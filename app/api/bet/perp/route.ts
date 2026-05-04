@@ -7,6 +7,10 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { flashSymbolFor } from "@/lib/flash-trade/client";
 import { buildOpenPerpTx } from "@/lib/flash-trade/perp";
+import {
+  ensureUsdcOrConsolidate,
+  InsufficientCombinedBalanceError,
+} from "@/lib/usd/consolidate";
 import type { WhaleSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -87,6 +91,35 @@ export async function POST(request: Request) {
     );
   }
 
+  // Flash Trade collateral is USDC-only. If the user is holding their
+  // funds in jupUSD (common after prediction closes settle), build a
+  // jupUSD->USDC swap first and ask the client to sign it before we
+  // can build the actual perp open.
+  try {
+    const consolidation = await ensureUsdcOrConsolidate({
+      userPubkey: user.solanaPubkey,
+      requiredUsd: body.amountUsdc,
+    });
+    if (!consolidation.ready) {
+      return NextResponse.json({
+        phase: "consolidate",
+        consolidationTransaction: consolidation.consolidationTransaction,
+        usdcBalance: consolidation.usdcBalance,
+        jupUsdBalance: consolidation.jupUsdBalance,
+        requiredUsd: consolidation.requiredUsd,
+      });
+    }
+  } catch (err) {
+    if (err instanceof InsufficientCombinedBalanceError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: 400 },
+      );
+    }
+    console.error("[bet/perp] consolidation check failed:", err);
+    // Fall through and let the Flash SDK surface its own error.
+  }
+
   let tx;
   try {
     tx = await buildOpenPerpTx({
@@ -130,6 +163,7 @@ export async function POST(request: Request) {
     .returning();
 
   return NextResponse.json({
+    phase: "open",
     betId: bet.id,
     swapTransaction: tx.transaction,
     notionalUsd: tx.notionalUsd,

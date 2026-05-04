@@ -33,6 +33,53 @@ async function signAndSubmit(
   });
 }
 
+function decodeBase64Tx(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+// Wraps fetch + sign-loop for the consolidate/open dance. The server
+// returns either { phase: "open", swapTransaction, ... } (ready to bet)
+// or { phase: "consolidate", consolidationTransaction } (need to swap
+// jupUSD->USDC first). When consolidating we sign the swap, wait for
+// confirmation, then re-call the same endpoint with the same body —
+// the server now sees enough USDC and returns phase "open".
+async function postBetWithConsolidation(
+  url: string,
+  body: unknown,
+  token: string,
+  wallet: ReturnType<typeof useEmbeddedSolanaWallet>,
+  signTransaction: ReturnType<typeof useSignTransaction>["signTransaction"],
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
+      throw new Error(b.error ?? `HTTP ${r.status}`);
+    }
+    const data = (await r.json()) as Record<string, unknown>;
+    if (data.phase === "consolidate") {
+      if (attempt > 0) {
+        throw new Error("consolidation didn't clear after retry");
+      }
+      const swapB64 = data.consolidationTransaction as string;
+      const swapBytes = decodeBase64Tx(swapB64);
+      const sig = await signAndSubmit(swapBytes, wallet, signTransaction);
+      const conn = new Connection(RPC_URL, "confirmed");
+      await conn.confirmTransaction(sig, "confirmed");
+      continue;
+    }
+    return data;
+  }
+  throw new Error("consolidation loop exhausted");
+}
+
 interface Props {
   signal: Signal;
 }
@@ -71,31 +118,20 @@ export function StakeButtons({ signal }: Props) {
       token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
-      const r = await fetch("/api/bet/meme", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const data = await postBetWithConsolidation(
+        "/api/bet/meme",
+        {
           signalId: signal.id,
           amountUsdc: amount,
           walletAddress: wallet.address,
-        }),
-      });
-
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? `HTTP ${r.status}`);
-      }
-
-      const data = await r.json();
+        },
+        token,
+        wallet,
+        signTransaction,
+      );
       betId = data.betId as string;
 
-      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
-        c.charCodeAt(0),
-      );
-
+      const txBytes = decodeBase64Tx(data.swapTransaction as string);
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/meme/confirm", {
@@ -166,32 +202,21 @@ export function StakeButtons({ signal }: Props) {
       token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
-      const r = await fetch("/api/bet/prediction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const data = await postBetWithConsolidation(
+        "/api/bet/prediction",
+        {
           signalId: signal.id,
           outcome,
           amountUsdc: amount,
           walletAddress: wallet.address,
-        }),
-      });
-
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error ?? `HTTP ${r.status}`);
-      }
-
-      const data = await r.json();
+        },
+        token,
+        wallet,
+        signTransaction,
+      );
       betId = data.betId as string;
 
-      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
-        c.charCodeAt(0),
-      );
-
+      const txBytes = decodeBase64Tx(data.swapTransaction as string);
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/prediction/confirm", {
@@ -345,32 +370,21 @@ export function StakeButtons({ signal }: Props) {
       token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
-      const r = await fetch("/api/bet/perp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const data = await postBetWithConsolidation(
+        "/api/bet/perp",
+        {
           signalId: signal.id,
           action,
           amountUsdc: amount,
           walletAddress: wallet.address,
-        }),
-      });
-
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error ?? `HTTP ${r.status}`);
-      }
-
-      const data = await r.json();
+        },
+        token,
+        wallet,
+        signTransaction,
+      );
       betId = data.betId as string;
 
-      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
-        c.charCodeAt(0),
-      );
-
+      const txBytes = decodeBase64Tx(data.swapTransaction as string);
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/perp/confirm", {

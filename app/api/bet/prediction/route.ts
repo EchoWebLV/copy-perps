@@ -4,9 +4,11 @@ import { db } from "@/lib/db";
 import { signals, bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { createOrder, PREDICTION_USDC_MINT } from "@/lib/jupiter-prediction/client";
-import { JUPUSD_MINT } from "@/lib/jupiter/constants";
-import { getUsdcBalance, getJupUsdBalance } from "@/lib/solana/balance";
+import { createOrder } from "@/lib/jupiter-prediction/client";
+import {
+  ensureUsdcOrConsolidate,
+  InsufficientCombinedBalanceError,
+} from "@/lib/usd/consolidate";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -116,30 +118,29 @@ export async function POST(request: Request) {
   const isYes = body.outcome === "yes";
   const depositAtomic = BigInt(Math.floor(body.amountUsdc * 1_000_000));
 
-  // Both USDC and jupUSD are valid prediction-market deposit mints.
-  // Many users hold a mix (closes pay out jupUSD), so pick whichever
-  // mint they actually have enough of. USDC first since it's the
-  // legacy default; fall back to jupUSD.
-  let depositMint: string = PREDICTION_USDC_MINT;
+  // Unify on USDC across all bet paths. If the user is short USDC but
+  // their combined USDC + jupUSD covers the trade, ask them to sign a
+  // jupUSD->USDC swap first; the client re-calls this endpoint after
+  // consolidation confirms.
   try {
-    const [usdcBal, jupUsdBal] = await Promise.all([
-      getUsdcBalance(user.solanaPubkey),
-      getJupUsdBalance(user.solanaPubkey),
-    ]);
-    if (usdcBal < body.amountUsdc) {
-      if (jupUsdBal >= body.amountUsdc) {
-        depositMint = JUPUSD_MINT;
-      } else {
-        return NextResponse.json(
-          {
-            error: `Insufficient balance — need $${body.amountUsdc}, have $${usdcBal.toFixed(2)} USDC + $${jupUsdBal.toFixed(2)} jupUSD`,
-          },
-          { status: 400 },
-        );
-      }
+    const consolidation = await ensureUsdcOrConsolidate({
+      userPubkey: user.solanaPubkey,
+      requiredUsd: body.amountUsdc,
+    });
+    if (!consolidation.ready) {
+      return NextResponse.json({
+        phase: "consolidate",
+        consolidationTransaction: consolidation.consolidationTransaction,
+        usdcBalance: consolidation.usdcBalance,
+        jupUsdBalance: consolidation.jupUsdBalance,
+        requiredUsd: consolidation.requiredUsd,
+      });
     }
   } catch (err) {
-    console.warn("[bet/prediction] balance check failed, defaulting to USDC:", err);
+    if (err instanceof InsufficientCombinedBalanceError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    console.error("[bet/prediction] consolidation check failed:", err);
   }
 
   let order;
@@ -150,7 +151,6 @@ export async function POST(request: Request) {
       isYes,
       isBuy: true,
       depositAmountMicroUsd: depositAtomic,
-      depositMint,
     });
   } catch (err) {
     console.error("[bet/prediction] order failed:", err);
@@ -194,6 +194,7 @@ export async function POST(request: Request) {
     .returning();
 
   return NextResponse.json({
+    phase: "open",
     betId: bet.id,
     swapTransaction: order.transaction,
     contracts: order.order.contracts,
