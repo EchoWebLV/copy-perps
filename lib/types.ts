@@ -43,6 +43,7 @@ export interface PredictionSignal extends BaseSignal {
   eventId?: string;
   marketId?: string;
   series?: string;
+  imageUrl?: string | null;
 }
 
 export interface WhaleSignal extends BaseSignal {
@@ -68,6 +69,7 @@ export interface MultiPredictionSignal extends BaseSignal {
   series?: string;
   outcomes: MultiPredictionOutcome[];
   totalOutcomes: number;
+  imageUrl?: string | null;
 }
 
 export type Signal =

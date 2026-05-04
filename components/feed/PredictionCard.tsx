@@ -11,7 +11,11 @@ const fmtUsd = (n: number) =>
 export function PredictionCard({ signal }: { signal: PredictionSignal }) {
   const yesCents = Math.round(signal.yesProbability * 100);
   const noCents = 100 - yesCents;
-  const icon = useJupiterEventImage(signal.eventId, signal.marketId);
+  const fallbackIcon = useJupiterEventImage(
+    signal.imageUrl ? undefined : signal.eventId,
+    signal.marketId,
+  );
+  const icon = signal.imageUrl ?? fallbackIcon;
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">

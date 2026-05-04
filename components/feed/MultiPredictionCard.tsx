@@ -31,7 +31,10 @@ interface State {
 export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
   const [state, setState] = useState<State>({});
   const [stake, setStake] = useState<StakeAmount>(10);
-  const icon = useJupiterEventImage(signal.eventId);
+  const fallbackIcon = useJupiterEventImage(
+    signal.imageUrl ? undefined : signal.eventId,
+  );
+  const icon = signal.imageUrl ?? fallbackIcon;
   const { getAccessToken } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
