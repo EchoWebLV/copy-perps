@@ -33,3 +33,32 @@ body {
 /* Hide scrollbars on the feed */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes gwak-breathe {
+  0%, 100% {
+    background:
+      radial-gradient(circle at 30% 35%, rgba(74, 222, 128, 0.18), transparent 55%),
+      radial-gradient(circle at 70% 70%, rgba(167, 139, 250, 0.18), transparent 55%),
+      #000;
+  }
+  50% {
+    background:
+      radial-gradient(circle at 30% 35%, rgba(74, 222, 128, 0.34), transparent 55%),
+      radial-gradient(circle at 70% 70%, rgba(167, 139, 250, 0.34), transparent 55%),
+      #000;
+  }
+}
+
+.gwak-breathe {
+  background:
+    radial-gradient(circle at 30% 35%, rgba(74, 222, 128, 0.18), transparent 55%),
+    radial-gradient(circle at 70% 70%, rgba(167, 139, 250, 0.18), transparent 55%),
+    #000;
+  animation: gwak-breathe 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gwak-breathe {
+    animation: none;
+  }
+}
