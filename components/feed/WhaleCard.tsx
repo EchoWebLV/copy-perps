@@ -45,7 +45,7 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         {signal.asset} {signal.leverage}× {signal.side.toUpperCase()}
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {signal.venue} · opened {signal.openedAtRelative}
+        {signal.venue} · {signal.openedAtRelative}
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">

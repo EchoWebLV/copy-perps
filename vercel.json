@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/refresh-predictions",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-whales",
+      "schedule": "*/2 * * * *"
     }
   ]
 }
