@@ -92,6 +92,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error("[bet/meme] consolidation check failed:", err);
+    return NextResponse.json(
+      { error: `Balance check failed: ${String(err)}` },
+      { status: 502 },
+    );
   }
 
   let swapResult;

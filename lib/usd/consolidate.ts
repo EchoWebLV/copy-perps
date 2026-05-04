@@ -43,6 +43,10 @@ export async function ensureUsdcOrConsolidate(params: {
     getJupUsdBalance(params.userPubkey),
   ]);
 
+  console.log(
+    `[consolidate] required=$${params.requiredUsd} usdc=$${usdcBalance.toFixed(4)} jupUsd=$${jupUsdBalance.toFixed(4)}`,
+  );
+
   if (usdcBalance >= params.requiredUsd) {
     return {
       ready: true,
@@ -62,10 +66,13 @@ export async function ensureUsdcOrConsolidate(params: {
   }
 
   const shortfall = params.requiredUsd - usdcBalance;
-  // 0.5% over-swap buffer covers stable-to-stable slippage so the
-  // post-swap USDC balance reliably crosses the requiredUsd threshold.
+  // 2% over-swap buffer covers stable-to-stable slippage AND any
+  // Jupiter Prediction fee that's deducted from the deposit at order
+  // time. Without enough headroom, post-swap USDC sits right at the
+  // required threshold and the prediction order rejects with
+  // INSUFFICIENT_FUNDS even though the swap landed.
   const swapInputAtomic = BigInt(
-    Math.ceil(shortfall * 1.005 * 1_000_000),
+    Math.ceil(shortfall * 1.02 * 1_000_000),
   );
 
   const { swap } = await sellTokenForUsdc({

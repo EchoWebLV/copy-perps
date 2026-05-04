@@ -15,12 +15,12 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-// Jupiter Prediction's createOrder enforces a minimum of $5 — but its
-// "minimum" is checked against contracts AFTER fees, so a $5 deposit
-// can land just under $5 in contract value and reject. Floor our minimum
-// at $5.50 so the after-fee order always clears.
-const MIN_USDC = 5.5;
+const MIN_USDC = 5;
 const MAX_USDC = 1000;
+// Jupiter Prediction's "Minimum order is $5" check runs against contract
+// value AFTER fees, so a $5 deposit is rejected. Pad small deposits up
+// to this floor so a user-facing $5 stake actually clears the API.
+const PREDICTION_DEPOSIT_FLOOR = 5.5;
 
 export async function POST(request: Request) {
   const claims = await verifyPrivyRequest(request);
@@ -120,7 +120,11 @@ export async function POST(request: Request) {
   }
 
   const isYes = body.outcome === "yes";
-  const depositAtomic = BigInt(Math.floor(body.amountUsdc * 1_000_000));
+  // Pad up to the API's effective minimum if the user's stake would
+  // otherwise be rejected. The bet record's amountUsdc reflects the
+  // padded value so PnL math stays consistent.
+  const effectiveAmount = Math.max(body.amountUsdc, PREDICTION_DEPOSIT_FLOOR);
+  const depositAtomic = BigInt(Math.floor(effectiveAmount * 1_000_000));
 
   // Unify on USDC across all bet paths. If the user is short USDC but
   // their combined USDC + jupUSD covers the trade, ask them to sign a
@@ -129,7 +133,7 @@ export async function POST(request: Request) {
   try {
     const consolidation = await ensureUsdcOrConsolidate({
       userPubkey: user.solanaPubkey,
-      requiredUsd: body.amountUsdc,
+      requiredUsd: effectiveAmount,
     });
     if (!consolidation.ready) {
       return NextResponse.json({
@@ -145,6 +149,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error("[bet/prediction] consolidation check failed:", err);
+    return NextResponse.json(
+      { error: `Balance check failed: ${String(err)}` },
+      { status: 502 },
+    );
   }
 
   let order;
@@ -177,7 +185,7 @@ export async function POST(request: Request) {
       userId: user.id,
       signalId: signalRow.id,
       type: "prediction",
-      amountUsdc: body.amountUsdc,
+      amountUsdc: effectiveAmount,
       status: "pending",
       meta: {
         marketId: resolvedMarketId,

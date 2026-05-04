@@ -2,14 +2,18 @@
 
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
-import bs58 from "bs58";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
 import type {
   MultiPredictionSignal,
   MultiPredictionOutcome,
   StakeAmount,
 } from "@/lib/types";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import {
+  decodeBase64Tx,
+  postBetWithConsolidation,
+  signAndSubmitTx,
+} from "@/lib/bets/post-with-consolidation";
 import { SignalChip } from "./SignalChip";
 
 const fmtVol = (n: number) =>
@@ -27,7 +31,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
   const [state, setState] = useState<State>({});
   const [stake, setStake] = useState<StakeAmount>(10);
   const { getAccessToken } = usePrivy();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
+  const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
 
   function flashError(msg: string) {
@@ -57,37 +61,27 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
       token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
-      const r = await fetch("/api/bet/prediction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const data = await postBetWithConsolidation(
+        "/api/bet/prediction",
+        {
           signalId: signal.id,
           outcome: "yes",
           amountUsdc: stake,
           walletAddress: wallet.address,
           marketId: outcome.marketId,
           outcomeLabel: outcome.label,
-        }),
-      });
-
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error ?? `HTTP ${r.status}`);
-      }
-      const data = await r.json();
+        },
+        token,
+        wallet,
+        signTransaction,
+      );
       betId = data.betId as string;
 
-      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
-        c.charCodeAt(0),
+      const txBytes = decodeBase64Tx(
+        data.swapTransaction,
+        "multi-prediction order tx",
       );
-      const result = await signAndSendTransaction({
-        transaction: txBytes,
-        wallet,
-      });
-      const sigB58 = bs58.encode(result.signature);
+      const sigB58 = await signAndSubmitTx(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/prediction/confirm", {
         method: "POST",

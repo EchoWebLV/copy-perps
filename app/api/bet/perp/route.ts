@@ -117,7 +117,10 @@ export async function POST(request: Request) {
       );
     }
     console.error("[bet/perp] consolidation check failed:", err);
-    // Fall through and let the Flash SDK surface its own error.
+    return NextResponse.json(
+      { error: `Balance check failed: ${String(err)}` },
+      { status: 502 },
+    );
   }
 
   let tx;
