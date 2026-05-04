@@ -1,4 +1,4 @@
-import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import {
   DriftClient,
   Wallet,
@@ -9,22 +9,32 @@ import {
   BulkAccountLoader,
 } from "@drift-labs/sdk";
 
+// Drift's nested @coral-xyz/anchor pins an older @solana/web3.js,
+// so the Connection/Keypair types from our top-level @solana/web3.js
+// don't structurally match Drift's expected types even though they're
+// runtime-identical. Cast at the seam.
+type DriftCompatConnection = ConstructorParameters<typeof Connection>[0] extends never
+  ? never
+  : Connection;
+
 // Drift's BulkAccountLoader sends batched getMultipleAccountsInfo, which
-// Helius's free tier rejects (-32403). Use a batch-friendly RPC for the
-// Drift client specifically. DRIFT_RPC_URL can override (e.g. paid Triton)
-// or we fall back to public mainnet — slower but it supports batches.
+// the Helius free tier rejects. Either set DRIFT_RPC_URL to a paid
+// batch-friendly RPC, or rely on NEXT_PUBLIC_HELIUS_RPC_URL once on a
+// paid Helius tier (which is the current setup).
 const RPC_URL =
-  process.env.DRIFT_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+  process.env.DRIFT_RPC_URL ??
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ??
+  "https://api.mainnet-beta.solana.com";
 
 const sdkConfig = initialize({ env: "mainnet-beta" });
 export const DRIFT_PROGRAM_ID = new PublicKey(sdkConfig.DRIFT_PROGRAM_ID);
 
-let connection: Connection | null = null;
-function getConnection(): Connection {
-  if (!connection) {
-    connection = new Connection(RPC_URL, "confirmed");
+let cachedConnection: Connection | null = null;
+export function getConnection(): Connection {
+  if (!cachedConnection) {
+    cachedConnection = new Connection(RPC_URL, "confirmed");
   }
-  return connection;
+  return cachedConnection;
 }
 
 /**
@@ -43,8 +53,6 @@ class ReadOnlyWallet {
   }
 }
 
-// Markets we actually let users trade in MVP. SOL/BTC/ETH covers the
-// dominant Hyperliquid whale activity and minimizes subscription cost.
 const SUPPORTED_PERP_SYMBOLS = ["SOL-PERP", "BTC-PERP", "ETH-PERP"] as const;
 
 export const SUPPORTED_PERP_INDEXES = PerpMarkets["mainnet-beta"]
@@ -64,39 +72,38 @@ const SPOT_ORACLE_INFOS = SpotMarkets["mainnet-beta"]
   .filter((m) => SUPPORTED_SPOT_INDEXES.includes(m.marketIndex))
   .map((m) => ({ publicKey: m.oracle, source: m.oracleSource }));
 
-export async function makeDriftClientForUser(
+// Cache DriftClient instances per user pubkey within a warm function instance.
+const clientCache = new Map<string, Promise<DriftClient>>();
+
+export function makeDriftClientForUser(
   userPubkey: PublicKey,
 ): Promise<DriftClient> {
-  const conn = getConnection();
-  const wallet = new ReadOnlyWallet(userPubkey) as unknown as Wallet;
+  const key = userPubkey.toBase58();
+  const existing = clientCache.get(key);
+  if (existing) return existing;
 
-  const accountLoader = new BulkAccountLoader(conn, "confirmed", 1000);
+  const promise = (async () => {
+    const conn = getConnection() as unknown as DriftCompatConnection;
+    const wallet = new ReadOnlyWallet(userPubkey) as unknown as Wallet;
+    const accountLoader = new BulkAccountLoader(conn, "confirmed", 1000);
 
-  const drift = new DriftClient({
-    connection: conn,
-    wallet,
-    programID: DRIFT_PROGRAM_ID,
-    env: "mainnet-beta",
-    perpMarketIndexes: SUPPORTED_PERP_INDEXES,
-    spotMarketIndexes: SUPPORTED_SPOT_INDEXES,
-    oracleInfos: [...PERP_ORACLE_INFOS, ...SPOT_ORACLE_INFOS],
-    accountSubscription: { type: "polling", accountLoader },
-    skipLoadUsers: true,
-  });
+    const drift = new DriftClient({
+      connection: conn,
+      wallet,
+      programID: DRIFT_PROGRAM_ID,
+      env: "mainnet-beta",
+      perpMarketIndexes: SUPPORTED_PERP_INDEXES,
+      spotMarketIndexes: SUPPORTED_SPOT_INDEXES,
+      oracleInfos: [...PERP_ORACLE_INFOS, ...SPOT_ORACLE_INFOS],
+      accountSubscription: { type: "polling", accountLoader },
+    });
 
-  await drift.subscribe();
-  // Wait one polling cycle for the bulk loader to populate market state.
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  return drift;
-}
+    await drift.subscribe();
+    return drift;
+  })();
 
-export function perpMarketIndexFor(asset: string): number | null {
-  const m = PerpMarkets["mainnet-beta"].find(
-    (p) => p.baseAssetSymbol === asset.toUpperCase(),
-  );
-  if (!m) return null;
-  if (!SUPPORTED_PERP_INDEXES.includes(m.marketIndex)) return null;
-  return m.marketIndex;
+  clientCache.set(key, promise);
+  return promise;
 }
 
 export async function userHasDriftAccount(
@@ -111,4 +118,11 @@ export async function userHasDriftAccount(
   return info !== null;
 }
 
-export { getConnection };
+export function perpMarketIndexFor(asset: string): number | null {
+  const m = PerpMarkets["mainnet-beta"].find(
+    (p) => p.baseAssetSymbol === asset.toUpperCase(),
+  );
+  if (!m) return null;
+  if (!SUPPORTED_PERP_INDEXES.includes(m.marketIndex)) return null;
+  return m.marketIndex;
+}

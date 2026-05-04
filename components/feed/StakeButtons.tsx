@@ -313,40 +313,141 @@ export function StakeButtons({ signal }: Props) {
     );
   }
 
+  async function executePerp(action: "tail" | "fade", amount: StakeAmount) {
+    if (signal.type !== "whale") return;
+    if (!wallet?.address) {
+      flashError("Wallet not ready yet");
+      return;
+    }
+    const key = `${action}-${amount}`;
+    setState({ pending: key });
+
+    let betId: string | undefined;
+    let token: string | null = null;
+
+    try {
+      token = await getAccessToken();
+      if (!token) throw new Error("Not signed in");
+
+      const r = await fetch("/api/bet/perp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          signalId: signal.id,
+          action,
+          amountUsdc: amount,
+          walletAddress: wallet.address,
+        }),
+      });
+
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? `HTTP ${r.status}`);
+      }
+
+      const data = await r.json();
+      betId = data.betId as string;
+
+      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
+        c.charCodeAt(0),
+      );
+
+      const result = await signAndSendTransaction({
+        transaction: txBytes,
+        wallet,
+      });
+
+      const sigB58 = bs58.encode(result.signature);
+
+      await fetch("/api/bet/perp/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ betId, txHash: sigB58 }),
+      });
+
+      flashConfirmed(key);
+    } catch (err) {
+      console.error("[perp]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      flashError(msg.slice(0, 80));
+      if (betId && token) {
+        await fetch("/api/bet/perp/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            betId,
+            failed: true,
+            failureReason: msg.slice(0, 200),
+          }),
+        }).catch(() => {});
+      }
+    } finally {
+      setState((s) => ({ ...s, pending: undefined }));
+    }
+  }
+
+  // whale
   return (
     <div className="mt-auto pt-4">
       <div className="grid grid-cols-2 gap-2">
         <button
-          onClick={() => fireOptimistic("tail", 10)}
-          className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] ${
+          onClick={() => executePerp("tail", 10)}
+          disabled={!!state.pending}
+          className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
             state.confirmed === "tail-10" ? "ring-4 ring-white/40" : ""
           }`}
         >
-          {state.confirmed === "tail-10" ? "✓ Tailing" : "Tail $10"}
+          {state.confirmed === "tail-10"
+            ? "✓ Tailing"
+            : state.pending === "tail-10"
+              ? "…"
+              : "Tail $10"}
         </button>
         <button
-          onClick={() => fireOptimistic("fade", 10)}
-          className={`rounded-2xl border border-neutral-700 bg-neutral-800 px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] ${
+          onClick={() => executePerp("fade", 10)}
+          disabled={!!state.pending}
+          className={`rounded-2xl border border-neutral-700 bg-neutral-800 px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
             state.confirmed === "fade-10" ? "ring-4 ring-white/40" : ""
           }`}
         >
-          {state.confirmed === "fade-10" ? "✓ Fading" : "Fade $10"}
+          {state.confirmed === "fade-10"
+            ? "✓ Fading"
+            : state.pending === "fade-10"
+              ? "…"
+              : "Fade $10"}
         </button>
       </div>
       <div className="mt-2 flex gap-2">
-        {[5, 20, 50].map((amt) => (
-          <button
-            key={amt}
-            onClick={() => fireOptimistic("tail", amt as StakeAmount)}
-            className="flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97]"
-          >
-            ${amt}
-          </button>
-        ))}
+        {[5, 20, 50].map((amt) => {
+          const k = `tail-${amt}`;
+          const pending = state.pending === k;
+          const confirmed = state.confirmed === k;
+          return (
+            <button
+              key={amt}
+              onClick={() => executePerp("tail", amt as StakeAmount)}
+              disabled={!!state.pending}
+              className={`flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+                confirmed ? "!border-[#22c55e] !bg-[#22c55e] !text-black" : ""
+              }`}
+            >
+              {confirmed ? "✓" : pending ? "…" : `$${amt}`}
+            </button>
+          );
+        })}
       </div>
       {errorBar}
       <div className="mt-3 text-center text-[11px] text-neutral-600">
-        Executes on Drift Perps · stub · ↑ swipe for next
+        Executes on Drift Perps · ↑ swipe for next
       </div>
     </div>
   );
