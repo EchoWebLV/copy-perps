@@ -162,6 +162,42 @@ export interface JPClosePositionResponse {
   order: JPOrder;
 }
 
+export interface JPPosition {
+  pubkey: string;
+  owner: string;
+  ownerPubkey: string;
+  market: string;
+  marketId: string;
+  isYes: boolean;
+  contracts: string;
+  totalCostUsd: string;
+  sizeUsd: string;
+  // Mark-to-market value in micro-USD. Null once the market is resolved.
+  valueUsd: string | null;
+  avgPriceUsd: string;
+  markPriceUsd: string | null;
+  sellPriceUsd: string | null;
+  pnlUsd: string | null;
+}
+
+export async function getPosition(
+  positionPubkey: string,
+): Promise<JPPosition | null> {
+  const r = await fetch(`${BASE}/positions/${positionPubkey}`, {
+    cache: "no-store",
+  });
+  if (r.status === 404) return null;
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction position: ${r.status} ${txt}`);
+  }
+  const raw = (await r.json()) as { data?: JPPosition } | JPPosition;
+  if (raw && typeof raw === "object" && "data" in raw && raw.data) {
+    return raw.data;
+  }
+  return raw as JPPosition;
+}
+
 export async function closePosition(
   positionPubkey: string,
   ownerPubkey: string,

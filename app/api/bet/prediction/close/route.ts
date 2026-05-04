@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
-import { closePosition } from "@/lib/jupiter-prediction/client";
+import { closePosition, getPosition } from "@/lib/jupiter-prediction/client";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -53,6 +53,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Read position mark-to-market BEFORE building the close. Jupiter's
+    // close response sets `orderCostUsd` to the user's spend on the order
+    // (zero for sells), which made every closed prediction record proceeds
+    // of $0 and display as -100% PnL. The position's `valueUsd` is the
+    // current micro-USD value the user gets back at market price — much
+    // better proceeds proxy. Falls back to orderCostUsd if the market has
+    // already resolved (valueUsd is null in that case).
+    const position = await getPosition(positionPubkey).catch(() => null);
     const result = await closePosition(positionPubkey, user.solanaPubkey);
     if (!result.transaction) {
       return NextResponse.json(
@@ -60,9 +68,11 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
+    const expectedProceedsAtomic =
+      position?.valueUsd ?? result.order.orderCostUsd;
     return NextResponse.json({
       swapTransaction: result.transaction,
-      expectedProceedsAtomic: result.order.orderCostUsd,
+      expectedProceedsAtomic,
     });
   } catch (err) {
     console.error("[bet/prediction/close] failed:", err);
