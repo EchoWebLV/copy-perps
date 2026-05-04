@@ -3,7 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
-import { closePosition } from "@/lib/jupiter-prediction/client";
+import {
+  getPosition,
+  sellPositionToMint,
+} from "@/lib/jupiter-prediction/client";
+import { USDC_MINT } from "@/lib/jupiter/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -52,11 +56,29 @@ export async function POST(request: Request) {
     );
   }
 
+  // Experimental close path: POST /orders with depositMint=USDC instead of
+  // DELETE /positions/{pk}. If Jupiter honors depositMint as the proceeds
+  // mint for sells, the user receives USDC directly and we skip a
+  // follow-up jupUSD->USDC swap. If the API ignores depositMint on sells,
+  // we'll see jupUSD in the close tx logs and revert to DELETE.
   try {
-    const result = await closePosition(positionPubkey, user.solanaPubkey);
+    const position = await getPosition(positionPubkey);
+    if (!position) {
+      return NextResponse.json(
+        { error: "position not found on chain" },
+        { status: 404 },
+      );
+    }
+    const result = await sellPositionToMint({
+      ownerPubkey: user.solanaPubkey,
+      positionPubkey,
+      isYes: position.isYes,
+      contracts: position.contracts,
+      receiveMint: USDC_MINT,
+    });
     if (!result.transaction) {
       return NextResponse.json(
-        { error: "Close returned no transaction" },
+        { error: "Sell-order returned no transaction" },
         { status: 502 },
       );
     }

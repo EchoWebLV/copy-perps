@@ -181,3 +181,75 @@ export async function closePosition(
   return (await r.json()) as JPClosePositionResponse;
 }
 
+export interface JPPosition {
+  pubkey: string;
+  owner: string;
+  ownerPubkey: string;
+  market: string;
+  marketId: string;
+  isYes: boolean;
+  contracts: string;
+  totalCostUsd: string;
+  sizeUsd: string;
+  valueUsd: string | null;
+  avgPriceUsd: string;
+  markPriceUsd: string | null;
+  sellPriceUsd: string | null;
+  pnlUsd: string | null;
+}
+
+export async function getPosition(
+  positionPubkey: string,
+): Promise<JPPosition | null> {
+  const r = await fetch(`${BASE}/positions/${positionPubkey}`, {
+    cache: "no-store",
+  });
+  if (r.status === 404) return null;
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction position: ${r.status} ${txt}`);
+  }
+  const data = (await r.json()) as { data?: JPPosition } | JPPosition;
+  if (data && typeof data === "object" && "data" in data && data.data) {
+    return data.data;
+  }
+  return data as JPPosition;
+}
+
+// Experimental: close a position via POST /orders (sell-order) instead of
+// DELETE /positions, passing depositMint=USDC. The API doesn't document
+// what depositMint means for sells, but for buys it's the input mint —
+// if it's symmetric for sells (= proceeds mint), the user receives USDC
+// directly and avoids a follow-up jupUSD->USDC swap.
+export async function sellPositionToMint(params: {
+  ownerPubkey: string;
+  positionPubkey: string;
+  isYes: boolean;
+  contracts: string;
+  // Floor price per contract in micro-USD. Defaults to $0.01 — the API
+  // minimum — so a market sell always fills.
+  minSellPriceMicroUsd?: string;
+  // The mint the user wants to receive proceeds in. Defaults to USDC.
+  receiveMint?: string;
+}): Promise<JPOrderResponse> {
+  const r = await fetch(`${BASE}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ownerPubkey: params.ownerPubkey,
+      isBuy: false,
+      positionPubkey: params.positionPubkey,
+      isYes: params.isYes,
+      contracts: params.contracts,
+      minSellPriceUsd: params.minSellPriceMicroUsd ?? "10000",
+      orderType: "market",
+      depositMint: params.receiveMint ?? PREDICTION_USDC_MINT,
+    }),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction sell-order: ${r.status} ${txt}`);
+  }
+  return (await r.json()) as JPOrderResponse;
+}
+
