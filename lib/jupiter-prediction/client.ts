@@ -82,3 +82,63 @@ export async function getEvent(eventId: string): Promise<JPEvent | null> {
   const data = (await r.json()) as { data?: JPEvent };
   return data.data ?? null;
 }
+
+export interface JPOrder {
+  orderPubkey: string | null;
+  positionPubkey: string | null;
+  userPubkey: string;
+  marketId: string;
+  isBuy: boolean;
+  isYes: boolean;
+  contracts: string;
+  newContracts: string;
+  maxBuyPriceUsd: string | null;
+  minSellPriceUsd: string | null;
+  orderCostUsd: string;
+  newAvgPriceUsd: string;
+  newSizeUsd: string;
+  newPayoutUsd: string;
+  estimatedTotalFeeUsd: string;
+}
+
+export interface JPOrderResponse {
+  transaction: string | null;
+  txMeta: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  } | null;
+  externalOrderId: string | null;
+  requiredSigners: string[];
+  order: JPOrder;
+}
+
+export const PREDICTION_USDC_MINT =
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+export async function createOrder(params: {
+  ownerPubkey: string;
+  marketId: string;
+  isYes: boolean;
+  isBuy: boolean;
+  depositAmountMicroUsd: bigint | string;
+  depositMint?: string;
+}): Promise<JPOrderResponse> {
+  const r = await fetch(`${BASE}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ownerPubkey: params.ownerPubkey,
+      marketId: params.marketId,
+      isYes: params.isYes,
+      isBuy: params.isBuy,
+      depositAmount: params.depositAmountMicroUsd.toString(),
+      depositMint: params.depositMint ?? PREDICTION_USDC_MINT,
+    }),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction createOrder: ${r.status} ${txt}`);
+  }
+  return (await r.json()) as JPOrderResponse;
+}
+

@@ -126,6 +126,92 @@ export function StakeButtons({ signal }: Props) {
     }
   }
 
+  async function executePredictionBuy(
+    outcome: "yes" | "no",
+    amount: StakeAmount,
+  ) {
+    if (signal.type !== "prediction") return;
+    if (!wallet?.address) {
+      flashError("Wallet not ready yet");
+      return;
+    }
+    const key = `${outcome}-${amount}`;
+    setState({ pending: key });
+
+    let betId: string | undefined;
+    let token: string | null = null;
+
+    try {
+      token = await getAccessToken();
+      if (!token) throw new Error("Not signed in");
+
+      const r = await fetch("/api/bet/prediction", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          signalId: signal.id,
+          outcome,
+          amountUsdc: amount,
+          walletAddress: wallet.address,
+        }),
+      });
+
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? `HTTP ${r.status}`);
+      }
+
+      const data = await r.json();
+      betId = data.betId as string;
+
+      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
+        c.charCodeAt(0),
+      );
+
+      const result = await signAndSendTransaction({
+        transaction: txBytes,
+        wallet,
+      });
+
+      const sigB58 = bs58.encode(result.signature);
+
+      await fetch("/api/bet/prediction/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ betId, txHash: sigB58 }),
+      });
+
+      flashConfirmed(key);
+    } catch (err) {
+      console.error("[prediction buy]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      flashError(msg.slice(0, 80));
+
+      if (betId && token) {
+        await fetch("/api/bet/prediction/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            betId,
+            failed: true,
+            failureReason: msg.slice(0, 200),
+          }),
+        }).catch(() => {});
+      }
+    } finally {
+      setState((s) => ({ ...s, pending: undefined }));
+    }
+  }
+
   const errorBar = state.error && (
     <div className="mt-2 truncate rounded-lg bg-red-500/15 px-3 py-2 text-center text-[11px] text-red-300">
       {state.error}
@@ -166,40 +252,62 @@ export function StakeButtons({ signal }: Props) {
   }
 
   if (signal.type === "prediction") {
+    const yesPending = state.pending === "yes-10";
+    const noPending = state.pending === "no-10";
+    const yesConfirmed = state.confirmed === "yes-10";
+    const noConfirmed = state.confirmed === "no-10";
     return (
       <div className="mt-auto pt-4">
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => fireOptimistic("yes", 10)}
-            className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] ${
-              state.confirmed === "yes-10" ? "ring-4 ring-white/40" : ""
+            onClick={() => executePredictionBuy("yes", 10)}
+            disabled={!!state.pending}
+            className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
+              yesConfirmed ? "ring-4 ring-white/40" : ""
             }`}
           >
-            {state.confirmed === "yes-10" ? "✓ Bought $10 YES" : "$10 YES"}
+            {yesConfirmed
+              ? "✓ Bought $10 YES"
+              : yesPending
+                ? "…"
+                : "$10 YES"}
           </button>
           <button
-            onClick={() => fireOptimistic("no", 10)}
-            className={`rounded-2xl border border-[#ef4444] bg-[#ef4444] px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] ${
-              state.confirmed === "no-10" ? "ring-4 ring-white/40" : ""
+            onClick={() => executePredictionBuy("no", 10)}
+            disabled={!!state.pending}
+            className={`rounded-2xl border border-[#ef4444] bg-[#ef4444] px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+              noConfirmed ? "ring-4 ring-white/40" : ""
             }`}
           >
-            {state.confirmed === "no-10" ? "✓ Bought $10 NO" : "$10 NO"}
+            {noConfirmed
+              ? "✓ Bought $10 NO"
+              : noPending
+                ? "…"
+                : "$10 NO"}
           </button>
         </div>
         <div className="mt-2 flex gap-2">
-          {[5, 20, 50].map((amt) => (
-            <button
-              key={amt}
-              onClick={() => fireOptimistic("yes", amt as StakeAmount)}
-              className="flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97]"
-            >
-              ${amt}
-            </button>
-          ))}
+          {[5, 20, 50].map((amt) => {
+            const k = `yes-${amt}`;
+            const pending = state.pending === k;
+            const confirmed = state.confirmed === k;
+            return (
+              <button
+                key={amt}
+                onClick={() => executePredictionBuy("yes", amt as StakeAmount)}
+                disabled={!!state.pending}
+                className={`flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+                  confirmed ? "!border-[#22c55e] !bg-[#22c55e] !text-black" : ""
+                }`}
+              >
+                {confirmed ? "✓" : pending ? "…" : `$${amt} YES`}
+              </button>
+            );
+          })}
         </div>
         {errorBar}
         <div className="mt-3 text-center text-[11px] text-neutral-600">
-          Executes on Jupiter Prediction · stub · ↑ swipe for next
+          Executes on Jupiter Prediction · ↑ swipe for next
         </div>
       </div>
     );
