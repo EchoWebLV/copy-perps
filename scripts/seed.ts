@@ -13,7 +13,9 @@ async function main() {
         ? s.ticker
         : s.type === "prediction"
           ? s.id
-          : s.walletAddress;
+          : s.type === "multiprediction"
+            ? s.eventId
+            : s.walletAddress;
 
     await db.insert(signals).values({
       id: s.id,

@@ -1,0 +1,227 @@
+"use client";
+
+import { useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import bs58 from "bs58";
+import type {
+  MultiPredictionSignal,
+  MultiPredictionOutcome,
+  StakeAmount,
+} from "@/lib/types";
+import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { SignalChip } from "./SignalChip";
+
+const fmtVol = (n: number) =>
+  n >= 1_000_000
+    ? `$${(n / 1_000_000).toFixed(1)}M`
+    : `$${(n / 1000).toFixed(0)}k`;
+
+interface State {
+  pendingMarketId?: string;
+  confirmedMarketId?: string;
+  error?: string | null;
+}
+
+export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
+  const [state, setState] = useState<State>({});
+  const [stake, setStake] = useState<StakeAmount>(10);
+  const { getAccessToken } = usePrivy();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
+  const wallet = useEmbeddedSolanaWallet();
+
+  function flashError(msg: string) {
+    setState({ error: msg });
+    setTimeout(() => setState((s) => (s.error === msg ? {} : s)), 4000);
+  }
+
+  function flashConfirmed(marketId: string) {
+    setState({ confirmedMarketId: marketId });
+    setTimeout(
+      () => setState((s) => (s.confirmedMarketId === marketId ? {} : s)),
+      2200,
+    );
+  }
+
+  async function buy(outcome: MultiPredictionOutcome) {
+    if (!wallet?.address) {
+      flashError("Wallet not ready yet");
+      return;
+    }
+    setState({ pendingMarketId: outcome.marketId });
+
+    let betId: string | undefined;
+    let token: string | null = null;
+
+    try {
+      token = await getAccessToken();
+      if (!token) throw new Error("Not signed in");
+
+      const r = await fetch("/api/bet/prediction", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          signalId: signal.id,
+          outcome: "yes",
+          amountUsdc: stake,
+          walletAddress: wallet.address,
+          marketId: outcome.marketId,
+          outcomeLabel: outcome.label,
+        }),
+      });
+
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? `HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      betId = data.betId as string;
+
+      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
+        c.charCodeAt(0),
+      );
+      const result = await signAndSendTransaction({
+        transaction: txBytes,
+        wallet,
+      });
+      const sigB58 = bs58.encode(result.signature);
+
+      await fetch("/api/bet/prediction/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ betId, txHash: sigB58 }),
+      });
+
+      flashConfirmed(outcome.marketId);
+    } catch (err) {
+      console.error("[multi-prediction buy]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      flashError(msg.slice(0, 80));
+      if (betId && token) {
+        await fetch("/api/bet/prediction/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            betId,
+            failed: true,
+            failureReason: msg.slice(0, 200),
+          }),
+        }).catch(() => {});
+      }
+    } finally {
+      setState((s) => ({ ...s, pendingMarketId: undefined }));
+    }
+  }
+
+  return (
+    <div
+      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-24 text-white"
+      style={{
+        background: "radial-gradient(ellipse at top, #0a1428, #050505 60%)",
+      }}
+    >
+      <span className="absolute top-[60px] left-5 rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
+        {signal.series ?? "Polymarket"}
+      </span>
+
+      <div className="mt-12 text-xl font-bold leading-tight">
+        {signal.question}
+      </div>
+      <div className="mt-2 text-[11px] text-neutral-500">
+        Resolves {signal.resolveDate} · {fmtVol(signal.volume24h)} 24h vol ·{" "}
+        {signal.totalOutcomes} outcomes
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2">
+        {signal.outcomes.map((o) => {
+          const pct = Math.round(o.yesProbability * 100);
+          const isPending = state.pendingMarketId === o.marketId;
+          const isConfirmed = state.confirmedMarketId === o.marketId;
+          return (
+            <button
+              key={o.marketId}
+              onClick={() => buy(o)}
+              disabled={!!state.pendingMarketId}
+              className={`group flex items-center gap-3 rounded-xl border bg-white/[0.03] px-3 py-2.5 text-left transition active:scale-[0.99] disabled:opacity-60 ${
+                isConfirmed
+                  ? "border-[#22c55e] bg-[#22c55e]/15"
+                  : "border-white/10 hover:bg-white/[0.06]"
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="truncate text-[14px] font-semibold">
+                  {o.label}
+                </div>
+                <div className="mt-1 h-1 w-full rounded-full bg-white/10">
+                  <div
+                    className="h-1 rounded-full bg-[#22c55e]"
+                    style={{ width: `${Math.max(2, pct)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[16px] font-extrabold text-[#22c55e]">
+                  {pct}¢
+                </div>
+                <div className="text-[10px] font-bold text-neutral-400">
+                  {isConfirmed ? "✓" : isPending ? "…" : `Buy $${stake}`}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {signal.totalOutcomes > signal.outcomes.length && (
+        <div className="mt-2 text-center text-[11px] text-neutral-600">
+          + {signal.totalOutcomes - signal.outcomes.length} more outcomes
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-col gap-1.5">
+        {signal.chips.map((c, i) => (
+          <SignalChip key={i} text={c.text} level={c.level} />
+        ))}
+      </div>
+
+      <div className="mt-auto pt-4">
+        {state.error && (
+          <div className="mb-2 truncate rounded-lg bg-red-500/15 px-3 py-2 text-center text-[11px] text-red-300">
+            {state.error}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-neutral-500">Bet size:</span>
+          {[5, 10, 20, 50].map((amt) => {
+            const selected = stake === amt;
+            return (
+              <button
+                key={amt}
+                onClick={() => setStake(amt as StakeAmount)}
+                className={`flex-1 rounded-lg px-0 py-2 text-[12px] font-bold transition active:scale-95 ${
+                  selected
+                    ? "bg-white text-black"
+                    : "bg-white/10 text-white"
+                }`}
+              >
+                ${amt}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-3 text-center text-[11px] text-neutral-600">
+          Tap an outcome to buy YES on it · Jupiter Prediction
+        </div>
+      </div>
+    </div>
+  );
+}

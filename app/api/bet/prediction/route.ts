@@ -5,7 +5,7 @@ import { signals, bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { createOrder } from "@/lib/jupiter-prediction/client";
-import type { PredictionSignal } from "@/lib/types";
+import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -25,6 +25,8 @@ export async function POST(request: Request) {
     outcome?: "yes" | "no";
     amountUsdc?: number;
     walletAddress?: string;
+    marketId?: string;
+    outcomeLabel?: string;
   } | null;
 
   if (
@@ -51,20 +53,55 @@ export async function POST(request: Request) {
     .where(eq(signals.id, body.signalId))
     .limit(1);
 
-  if (!signalRow || signalRow.type !== "prediction") {
+  if (
+    !signalRow ||
+    (signalRow.type !== "prediction" && signalRow.type !== "multiprediction")
+  ) {
     return NextResponse.json(
       { error: "signal not found or wrong type" },
       { status: 400 },
     );
   }
 
-  const payload = signalRow.payload as PredictionSignal;
-  if (!payload.marketId) {
-    return NextResponse.json(
-      { error: "signal missing marketId" },
-      { status: 400 },
-    );
+  // Resolve marketId + outcome label, branching on signal flavor.
+  let resolvedMarketId: string | null = null;
+  let resolvedOutcomeLabel: string | undefined;
+  let resolvedQuestion: string;
+  let entryYesProbability: number | undefined;
+
+  if (signalRow.type === "prediction") {
+    const p = signalRow.payload as PredictionSignal;
+    if (!p.marketId) {
+      return NextResponse.json(
+        { error: "signal missing marketId" },
+        { status: 400 },
+      );
+    }
+    resolvedMarketId = p.marketId;
+    resolvedQuestion = p.question;
+    entryYesProbability = p.yesProbability;
+  } else {
+    const p = signalRow.payload as MultiPredictionSignal;
+    if (!body.marketId) {
+      return NextResponse.json(
+        { error: "marketId required for multi-outcome events" },
+        { status: 400 },
+      );
+    }
+    const outcome = p.outcomes.find((o) => o.marketId === body.marketId);
+    if (!outcome) {
+      return NextResponse.json(
+        { error: "marketId not in signal outcomes" },
+        { status: 400 },
+      );
+    }
+    resolvedMarketId = outcome.marketId;
+    resolvedOutcomeLabel = body.outcomeLabel ?? outcome.label;
+    resolvedQuestion = `${outcome.label} · ${p.question}`;
+    entryYesProbability = outcome.yesProbability;
   }
+
+  const payload = { marketId: resolvedMarketId } as { marketId: string };
 
   const user = await ensureUser(claims.userId, body.walletAddress ?? null);
   if (!user.solanaPubkey) {
@@ -81,7 +118,7 @@ export async function POST(request: Request) {
   try {
     order = await createOrder({
       ownerPubkey: user.solanaPubkey,
-      marketId: payload.marketId,
+      marketId: resolvedMarketId,
       isYes,
       isBuy: true,
       depositAmountMicroUsd: depositAtomic,
@@ -110,11 +147,15 @@ export async function POST(request: Request) {
       amountUsdc: body.amountUsdc,
       status: "pending",
       meta: {
-        marketId: payload.marketId,
-        eventId: payload.eventId,
+        marketId: resolvedMarketId,
+        eventId:
+          signalRow.type === "prediction"
+            ? (signalRow.payload as PredictionSignal).eventId
+            : (signalRow.payload as MultiPredictionSignal).eventId,
         outcome: body.outcome,
-        question: payload.question,
-        entryYesProbability: payload.yesProbability,
+        outcomeLabel: resolvedOutcomeLabel,
+        question: resolvedQuestion,
+        entryYesProbability,
         contracts: order.order.contracts,
         avgPriceUsd: order.order.newAvgPriceUsd,
         orderCostUsd: order.order.orderCostUsd,

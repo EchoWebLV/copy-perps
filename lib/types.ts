@@ -5,7 +5,7 @@ export interface SignalChipData {
   level: SignalLevel;
 }
 
-export type SignalType = "meme" | "prediction" | "whale";
+export type SignalType = "meme" | "prediction" | "whale" | "multiprediction";
 
 export interface BaseSignal {
   id: string;
@@ -13,6 +13,12 @@ export interface BaseSignal {
   heatScore: number;
   createdAt: string;
   chips: SignalChipData[];
+}
+
+export interface MultiPredictionOutcome {
+  label: string;
+  marketId: string;
+  yesProbability: number;
 }
 
 export interface MemeSignal extends BaseSignal {
@@ -52,6 +58,21 @@ export interface WhaleSignal extends BaseSignal {
   venue: string;
 }
 
-export type Signal = MemeSignal | PredictionSignal | WhaleSignal;
+export interface MultiPredictionSignal extends BaseSignal {
+  type: "multiprediction";
+  question: string;
+  resolveDate: string;
+  volume24h: number;
+  eventId: string;
+  series?: string;
+  outcomes: MultiPredictionOutcome[];
+  totalOutcomes: number;
+}
+
+export type Signal =
+  | MemeSignal
+  | PredictionSignal
+  | WhaleSignal
+  | MultiPredictionSignal;
 
 export type StakeAmount = 5 | 10 | 20 | 50;

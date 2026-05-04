@@ -3,6 +3,7 @@
 import type { Signal } from "@/lib/types";
 import { MemeCard } from "./MemeCard";
 import { PredictionCard } from "./PredictionCard";
+import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { BalancePill } from "@/components/shell/BalancePill";
 
@@ -22,6 +23,9 @@ export function FeedContainer({ signals }: Props) {
           <div key={signal.id} className="h-dvh w-full snap-start">
             {signal.type === "meme" && <MemeCard signal={signal} />}
             {signal.type === "prediction" && <PredictionCard signal={signal} />}
+            {signal.type === "multiprediction" && (
+              <MultiPredictionCard signal={signal} />
+            )}
             {signal.type === "whale" && <WhaleCard signal={signal} />}
           </div>
         ))}
