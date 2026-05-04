@@ -1,7 +1,7 @@
 {
-  "name": "Fast Bet",
-  "short_name": "Fast Bet",
-  "description": "All the short market spam, in one feed.",
+  "name": "gwak.gg",
+  "short_name": "gwak",
+  "description": "Trade. Watch. Grow.",
   "start_url": "/feed",
   "display": "standalone",
   "background_color": "#0a0a0a",

@@ -3,13 +3,13 @@ import { PrivyClientProvider } from "@/components/providers/PrivyClientProvider"
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Fast Bet",
-  description: "All the short market spam, in one feed.",
+  title: "gwak.gg",
+  description: "Trade. Watch. Grow.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Fast Bet",
+    title: "gwak.gg",
   },
 };
 
