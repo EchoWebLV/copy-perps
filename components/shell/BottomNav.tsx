@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Wallet, History } from "lucide-react";
+import { Flame, Wallet, PieChart } from "lucide-react";
 
 const tabs = [
   { href: "/feed", icon: Flame, label: "Feed" },
   { href: "/deposit", icon: Wallet, label: "Deposit" },
-  { href: "/history", icon: History, label: "History" },
+  { href: "/portfolio", icon: PieChart, label: "Portfolio" },
 ];
 
 export function BottomNav() {
