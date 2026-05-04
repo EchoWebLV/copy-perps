@@ -14,13 +14,15 @@ The product wedge: **the unified short-attention betting surface**. Today, trade
 
 ## The three rails
 
-| Rail | Data source | Execution venue | Status in MVP |
-|---|---|---|---|
-| **Memes** | Birdeye trending + Jupiter token list + smart-money wallet watch | Jupiter Swap | REAL |
-| **Prediction markets** | Jupiter Prediction API (= Polymarket + Kalshi liquidity) | Jupiter Prediction | REAL |
-| **Whale positions** | Hyperliquid public REST (5s poll, MVP) → WebSocket later | Jupiter Perps | REAL |
+| Rail | Data source | Execution venue | Library | Status in MVP |
+|---|---|---|---|---|
+| **Memes** | DexScreener trending + Jupiter token list + smart-money wallet watch | Jupiter Swap (REST) | `@jup-ag/api` | REAL |
+| **Prediction markets** | Jupiter Prediction API (= Polymarket + Kalshi liquidity) | Jupiter Prediction (REST, beta) | direct `fetch` | REAL |
+| **Whale positions** | Hyperliquid public REST (5s poll, MVP) → WebSocket later | **Drift Protocol** | `@drift-labs/sdk` | REAL |
 
-All three execute on Solana. **Zero bridges in MVP.** The whale rail decouples signal source (Hyperliquid, where famous traders trade) from execution venue (Jupiter Perps, Solana-native) — disclosed in a small "executes on Jupiter Perps" line under the action button.
+All three execute on Solana. **Zero bridges in MVP.** The whale rail decouples signal source (Hyperliquid, where famous traders trade) from execution venue (Drift, Solana-native) — disclosed in a small "executes on Drift" line under the action button.
+
+**Why Drift over Jupiter Perps**: Jupiter Perps is an on-chain Anchor program with no official TypeScript SDK and docs flagged "work in progress". Drift ships a mature `@drift-labs/sdk` and supports 30+ markets vs Jupiter Perps' SOL/BTC/ETH-only. Net cost: ~1 day of SDK setup vs ~2-3 days of low-level Anchor IDL grind.
 
 ## Wallet & funding
 
@@ -70,7 +72,7 @@ Each rail computes a **heat score 0-100** every 30-60 seconds. Feed is ranked by
 - Wallet 30d PnL (≥$500k to be "famous")
 - Recency (open in last 5 min = hottest, decays over 30 min)
 - Conviction multiplier (multiple watched wallets same direction)
-- Quality gate: asset must be tradeable on Jupiter Perps
+- Quality gate: asset must be tradeable on Drift
 
 ## Tech stack
 
@@ -86,7 +88,10 @@ Each rail computes a **heat score 0-100** every 30-60 seconds. Feed is ranked by
 | Background work | Vercel Cron + Functions | Signal recompute, market polling |
 | Realtime | Server-Sent Events (Edge runtime) | Push new cards without WS infra |
 | Solana RPC | Helius | Fast, reliable, account WS |
-| Execution SDK | `@jup-ag/api` | Memes + Perps + Prediction, one library |
+| Meme/swap exec | `@jup-ag/api` (Jupiter Swap REST) | Aggregator quote + execute |
+| Prediction exec | Jupiter Prediction REST API | Polymarket + Kalshi liquidity, beta |
+| Perp exec | `@drift-labs/sdk` | Mature TS SDK, 30+ markets |
+| Meme data | DexScreener REST (free) | Trending boosts, volume velocity |
 | Whale signals | Hyperliquid REST (poll) | Public, free |
 | Observability | Vercel logs + Sentry | Live demo safety |
 
@@ -111,9 +116,10 @@ fast-bet/
 │   ├── shell/{BalancePill,BottomNav}.tsx
 │   └── ui/                       # shadcn primitives
 ├── lib/
-│   ├── jupiter/                  # swap, perps, prediction wrappers
+│   ├── jupiter/                  # swap + prediction wrappers
+│   ├── drift/                    # perp open/close via @drift-labs/sdk
 │   ├── hyperliquid/              # rest poller, decoders
-│   ├── birdeye/                  # trending fetcher
+│   ├── dexscreener/              # trending fetcher
 │   ├── signals/                  # heat-score functions, ranker
 │   ├── privy/                    # server-side helpers
 │   └── db/                       # Drizzle schema + queries
@@ -136,10 +142,10 @@ feed_views     (id pk, user_id, signal_id, action [skip|stake], viewed_at)
 ```
 Vercel Cron (30s/60s/5s)
         │
-   ┌────┼─────────────────┐
-   ▼    ▼                 ▼
-Birdeye Jupiter Pred  Hyperliquid REST
-   │    │                 │
+   ┌────┼──────────────────┐
+   ▼    ▼                  ▼
+DexScreener Jupiter Pred Hyperliquid REST
+   │    │                  │
    └────┴── compute heat ─┘
               │
            Postgres `signals`
@@ -171,15 +177,15 @@ Birdeye Jupiter Pred  Hyperliquid REST
 
 ### Phase 1 — Memes rail real (days 4-7)
 4. Drizzle migrations applied; `/api/feed` reads DB; seed signals
-5. Birdeye + Jupiter token list; `refresh-memes` cron; heat score v1
+5. DexScreener + Jupiter token list; `refresh-memes` cron; heat score v1
 6. `/api/bet/meme` → Jupiter swap; Privy signing; real $1 swap test
-7. `/deposit` page; MoonPay toggle; BalancePill subscribed to Helius account WS
+7. `/deposit` page polish; MoonPay toggle; BalancePill subscribed to Helius account WS
 
 ### Phase 2 — Prediction + Whale rails (days 8-11)
 8. Jupiter Prediction API integration; `refresh-predictions` cron; live data
-9. `/api/bet/prediction` → Jupiter Prediction SDK; YES/NO real txs
+9. `/api/bet/prediction` → REST POST → sign + send; YES/NO real txs
 10. Hyperliquid REST polling; curated whale list seeded; `refresh-whales` cron
-11. `/api/bet/perp` → Jupiter Perps open; Tail/Fade real txs
+11. `/api/bet/perp` → `@drift-labs/sdk` open position; Tail/Fade real txs
 
 ### Phase 3 — Polish & demo (days 12-14)
 12. SSE feed stream; composite ranker; Framer Motion polish
@@ -188,9 +194,9 @@ Birdeye Jupiter Pred  Hyperliquid REST
 
 ## Critical risks
 
-1. **Jupiter Prediction API maturity** (shipped Feb 2026) — fallback: read-only Polymarket data + stub the bet for that rail. De-risk on day 8 morning.
+1. **Jupiter Prediction API maturity** (shipped Feb 2026, beta) — fallback: read-only Polymarket data + stub the bet for that rail. De-risk on day 8 morning.
 2. **Hyperliquid REST rate limits** — fallback: Railway worker with WS. Adds ~0.5 day.
-3. **Privy server-side signing flow** — needs a 30-min spike on day 1.
+3. **Drift SDK Privy compatibility** — Drift SDK expects a `Wallet` interface; Privy embedded wallets need adaptation. 30-min spike on day 11.
 4. **Mainnet test budget** — ~$100 USDC for real-bet testing across rails.
 
 ## "MVP done" definition
