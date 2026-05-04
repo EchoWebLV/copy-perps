@@ -1,6 +1,9 @@
+"use client";
+
 import type { PredictionSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
+import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 
 const fmtUsd = (n: number) =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}k`;
@@ -8,6 +11,7 @@ const fmtUsd = (n: number) =>
 export function PredictionCard({ signal }: { signal: PredictionSignal }) {
   const yesCents = Math.round(signal.yesProbability * 100);
   const noCents = 100 - yesCents;
+  const icon = useJupiterEventImage(signal.eventId, signal.marketId);
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -15,10 +19,10 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
         Market
       </span>
 
-      {signal.imageUrl ? (
+      {icon ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={signal.imageUrl}
+          src={icon}
           alt=""
           className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
           loading="lazy"

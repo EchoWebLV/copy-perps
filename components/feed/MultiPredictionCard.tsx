@@ -15,6 +15,7 @@ import {
   signAndSubmitTx,
 } from "@/lib/bets/post-with-consolidation";
 import { SignalChip } from "./SignalChip";
+import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000
@@ -30,6 +31,7 @@ interface State {
 export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
   const [state, setState] = useState<State>({});
   const [stake, setStake] = useState<StakeAmount>(10);
+  const icon = useJupiterEventImage(signal.eventId);
   const { getAccessToken } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -122,10 +124,10 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
         Market
       </span>
 
-      {signal.imageUrl ? (
+      {icon ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={signal.imageUrl}
+          src={icon}
           alt=""
           className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
           loading="lazy"

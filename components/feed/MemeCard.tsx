@@ -1,24 +1,26 @@
+"use client";
+
 import type { MemeSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
+import { useJupiterTokenIcon } from "@/lib/feed/use-card-image";
 
 function fmtMarketCap(n: number | undefined): string {
-  if (!n || !Number.isFinite(n)) return "—";
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}b`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}m`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}k`;
   return `$${n.toFixed(0)}`;
 }
 
 export function MemeCard({ signal }: { signal: MemeSignal }) {
-  // Tolerate rows still on the legacy `change1hPct` shape until the next
-  // cron run rewrites them.
   const change =
     signal.change24hPct ??
     (signal as unknown as { change1hPct?: number }).change1hPct ??
     0;
   const up = change >= 0;
   const stroke = up ? "#22c55e" : "#ef4444";
+  const icon = useJupiterTokenIcon(signal.tokenAddress);
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -26,10 +28,10 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
         Coin
       </span>
 
-      {signal.imageUrl ? (
+      {icon ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={signal.imageUrl}
+          src={icon}
           alt={signal.ticker}
           className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
           loading="lazy"

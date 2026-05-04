@@ -131,7 +131,6 @@ export async function refreshPredictions(): Promise<RefreshPredictionsResult> {
         marketId: market.marketId,
         series: event.metadata.series,
         chips: predictionSignalChips(event, market),
-        imageUrl: market.imageUrl ?? event.metadata.imageUrl,
       };
 
       return {
@@ -163,7 +162,6 @@ export async function refreshPredictions(): Promise<RefreshPredictionsResult> {
       outcomes: outcomes.slice(0, MULTI_OUTCOMES_TO_SHOW),
       totalOutcomes: outcomes.length,
       chips: predictionSignalChips(event, leadMarket),
-      imageUrl: event.metadata.imageUrl ?? leadMarket.imageUrl ?? undefined,
     };
 
     return {

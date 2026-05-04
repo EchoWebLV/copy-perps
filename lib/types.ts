@@ -32,7 +32,6 @@ export interface MemeSignal extends BaseSignal {
   marketCap?: number;
   change24hPct: number;
   sparklinePath: string;
-  imageUrl?: string;
 }
 
 export interface PredictionSignal extends BaseSignal {
@@ -44,7 +43,6 @@ export interface PredictionSignal extends BaseSignal {
   eventId?: string;
   marketId?: string;
   series?: string;
-  imageUrl?: string;
 }
 
 export interface WhaleSignal extends BaseSignal {
@@ -70,7 +68,6 @@ export interface MultiPredictionSignal extends BaseSignal {
   series?: string;
   outcomes: MultiPredictionOutcome[];
   totalOutcomes: number;
-  imageUrl?: string;
 }
 
 export type Signal =
