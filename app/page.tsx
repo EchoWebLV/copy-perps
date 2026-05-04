@@ -1,25 +1,22 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
+import Image from "next/image";
 import Link from "next/link";
 
 export default function LandingPage() {
   const { ready, authenticated, login } = usePrivy();
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-      <div className="mb-3 text-xs font-bold tracking-[0.2em] text-neutral-500 uppercase">
-        Fast Bet
-      </div>
-      <h1 className="text-5xl font-black tracking-tight text-white">
-        All the short market spam.
-      </h1>
-      <h2 className="mt-2 text-5xl font-black tracking-tight text-neutral-500">
-        One feed.
-      </h2>
-      <p className="mt-6 max-w-md text-base text-neutral-400">
-        Hot meme coins. Hot Polymarket. Hot whale leverage. Tap to bet.
-      </p>
+    <main className="gwak-breathe flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+      <Image
+        src="/logo.jpeg"
+        alt="gwak.gg"
+        width={1280}
+        height={853}
+        priority
+        className="h-auto w-full max-w-[360px] drop-shadow-[0_0_30px_rgba(74,222,128,0.18)]"
+      />
 
       {!ready && (
         <div className="mt-10 text-sm text-neutral-600">Loading…</div>
@@ -39,7 +36,7 @@ export default function LandingPage() {
           href="/feed"
           className="mt-10 rounded-2xl bg-[#22c55e] px-8 py-4 text-lg font-bold text-black transition active:scale-[0.97]"
         >
-          Open feed →
+          Enter →
         </Link>
       )}
     </main>
