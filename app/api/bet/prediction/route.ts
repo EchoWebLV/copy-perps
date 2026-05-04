@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { signals, bets } from "@/lib/db/schema";
+import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { createOrder } from "@/lib/jupiter-prediction/client";
@@ -11,6 +10,7 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import { getSignalById } from "@/lib/feed/pool";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -57,15 +57,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const [signalRow] = await db
-    .select()
-    .from(signals)
-    .where(eq(signals.id, body.signalId))
-    .limit(1);
-
+  const signal = await getSignalById(body.signalId);
   if (
-    !signalRow ||
-    (signalRow.type !== "prediction" && signalRow.type !== "multiprediction")
+    !signal ||
+    (signal.type !== "prediction" && signal.type !== "multiprediction")
   ) {
     return NextResponse.json(
       { error: "signal not found or wrong type" },
@@ -74,13 +69,14 @@ export async function POST(request: Request) {
   }
 
   // Resolve marketId + outcome label, branching on signal flavor.
-  let resolvedMarketId: string | null = null;
+  let resolvedMarketId: string;
   let resolvedOutcomeLabel: string | undefined;
   let resolvedQuestion: string;
   let entryYesProbability: number | undefined;
+  let resolvedEventId: string | undefined;
 
-  if (signalRow.type === "prediction") {
-    const p = signalRow.payload as PredictionSignal;
+  if (signal.type === "prediction") {
+    const p: PredictionSignal = signal;
     if (!p.marketId) {
       return NextResponse.json(
         { error: "signal missing marketId" },
@@ -90,8 +86,9 @@ export async function POST(request: Request) {
     resolvedMarketId = p.marketId;
     resolvedQuestion = p.question;
     entryYesProbability = p.yesProbability;
+    resolvedEventId = p.eventId;
   } else {
-    const p = signalRow.payload as MultiPredictionSignal;
+    const p: MultiPredictionSignal = signal;
     if (!body.marketId) {
       return NextResponse.json(
         { error: "marketId required for multi-outcome events" },
@@ -109,9 +106,8 @@ export async function POST(request: Request) {
     resolvedOutcomeLabel = body.outcomeLabel ?? outcome.label;
     resolvedQuestion = `${outcome.label} · ${p.question}`;
     entryYesProbability = outcome.yesProbability;
+    resolvedEventId = p.eventId;
   }
-
-  const payload = { marketId: resolvedMarketId } as { marketId: string };
 
   const user = await ensureUser(claims.userId, body.walletAddress ?? null);
   if (!user.solanaPubkey) {
@@ -198,16 +194,13 @@ export async function POST(request: Request) {
     .insert(bets)
     .values({
       userId: user.id,
-      signalId: signalRow.id,
       type: "prediction",
       amountUsdc: effectiveAmount,
       status: "pending",
       meta: {
+        signalId: signal.id,
         marketId: resolvedMarketId,
-        eventId:
-          signalRow.type === "prediction"
-            ? (signalRow.payload as PredictionSignal).eventId
-            : (signalRow.payload as MultiPredictionSignal).eventId,
+        eventId: resolvedEventId,
         outcome: body.outcome,
         outcomeLabel: resolvedOutcomeLabel,
         question: resolvedQuestion,

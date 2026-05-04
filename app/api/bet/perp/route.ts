@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
-import { signals, bets } from "@/lib/db/schema";
+import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { flashSymbolFor } from "@/lib/flash-trade/client";
@@ -13,6 +12,7 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import { getSignalById } from "@/lib/feed/pool";
 import type { WhaleSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -53,20 +53,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const [signalRow] = await db
-    .select()
-    .from(signals)
-    .where(eq(signals.id, body.signalId))
-    .limit(1);
-
-  if (!signalRow || signalRow.type !== "whale") {
+  const signal = await getSignalById(body.signalId);
+  if (!signal || signal.type !== "whale") {
     return NextResponse.json(
       { error: "signal not found or wrong type" },
       { status: 400 },
     );
   }
 
-  const whale = signalRow.payload as WhaleSignal;
+  const whale: WhaleSignal = signal;
   const flashSymbol = flashSymbolFor(whale.asset);
   if (flashSymbol == null) {
     return NextResponse.json(
@@ -159,11 +154,11 @@ export async function POST(request: Request) {
     .insert(bets)
     .values({
       userId: user.id,
-      signalId: signalRow.id,
       type: "perp",
       amountUsdc: body.amountUsdc,
       status: "pending",
       meta: {
+        signalId: signal.id,
         venue: "FlashTrade",
         flashAsset: flashSymbol,
         whaleAddress: whale.walletAddress,

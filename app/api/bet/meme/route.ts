@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { signals, bets, users } from "@/lib/db/schema";
+import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { buyTokenWithUsdc } from "@/lib/jupiter/swap";
@@ -11,6 +10,7 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import { getSignalById } from "@/lib/feed/pool";
 import type { MemeSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -44,20 +44,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const [signalRow] = await db
-    .select()
-    .from(signals)
-    .where(eq(signals.id, body.signalId))
-    .limit(1);
-
-  if (!signalRow || signalRow.type !== "meme") {
+  const signal = await getSignalById(body.signalId);
+  if (!signal || signal.type !== "meme") {
     return NextResponse.json(
       { error: "signal not found or wrong type" },
       { status: 400 },
     );
   }
 
-  const memePayload = signalRow.payload as MemeSignal;
+  const memePayload: MemeSignal = signal;
   if (!memePayload.tokenAddress) {
     return NextResponse.json(
       { error: "signal missing tokenAddress" },
@@ -127,15 +122,18 @@ export async function POST(request: Request) {
     );
   }
 
+  // signalId is left null because the pool — not the signals table — is the
+  // source of truth now and the FK would fire for pool-only ids. The
+  // original id is preserved in meta for traceability.
   const [bet] = await db
     .insert(bets)
     .values({
       userId: user.id,
-      signalId: signalRow.id,
       type: "meme",
       amountUsdc: amount,
       status: "pending",
       meta: {
+        signalId: signal.id,
         tokenAddress: memePayload.tokenAddress,
         tokenSymbol: memePayload.ticker,
         tokenName: memePayload.name,

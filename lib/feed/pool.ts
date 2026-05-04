@@ -401,3 +401,13 @@ export const getFeedPool = unstable_cache(buildPool, ["feed-pool"], {
   revalidate: 60,
   tags: ["feed-pool"],
 });
+
+/**
+ * Look up a signal by id from the cached pool. Used by bet routes for
+ * validation since the pool — not the signals table — is now the source
+ * of truth for "what's bettable right now."
+ */
+export async function getSignalById(id: string): Promise<Signal | null> {
+  const pool = await getFeedPool();
+  return pool.find((s) => s.id === id) ?? null;
+}
