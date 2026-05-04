@@ -38,8 +38,11 @@ export function StakeButtons({ signal }: Props) {
     const key = `buy-${amount}`;
     setState({ pending: key });
 
+    let betId: string | undefined;
+    let token: string | null = null;
+
     try {
-      const token = await getAccessToken();
+      token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
       const r = await fetch("/api/bet/meme", {
@@ -60,9 +63,10 @@ export function StakeButtons({ signal }: Props) {
         throw new Error(body.error ?? `HTTP ${r.status}`);
       }
 
-      const { betId, swapTransaction, expectedOutAmount } = await r.json();
+      const data = await r.json();
+      betId = data.betId as string;
 
-      const txBytes = Uint8Array.from(atob(swapTransaction), (c) =>
+      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
         c.charCodeAt(0),
       );
 
@@ -82,7 +86,7 @@ export function StakeButtons({ signal }: Props) {
         body: JSON.stringify({
           betId,
           txHash: sigB58,
-          actualOutAmount: expectedOutAmount,
+          actualOutAmount: data.expectedOutAmount,
         }),
       });
 
@@ -92,8 +96,7 @@ export function StakeButtons({ signal }: Props) {
       const msg = err instanceof Error ? err.message : String(err);
       flashError(msg.slice(0, 80));
 
-      const token = await getAccessToken().catch(() => null);
-      if (token) {
+      if (betId && token) {
         await fetch("/api/bet/meme/confirm", {
           method: "POST",
           headers: {
@@ -101,7 +104,7 @@ export function StakeButtons({ signal }: Props) {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            betId: undefined,
+            betId,
             failed: true,
             failureReason: msg.slice(0, 200),
           }),

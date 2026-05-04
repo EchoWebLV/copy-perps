@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { getQuote } from "@/lib/jupiter/swap";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
+
+const STALE_PENDING_MINUTES = 5;
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -42,10 +44,32 @@ export async function GET(request: Request) {
     .limit(1);
   if (!user) return NextResponse.json({ positions: [] });
 
+  // Reap pending bets that never reached the confirm step (sign cancelled,
+  // wallet modal closed, network died mid-sign, etc.) so they don't clutter
+  // the portfolio forever.
+  await db
+    .update(bets)
+    .set({ status: "abandoned" })
+    .where(
+      and(
+        eq(bets.userId, user.id),
+        eq(bets.status, "pending"),
+        lt(
+          bets.createdAt,
+          sql`now() - (${STALE_PENDING_MINUTES} || ' minutes')::interval`,
+        ),
+      ),
+    );
+
   const userBets = await db
     .select()
     .from(bets)
-    .where(eq(bets.userId, user.id))
+    .where(
+      and(
+        eq(bets.userId, user.id),
+        inArray(bets.status, ["pending", "confirmed", "closed"]),
+      ),
+    )
     .orderBy(desc(bets.createdAt));
 
   const positions = await Promise.all(
