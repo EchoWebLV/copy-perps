@@ -8,7 +8,7 @@ import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 
 interface Props {
   betId: string;
-  apiBase: "/api/bet/meme" | "/api/bet/prediction";
+  apiBase: "/api/bet/meme" | "/api/bet/prediction" | "/api/bet/perp";
   onClosed: () => void;
 }
 

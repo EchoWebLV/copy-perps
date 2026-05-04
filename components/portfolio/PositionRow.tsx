@@ -15,6 +15,12 @@ export interface PortfolioPosition {
   question?: string;
   outcome?: "yes" | "no";
   contracts?: string;
+  // perp
+  asset?: string;
+  side?: "long" | "short";
+  leverage?: number;
+  notionalUsd?: number;
+  whaleAddress?: string;
   // shared
   amountUsdc: number;
   currentValueUsdc?: number | null;
@@ -67,12 +73,15 @@ export function PositionRow({
 
   const isMeme = position.type === "meme";
   const isPrediction = position.type === "prediction";
+  const isPerp = position.type === "perp";
 
   const title = isMeme
     ? (position.ticker ?? position.type)
     : isPrediction
       ? truncate(position.question, 36)
-      : position.type;
+      : isPerp
+        ? `${position.asset} ${position.leverage ?? 1}×`
+        : position.type;
 
   const subtitleEl = isMeme ? (
     position.name && (
@@ -91,14 +100,31 @@ export function PositionRow({
       {position.outcome.toUpperCase()}
       {position.contracts ? ` · ${position.contracts}` : ""}
     </span>
+  ) : isPerp && position.side ? (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+        position.side === "long"
+          ? "bg-[#22c55e]/20 text-[#22c55e]"
+          : "bg-[#ef4444]/20 text-[#ef4444]"
+      }`}
+    >
+      {position.side.toUpperCase()}
+      {position.notionalUsd ? ` · $${position.notionalUsd.toFixed(0)}` : ""}
+    </span>
   ) : null;
 
   const closeable = !isClosed && !isPending && !isFailed;
-  const apiBase: "/api/bet/meme" | "/api/bet/prediction" | null = isMeme
+  const apiBase:
+    | "/api/bet/meme"
+    | "/api/bet/prediction"
+    | "/api/bet/perp"
+    | null = isMeme
     ? "/api/bet/meme"
     : isPrediction
       ? "/api/bet/prediction"
-      : null;
+      : isPerp
+        ? "/api/bet/perp"
+        : null;
 
   return (
     <div

@@ -4,6 +4,7 @@ import {
   OrderType,
   PositionDirection,
   PRICE_PRECISION,
+  QUOTE_PRECISION,
 } from "@drift-labs/sdk";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import {
@@ -138,3 +139,134 @@ export async function buildOpenPerpTx(params: {
     isFirstTimeUser: isFirstTime,
   };
 }
+
+export interface PerpPositionPnl {
+  baseAssetAmount: string;
+  side: "long" | "short";
+  unrealizedPnlUsd: number;
+  positionValueUsd: number;
+}
+
+/**
+ * Read the user's current position for a given Drift perp market and
+ * compute its unrealized PnL. Returns null if the user has no open
+ * exposure on that market.
+ */
+export async function readPerpPosition(
+  userPubkey: PublicKey,
+  marketIndex: number,
+): Promise<PerpPositionPnl | null> {
+  const drift = await makeDriftClientForUser(userPubkey);
+  try {
+    await drift.addUser(0);
+  } catch {
+    /* already subscribed, or user PDA doesn't exist on chain */
+  }
+
+  let driftUser;
+  try {
+    driftUser = drift.getUser(0);
+  } catch {
+    return null;
+  }
+  await driftUser.fetchAccounts();
+
+  const position = driftUser.getPerpPosition(marketIndex);
+  if (!position || position.baseAssetAmount.eqn(0)) return null;
+
+  const upnl = driftUser.getUnrealizedPNL(true, marketIndex);
+  const upnlUsd = upnl.toNumber() / QUOTE_PRECISION.toNumber();
+
+  const oracleData = drift.getOracleDataForPerpMarket(marketIndex);
+  const priceUsd = oracleData.price.toNumber() / PRICE_PRECISION.toNumber();
+  const sizeBase =
+    Math.abs(position.baseAssetAmount.toNumber()) /
+    drift.convertToPerpPrecision(1).toNumber();
+  const positionValueUsd = sizeBase * priceUsd;
+
+  return {
+    baseAssetAmount: position.baseAssetAmount.toString(),
+    side: position.baseAssetAmount.isNeg() ? "short" : "long",
+    unrealizedPnlUsd: upnlUsd,
+    positionValueUsd,
+  };
+}
+
+export interface BuildClosePerpResult {
+  transaction: string;
+  expectedProceedsUsd: number;
+  closedSide: "long" | "short";
+  baseAssetAmount: string;
+}
+
+/**
+ * Build a single transaction that flattens the user's position on the
+ * given market via a reduce-only market order in the opposite direction.
+ *
+ * Note: collateral stays inside Drift after close — withdrawing back to
+ * the wallet is a separate step, intentional for now so users can roll
+ * proceeds into another bet without paying ATA + tx overhead twice.
+ */
+export async function buildClosePerpTx(params: {
+  userPubkey: PublicKey;
+  marketIndex: number;
+}): Promise<BuildClosePerpResult> {
+  const drift = await makeDriftClientForUser(params.userPubkey);
+  try {
+    await drift.addUser(0);
+  } catch {
+    /* already subscribed */
+  }
+
+  const driftUser = drift.getUser(0);
+  await driftUser.fetchAccounts();
+
+  const position = driftUser.getPerpPosition(params.marketIndex);
+  if (!position || position.baseAssetAmount.eqn(0)) {
+    throw new Error("No open position to close on this market");
+  }
+
+  const closingDirection = position.baseAssetAmount.isNeg()
+    ? PositionDirection.LONG
+    : PositionDirection.SHORT;
+  const closingSide: "long" | "short" = position.baseAssetAmount.isNeg()
+    ? "short"
+    : "long";
+
+  const baseAmountToClose = position.baseAssetAmount.abs();
+
+  const closeIx = await drift.getPlacePerpOrderIx(
+    {
+      orderType: OrderType.MARKET,
+      marketIndex: params.marketIndex,
+      direction: closingDirection,
+      baseAssetAmount: baseAmountToClose,
+      reduceOnly: true,
+    },
+    0,
+  );
+
+  const upnl = driftUser.getUnrealizedPNL(true, params.marketIndex);
+  const expectedProceedsUsd = upnl.toNumber() / QUOTE_PRECISION.toNumber();
+
+  const conn = getConnection();
+  const { blockhash } = await conn.getLatestBlockhash("confirmed");
+  const tx = new Transaction({
+    feePayer: params.userPubkey,
+    recentBlockhash: blockhash,
+  });
+  tx.add(closeIx);
+
+  const serialized = tx.serialize({
+    requireAllSignatures: false,
+    verifySignatures: false,
+  });
+
+  return {
+    transaction: Buffer.from(serialized).toString("base64"),
+    expectedProceedsUsd,
+    closedSide: closingSide,
+    baseAssetAmount: baseAmountToClose.toString(),
+  };
+}
+

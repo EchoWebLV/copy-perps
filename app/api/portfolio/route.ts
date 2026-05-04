@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { getQuote } from "@/lib/jupiter/swap";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 import { getMarket } from "@/lib/jupiter-prediction/client";
+import { readPerpPosition } from "@/lib/drift/perp";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -28,6 +30,12 @@ interface Position {
   contracts?: string;
   marketId?: string;
   positionPubkey?: string;
+  // perp fields
+  asset?: string;
+  side?: "long" | "short";
+  leverage?: number;
+  notionalUsd?: number;
+  whaleAddress?: string;
   // shared
   amountUsdc: number;
   currentValueUsdc?: number | null;
@@ -138,6 +146,64 @@ export async function GET(request: Request) {
             };
           } catch (e) {
             console.warn("[portfolio] meme sell quote failed for", bet.id, e);
+            return { ...base, currentValueUsdc: null };
+          }
+        }
+
+        return base;
+      }
+
+      // ---- Perp bet (Drift) ----
+      if (bet.type === "perp") {
+        const asset = meta.whaleAsset as string | undefined;
+        const side = meta.direction as "long" | "short" | undefined;
+        const leverage = meta.whaleLeverage as number | undefined;
+        const notionalUsd = meta.notionalUsd as number | undefined;
+        const whaleAddress = meta.whaleAddress as string | undefined;
+        const marketIndex = meta.marketIndex as number | undefined;
+
+        Object.assign(base, {
+          asset,
+          ticker: asset,
+          side,
+          leverage,
+          notionalUsd,
+          whaleAddress,
+        });
+
+        if (bet.status === "closed" && bet.proceedsUsdc !== null) {
+          const pnl = bet.proceedsUsdc! - bet.amountUsdc;
+          return {
+            ...base,
+            pnlUsdc: pnl,
+            pnlPct: (pnl / bet.amountUsdc) * 100,
+          };
+        }
+
+        if (
+          bet.status === "confirmed" &&
+          typeof marketIndex === "number" &&
+          user.solanaPubkey
+        ) {
+          try {
+            const liveData = await readPerpPosition(
+              new PublicKey(user.solanaPubkey),
+              marketIndex,
+            );
+            if (liveData) {
+              const pnl = liveData.unrealizedPnlUsd;
+              const currentValue = bet.amountUsdc + pnl;
+              return {
+                ...base,
+                currentValueUsdc: currentValue,
+                pnlUsdc: pnl,
+                pnlPct: (pnl / bet.amountUsdc) * 100,
+              };
+            }
+            // Position closed externally (e.g. via Drift UI). No live exposure.
+            return { ...base, currentValueUsdc: null };
+          } catch (e) {
+            console.warn("[portfolio] Drift PnL failed for", bet.id, e);
             return { ...base, currentValueUsdc: null };
           }
         }
