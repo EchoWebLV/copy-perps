@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getFeedPool } from "@/lib/feed/pool";
-import { seededShuffle, randomSeed } from "@/lib/feed/shuffle";
+import { interleaveByRail, randomSeed } from "@/lib/feed/shuffle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   try {
     const pool = await getFeedPool();
-    const shuffled = seededShuffle(pool, seed);
+    const shuffled = interleaveByRail(pool, seed);
     const slice = shuffled.slice(cursor, cursor + limit);
     return NextResponse.json({
       signals: slice,

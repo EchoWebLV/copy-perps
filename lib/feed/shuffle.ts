@@ -33,3 +33,44 @@ export function seededShuffle<T>(arr: readonly T[], seed: number): T[] {
 export function randomSeed(): number {
   return Math.floor(Math.random() * 0xffffffff);
 }
+
+interface Typed {
+  type: string;
+}
+
+/**
+ * Interleave a shuffled pool so memes never run more than `maxMemeRun` in a
+ * row while non-memes (predictions + whales) are available. Once the
+ * non-meme bucket is drained the remaining memes spill out at the tail —
+ * unavoidable when memes outnumber the rest 7:1.
+ *
+ * Same seed → same sequence, so paginated batches stay consistent.
+ */
+export function interleaveByRail<T extends Typed>(
+  signals: readonly T[],
+  seed: number,
+  maxMemeRun = 2,
+): T[] {
+  const memes: T[] = [];
+  const others: T[] = [];
+  for (const s of signals) {
+    (s.type === "meme" ? memes : others).push(s);
+  }
+  const shuffledMemes = seededShuffle(memes, seed);
+  // XOR to derive an independent stream so the same seed doesn't produce
+  // the same relative order for both buckets.
+  const shuffledOthers = seededShuffle(others, seed ^ 0x9e3779b9);
+
+  const out: T[] = [];
+  let mi = 0;
+  let oi = 0;
+  while (mi < shuffledMemes.length || oi < shuffledOthers.length) {
+    for (let k = 0; k < maxMemeRun && mi < shuffledMemes.length; k++) {
+      out.push(shuffledMemes[mi++]);
+    }
+    if (oi < shuffledOthers.length) {
+      out.push(shuffledOthers[oi++]);
+    }
+  }
+  return out;
+}
