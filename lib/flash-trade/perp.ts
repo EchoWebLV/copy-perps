@@ -109,11 +109,18 @@ export async function buildOpenPerpTx(params: {
   );
   if (size.lten(0)) throw new Error("computed size is non-positive");
 
-  const openData = await flash.openPosition(
+  // Crypto.1's perp markets are self-collateralized — the SOL/Long
+  // market expects SOL collateral, BTC/Long expects BTC, etc. Calling
+  // openPosition with USDC collateral against a SOL/Long market lookups
+  // up market PDA (SOL, USDC, Long) which doesn't exist (Anchor 0xbc4
+  // AccountNotInitialized). Use swapAndOpen so Flash swaps USDC->target
+  // inside the tx and uses the target asset as collateral.
+  const openData = await flash.swapAndOpen(
+    targetSym,
     targetSym,
     COLLATERAL_SYMBOL,
-    priceWithSlippage,
     collateralWithFee,
+    priceWithSlippage,
     size,
     side as unknown as Side,
     POOL_CONFIG,
@@ -197,9 +204,14 @@ export async function buildClosePerpTx(params: {
     side as unknown as Side,
   );
 
-  const closeData = await flash.closePosition(
+  // Mirror the swapAndOpen path: position uses target as collateral, so
+  // closing with closeAndSwap converts back to USDC for the user in the
+  // same tx. Calling plain closePosition with collateral=USDC would hit
+  // the same uninitialised-market error as the open side.
+  const closeData = await flash.closeAndSwap(
     targetSym,
     COLLATERAL_SYMBOL,
+    targetSym,
     priceWithSlippage,
     side as unknown as Side,
     POOL_CONFIG,

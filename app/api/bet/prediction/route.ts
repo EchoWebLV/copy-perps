@@ -15,7 +15,11 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-const MIN_USDC = 5;
+// Jupiter Prediction's createOrder enforces a minimum of $5 — but its
+// "minimum" is checked against contracts AFTER fees, so a $5 deposit
+// can land just under $5 in contract value and reject. Floor our minimum
+// at $5.50 so the after-fee order always clears.
+const MIN_USDC = 5.5;
 const MAX_USDC = 1000;
 
 export async function POST(request: Request) {
