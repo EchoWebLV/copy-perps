@@ -5,7 +5,7 @@ const RPC_URL =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
 let cachedConnection: Connection | null = null;
-function getConnection(): Connection {
+export function getConnection(): Connection {
   if (!cachedConnection) {
     cachedConnection = new Connection(RPC_URL, "confirmed");
   }

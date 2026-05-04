@@ -8,6 +8,7 @@ import {
   PositionRow,
   type PortfolioPosition,
 } from "@/components/portfolio/PositionRow";
+import { WithdrawButton } from "@/components/portfolio/WithdrawButton";
 import {
   useEmbeddedSolanaWallet,
   truncateAddress,
@@ -160,14 +161,17 @@ export default function PortfolioPage() {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-2 text-[11px] text-neutral-500">
-              <span className="font-mono">
-                {truncateAddress(wallet?.address)}
-              </span>
-              <span>·</span>
-              <span>
-                {openPositions.length} open · {closedPositions.length} closed
-              </span>
+            <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
+              <div className="flex items-center gap-2">
+                <span className="font-mono">
+                  {truncateAddress(wallet?.address)}
+                </span>
+                <span>·</span>
+                <span>
+                  {openPositions.length} open · {closedPositions.length} closed
+                </span>
+              </div>
+              <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
             </div>
           </div>
 
