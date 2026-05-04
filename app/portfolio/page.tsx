@@ -22,6 +22,7 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"open" | "closed">("open");
 
   const load = useCallback(async () => {
     if (!authenticated) return;
@@ -37,32 +38,46 @@ export default function PortfolioPage() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       setPositions(data.positions);
+      void refreshBalance();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [authenticated, getAccessToken]);
+  }, [authenticated, getAccessToken, refreshBalance]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Pending and failed bets don't represent a real position — exclude from totals.
-  const counted =
-    positions?.filter((p) => p.status === "confirmed" || p.status === "closed") ?? [];
-  const totalCost = counted.reduce((sum, p) => sum + p.amountUsdc, 0);
-  const positionsValue = counted.reduce(
-    (sum, p) =>
-      sum +
-      (p.status === "closed"
-        ? (p.proceedsUsdc ?? 0)
-        : (p.currentValueUsdc ?? p.amountUsdc)),
+  // Pending and failed bets don't represent a real position — exclude entirely.
+  // Closed bets' proceeds are already back in the wallet, so they don't belong
+  // in "In positions" either; counting them double-counts. Stats now reflect
+  // only currently-held (confirmed) positions.
+  const openPositions =
+    positions?.filter((p) => p.status === "confirmed") ?? [];
+  const closedPositions =
+    positions?.filter((p) => p.status === "closed") ?? [];
+
+  const totalCost = openPositions.reduce((sum, p) => sum + p.amountUsdc, 0);
+  const positionsValue = openPositions.reduce(
+    (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
     0,
   );
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
   const totalNetWorth = positionsValue + (walletUsd ?? 0);
+
+  // Realized PnL summary for the Closed tab.
+  const closedCost = closedPositions.reduce((sum, p) => sum + p.amountUsdc, 0);
+  const closedProceeds = closedPositions.reduce(
+    (sum, p) => sum + (p.proceedsUsdc ?? 0),
+    0,
+  );
+  const realizedPnl = closedProceeds - closedCost;
+  const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
+
+  const visiblePositions = tab === "open" ? openPositions : closedPositions;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pt-12 pb-28">
@@ -150,9 +165,64 @@ export default function PortfolioPage() {
                 {truncateAddress(wallet?.address)}
               </span>
               <span>·</span>
-              <span>{positions?.length ?? 0} positions</span>
+              <span>
+                {openPositions.length} open · {closedPositions.length} closed
+              </span>
             </div>
           </div>
+
+          <div className="mt-4 flex gap-1 rounded-full bg-white/5 p-1">
+            <button
+              onClick={() => setTab("open")}
+              className={`flex-1 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+                tab === "open"
+                  ? "bg-white text-black"
+                  : "text-neutral-400 active:scale-95"
+              }`}
+            >
+              Open · {openPositions.length}
+            </button>
+            <button
+              onClick={() => setTab("closed")}
+              className={`flex-1 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+                tab === "closed"
+                  ? "bg-white text-black"
+                  : "text-neutral-400 active:scale-95"
+              }`}
+            >
+              Closed · {closedPositions.length}
+            </button>
+          </div>
+
+          {tab === "closed" && closedPositions.length > 0 && (
+            <div className="mt-3 rounded-xl bg-white/[0.04] px-3 py-2.5">
+              <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
+                Realized PnL
+              </div>
+              <div className="mt-0.5 flex items-baseline gap-2">
+                <span
+                  className={`text-base font-bold ${
+                    realizedPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
+                  }`}
+                >
+                  {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
+                </span>
+                {closedCost > 0 && (
+                  <span
+                    className={`text-[11px] font-semibold ${
+                      realizedPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
+                    }`}
+                  >
+                    {realizedPnlPct >= 0 ? "+" : ""}
+                    {realizedPnlPct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-neutral-500">
+                cost ${closedCost.toFixed(2)}
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 flex flex-col gap-2">
             {error && (
@@ -165,15 +235,21 @@ export default function PortfolioPage() {
                 Loading positions…
               </div>
             )}
-            {positions && positions.length === 0 && (
+            {positions && visiblePositions.length === 0 && (
               <div className="py-12 text-center">
-                <p className="text-sm text-neutral-400">No positions yet.</p>
+                <p className="text-sm text-neutral-400">
+                  {tab === "open"
+                    ? "No open positions."
+                    : "No closed positions yet."}
+                </p>
                 <p className="mt-1 text-xs text-neutral-600">
-                  Tap a meme card in the feed to open one.
+                  {tab === "open"
+                    ? "Tap a meme card in the feed to open one."
+                    : "Closed bets show up here."}
                 </p>
               </div>
             )}
-            {positions?.map((p) => (
+            {visiblePositions.map((p) => (
               <PositionRow key={p.id} position={p} onClosed={load} />
             ))}
           </div>
