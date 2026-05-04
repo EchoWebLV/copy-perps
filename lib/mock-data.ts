@@ -19,7 +19,7 @@ export const mockSignals: Signal[] = [
     tokenAddress: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
     tokenDecimals: 6,
     price: 2.41,
-    change1hPct: 18.2,
+    change24hPct: 18.2,
     sparklinePath: upPath,
     chips: [
       { text: "5 known whales bought $1.2M in 8min", level: "green" },
@@ -73,7 +73,7 @@ export const mockSignals: Signal[] = [
     tokenAddress: "2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump",
     tokenDecimals: 6,
     price: 0.0042,
-    change1hPct: -7.4,
+    change24hPct: -7.4,
     sparklinePath: downPath,
     chips: [
       { text: "Bouncing off support 4× today", level: "amber" },
@@ -122,7 +122,7 @@ export const mockSignals: Signal[] = [
     tokenAddress: "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
     tokenDecimals: 9,
     price: 1.18,
-    change1hPct: 6.4,
+    change24hPct: 6.4,
     sparklinePath: choppyUp,
     chips: [
       { text: "CEX listing rumor on X", level: "amber" },

@@ -75,9 +75,10 @@ export async function refreshMemes(): Promise<RefreshMemesResult> {
       chain: "Solana",
       tokenAddress: pair.baseToken.address,
       price: Number(pair.priceUsd),
-      change1hPct: pair.priceChange?.h1 ?? 0,
+      change24hPct: pair.priceChange?.h24 ?? 0,
       sparklinePath: memeSparkline(pair.priceChange ?? {}),
       chips: memeSignalChips(pair),
+      imageUrl: pair.info?.imageUrl,
     };
 
     return {

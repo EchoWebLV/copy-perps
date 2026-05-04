@@ -12,10 +12,20 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
-        Polymarket
+        Market
       </span>
 
-      <div className="mt-14 text-2xl font-bold leading-tight">{signal.question}</div>
+      {signal.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={signal.imageUrl}
+          alt=""
+          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
+          loading="lazy"
+        />
+      ) : null}
+
+      <div className="mt-14 pr-16 text-2xl font-bold leading-tight">{signal.question}</div>
       <div className="mt-3 text-xs text-neutral-500">
         Resolves {signal.resolveDate} · {fmtUsd(signal.volume24h)} volume
       </div>

@@ -3,14 +3,30 @@ import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 
 export function MemeCard({ signal }: { signal: MemeSignal }) {
-  const up = signal.change1hPct >= 0;
+  // Tolerate rows still on the legacy `change1hPct` shape until the next
+  // cron run rewrites them.
+  const change =
+    signal.change24hPct ??
+    (signal as unknown as { change1hPct?: number }).change1hPct ??
+    0;
+  const up = change >= 0;
   const stroke = up ? "#22c55e" : "#ef4444";
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
-        Meme
+        Coin
       </span>
+
+      {signal.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={signal.imageUrl}
+          alt={signal.ticker}
+          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
+          loading="lazy"
+        />
+      ) : null}
 
       <div className="mt-[60px] text-[44px] font-black tracking-tight leading-none">
         {signal.ticker}
@@ -26,7 +42,7 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
           style={{ color: up ? "#22c55e" : "#ef4444" }}
         >
           {up ? "+" : ""}
-          {signal.change1hPct.toFixed(1)}% · last hour
+          {change.toFixed(1)}% · 24h
         </div>
       </div>
 
