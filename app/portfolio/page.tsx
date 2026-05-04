@@ -12,10 +12,12 @@ import {
   useEmbeddedSolanaWallet,
   truncateAddress,
 } from "@/lib/privy/use-solana-wallet";
+import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
+  const { usdc: walletUsdc, sol: walletSol } = useWalletBalance(wallet?.address);
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function PortfolioPage() {
   const counted =
     positions?.filter((p) => p.status === "confirmed" || p.status === "closed") ?? [];
   const totalCost = counted.reduce((sum, p) => sum + p.amountUsdc, 0);
-  const totalValue = counted.reduce(
+  const positionsValue = counted.reduce(
     (sum, p) =>
       sum +
       (p.status === "closed"
@@ -57,8 +59,9 @@ export default function PortfolioPage() {
         : (p.currentValueUsdc ?? p.amountUsdc)),
     0,
   );
-  const totalPnl = totalValue - totalCost;
-  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const positionsPnl = positionsValue - totalCost;
+  const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
+  const totalNetWorth = positionsValue + (walletUsdc ?? 0);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pt-12 pb-28">
@@ -95,33 +98,52 @@ export default function PortfolioPage() {
       {ready && authenticated && (
         <>
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-end justify-between">
-              <div>
+            <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
+              Net worth
+            </div>
+            <div className="mt-1 text-3xl font-extrabold">
+              ${totalNetWorth.toFixed(2)}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-white/[0.04] px-3 py-2.5">
                 <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
-                  Total value
+                  Available
                 </div>
-                <div className="mt-1 text-3xl font-extrabold">
-                  ${totalValue.toFixed(2)}
+                <div className="mt-0.5 text-base font-bold">
+                  {walletUsdc == null ? "—" : `$${walletUsdc.toFixed(2)}`}
                 </div>
+                {walletSol != null && (
+                  <div className="text-[10px] text-neutral-500">
+                    + {walletSol.toFixed(4)} SOL
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <div
-                  className={`text-base font-bold ${
-                    totalPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
-                  }`}
-                >
-                  {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
+              <div className="rounded-xl bg-white/[0.04] px-3 py-2.5">
+                <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
+                  In positions
                 </div>
-                <div
-                  className={`text-xs font-semibold ${
-                    totalPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
-                  }`}
-                >
-                  {totalPnl >= 0 ? "+" : ""}
-                  {totalPnlPct.toFixed(1)}%
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <span className="text-base font-bold">
+                    ${positionsValue.toFixed(2)}
+                  </span>
+                  {totalCost > 0 && (
+                    <span
+                      className={`text-[11px] font-semibold ${
+                        positionsPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
+                      }`}
+                    >
+                      {positionsPnl >= 0 ? "+" : ""}
+                      {positionsPnlPct.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-neutral-500">
+                  cost ${totalCost.toFixed(2)}
                 </div>
               </div>
             </div>
+
             <div className="mt-3 flex items-center gap-2 text-[11px] text-neutral-500">
               <span className="font-mono">
                 {truncateAddress(wallet?.address)}
