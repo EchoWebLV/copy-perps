@@ -7,9 +7,15 @@ export interface PortfolioPosition {
   id: string;
   type: string;
   status: string;
+  // meme
   ticker?: string;
   name?: string;
   tokenAddress?: string;
+  // prediction
+  question?: string;
+  outcome?: "yes" | "no";
+  contracts?: string;
+  // shared
   amountUsdc: number;
   currentValueUsdc?: number | null;
   proceedsUsdc?: number | null;
@@ -19,6 +25,11 @@ export interface PortfolioPosition {
   closeTxHash?: string | null;
   createdAt: string;
   closedAt?: string | null;
+}
+
+function truncate(s: string | undefined, max: number): string {
+  if (!s) return "";
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 const fmtUsd = (n: number | null | undefined) =>
@@ -54,6 +65,41 @@ export function PositionRow({
 
   const dim = isPending || isFailed;
 
+  const isMeme = position.type === "meme";
+  const isPrediction = position.type === "prediction";
+
+  const title = isMeme
+    ? (position.ticker ?? position.type)
+    : isPrediction
+      ? truncate(position.question, 36)
+      : position.type;
+
+  const subtitleEl = isMeme ? (
+    position.name && (
+      <span className="truncate text-xs text-neutral-500">
+        {position.name}
+      </span>
+    )
+  ) : isPrediction && position.outcome ? (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+        position.outcome === "yes"
+          ? "bg-[#22c55e]/20 text-[#22c55e]"
+          : "bg-[#ef4444]/20 text-[#ef4444]"
+      }`}
+    >
+      {position.outcome.toUpperCase()}
+      {position.contracts ? ` · ${position.contracts}` : ""}
+    </span>
+  ) : null;
+
+  const closeable = !isClosed && !isPending && !isFailed;
+  const apiBase: "/api/bet/meme" | "/api/bet/prediction" | null = isMeme
+    ? "/api/bet/meme"
+    : isPrediction
+      ? "/api/bet/prediction"
+      : null;
+
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
@@ -67,13 +113,9 @@ export function PositionRow({
           <span
             className={`text-base font-bold ${dim ? "text-neutral-400" : ""}`}
           >
-            {position.ticker ?? position.type}
+            {title}
           </span>
-          {position.name && (
-            <span className="truncate text-xs text-neutral-500">
-              {position.name}
-            </span>
-          )}
+          {subtitleEl}
           {isPending && (
             <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
               Pending
@@ -125,8 +167,8 @@ export function PositionRow({
         </div>
       </div>
 
-      {!isClosed && !isPending && !isFailed && position.type === "meme" && (
-        <CloseButton betId={position.id} onClosed={onClosed} />
+      {closeable && apiBase && (
+        <CloseButton betId={position.id} apiBase={apiBase} onClosed={onClosed} />
       )}
     </div>
   );

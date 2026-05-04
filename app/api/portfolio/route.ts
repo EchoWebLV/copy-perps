@@ -5,6 +5,7 @@ import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { getQuote } from "@/lib/jupiter/swap";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
+import { getMarket } from "@/lib/jupiter-prediction/client";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -16,10 +17,18 @@ interface Position {
   id: string;
   type: string;
   status: string;
+  // meme fields
   ticker?: string;
   name?: string;
   tokenAddress?: string;
   tokenAmount?: string;
+  // prediction fields
+  question?: string;
+  outcome?: "yes" | "no";
+  contracts?: string;
+  marketId?: string;
+  positionPubkey?: string;
+  // shared
   amountUsdc: number;
   currentValueUsdc?: number | null;
   proceedsUsdc?: number | null;
@@ -73,20 +82,11 @@ export async function GET(request: Request) {
   const positions = await Promise.all(
     userBets.map(async (bet): Promise<Position> => {
       const meta = (bet.meta ?? {}) as Record<string, unknown>;
-      const tokenSymbol = meta.tokenSymbol as string | undefined;
-      const tokenName = meta.tokenName as string | undefined;
-      const tokenAddress = meta.tokenAddress as string | undefined;
-      const actualOutAmount = (meta.actualOutAmount ??
-        meta.expectedOutAmount) as string | undefined;
 
       const base: Position = {
         id: bet.id,
         type: bet.type,
         status: bet.status,
-        ticker: tokenSymbol,
-        name: tokenName,
-        tokenAddress,
-        tokenAmount: actualOutAmount,
         amountUsdc: bet.amountUsdc,
         openTxHash: bet.txHash,
         closeTxHash: bet.closeTxHash,
@@ -95,41 +95,116 @@ export async function GET(request: Request) {
         closedAt: bet.closedAt?.toISOString() ?? null,
       };
 
-      if (bet.status === "closed" && bet.proceedsUsdc !== null) {
-        const pnl = bet.proceedsUsdc! - bet.amountUsdc;
-        return {
-          ...base,
-          pnlUsdc: pnl,
-          pnlPct: (pnl / bet.amountUsdc) * 100,
-        };
-      }
+      // ---- Meme bet ----
+      if (bet.type === "meme") {
+        const tokenSymbol = meta.tokenSymbol as string | undefined;
+        const tokenName = meta.tokenName as string | undefined;
+        const tokenAddress = meta.tokenAddress as string | undefined;
+        const actualOutAmount = (meta.actualOutAmount ??
+          meta.expectedOutAmount) as string | undefined;
 
-      if (
-        bet.type === "meme" &&
-        bet.status === "confirmed" &&
-        tokenAddress &&
-        actualOutAmount
-      ) {
-        try {
-          const quote = await getQuote({
-            inputMint: tokenAddress,
-            outputMint: USDC_MINT,
-            amount: BigInt(actualOutAmount),
-            slippageBps: 100,
-          });
-          const currentValue =
-            Number(quote.outAmount) / 10 ** USDC_DECIMALS;
-          const pnl = currentValue - bet.amountUsdc;
+        Object.assign(base, {
+          ticker: tokenSymbol,
+          name: tokenName,
+          tokenAddress,
+          tokenAmount: actualOutAmount,
+        });
+
+        if (bet.status === "closed" && bet.proceedsUsdc !== null) {
+          const pnl = bet.proceedsUsdc! - bet.amountUsdc;
           return {
             ...base,
-            currentValueUsdc: currentValue,
             pnlUsdc: pnl,
             pnlPct: (pnl / bet.amountUsdc) * 100,
           };
-        } catch (e) {
-          console.warn("[portfolio] sell quote failed for", bet.id, e);
-          return { ...base, currentValueUsdc: null };
         }
+
+        if (bet.status === "confirmed" && tokenAddress && actualOutAmount) {
+          try {
+            const quote = await getQuote({
+              inputMint: tokenAddress,
+              outputMint: USDC_MINT,
+              amount: BigInt(actualOutAmount),
+              slippageBps: 100,
+            });
+            const currentValue =
+              Number(quote.outAmount) / 10 ** USDC_DECIMALS;
+            const pnl = currentValue - bet.amountUsdc;
+            return {
+              ...base,
+              currentValueUsdc: currentValue,
+              pnlUsdc: pnl,
+              pnlPct: (pnl / bet.amountUsdc) * 100,
+            };
+          } catch (e) {
+            console.warn("[portfolio] meme sell quote failed for", bet.id, e);
+            return { ...base, currentValueUsdc: null };
+          }
+        }
+
+        return base;
+      }
+
+      // ---- Prediction bet ----
+      if (bet.type === "prediction") {
+        const question = meta.question as string | undefined;
+        const outcome = meta.outcome as "yes" | "no" | undefined;
+        const contracts = meta.contracts as string | undefined;
+        const marketId = meta.marketId as string | undefined;
+        const positionPubkey = meta.positionPubkey as string | undefined;
+
+        Object.assign(base, {
+          question,
+          outcome,
+          contracts,
+          marketId,
+          positionPubkey,
+        });
+
+        if (bet.status === "closed" && bet.proceedsUsdc !== null) {
+          const pnl = bet.proceedsUsdc! - bet.amountUsdc;
+          return {
+            ...base,
+            pnlUsdc: pnl,
+            pnlPct: (pnl / bet.amountUsdc) * 100,
+          };
+        }
+
+        if (
+          bet.status === "confirmed" &&
+          marketId &&
+          contracts &&
+          (outcome === "yes" || outcome === "no")
+        ) {
+          try {
+            const market = await getMarket(marketId);
+            if (!market) return { ...base, currentValueUsdc: null };
+
+            const sellPriceMicroUsd =
+              outcome === "yes"
+                ? market.pricing.sellYesPriceUsd
+                : market.pricing.sellNoPriceUsd;
+            const contractsNum = Number(contracts);
+            // contracts × sell price (micro-USD per contract) → divide by 1e6
+            const currentValue = (contractsNum * sellPriceMicroUsd) / 1_000_000;
+            const pnl = currentValue - bet.amountUsdc;
+            return {
+              ...base,
+              currentValueUsdc: currentValue,
+              pnlUsdc: pnl,
+              pnlPct: (pnl / bet.amountUsdc) * 100,
+            };
+          } catch (e) {
+            console.warn(
+              "[portfolio] prediction market quote failed for",
+              bet.id,
+              e,
+            );
+            return { ...base, currentValueUsdc: null };
+          }
+        }
+
+        return base;
       }
 
       return base;

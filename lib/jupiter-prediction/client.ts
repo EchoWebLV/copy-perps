@@ -142,3 +142,38 @@ export async function createOrder(params: {
   return (await r.json()) as JPOrderResponse;
 }
 
+export async function getMarket(marketId: string): Promise<JPMarket | null> {
+  const r = await fetch(`${BASE}/markets/${marketId}`, { cache: "no-store" });
+  if (r.status === 404) return null;
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction market: ${r.status} ${txt}`);
+  }
+  // /markets/{id} returns the market directly, not wrapped in { data }
+  return (await r.json()) as JPMarket;
+}
+
+export interface JPClosePositionResponse {
+  transaction: string | null;
+  txMeta: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  } | null;
+  order: JPOrder;
+}
+
+export async function closePosition(
+  positionPubkey: string,
+  ownerPubkey: string,
+): Promise<JPClosePositionResponse> {
+  const r = await fetch(
+    `${BASE}/positions/${positionPubkey}?ownerPubkey=${ownerPubkey}`,
+    { method: "DELETE" },
+  );
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Jupiter Prediction close: ${r.status} ${txt}`);
+  }
+  return (await r.json()) as JPClosePositionResponse;
+}
+

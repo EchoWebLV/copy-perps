@@ -6,13 +6,13 @@ import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import bs58 from "bs58";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 
-export function CloseButton({
-  betId,
-  onClosed,
-}: {
+interface Props {
   betId: string;
+  apiBase: "/api/bet/meme" | "/api/bet/prediction";
   onClosed: () => void;
-}) {
+}
+
+export function CloseButton({ betId, apiBase, onClosed }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { getAccessToken } = usePrivy();
@@ -27,7 +27,7 @@ export function CloseButton({
       const token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
 
-      const r = await fetch("/api/bet/meme/close", {
+      const r = await fetch(`${apiBase}/close`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -39,9 +39,13 @@ export function CloseButton({
         const b = await r.json().catch(() => ({}));
         throw new Error(b.error ?? `HTTP ${r.status}`);
       }
-      const { swapTransaction, expectedUsdcOut } = await r.json();
+      const data = await r.json();
+      // Meme returns expectedUsdcOut (atomic USDC); prediction returns
+      // expectedProceedsAtomic (also micro-USD = USDC atomic units).
+      const proceedsAtomic =
+        data.expectedUsdcOut ?? data.expectedProceedsAtomic;
 
-      const txBytes = Uint8Array.from(atob(swapTransaction), (c) =>
+      const txBytes = Uint8Array.from(atob(data.swapTransaction), (c) =>
         c.charCodeAt(0),
       );
       const result = await signAndSendTransaction({
@@ -50,7 +54,7 @@ export function CloseButton({
       });
       const sig = bs58.encode(result.signature);
 
-      await fetch("/api/bet/meme/close/confirm", {
+      await fetch(`${apiBase}/close/confirm`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -59,7 +63,7 @@ export function CloseButton({
         body: JSON.stringify({
           betId,
           txHash: sig,
-          proceedsAtomic: expectedUsdcOut,
+          proceedsAtomic,
         }),
       });
 
