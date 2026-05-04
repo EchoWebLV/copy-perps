@@ -193,8 +193,12 @@ export async function GET(request: Request) {
               side,
             );
             if (liveData) {
-              const pnl = liveData.unrealizedPnlUsd;
-              const currentValue = bet.amountUsdc + pnl;
+              // positionValueUsd = on-chain collateral + unrealized
+              // mark-to-market PnL. Comparing against the bet's original
+              // amountUsdc captures entry fees too, so the displayed PnL
+              // matches what the user would actually receive on close.
+              const currentValue = liveData.positionValueUsd;
+              const pnl = currentValue - bet.amountUsdc;
               return {
                 ...base,
                 currentValueUsdc: currentValue,

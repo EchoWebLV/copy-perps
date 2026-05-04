@@ -268,14 +268,61 @@ export interface PerpPositionPnl {
   positionValueUsd: number;
 }
 
-// Stub for now — Flash position-state reads need PositionAccount.fetch
-// against a PDA derived from (user, market, collateral, side). Wiring
-// that properly is a follow-up; for now the portfolio shows perps
-// without live PnL (same as a closed bet). Returns null = no exposure.
 export async function readPerpPosition(
-  _userPubkey: PublicKey,
-  _asset: string,
-  _side: "long" | "short",
+  userPubkey: PublicKey,
+  asset: string,
+  side: "long" | "short",
 ): Promise<PerpPositionPnl | null> {
-  return null;
+  const targetSym = asset.toUpperCase() as FlashPerpSymbol;
+  const targetToken = POOL_CONFIG.tokens.find((t) => t.symbol === targetSym);
+  const targetCustody = POOL_CONFIG.custodies.find(
+    (c) => c.symbol === targetSym,
+  );
+  if (!targetToken || !targetCustody) return null;
+
+  // Crypto.1 markets are self-collateralized — collateral custody = target.
+  const sideEnum = (side === "long" ? Side.Long : Side.Short) as unknown as Side;
+  const marketPk = POOL_CONFIG.getMarketPk(
+    targetCustody.custodyAccount,
+    targetCustody.custodyAccount,
+    sideEnum,
+  );
+  const positionPk = POOL_CONFIG.getPositionFromMarketPk(userPubkey, marketPk);
+
+  const flash = makeFlashClient(userPubkey);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let raw: any;
+  try {
+    raw = await flash.program.account.position.fetch(positionPk);
+  } catch {
+    return null; // position PDA doesn't exist => no open position
+  }
+  if (!raw || raw.isActive === false) return null;
+
+  const targetPrice = await fetchOraclePrice(targetToken.pythPriceId);
+  const currentPriceUsd = priceToUsd(targetPrice);
+  if (!currentPriceUsd || !Number.isFinite(currentPriceUsd)) return null;
+
+  // sizeAmount: target-asset native units. Convert to UI units, multiply
+  // by the live oracle price to get current notional in USD. PnL is the
+  // delta vs. entry notional (sizeUsd is in micro-USD).
+  const sizeAmountNative = BigInt(raw.sizeAmount.toString());
+  if (sizeAmountNative === 0n) return null;
+  const sizeUi = Number(sizeAmountNative) / 10 ** targetToken.decimals;
+  const currentNotionalUsd = sizeUi * currentPriceUsd;
+  const entryNotionalUsd = Number(raw.sizeUsd.toString()) / 1_000_000;
+  const collateralUsd = Number(raw.collateralUsd.toString()) / 1_000_000;
+
+  const pnlUsd =
+    side === "long"
+      ? currentNotionalUsd - entryNotionalUsd
+      : entryNotionalUsd - currentNotionalUsd;
+  const positionValueUsd = collateralUsd + pnlUsd;
+
+  return {
+    baseAssetAmount: raw.sizeAmount.toString(),
+    side,
+    unrealizedPnlUsd: pnlUsd,
+    positionValueUsd,
+  };
 }
