@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/refresh-memes",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-predictions",
+      "schedule": "*/2 * * * *"
     }
   ]
 }

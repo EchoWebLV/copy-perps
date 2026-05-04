@@ -33,6 +33,9 @@ export interface PredictionSignal extends BaseSignal {
   resolveDate: string;
   volume24h: number;
   yesProbability: number;
+  eventId?: string;
+  marketId?: string;
+  series?: string;
 }
 
 export interface WhaleSignal extends BaseSignal {
