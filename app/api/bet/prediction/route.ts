@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { signals, bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { createOrder } from "@/lib/jupiter-prediction/client";
+import { createOrder, PREDICTION_USDC_MINT } from "@/lib/jupiter-prediction/client";
+import { JUPUSD_MINT } from "@/lib/jupiter/constants";
+import { getUsdcBalance, getJupUsdBalance } from "@/lib/solana/balance";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -114,6 +116,32 @@ export async function POST(request: Request) {
   const isYes = body.outcome === "yes";
   const depositAtomic = BigInt(Math.floor(body.amountUsdc * 1_000_000));
 
+  // Both USDC and jupUSD are valid prediction-market deposit mints.
+  // Many users hold a mix (closes pay out jupUSD), so pick whichever
+  // mint they actually have enough of. USDC first since it's the
+  // legacy default; fall back to jupUSD.
+  let depositMint: string = PREDICTION_USDC_MINT;
+  try {
+    const [usdcBal, jupUsdBal] = await Promise.all([
+      getUsdcBalance(user.solanaPubkey),
+      getJupUsdBalance(user.solanaPubkey),
+    ]);
+    if (usdcBal < body.amountUsdc) {
+      if (jupUsdBal >= body.amountUsdc) {
+        depositMint = JUPUSD_MINT;
+      } else {
+        return NextResponse.json(
+          {
+            error: `Insufficient balance — need $${body.amountUsdc}, have $${usdcBal.toFixed(2)} USDC + $${jupUsdBal.toFixed(2)} jupUSD`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[bet/prediction] balance check failed, defaulting to USDC:", err);
+  }
+
   let order;
   try {
     order = await createOrder({
@@ -122,6 +150,7 @@ export async function POST(request: Request) {
       isYes,
       isBuy: true,
       depositAmountMicroUsd: depositAtomic,
+      depositMint,
     });
   } catch (err) {
     console.error("[bet/prediction] order failed:", err);
