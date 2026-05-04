@@ -3,14 +3,20 @@
 import { useEffect, useState } from "react";
 
 // Module-level caches survive component unmount/remount but reset on
-// page reload. Keys are mint address / Jupiter event id; values are
-// resolved icon URLs or null when the upstream had nothing for us.
-const tokenIconCache = new Map<string, string | null>();
+// page reload. Keys are mint address / Jupiter event id.
+export interface JupTokenInfo {
+  icon: string | null;
+  mcap: number | null;
+}
+const EMPTY_TOKEN_INFO: JupTokenInfo = { icon: null, mcap: null };
+const tokenInfoCache = new Map<string, JupTokenInfo>();
 const eventImageCache = new Map<string, string | null>();
 
 interface JupTokenSearchEntry {
   id: string;
   icon?: string | null;
+  mcap?: number | null;
+  fdv?: number | null;
 }
 
 // `/prediction/v1/events/{id}` returns the event at the top level, NOT
@@ -20,34 +26,41 @@ interface JupEventResponse {
   markets?: { marketId: string; imageUrl?: string | null }[];
 }
 
-export function useJupiterTokenIcon(mint: string | undefined): string | null {
-  const initial = mint && tokenIconCache.has(mint) ? tokenIconCache.get(mint)! : null;
-  const [icon, setIcon] = useState<string | null>(initial);
+export function useJupiterTokenInfo(mint: string | undefined): JupTokenInfo {
+  const initial =
+    mint && tokenInfoCache.has(mint)
+      ? tokenInfoCache.get(mint)!
+      : EMPTY_TOKEN_INFO;
+  const [info, setInfo] = useState<JupTokenInfo>(initial);
 
   useEffect(() => {
     if (!mint) return;
-    if (tokenIconCache.has(mint)) {
-      setIcon(tokenIconCache.get(mint) ?? null);
+    if (tokenInfoCache.has(mint)) {
+      setInfo(tokenInfoCache.get(mint) ?? EMPTY_TOKEN_INFO);
       return;
     }
     let cancelled = false;
     fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((arr: JupTokenSearchEntry[]) => {
-        const url = arr.find((e) => e.id === mint)?.icon ?? null;
-        tokenIconCache.set(mint, url);
-        if (!cancelled) setIcon(url);
+        const hit = arr.find((e) => e.id === mint);
+        const next: JupTokenInfo = {
+          icon: hit?.icon ?? null,
+          mcap: hit?.mcap ?? hit?.fdv ?? null,
+        };
+        tokenInfoCache.set(mint, next);
+        if (!cancelled) setInfo(next);
       })
       .catch(() => {
-        tokenIconCache.set(mint, null);
-        if (!cancelled) setIcon(null);
+        tokenInfoCache.set(mint, EMPTY_TOKEN_INFO);
+        if (!cancelled) setInfo(EMPTY_TOKEN_INFO);
       });
     return () => {
       cancelled = true;
     };
   }, [mint]);
 
-  return icon;
+  return info;
 }
 
 export function useJupiterEventImage(

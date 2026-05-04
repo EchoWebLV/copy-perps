@@ -3,7 +3,8 @@
 import type { MemeSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
-import { useJupiterTokenIcon } from "@/lib/feed/use-card-image";
+import { useJupiterTokenInfo } from "@/lib/feed/use-card-image";
+import { useDexScreenerPair } from "@/lib/feed/use-dexscreener-pair";
 
 function fmtMarketCap(n: number | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "—";
@@ -14,13 +15,18 @@ function fmtMarketCap(n: number | undefined): string {
 }
 
 export function MemeCard({ signal }: { signal: MemeSignal }) {
+  const { icon } = useJupiterTokenInfo(signal.tokenAddress);
+  const live = useDexScreenerPair(signal.tokenAddress);
+
+  const marketCap = live.marketCap ?? signal.marketCap;
   const change =
+    live.change24hPct ??
     signal.change24hPct ??
     (signal as unknown as { change1hPct?: number }).change1hPct ??
     0;
+  const sparklinePath = live.sparklinePath ?? signal.sparklinePath;
   const up = change >= 0;
   const stroke = up ? "#22c55e" : "#ef4444";
-  const icon = useJupiterTokenIcon(signal.tokenAddress);
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -48,7 +54,7 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
           Market cap
         </div>
         <div className="mt-1 text-4xl font-extrabold">
-          {fmtMarketCap(signal.marketCap)}
+          {fmtMarketCap(marketCap)}
         </div>
         <div
           className="mt-1 text-base font-semibold"
@@ -68,7 +74,7 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
         }}
       >
         <svg viewBox="0 0 300 90" preserveAspectRatio="none" className="h-full w-full">
-          <path d={signal.sparklinePath} fill="none" stroke={stroke} strokeWidth={2.5} />
+          <path d={sparklinePath} fill="none" stroke={stroke} strokeWidth={2.5} />
         </svg>
       </div>
 
