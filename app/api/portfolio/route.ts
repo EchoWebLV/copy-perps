@@ -7,7 +7,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { getQuote } from "@/lib/jupiter/swap";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 import { getMarket } from "@/lib/jupiter-prediction/client";
-import { readPerpPosition } from "@/lib/drift/perp";
+import { readPerpPosition } from "@/lib/flash-trade/perp";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -153,14 +153,14 @@ export async function GET(request: Request) {
         return base;
       }
 
-      // ---- Perp bet (Drift) ----
+      // ---- Perp bet (Flash Trade) ----
       if (bet.type === "perp") {
         const asset = meta.whaleAsset as string | undefined;
+        const flashAsset = meta.flashAsset as string | undefined;
         const side = meta.direction as "long" | "short" | undefined;
         const leverage = meta.whaleLeverage as number | undefined;
         const notionalUsd = meta.notionalUsd as number | undefined;
         const whaleAddress = meta.whaleAddress as string | undefined;
-        const marketIndex = meta.marketIndex as number | undefined;
 
         Object.assign(base, {
           asset,
@@ -182,13 +182,15 @@ export async function GET(request: Request) {
 
         if (
           bet.status === "confirmed" &&
-          typeof marketIndex === "number" &&
+          flashAsset &&
+          (side === "long" || side === "short") &&
           user.solanaPubkey
         ) {
           try {
             const liveData = await readPerpPosition(
               new PublicKey(user.solanaPubkey),
-              marketIndex,
+              flashAsset,
+              side,
             );
             if (liveData) {
               const pnl = liveData.unrealizedPnlUsd;
@@ -200,10 +202,11 @@ export async function GET(request: Request) {
                 pnlPct: (pnl / bet.amountUsdc) * 100,
               };
             }
-            // Position closed externally (e.g. via Drift UI). No live exposure.
+            // No live exposure (position closed externally, or
+            // Flash readPerpPosition is still stubbed).
             return { ...base, currentValueUsdc: null };
           } catch (e) {
-            console.warn("[portfolio] Drift PnL failed for", bet.id, e);
+            console.warn("[portfolio] Flash PnL failed for", bet.id, e);
             return { ...base, currentValueUsdc: null };
           }
         }

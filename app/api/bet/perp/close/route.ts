@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
-import { buildClosePerpTx } from "@/lib/drift/perp";
+import { buildClosePerpTx } from "@/lib/flash-trade/perp";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -45,10 +45,13 @@ export async function POST(request: Request) {
   }
 
   const meta = (bet.meta ?? {}) as Record<string, unknown>;
-  const marketIndex = meta.marketIndex as number | undefined;
-  if (typeof marketIndex !== "number") {
+  const flashAsset = meta.flashAsset as string | undefined;
+  const direction = meta.direction as "long" | "short" | undefined;
+  // Old Drift bets won't have flashAsset on meta — they were opened on a
+  // protocol that's no longer wired up. Reject with a clear message.
+  if (!flashAsset || (direction !== "long" && direction !== "short")) {
     return NextResponse.json(
-      { error: "bet missing marketIndex" },
+      { error: "bet was opened on a different venue and can't be closed here" },
       { status: 400 },
     );
   }
@@ -56,7 +59,8 @@ export async function POST(request: Request) {
   try {
     const result = await buildClosePerpTx({
       userPubkey: new PublicKey(user.solanaPubkey),
-      marketIndex,
+      asset: flashAsset,
+      side: direction,
     });
     return NextResponse.json({
       swapTransaction: result.transaction,
@@ -66,21 +70,8 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[bet/perp/close] failed:", err);
-    const msg = String(err);
-    if (
-      msg.includes("InstructionFallbackNotFound") ||
-      msg.includes("custom program error: 0x65")
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Drift Perps is offline (April 1 incident recovery). Position close returns when Drift relaunches.",
-        },
-        { status: 503 },
-      );
-    }
     return NextResponse.json(
-      { error: `Close build failed: ${msg}` },
+      { error: `Close build failed: ${String(err)}` },
       { status: 502 },
     );
   }

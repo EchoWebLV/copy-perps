@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 import { signals, bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { perpMarketIndexFor } from "@/lib/drift/client";
-import { buildOpenPerpTx } from "@/lib/drift/perp";
+import { flashSymbolFor } from "@/lib/flash-trade/client";
+import { buildOpenPerpTx } from "@/lib/flash-trade/perp";
 import type { WhaleSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -61,13 +61,16 @@ export async function POST(request: Request) {
   }
 
   const whale = signalRow.payload as WhaleSignal;
-  const marketIndex = perpMarketIndexFor(whale.asset);
-  if (marketIndex == null) {
+  const flashSymbol = flashSymbolFor(whale.asset);
+  if (flashSymbol == null) {
     return NextResponse.json(
-      { error: `${whale.asset} not yet supported on Drift (MVP: SOL/BTC/ETH only)` },
+      { error: `${whale.asset} not yet supported on Flash Trade (MVP: SOL/BTC/ETH only)` },
       { status: 400 },
     );
   }
+  // Synthetic index for compatibility with existing meta shape; Flash
+  // doesn't use indexes (it uses symbols).
+  const marketIndex = ["SOL", "BTC", "ETH"].indexOf(flashSymbol);
 
   const direction: "long" | "short" =
     body.action === "tail"
@@ -88,7 +91,7 @@ export async function POST(request: Request) {
   try {
     tx = await buildOpenPerpTx({
       userPubkey: new PublicKey(user.solanaPubkey),
-      asset: whale.asset,
+      asset: flashSymbol,
       marketIndex,
       direction,
       marginUsdc: body.amountUsdc,
@@ -96,25 +99,8 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[bet/perp] build failed:", err);
-    const msg = String(err);
-    // Drift was exploited on April 1, 2026 (~$295M) and is currently in
-    // incident recovery — most user-facing instructions are stripped
-    // from the deployed bytecode pending two security audits. Surface
-    // a friendly error rather than a raw simulation failure.
-    if (
-      msg.includes("InstructionFallbackNotFound") ||
-      msg.includes("custom program error: 0x65")
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Drift Perps is currently offline (April 1 incident recovery). Whale signals stay live; tail/fade execution returns when Drift relaunches.",
-        },
-        { status: 503 },
-      );
-    }
     return NextResponse.json(
-      { error: `Drift tx build failed: ${msg}` },
+      { error: `Flash Trade tx build failed: ${String(err)}` },
       { status: 502 },
     );
   }
@@ -128,7 +114,8 @@ export async function POST(request: Request) {
       amountUsdc: body.amountUsdc,
       status: "pending",
       meta: {
-        venue: "Drift",
+        venue: "FlashTrade",
+        flashAsset: flashSymbol,
         whaleAddress: whale.walletAddress,
         whaleAsset: whale.asset,
         whaleSide: whale.side,
@@ -138,7 +125,6 @@ export async function POST(request: Request) {
         marketIndex,
         baseAssetAmount: tx.baseAssetAmount,
         notionalUsd: tx.notionalUsd,
-        wasFirstTimeUser: tx.isFirstTimeUser,
       },
     })
     .returning();
