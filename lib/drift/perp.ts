@@ -1,4 +1,9 @@
-import { PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import {
+  PublicKey,
+  Transaction,
+  TransactionInstruction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import {
   BN,
   OrderType,
@@ -66,13 +71,23 @@ export async function buildOpenPerpTx(params: {
   const ixs: TransactionInstruction[] = [];
 
   if (isFirstTime) {
-    const { ixs: initIxs } =
-      await drift.createInitializeUserAccountAndDepositCollateralIxs(
-        depositAtomic,
-        usdcAta,
-        USDC_SPOT_MARKET_INDEX,
-      );
+    // The bundled `createInitializeUserAccountAndDepositCollateralIxs`
+    // includes an `initializeSignedMsgUserOrders` instruction whose
+    // discriminator the deployed Drift program currently rejects with
+    // InstructionFallbackNotFound. Use the lower-level helper that only
+    // emits initializeUserStats (if missing) + initializeUser.
+    const [initIxs] = await drift.getInitializeUserAccountIxs(SUB_ACCOUNT_ID);
     ixs.push(...initIxs);
+
+    const depositIx = await drift.getDepositInstruction(
+      depositAtomic,
+      USDC_SPOT_MARKET_INDEX,
+      usdcAta,
+      SUB_ACCOUNT_ID,
+      false, // reduceOnly
+      false, // userInitialized=false — user account is being created in this same tx
+    );
+    ixs.push(depositIx);
   } else {
     const depositIx = await drift.getDepositInstruction(
       depositAtomic,
@@ -130,6 +145,17 @@ export async function buildOpenPerpTx(params: {
     verifySignatures: false,
   });
 
+  console.log(
+    `[drift open] firstTime=${isFirstTime} ixs=${ixs.length} discriminators:`,
+  );
+  ixs.forEach((ix, i) => {
+    console.log(
+      `  ${i}: prog=${ix.programId.toString().slice(0, 8)} disc=${ix.data.slice(0, 8).toString("hex")} keys=${ix.keys.length} dataLen=${ix.data.length}`,
+    );
+  });
+
+  await simulateAndLog(tx, "open");
+
   return {
     transaction: Buffer.from(serialized).toString("base64"),
     baseAssetAmount: baseAssetAmount.toString(),
@@ -138,6 +164,26 @@ export async function buildOpenPerpTx(params: {
     direction: params.direction,
     isFirstTimeUser: isFirstTime,
   };
+}
+
+async function simulateAndLog(tx: Transaction, label: string): Promise<void> {
+  try {
+    const conn = getConnection();
+    const sim = await conn.simulateTransaction(tx, undefined, [
+      tx.feePayer!,
+    ]);
+    if (sim.value.err) {
+      console.error(`[drift sim:${label}] ERROR:`, JSON.stringify(sim.value.err));
+      console.error(`[drift sim:${label}] LOGS:`);
+      sim.value.logs?.forEach((l, i) =>
+        console.error(`  ${i.toString().padStart(2)}: ${l}`),
+      );
+    } else {
+      console.log(`[drift sim:${label}] OK · units consumed:`, sim.value.unitsConsumed);
+    }
+  } catch (e) {
+    console.warn(`[drift sim:${label}] simulate threw:`, e);
+  }
 }
 
 export interface PerpPositionPnl {
@@ -261,6 +307,8 @@ export async function buildClosePerpTx(params: {
     requireAllSignatures: false,
     verifySignatures: false,
   });
+
+  await simulateAndLog(tx, "close");
 
   return {
     transaction: Buffer.from(serialized).toString("base64"),

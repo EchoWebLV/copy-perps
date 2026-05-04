@@ -2,10 +2,36 @@
 
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
-import bs58 from "bs58";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { Connection } from "@solana/web3.js";
 import type { Signal, StakeAmount } from "@/lib/types";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+
+const RPC_URL =
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+
+// Sign with Privy, submit ourselves via Helius — Privy's built-in submit
+// can't resolve address-lookup-table contents (needed for Jupiter swaps),
+// so we sign-only and broadcast through a web3.js Connection that
+// resolves ALTs natively.
+async function signAndSubmit(
+  txBytes: Uint8Array,
+  wallet: ReturnType<typeof useEmbeddedSolanaWallet>,
+  signTransaction: ReturnType<typeof useSignTransaction>["signTransaction"],
+): Promise<string> {
+  if (!wallet) throw new Error("Wallet not ready");
+
+  const result = (await signTransaction({
+    transaction: txBytes,
+    wallet,
+  })) as { signedTransaction: Uint8Array };
+
+  const conn = new Connection(RPC_URL, "confirmed");
+  return await conn.sendRawTransaction(result.signedTransaction, {
+    skipPreflight: false,
+    maxRetries: 3,
+  });
+}
 
 interface Props {
   signal: Signal;
@@ -16,7 +42,7 @@ type ButtonState = { pending?: string; confirmed?: string; error?: string | null
 export function StakeButtons({ signal }: Props) {
   const [state, setState] = useState<ButtonState>({});
   const { getAccessToken } = usePrivy();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
+  const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
 
   function flashConfirmed(key: string) {
@@ -70,12 +96,7 @@ export function StakeButtons({ signal }: Props) {
         c.charCodeAt(0),
       );
 
-      const result = await signAndSendTransaction({
-        transaction: txBytes,
-        wallet,
-      });
-
-      const sigB58 = bs58.encode(result.signature);
+      const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/meme/confirm", {
         method: "POST",
@@ -171,12 +192,7 @@ export function StakeButtons({ signal }: Props) {
         c.charCodeAt(0),
       );
 
-      const result = await signAndSendTransaction({
-        transaction: txBytes,
-        wallet,
-      });
-
-      const sigB58 = bs58.encode(result.signature);
+      const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/prediction/confirm", {
         method: "POST",
@@ -355,12 +371,7 @@ export function StakeButtons({ signal }: Props) {
         c.charCodeAt(0),
       );
 
-      const result = await signAndSendTransaction({
-        transaction: txBytes,
-        wallet,
-      });
-
-      const sigB58 = bs58.encode(result.signature);
+      const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/perp/confirm", {
         method: "POST",

@@ -166,10 +166,14 @@ export async function closePosition(
   positionPubkey: string,
   ownerPubkey: string,
 ): Promise<JPClosePositionResponse> {
-  const r = await fetch(
-    `${BASE}/positions/${positionPubkey}?ownerPubkey=${ownerPubkey}`,
-    { method: "DELETE" },
-  );
+  // Jupiter Prediction's DELETE /positions/:pk expects the owner pubkey in
+  // the JSON body, not the query string. The query-string form returns
+  // "ownerPubkey or userPubkey is required" even though both are present.
+  const r = await fetch(`${BASE}/positions/${positionPubkey}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerPubkey }),
+  });
   if (!r.ok) {
     const txt = await r.text();
     throw new Error(`Jupiter Prediction close: ${r.status} ${txt}`);

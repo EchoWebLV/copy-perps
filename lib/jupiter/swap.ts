@@ -23,6 +23,7 @@ export async function getQuote(params: {
   outputMint: string;
   amount: bigint | number;
   slippageBps?: number;
+  maxAccounts?: number;
 }): Promise<JupiterQuote> {
   const qs = new URLSearchParams({
     inputMint: params.inputMint,
@@ -30,6 +31,7 @@ export async function getQuote(params: {
     amount: params.amount.toString(),
     slippageBps: (params.slippageBps ?? 100).toString(),
   });
+  if (params.maxAccounts) qs.set("maxAccounts", params.maxAccounts.toString());
 
   const res = await fetch(`${JUPITER_BASE}/swap/v1/quote?${qs}`, {
     cache: "no-store",
@@ -53,6 +55,12 @@ export async function buildSwap(params: {
       userPublicKey: params.userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
+      // Privy's signer can't resolve address-lookup-table contents on its
+      // own, so request a legacy (non-versioned) tx without ALT references.
+      // For straightforward swaps this still fits well under Solana's
+      // 1232-byte cap.
+      // Versioned tx with ALTs. Client uses signTransaction + a Helius
+      // connection to submit so ALTs resolve correctly server-side.
       prioritizationFeeLamports: { priorityLevelWithMaxLamports: { priorityLevel: "high", maxLamports: 1_000_000 } },
     }),
   });

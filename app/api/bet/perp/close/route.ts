@@ -66,8 +66,21 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[bet/perp/close] failed:", err);
+    const msg = String(err);
+    if (
+      msg.includes("InstructionFallbackNotFound") ||
+      msg.includes("custom program error: 0x65")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Drift Perps is offline (April 1 incident recovery). Position close returns when Drift relaunches.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
-      { error: `Close build failed: ${String(err)}` },
+      { error: `Close build failed: ${msg}` },
       { status: 502 },
     );
   }

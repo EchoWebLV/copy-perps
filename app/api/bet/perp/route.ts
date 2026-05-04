@@ -96,8 +96,25 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[bet/perp] build failed:", err);
+    const msg = String(err);
+    // Drift was exploited on April 1, 2026 (~$295M) and is currently in
+    // incident recovery — most user-facing instructions are stripped
+    // from the deployed bytecode pending two security audits. Surface
+    // a friendly error rather than a raw simulation failure.
+    if (
+      msg.includes("InstructionFallbackNotFound") ||
+      msg.includes("custom program error: 0x65")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Drift Perps is currently offline (April 1 incident recovery). Whale signals stay live; tail/fade execution returns when Drift relaunches.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
-      { error: `Drift tx build failed: ${String(err)}` },
+      { error: `Drift tx build failed: ${msg}` },
       { status: 502 },
     );
   }
