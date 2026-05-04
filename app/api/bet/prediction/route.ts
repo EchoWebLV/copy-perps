@@ -10,7 +10,6 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
-import { getSignalById } from "@/lib/feed/pool";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -31,7 +30,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    signalId?: string;
+    signal?: PredictionSignal | MultiPredictionSignal;
     outcome?: "yes" | "no";
     amountUsdc?: number;
     walletAddress?: string;
@@ -40,12 +39,13 @@ export async function POST(request: Request) {
   } | null;
 
   if (
-    !body?.signalId ||
+    !body?.signal ||
+    (body.signal.type !== "prediction" && body.signal.type !== "multiprediction") ||
     (body.outcome !== "yes" && body.outcome !== "no") ||
     typeof body.amountUsdc !== "number"
   ) {
     return NextResponse.json(
-      { error: "signalId, outcome (yes|no), amountUsdc required" },
+      { error: "signal (prediction|multiprediction), outcome (yes|no), amountUsdc required" },
       { status: 400 },
     );
   }
@@ -57,16 +57,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const signal = await getSignalById(body.signalId);
-  if (
-    !signal ||
-    (signal.type !== "prediction" && signal.type !== "multiprediction")
-  ) {
-    return NextResponse.json(
-      { error: "signal not found or wrong type" },
-      { status: 400 },
-    );
-  }
+  const signal = body.signal;
 
   // Resolve marketId + outcome label, branching on signal flavor.
   let resolvedMarketId: string;
@@ -198,7 +189,7 @@ export async function POST(request: Request) {
       amountUsdc: effectiveAmount,
       status: "pending",
       meta: {
-        signalId: signal.id,
+        signalId: body.signal.id,
         marketId: resolvedMarketId,
         eventId: resolvedEventId,
         outcome: body.outcome,

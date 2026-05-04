@@ -52,7 +52,7 @@ export function StakeButtons({ signal }: Props) {
       const data = await postBetWithConsolidation(
         "/api/bet/meme",
         {
-          signalId: signal.id,
+          signal,
           amountUsdc: amount,
           walletAddress: wallet.address,
         },
@@ -136,7 +136,7 @@ export function StakeButtons({ signal }: Props) {
       const data = await postBetWithConsolidation(
         "/api/bet/prediction",
         {
-          signalId: signal.id,
+          signal,
           outcome,
           amountUsdc: amount,
           walletAddress: wallet.address,
@@ -304,7 +304,7 @@ export function StakeButtons({ signal }: Props) {
       const data = await postBetWithConsolidation(
         "/api/bet/perp",
         {
-          signalId: signal.id,
+          signal,
           action,
           amountUsdc: amount,
           walletAddress: wallet.address,

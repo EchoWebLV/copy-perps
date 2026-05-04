@@ -69,7 +69,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
       const data = await postBetWithConsolidation(
         "/api/bet/prediction",
         {
-          signalId: signal.id,
+          signal,
           outcome: "yes",
           amountUsdc: stake,
           walletAddress: wallet.address,

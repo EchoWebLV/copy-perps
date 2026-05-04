@@ -10,7 +10,6 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
-import { getSignalById } from "@/lib/feed/pool";
 import type { MemeSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -24,38 +23,28 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    signalId?: string;
+    signal?: MemeSignal;
     amountUsdc?: number;
     walletAddress?: string;
   } | null;
 
-  if (!body?.signalId || typeof body.amountUsdc !== "number") {
+  if (
+    !body?.signal ||
+    body.signal.type !== "meme" ||
+    !body.signal.tokenAddress ||
+    typeof body.amountUsdc !== "number"
+  ) {
     return NextResponse.json(
-      { error: "signalId and amountUsdc required" },
+      { error: "signal (meme with tokenAddress) and amountUsdc required" },
       { status: 400 },
     );
   }
 
+  const memePayload: MemeSignal = body.signal;
   const amount = body.amountUsdc;
   if (amount <= 0 || amount > 1000) {
     return NextResponse.json(
       { error: "amount must be between 0 and 1000 USDC" },
-      { status: 400 },
-    );
-  }
-
-  const signal = await getSignalById(body.signalId);
-  if (!signal || signal.type !== "meme") {
-    return NextResponse.json(
-      { error: "signal not found or wrong type" },
-      { status: 400 },
-    );
-  }
-
-  const memePayload: MemeSignal = signal;
-  if (!memePayload.tokenAddress) {
-    return NextResponse.json(
-      { error: "signal missing tokenAddress" },
       { status: 400 },
     );
   }
@@ -122,9 +111,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // signalId is left null because the pool — not the signals table — is the
-  // source of truth now and the FK would fire for pool-only ids. The
-  // original id is preserved in meta for traceability.
+  // signalId column left null — the signal originated client-side now,
+  // not from the signals table, so the FK would fire. Keep the original
+  // id in meta for traceability.
   const [bet] = await db
     .insert(bets)
     .values({
@@ -133,7 +122,7 @@ export async function POST(request: Request) {
       amountUsdc: amount,
       status: "pending",
       meta: {
-        signalId: signal.id,
+        signalId: memePayload.id,
         tokenAddress: memePayload.tokenAddress,
         tokenSymbol: memePayload.ticker,
         tokenName: memePayload.name,

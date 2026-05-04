@@ -12,7 +12,6 @@ import {
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
-import { getSignalById } from "@/lib/feed/pool";
 import type { WhaleSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,19 +28,21 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    signalId?: string;
+    signal?: WhaleSignal;
     action?: "tail" | "fade";
     amountUsdc?: number;
     walletAddress?: string;
   } | null;
 
   if (
-    !body?.signalId ||
+    !body?.signal ||
+    body.signal.type !== "whale" ||
+    !body.signal.asset ||
     (body.action !== "tail" && body.action !== "fade") ||
     typeof body.amountUsdc !== "number"
   ) {
     return NextResponse.json(
-      { error: "signalId, action (tail|fade), amountUsdc required" },
+      { error: "signal (whale), action (tail|fade), amountUsdc required" },
       { status: 400 },
     );
   }
@@ -53,15 +54,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const signal = await getSignalById(body.signalId);
-  if (!signal || signal.type !== "whale") {
-    return NextResponse.json(
-      { error: "signal not found or wrong type" },
-      { status: 400 },
-    );
-  }
-
-  const whale: WhaleSignal = signal;
+  const whale: WhaleSignal = body.signal;
   const flashSymbol = flashSymbolFor(whale.asset);
   if (flashSymbol == null) {
     return NextResponse.json(
@@ -158,7 +151,7 @@ export async function POST(request: Request) {
       amountUsdc: body.amountUsdc,
       status: "pending",
       meta: {
-        signalId: signal.id,
+        signalId: whale.id,
         venue: "FlashTrade",
         flashAsset: flashSymbol,
         whaleAddress: whale.walletAddress,
