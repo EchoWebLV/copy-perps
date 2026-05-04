@@ -45,17 +45,18 @@ export default function PortfolioPage() {
     void load();
   }, [load]);
 
-  const totalCost =
-    positions?.reduce((sum, p) => sum + p.amountUsdc, 0) ?? 0;
-  const totalValue =
-    positions?.reduce(
-      (sum, p) =>
-        sum +
-        (p.status === "closed"
-          ? (p.proceedsUsdc ?? 0)
-          : (p.currentValueUsdc ?? p.amountUsdc)),
-      0,
-    ) ?? 0;
+  // Pending and failed bets don't represent a real position — exclude from totals.
+  const counted =
+    positions?.filter((p) => p.status === "confirmed" || p.status === "closed") ?? [];
+  const totalCost = counted.reduce((sum, p) => sum + p.amountUsdc, 0);
+  const totalValue = counted.reduce(
+    (sum, p) =>
+      sum +
+      (p.status === "closed"
+        ? (p.proceedsUsdc ?? 0)
+        : (p.currentValueUsdc ?? p.amountUsdc)),
+    0,
+  );
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 

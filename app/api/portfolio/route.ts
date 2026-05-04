@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { getQuote } from "@/lib/jupiter/swap";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 
-const STALE_PENDING_MINUTES = 5;
+const STALE_PENDING_MS = 5 * 60 * 1000;
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -47,6 +47,7 @@ export async function GET(request: Request) {
   // Reap pending bets that never reached the confirm step (sign cancelled,
   // wallet modal closed, network died mid-sign, etc.) so they don't clutter
   // the portfolio forever.
+  const staleCutoff = new Date(Date.now() - STALE_PENDING_MS);
   await db
     .update(bets)
     .set({ status: "abandoned" })
@@ -54,10 +55,7 @@ export async function GET(request: Request) {
       and(
         eq(bets.userId, user.id),
         eq(bets.status, "pending"),
-        lt(
-          bets.createdAt,
-          sql`now() - (${STALE_PENDING_MINUTES} || ' minutes')::interval`,
-        ),
+        lt(bets.createdAt, staleCutoff),
       ),
     );
 

@@ -52,11 +52,21 @@ export function PositionRow({
     ? position.proceedsUsdc
     : position.currentValueUsdc;
 
+  const dim = isPending || isFailed;
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+    <div
+      className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
+        dim
+          ? "border-white/5 bg-white/[0.015] opacity-60"
+          : "border-white/5 bg-white/[0.03]"
+      }`}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-base font-bold">
+          <span
+            className={`text-base font-bold ${dim ? "text-neutral-400" : ""}`}
+          >
             {position.ticker ?? position.type}
           </span>
           {position.name && (
@@ -65,7 +75,7 @@ export function PositionRow({
             </span>
           )}
           {isPending && (
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+            <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
               Pending
             </span>
           )}
@@ -99,11 +109,19 @@ export function PositionRow({
       </div>
 
       <div className="flex flex-col items-end gap-1">
-        <div className={`text-base font-bold ${pnlColor}`}>
-          {fmtUsd(position.pnlUsdc)}
+        <div
+          className={`text-base font-bold ${
+            dim ? "text-neutral-500" : pnlColor
+          }`}
+        >
+          {dim ? "—" : fmtUsd(position.pnlUsdc)}
         </div>
-        <div className={`text-[11px] font-semibold ${pnlColor}`}>
-          {fmtPct(position.pnlPct)}
+        <div
+          className={`text-[11px] font-semibold ${
+            dim ? "text-neutral-600" : pnlColor
+          }`}
+        >
+          {dim ? "—" : fmtPct(position.pnlPct)}
         </div>
       </div>
 
