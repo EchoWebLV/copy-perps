@@ -13,11 +13,11 @@ interface JupTokenSearchEntry {
   icon?: string | null;
 }
 
+// `/prediction/v1/events/{id}` returns the event at the top level, NOT
+// wrapped in `{ data: ... }` like the list endpoint does.
 interface JupEventResponse {
-  data?: {
-    metadata?: { imageUrl?: string | null };
-    markets?: { marketId: string; imageUrl?: string | null }[];
-  };
+  metadata?: { imageUrl?: string | null };
+  markets?: { marketId: string; imageUrl?: string | null }[];
 }
 
 export function useJupiterTokenIcon(mint: string | undefined): string | null {
@@ -70,8 +70,7 @@ export function useJupiterEventImage(
     let cancelled = false;
     fetch(`https://api.jup.ag/prediction/v1/events/${eventId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((res: JupEventResponse) => {
-        const ev = res?.data;
+      .then((ev: JupEventResponse) => {
         const marketImg = marketId
           ? ev?.markets?.find((m) => m.marketId === marketId)?.imageUrl
           : null;
