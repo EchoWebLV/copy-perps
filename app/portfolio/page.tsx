@@ -17,7 +17,8 @@ import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
-  const { usdc: walletUsdc, sol: walletSol } = useWalletBalance(wallet?.address);
+  const { totalUsd: walletUsd, sol: walletSol, refresh: refreshBalance } =
+    useWalletBalance(wallet?.address);
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +62,7 @@ export default function PortfolioPage() {
   );
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
-  const totalNetWorth = positionsValue + (walletUsdc ?? 0);
+  const totalNetWorth = positionsValue + (walletUsd ?? 0);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pt-12 pb-28">
@@ -111,7 +112,7 @@ export default function PortfolioPage() {
                   Available
                 </div>
                 <div className="mt-0.5 text-base font-bold">
-                  {walletUsdc == null ? "—" : `$${walletUsdc.toFixed(2)}`}
+                  {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
                 </div>
                 {walletSol != null && (
                   <div className="text-[10px] text-neutral-500">

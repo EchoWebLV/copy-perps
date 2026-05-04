@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getUsdcBalance, getSolBalance } from "./balance";
+import { getUsdcBalance, getJupUsdBalance, getSolBalance } from "./balance";
 
 interface BalanceState {
   usdc: number | null;
+  jupUsd: number | null;
+  // Combined USD-equivalent balance: USDC + jupUSD. Both peg 1:1 to USD,
+  // so the app treats them interchangeably for display purposes.
+  totalUsd: number | null;
   sol: number | null;
   loading: boolean;
   error: string | null;
@@ -13,6 +17,8 @@ interface BalanceState {
 export function useWalletBalance(walletAddress: string | undefined) {
   const [state, setState] = useState<BalanceState>({
     usdc: null,
+    jupUsd: null,
+    totalUsd: null,
     sol: null,
     loading: false,
     error: null,
@@ -22,11 +28,19 @@ export function useWalletBalance(walletAddress: string | undefined) {
     if (!walletAddress) return;
     setState((s) => ({ ...s, loading: true }));
     try {
-      const [usdc, sol] = await Promise.all([
+      const [usdc, jupUsd, sol] = await Promise.all([
         getUsdcBalance(walletAddress),
+        getJupUsdBalance(walletAddress),
         getSolBalance(walletAddress),
       ]);
-      setState({ usdc, sol, loading: false, error: null });
+      setState({
+        usdc,
+        jupUsd,
+        totalUsd: usdc + jupUsd,
+        sol,
+        loading: false,
+        error: null,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setState((s) => ({ ...s, loading: false, error: msg }));

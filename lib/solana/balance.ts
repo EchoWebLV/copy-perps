@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { USDC_MINT } from "@/lib/jupiter/constants";
+import { USDC_MINT, JUPUSD_MINT } from "@/lib/jupiter/constants";
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
@@ -13,12 +13,16 @@ function getConnection(): Connection {
 }
 
 const usdcMintPubkey = new PublicKey(USDC_MINT);
+const jupUsdMintPubkey = new PublicKey(JUPUSD_MINT);
 
-export async function getUsdcBalance(walletAddress: string): Promise<number> {
+async function getUiBalanceForMint(
+  walletAddress: string,
+  mintPubkey: PublicKey,
+): Promise<number> {
   const conn = getConnection();
   const owner = new PublicKey(walletAddress);
   const accs = await conn.getParsedTokenAccountsByOwner(owner, {
-    mint: usdcMintPubkey,
+    mint: mintPubkey,
   });
 
   let total = 0;
@@ -39,6 +43,14 @@ export async function getUsdcBalance(walletAddress: string): Promise<number> {
     }
   }
   return total;
+}
+
+export async function getUsdcBalance(walletAddress: string): Promise<number> {
+  return getUiBalanceForMint(walletAddress, usdcMintPubkey);
+}
+
+export async function getJupUsdBalance(walletAddress: string): Promise<number> {
+  return getUiBalanceForMint(walletAddress, jupUsdMintPubkey);
 }
 
 export async function getSolBalance(walletAddress: string): Promise<number> {
