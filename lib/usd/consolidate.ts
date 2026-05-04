@@ -75,6 +75,12 @@ export async function ensureUsdcOrConsolidate(params: {
     slippageBps: 50,
   });
 
+  if (typeof swap.swapTransaction !== "string" || swap.swapTransaction.length === 0) {
+    throw new Error(
+      `Jupiter jupUSD->USDC swap returned no transaction (got ${typeof swap.swapTransaction})`,
+    );
+  }
+
   return {
     ready: false,
     consolidationTransaction: swap.swapTransaction,

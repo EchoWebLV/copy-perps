@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { Connection } from "@solana/web3.js";
+import { Connection, SendTransactionError } from "@solana/web3.js";
 import type { Signal, StakeAmount } from "@/lib/types";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 
@@ -27,14 +27,35 @@ async function signAndSubmit(
   })) as { signedTransaction: Uint8Array };
 
   const conn = new Connection(RPC_URL, "confirmed");
-  return await conn.sendRawTransaction(result.signedTransaction, {
-    skipPreflight: false,
-    maxRetries: 3,
-  });
+  try {
+    return await conn.sendRawTransaction(result.signedTransaction, {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+  } catch (err) {
+    if (err instanceof SendTransactionError) {
+      const logs = await err.getLogs(conn).catch(() => null);
+      console.error("[bet] sim logs:", logs);
+    }
+    throw err;
+  }
 }
 
-function decodeBase64Tx(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+function decodeBase64Tx(b64: unknown, label: string): Uint8Array {
+  if (typeof b64 !== "string" || b64.length === 0) {
+    throw new Error(
+      `${label}: expected base64 string, got ${typeof b64} (${
+        typeof b64 === "string" ? "empty" : String(b64).slice(0, 40)
+      })`,
+    );
+  }
+  try {
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  } catch (err) {
+    throw new Error(
+      `${label}: base64 decode failed (len=${b64.length}, head="${b64.slice(0, 40)}…"): ${String(err)}`,
+    );
+  }
 }
 
 // Wraps fetch + sign-loop for the consolidate/open dance. The server
@@ -64,12 +85,17 @@ async function postBetWithConsolidation(
       throw new Error(b.error ?? `HTTP ${r.status}`);
     }
     const data = (await r.json()) as Record<string, unknown>;
+    console.log(
+      `[bet ${url}] attempt=${attempt} phase=${String(data.phase)} keys=[${Object.keys(data).join(",")}]`,
+    );
     if (data.phase === "consolidate") {
       if (attempt > 0) {
         throw new Error("consolidation didn't clear after retry");
       }
-      const swapB64 = data.consolidationTransaction as string;
-      const swapBytes = decodeBase64Tx(swapB64);
+      const swapBytes = decodeBase64Tx(
+        data.consolidationTransaction,
+        "consolidation tx",
+      );
       const sig = await signAndSubmit(swapBytes, wallet, signTransaction);
       const conn = new Connection(RPC_URL, "confirmed");
       await conn.confirmTransaction(sig, "confirmed");
@@ -131,7 +157,7 @@ export function StakeButtons({ signal }: Props) {
       );
       betId = data.betId as string;
 
-      const txBytes = decodeBase64Tx(data.swapTransaction as string);
+      const txBytes = decodeBase64Tx(data.swapTransaction, "meme open tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/meme/confirm", {
@@ -216,7 +242,7 @@ export function StakeButtons({ signal }: Props) {
       );
       betId = data.betId as string;
 
-      const txBytes = decodeBase64Tx(data.swapTransaction as string);
+      const txBytes = decodeBase64Tx(data.swapTransaction, "prediction order tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/prediction/confirm", {
@@ -384,7 +410,7 @@ export function StakeButtons({ signal }: Props) {
       );
       betId = data.betId as string;
 
-      const txBytes = decodeBase64Tx(data.swapTransaction as string);
+      const txBytes = decodeBase64Tx(data.swapTransaction, "perp open tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
 
       await fetch("/api/bet/perp/confirm", {
