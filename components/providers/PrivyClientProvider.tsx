@@ -2,7 +2,21 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import type { ReactNode } from "react";
+
+const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+
+function buildRpcs() {
+  const httpUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? DEFAULT_RPC;
+  const wssUrl = httpUrl.replace(/^https?:/, "wss:");
+  return {
+    "solana:mainnet": {
+      rpc: createSolanaRpc(httpUrl),
+      rpcSubscriptions: createSolanaRpcSubscriptions(wssUrl),
+    },
+  } as const;
+}
 
 export function PrivyClientProvider({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -33,6 +47,9 @@ export function PrivyClientProvider({ children }: { children: ReactNode }) {
         },
         embeddedWallets: {
           solana: { createOnLogin: "users-without-wallets" },
+        },
+        solana: {
+          rpcs: buildRpcs(),
         },
       }}
     >

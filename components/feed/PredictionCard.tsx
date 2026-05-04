@@ -11,7 +11,7 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
 
   return (
     <div
-      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-6 text-white"
+      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-24 text-white"
       style={{
         background: "radial-gradient(ellipse at top, #0a1428, #050505 60%)",
       }}

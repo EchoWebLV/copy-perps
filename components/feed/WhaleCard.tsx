@@ -14,7 +14,7 @@ const fmtPrice = (n: number) =>
 export function WhaleCard({ signal }: { signal: WhaleSignal }) {
   return (
     <div
-      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-6 text-white"
+      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-24 text-white"
       style={{
         background: "radial-gradient(ellipse at top, #1a0a28, #050505 60%)",
       }}
