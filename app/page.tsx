@@ -36,7 +36,7 @@ function CountdownCell({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center">
       <div
-        className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-3xl font-black tabular-nums text-white shadow-[0_0_30px_rgba(74,222,128,0.08)] backdrop-blur-md sm:px-5 sm:py-3.5 sm:text-4xl"
+        className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-3xl font-black tabular-nums text-white shadow-[0_0_30px_rgba(74,222,128,0.08)] backdrop-blur-md sm:px-4 sm:py-3.5 sm:text-4xl"
       >
         {pad(value)}
       </div>
@@ -64,11 +64,11 @@ function Countdown() {
   }
 
   return (
-    <div className="mt-8 flex flex-col items-center">
+    <div className="mt-3 flex flex-col items-center px-4 sm:mt-4">
       <div className="text-[10px] font-bold uppercase tracking-[3px] text-neutral-500">
         Live in
       </div>
-      <div className="mt-3 flex items-center gap-2 sm:gap-3">
+      <div className="mt-3 flex items-center gap-1.5 sm:gap-2">
         <CountdownCell value={remaining.days} label="Days" />
         <span className="text-2xl font-black text-neutral-700 sm:text-3xl">
           :
