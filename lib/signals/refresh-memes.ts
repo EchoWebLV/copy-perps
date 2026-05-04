@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { signals } from "@/lib/db/schema";
 import { getTopBoosted, getPairs, type DSPair } from "@/lib/dexscreener/client";
+import { getJupiterTokenIcons } from "@/lib/jupiter/token-icon";
 import { memeHeatScore, memeSignalChips } from "./heat-meme";
 import { memeSparkline } from "./sparkline";
 import type { MemeSignal } from "@/lib/types";
@@ -60,6 +61,12 @@ export async function refreshMemes(): Promise<RefreshMemesResult> {
     return { fetched: solBoosts.length, qualified: 0, inserted: 0, errors };
   }
 
+  // Token icons come from Jupiter, not DexScreener — pair.info.imageUrl
+  // is unset for most boosted Pump.fun-era tokens.
+  const icons = await getJupiterTokenIcons(
+    top.map(({ pair }) => pair.baseToken.address),
+  );
+
   const now = new Date();
   const newRows = top.map(({ pair, score }) => {
     const id = `meme:${pair.baseToken.address}`;
@@ -75,10 +82,11 @@ export async function refreshMemes(): Promise<RefreshMemesResult> {
       chain: "Solana",
       tokenAddress: pair.baseToken.address,
       price: Number(pair.priceUsd),
+      marketCap: pair.marketCap ?? pair.fdv,
       change24hPct: pair.priceChange?.h24 ?? 0,
       sparklinePath: memeSparkline(pair.priceChange ?? {}),
       chips: memeSignalChips(pair),
-      imageUrl: pair.info?.imageUrl,
+      imageUrl: icons[pair.baseToken.address] ?? undefined,
     };
 
     return {

@@ -2,6 +2,14 @@ import type { MemeSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 
+function fmtMarketCap(n: number | undefined): string {
+  if (!n || !Number.isFinite(n)) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
 export function MemeCard({ signal }: { signal: MemeSignal }) {
   // Tolerate rows still on the legacy `change1hPct` shape until the next
   // cron run rewrites them.
@@ -34,8 +42,11 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
       <div className="mt-1 text-sm text-neutral-500">{signal.name} · {signal.chain}</div>
 
       <div className="mt-7">
-        <div className="text-4xl font-extrabold">
-          ${signal.price < 1 ? signal.price.toFixed(4) : signal.price.toFixed(2)}
+        <div className="text-[11px] font-bold uppercase tracking-[1.5px] text-neutral-500">
+          Market cap
+        </div>
+        <div className="mt-1 text-4xl font-extrabold">
+          {fmtMarketCap(signal.marketCap)}
         </div>
         <div
           className="mt-1 text-base font-semibold"
