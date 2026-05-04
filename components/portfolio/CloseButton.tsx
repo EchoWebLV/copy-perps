@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { Connection } from "@solana/web3.js";
+import { Connection, SendTransactionError } from "@solana/web3.js";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 
 const RPC_URL =
@@ -20,10 +20,18 @@ async function signAndSubmit(
     wallet,
   })) as { signedTransaction: Uint8Array };
   const conn = new Connection(RPC_URL, "confirmed");
-  return await conn.sendRawTransaction(result.signedTransaction, {
-    skipPreflight: false,
-    maxRetries: 3,
-  });
+  try {
+    return await conn.sendRawTransaction(result.signedTransaction, {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+  } catch (err) {
+    if (err instanceof SendTransactionError) {
+      const logs = await err.getLogs(conn).catch(() => null);
+      console.error("[close] sim logs:", logs);
+    }
+    throw err;
+  }
 }
 
 interface Props {

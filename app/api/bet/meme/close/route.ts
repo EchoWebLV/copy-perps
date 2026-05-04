@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { sellTokenForUsdc } from "@/lib/jupiter/swap";
+import { getTokenAtomicBalance } from "@/lib/solana/balance";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -55,11 +56,41 @@ export async function POST(request: Request) {
     );
   }
 
+  // The stored amount is the buy quote, not the on-chain delivered amount.
+  // Buy slippage means the wallet typically holds slightly less, and asking
+  // Jupiter to swap more than we hold trips an early-stage validation
+  // (custom error 0x1788). Cap to actual balance — but never exceed the
+  // per-bet quoted amount, so we don't bleed into another open position
+  // that shares the same mint.
+  let onChainBalance: bigint;
+  try {
+    onChainBalance = await getTokenAtomicBalance(
+      user.solanaPubkey,
+      tokenAddress,
+    );
+  } catch (err) {
+    console.error("[bet/meme/close] balance read failed:", err);
+    return NextResponse.json(
+      { error: "could not read on-chain token balance" },
+      { status: 502 },
+    );
+  }
+  if (onChainBalance === 0n) {
+    return NextResponse.json(
+      { error: "no token balance on chain to close" },
+      { status: 400 },
+    );
+  }
+  const stored = BigInt(tokenAmount);
+  const tokenAmountAtomic =
+    onChainBalance < stored ? onChainBalance : stored;
+
   try {
     const result = await sellTokenForUsdc({
       inputMint: tokenAddress,
-      tokenAmountAtomic: BigInt(tokenAmount),
+      tokenAmountAtomic,
       userPublicKey: user.solanaPubkey,
+      slippageBps: 300,
     });
     return NextResponse.json({
       swapTransaction: result.swap.swapTransaction,

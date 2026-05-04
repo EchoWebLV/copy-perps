@@ -46,3 +46,32 @@ export async function getSolBalance(walletAddress: string): Promise<number> {
   const lamports = await conn.getBalance(new PublicKey(walletAddress));
   return lamports / 1_000_000_000;
 }
+
+export async function getTokenAtomicBalance(
+  walletAddress: string,
+  mintAddress: string,
+): Promise<bigint> {
+  const conn = getConnection();
+  const owner = new PublicKey(walletAddress);
+  const mint = new PublicKey(mintAddress);
+  const accs = await conn.getParsedTokenAccountsByOwner(owner, { mint });
+
+  let total = 0n;
+  for (const acc of accs.value) {
+    const data = acc.account.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "parsed" in data &&
+      data.parsed &&
+      typeof data.parsed === "object"
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tokenAmount = (data.parsed as any).info?.tokenAmount;
+      if (typeof tokenAmount?.amount === "string") {
+        total += BigInt(tokenAmount.amount);
+      }
+    }
+  }
+  return total;
+}
