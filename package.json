@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx --env-file=.env.local scripts/seed.ts"
+    "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "refresh:memes": "tsx --env-file=.env.local scripts/refresh-memes-local.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
