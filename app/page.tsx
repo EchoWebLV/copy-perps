@@ -10,7 +10,7 @@ export default function LandingPage() {
   return (
     <main className="gwak-breathe flex min-h-dvh flex-col items-center justify-center px-6 text-center">
       <Image
-        src="/logo.jpeg"
+        src="/logo.png"
         alt="gwak.gg"
         width={1280}
         height={853}
