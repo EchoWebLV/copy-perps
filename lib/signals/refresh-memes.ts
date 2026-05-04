@@ -73,6 +73,7 @@ export async function refreshMemes(): Promise<RefreshMemesResult> {
       ticker,
       name: pair.baseToken.name,
       chain: "Solana",
+      tokenAddress: pair.baseToken.address,
       price: Number(pair.priceUsd),
       change1hPct: pair.priceChange?.h1 ?? 0,
       sparklinePath: memeSparkline(pair.priceChange ?? {}),

@@ -20,6 +20,8 @@ export interface MemeSignal extends BaseSignal {
   ticker: string;
   name: string;
   chain: string;
+  tokenAddress: string;
+  tokenDecimals?: number;
   price: number;
   change1hPct: number;
   sparklinePath: string;

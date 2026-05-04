@@ -41,6 +41,10 @@ export const bets = pgTable("bets", {
   amountUsdc: doublePrecision("amount_usdc").notNull(),
   txHash: text("tx_hash"),
   status: text("status").notNull().default("pending"),
+  meta: jsonb("meta"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closeTxHash: text("close_tx_hash"),
+  proceedsUsdc: doublePrecision("proceeds_usdc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

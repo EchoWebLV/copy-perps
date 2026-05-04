@@ -2,6 +2,7 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import type { ReactNode } from "react";
+import { UserEnsure } from "./UserEnsure";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { ready, authenticated, login } = usePrivy();
@@ -34,5 +35,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <UserEnsure />
+      {children}
+    </>
+  );
 }
