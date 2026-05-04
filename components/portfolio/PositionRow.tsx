@@ -33,11 +33,6 @@ export interface PortfolioPosition {
   closedAt?: string | null;
 }
 
-function truncate(s: string | undefined, max: number): string {
-  if (!s) return "";
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
-}
-
 const fmtUsd = (n: number | null | undefined) =>
   n == null ? "—" : `$${n >= 1000 ? n.toFixed(0) : n.toFixed(2)}`;
 
@@ -78,7 +73,7 @@ export function PositionRow({
   const title = isMeme
     ? (position.ticker ?? position.type)
     : isPrediction
-      ? truncate(position.question, 36)
+      ? (position.question ?? "")
       : isPerp
         ? `${position.asset} ${position.leverage ?? 1}×`
         : position.type;
@@ -128,74 +123,84 @@ export function PositionRow({
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
+      className={`rounded-2xl border p-4 transition ${
         dim
           ? "border-white/5 bg-white/[0.015] opacity-60"
           : "border-white/5 bg-white/[0.03]"
       }`}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-base font-bold ${dim ? "text-neutral-400" : ""}`}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div
+            className={`truncate text-base font-bold ${
+              dim ? "text-neutral-400" : ""
+            }`}
+            title={title}
           >
             {title}
-          </span>
-          {subtitleEl}
-          {isPending && (
-            <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
-              Pending
-            </span>
-          )}
-          {isFailed && (
-            <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
-              Failed
-            </span>
-          )}
-          {isClosed && (
-            <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
-              Closed
-            </span>
-          )}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {subtitleEl}
+            {isPending && (
+              <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
+                Pending
+              </span>
+            )}
+            {isFailed && (
+              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
+                Failed
+              </span>
+            )}
+            {isClosed && (
+              <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
+                Closed
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-neutral-500">
+            <span>Cost {fmtUsd(position.amountUsdc)}</span>
+            <span>·</span>
+            <span>Now {fmtUsd(value)}</span>
+            {position.openTxHash && (
+              <a
+                href={`https://solscan.io/tx/${position.openTxHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 text-neutral-500 hover:text-neutral-300"
+                title={position.openTxHash}
+              >
+                <ExternalLink size={10} />
+              </a>
+            )}
+          </div>
         </div>
-        <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
-          <span>Cost {fmtUsd(position.amountUsdc)}</span>
-          <span>·</span>
-          <span>Now {fmtUsd(value)}</span>
-          {position.openTxHash && (
-            <a
-              href={`https://solscan.io/tx/${position.openTxHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-0.5 text-neutral-500 hover:text-neutral-300"
-              title={position.openTxHash}
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="flex flex-col items-end leading-tight">
+            <div
+              className={`text-base font-bold ${
+                dim ? "text-neutral-500" : pnlColor
+              }`}
             >
-              <ExternalLink size={10} />
-            </a>
+              {dim ? "—" : fmtUsd(position.pnlUsdc)}
+            </div>
+            <div
+              className={`text-[11px] font-semibold ${
+                dim ? "text-neutral-600" : pnlColor
+              }`}
+            >
+              {dim ? "—" : fmtPct(position.pnlPct)}
+            </div>
+          </div>
+          {closeable && apiBase && (
+            <CloseButton
+              betId={position.id}
+              apiBase={apiBase}
+              onClosed={onClosed}
+            />
           )}
         </div>
       </div>
-
-      <div className="flex flex-col items-end gap-1">
-        <div
-          className={`text-base font-bold ${
-            dim ? "text-neutral-500" : pnlColor
-          }`}
-        >
-          {dim ? "—" : fmtUsd(position.pnlUsdc)}
-        </div>
-        <div
-          className={`text-[11px] font-semibold ${
-            dim ? "text-neutral-600" : pnlColor
-          }`}
-        >
-          {dim ? "—" : fmtPct(position.pnlPct)}
-        </div>
-      </div>
-
-      {closeable && apiBase && (
-        <CloseButton betId={position.id} apiBase={apiBase} onClosed={onClosed} />
-      )}
     </div>
   );
 }
