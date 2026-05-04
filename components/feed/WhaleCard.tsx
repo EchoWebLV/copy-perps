@@ -13,12 +13,7 @@ const fmtPrice = (n: number) =>
 
 export function WhaleCard({ signal }: { signal: WhaleSignal }) {
   return (
-    <div
-      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-24 text-white"
-      style={{
-        background: "radial-gradient(ellipse at top, #1a0a28, #050505 60%)",
-      }}
-    >
+    <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#7c3aed] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Whale opened
       </span>

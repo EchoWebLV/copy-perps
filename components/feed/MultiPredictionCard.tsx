@@ -117,12 +117,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
   }
 
   return (
-    <div
-      className="relative flex h-full w-full snap-start flex-col px-5 pt-[60px] pb-24 text-white"
-      style={{
-        background: "radial-gradient(ellipse at top, #0a1428, #050505 60%)",
-      }}
-    >
+    <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         {signal.series ?? "Polymarket"}
       </span>
