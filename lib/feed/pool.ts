@@ -27,8 +27,11 @@ const PREDICTION_KEEP = 40;
 const MULTI_OUTCOMES_TO_SHOW = 4;
 const WHALE_TOP_PER_WHALE = 3;
 
-// Filters
-const MEME_MIN_LIQUIDITY_USD = 10_000;
+// Filters — tuned to keep the pool full of tokens Jupiter can actually
+// swap into without simulation errors (rugged authorities, dust
+// liquidity, and bonding-curve-only tokens fail the swap step).
+const MEME_MIN_LIQUIDITY_USD = 50_000;
+const MEME_MIN_HOLDERS = 200;
 const MEME_MAX_MCAP_USD = 1_500_000_000; // drop blue chips like SOL/USDC
 const MEME_EXCLUDED_TAGS = new Set(["xstocks", "stocks", "lst"]);
 const MEME_EXCLUDED_MINTS = new Set([
@@ -62,6 +65,7 @@ interface JupToken {
   fdv?: number | null;
   usdPrice?: number | null;
   liquidity?: number | null;
+  holderCount?: number | null;
   organicScore?: number | null;
   organicScoreLabel?: string | null;
   isVerified?: boolean;
@@ -140,6 +144,9 @@ function tokenIsExcluded(t: JupToken): boolean {
   if (t.tags?.some((tag) => MEME_EXCLUDED_TAGS.has(tag))) return true;
   if ((t.mcap ?? t.fdv ?? 0) > MEME_MAX_MCAP_USD) return true;
   if ((t.liquidity ?? 0) < MEME_MIN_LIQUIDITY_USD) return true;
+  // Holder count gates out dust tokens, brand-new pump.fun launches with
+  // no real distribution, and deployer-only tokens that fail the swap.
+  if ((t.holderCount ?? 0) < MEME_MIN_HOLDERS) return true;
   return false;
 }
 
@@ -401,13 +408,3 @@ export const getFeedPool = unstable_cache(buildPool, ["feed-pool"], {
   revalidate: 60,
   tags: ["feed-pool"],
 });
-
-/**
- * Look up a signal by id from the cached pool. Used by bet routes for
- * validation since the pool — not the signals table — is now the source
- * of truth for "what's bettable right now."
- */
-export async function getSignalById(id: string): Promise<Signal | null> {
-  const pool = await getFeedPool();
-  return pool.find((s) => s.id === id) ?? null;
-}
