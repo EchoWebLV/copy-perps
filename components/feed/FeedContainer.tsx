@@ -49,12 +49,6 @@ export function FeedContainer({
   stateRef.current.cursor = cursor;
   stateRef.current.total = total;
 
-  // Track ids already in the feed to dedupe across reshuffles. We seed it
-  // from initialSignals so the first reshuffle doesn't duplicate them.
-  const seenIdsRef = useRef<Set<string>>(
-    new Set(initialSignals.map((s) => s.id)),
-  );
-
   const loadMore = useCallback(async () => {
     if (stateRef.current.loading) return;
     stateRef.current.loading = true;
@@ -74,10 +68,9 @@ export function FeedContainer({
       if (!r.ok) throw new Error(`feed ${r.status}`);
       const data = (await r.json()) as FeedResponse;
 
-      const fresh = data.signals.filter((s) => !seenIdsRef.current.has(s.id));
-      fresh.forEach((s) => seenIdsRef.current.add(s.id));
-
-      setSignals((prev) => [...prev, ...fresh]);
+      // Allow repeats — once the pool exhausts, reshuffles bring the same
+      // items back in a different M-M-N arrangement. That's the infinite.
+      setSignals((prev) => [...prev, ...data.signals]);
       setSeed(data.seed);
       setCursor(data.nextCursor);
       setTotal(data.total);
@@ -134,7 +127,7 @@ export function FeedContainer({
       >
         {signals.map((signal, i) => (
           <div
-            key={signal.id}
+            key={`${i}-${signal.id}`}
             ref={(el) => {
               itemRefs.current[i] = el;
             }}
