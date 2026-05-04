@@ -1,6 +1,42 @@
-import { getUsdcBalance, getJupUsdBalance } from "@/lib/solana/balance";
+import {
+  getUsdcBalance,
+  getJupUsdBalance,
+  getSolBalance,
+} from "@/lib/solana/balance";
 import { sellTokenForUsdc } from "@/lib/jupiter/swap";
 import { JUPUSD_MINT } from "@/lib/jupiter/constants";
+
+// Minimum SOL we require in the user's wallet before letting them open
+// any position. Covers tx fees + ATA rent + Flash position account
+// rent. Flash's swapAndOpen + Jupiter Prediction's createOrder both
+// allocate fresh accounts mid-tx; without ~0.01 SOL of headroom they
+// fail with "insufficient lamports" or "Insufficient SOL or token
+// balance" — which is what users see as a generic "insufficient funds"
+// error.
+const MIN_SOL_FOR_BET = 0.01;
+
+export class InsufficientSolForFeesError extends Error {
+  constructor(public solBalance: number) {
+    super(
+      `Need at least ${MIN_SOL_FOR_BET} SOL for fees and account rent — you have ${solBalance.toFixed(
+        4,
+      )} SOL. Add a tiny bit more SOL and try again.`,
+    );
+    this.name = "InsufficientSolForFeesError";
+  }
+}
+
+// Read SOL balance and throw the friendly error if it's below the
+// per-bet floor. Call this at the top of every bet route — it catches
+// the failure before the on-chain simulation does, so the message the
+// user sees actually says "you're low on SOL" instead of a generic
+// program error.
+export async function requireSolForBet(userPubkey: string): Promise<void> {
+  const sol = await getSolBalance(userPubkey);
+  if (sol < MIN_SOL_FOR_BET) {
+    throw new InsufficientSolForFeesError(sol);
+  }
+}
 
 export interface ConsolidationResult {
   // True when user already has enough USDC and no swap is needed.

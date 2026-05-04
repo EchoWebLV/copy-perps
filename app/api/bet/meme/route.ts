@@ -8,6 +8,8 @@ import { buyTokenWithUsdc } from "@/lib/jupiter/swap";
 import {
   ensureUsdcOrConsolidate,
   InsufficientCombinedBalanceError,
+  requireSolForBet,
+  InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import type { MemeSignal } from "@/lib/types";
 
@@ -69,6 +71,18 @@ export async function POST(request: Request) {
       { error: "no Solana wallet on user — pass walletAddress" },
       { status: 400 },
     );
+  }
+
+  // SOL preflight — Jupiter swap creates the destination token ATA
+  // inline, which needs rent. Surface a clear "low SOL" error before
+  // simulation fails.
+  try {
+    await requireSolForBet(user.solanaPubkey);
+  } catch (err) {
+    if (err instanceof InsufficientSolForFeesError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
 
   // Meme buy goes USDC -> token via Jupiter swap. If user holds their

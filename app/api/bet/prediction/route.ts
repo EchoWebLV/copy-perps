@@ -8,6 +8,8 @@ import { createOrder } from "@/lib/jupiter-prediction/client";
 import {
   ensureUsdcOrConsolidate,
   InsufficientCombinedBalanceError,
+  requireSolForBet,
+  InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
@@ -125,6 +127,19 @@ export async function POST(request: Request) {
   // padded value so PnL math stays consistent.
   const effectiveAmount = Math.max(body.amountUsdc, PREDICTION_DEPOSIT_FLOOR);
   const depositAtomic = BigInt(Math.floor(effectiveAmount * 1_000_000));
+
+  // SOL preflight — Jupiter Prediction's createOrder allocates ATAs
+  // for the position; without ~0.01 SOL the API returns "Insufficient
+  // SOL or token balance" which obscures whether the user is short on
+  // USDC or just short on SOL for fees.
+  try {
+    await requireSolForBet(user.solanaPubkey);
+  } catch (err) {
+    if (err instanceof InsufficientSolForFeesError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
 
   // Unify on USDC across all bet paths. If the user is short USDC but
   // their combined USDC + jupUSD covers the trade, ask them to sign a

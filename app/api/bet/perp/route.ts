@@ -10,6 +10,8 @@ import { buildOpenPerpTx } from "@/lib/flash-trade/perp";
 import {
   ensureUsdcOrConsolidate,
   InsufficientCombinedBalanceError,
+  requireSolForBet,
+  InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import type { WhaleSignal } from "@/lib/types";
 
@@ -89,6 +91,18 @@ export async function POST(request: Request) {
       { error: "no Solana wallet on user" },
       { status: 400 },
     );
+  }
+
+  // SOL preflight — Flash's swapAndOpen allocates ATAs and a position
+  // account inline; without ~0.01 SOL the tx fails with cryptic
+  // "insufficient lamports" deep in simulation logs. Catch it here.
+  try {
+    await requireSolForBet(user.solanaPubkey);
+  } catch (err) {
+    if (err instanceof InsufficientSolForFeesError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
 
   // Flash Trade collateral is USDC-only. If the user is holding their
