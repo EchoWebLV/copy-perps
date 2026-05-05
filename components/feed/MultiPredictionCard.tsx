@@ -16,6 +16,7 @@ import {
 } from "@/lib/bets/post-with-consolidation";
 import { SignalChip } from "./SignalChip";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
+import { useAnalyze } from "./AnalyzeProvider";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000
@@ -35,6 +36,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
     signal.imageUrl ? undefined : signal.eventId,
   );
   const icon = signal.imageUrl ?? fallbackIcon;
+  const { open: openAnalyze } = useAnalyze();
   const { getAccessToken } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -128,13 +130,20 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
       </span>
 
       {icon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={icon}
-          alt=""
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={() => openAnalyze(signal)}
+          aria-label="Ask Gwak about this market"
+          className="absolute top-[56px] right-5 h-14 w-14 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10 transition active:scale-95 hover:ring-emerald-300/50"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={icon}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </button>
       ) : null}
 
       <div className="mt-12 pr-16 text-xl font-bold leading-tight">

@@ -3,6 +3,7 @@ import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 import { perpAssetImage } from "@/lib/feed/perp-image";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
+import { useAnalyze } from "./AnalyzeProvider";
 
 const fmtUsd = (n: number) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -26,6 +27,7 @@ function fmtRelativeOpened(iso: string): string {
 
 export function WhaleCard({ signal }: { signal: WhaleSignal }) {
   const coinIcon = perpAssetImage(signal.asset);
+  const { open: openAnalyze } = useAnalyze();
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -36,29 +38,36 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         <BookmarkButton signal={signal} />
       </div>
 
-      {coinIcon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={coinIcon}
-          alt={signal.asset}
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-contain p-1.5 ring-1 ring-white/10"
-          loading="lazy"
-        />
-      ) : (
-        <div
-          className="absolute top-[56px] right-5 flex h-14 w-14 items-center justify-center rounded-full ring-1 ring-white/10"
-          style={{
-            background:
-              signal.side === "long"
-                ? "linear-gradient(135deg, #7c3aed, #ec4899)"
-                : "linear-gradient(135deg, #06b6d4, #22c55e)",
-          }}
-        >
+      <button
+        type="button"
+        onClick={() => openAnalyze(signal)}
+        aria-label="Ask Gwak about this whale position"
+        className="absolute top-[56px] right-5 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/10 transition active:scale-95 hover:ring-emerald-300/50"
+        style={
+          coinIcon
+            ? { background: "rgba(255,255,255,0.05)" }
+            : {
+                background:
+                  signal.side === "long"
+                    ? "linear-gradient(135deg, #7c3aed, #ec4899)"
+                    : "linear-gradient(135deg, #06b6d4, #22c55e)",
+              }
+        }
+      >
+        {coinIcon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={coinIcon}
+            alt={signal.asset}
+            className="h-full w-full object-contain p-1.5"
+            loading="lazy"
+          />
+        ) : (
           <span className="text-[11px] font-black tracking-tight">
             {signal.asset.slice(0, 4)}
           </span>
-        </div>
-      )}
+        )}
+      </button>
 
       <div className="mt-14 flex items-center gap-3">
         <div

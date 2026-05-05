@@ -5,6 +5,7 @@ import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
+import { useAnalyze } from "./AnalyzeProvider";
 
 const fmtUsd = (n: number) =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}k`;
@@ -17,6 +18,7 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
     signal.marketId,
   );
   const icon = signal.imageUrl ?? fallbackIcon;
+  const { open: openAnalyze } = useAnalyze();
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -28,13 +30,20 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
       </div>
 
       {icon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={icon}
-          alt=""
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={() => openAnalyze(signal)}
+          aria-label="Ask Gwak about this market"
+          className="absolute top-[56px] right-5 h-14 w-14 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10 transition active:scale-95 hover:ring-emerald-300/50"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={icon}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </button>
       ) : null}
 
       <div className="mt-14 pr-16 text-2xl font-bold leading-tight">{signal.question}</div>

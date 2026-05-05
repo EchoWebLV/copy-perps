@@ -6,6 +6,7 @@ import { StakeButtons } from "./StakeButtons";
 import { useJupiterTokenInfo } from "@/lib/feed/use-card-image";
 import { useDexScreenerPair } from "@/lib/feed/use-dexscreener-pair";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
+import { useAnalyze } from "./AnalyzeProvider";
 
 function fmtMarketCap(n: number | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "—";
@@ -18,6 +19,7 @@ function fmtMarketCap(n: number | undefined): string {
 export function MemeCard({ signal }: { signal: MemeSignal }) {
   const { icon } = useJupiterTokenInfo(signal.tokenAddress);
   const live = useDexScreenerPair(signal.tokenAddress);
+  const { open: openAnalyze } = useAnalyze();
 
   const marketCap = live.marketCap ?? signal.marketCap;
   const change =
@@ -42,13 +44,20 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
       </div>
 
       {icon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={icon}
-          alt={signal.ticker}
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={() => openAnalyze(signal)}
+          aria-label="Ask Gwak about this signal"
+          className="absolute top-[56px] right-5 h-14 w-14 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10 transition active:scale-95 hover:ring-emerald-300/50"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={icon}
+            alt={signal.ticker}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </button>
       ) : null}
 
       <div className="mt-[60px] text-[44px] font-black tracking-tight leading-none">
