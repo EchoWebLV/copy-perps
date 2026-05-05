@@ -31,7 +31,7 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
       <div className="absolute top-[58px] left-5 z-10 flex items-center gap-2">
         <span className="rounded-lg bg-[#7c3aed] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
-          Whale open
+          Whale
         </span>
         <BookmarkButton signal={signal} />
       </div>
