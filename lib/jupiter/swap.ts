@@ -32,6 +32,7 @@ export async function getQuote(params: {
   amount: bigint | number;
   slippageBps?: number;
   maxAccounts?: number;
+  swapMode?: "ExactIn" | "ExactOut";
 }): Promise<JupiterQuote> {
   const qs = new URLSearchParams({
     inputMint: params.inputMint,
@@ -40,6 +41,7 @@ export async function getQuote(params: {
     slippageBps: (params.slippageBps ?? 100).toString(),
   });
   if (params.maxAccounts) qs.set("maxAccounts", params.maxAccounts.toString());
+  if (params.swapMode) qs.set("swapMode", params.swapMode);
 
   const res = await fetch(`${JUPITER_BASE}/swap/v1/quote?${qs}`, {
     cache: "no-store",

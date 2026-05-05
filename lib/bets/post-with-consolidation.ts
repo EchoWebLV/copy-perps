@@ -30,6 +30,7 @@ export async function signAndSubmitTx(
   txBytes: Uint8Array,
   wallet: ReturnType<typeof useEmbeddedSolanaWallet>,
   signTransaction: ReturnType<typeof useSignTransaction>["signTransaction"],
+  opts: { skipPreflight?: boolean } = {},
 ): Promise<string> {
   if (!wallet) throw new Error("Wallet not ready");
   const result = (await signTransaction({
@@ -39,7 +40,7 @@ export async function signAndSubmitTx(
   const conn = new Connection(RPC_URL, "confirmed");
   try {
     return await conn.sendRawTransaction(result.signedTransaction, {
-      skipPreflight: false,
+      skipPreflight: opts.skipPreflight ?? false,
       maxRetries: 3,
     });
   } catch (err) {
@@ -94,7 +95,14 @@ export async function postBetWithConsolidation(
         data.consolidationTransaction,
         "consolidation tx",
       );
-      const sig = await signAndSubmitTx(swapBytes, wallet, signTransaction);
+      // Consolidation swap (jupUSD → USDC) hits Jupiter pre-flight
+      // slippage rejections on jupUSD's thin liquidity even with 10%
+      // tolerance. Skip RPC simulation and let the tx attempt on chain
+      // where state is current — if it really can't clear, the on-chain
+      // failure surfaces in confirmTransaction below.
+      const sig = await signAndSubmitTx(swapBytes, wallet, signTransaction, {
+        skipPreflight: true,
+      });
       const conn = new Connection(RPC_URL, "confirmed");
       const result = await conn.confirmTransaction(sig, "confirmed");
       if (result.value.err) {

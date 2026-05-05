@@ -185,19 +185,28 @@ export async function ensureUsdcOrConsolidateGasless(params: {
   }
 
   const shortfall = params.requiredUsd - usdcBalance;
-  const swapInputAtomic = BigInt(Math.ceil(shortfall * 1.03 * 1_000_000));
+  // ExactOut: ask Jupiter for exactly `shortfall` USDC out, let it
+  // figure how much jupUSD to take. ExactIn previously tripped 0x1788
+  // because Jupiter's quote-vs-actual delta on jupUSD's thin pools
+  // exceeded even 5% slippage at sim time. ExactOut routes more
+  // predictably for niche tokens.
+  const desiredUsdcAtomic = BigInt(Math.ceil(shortfall * 1_000_000));
 
   const quote = await getQuote({
     inputMint: JUPUSD_MINT,
     outputMint: USDC_MINT,
-    amount: swapInputAtomic,
-    slippageBps: 500,
+    amount: desiredUsdcAtomic,
+    swapMode: "ExactOut",
+    slippageBps: 1000, // 10% — caps max input pad; actual is rarely > 1%
   });
+  console.log(
+    `[consolidate-gasless] jupiter quote: inAmount=${quote.inAmount} outAmount=${quote.outAmount} otherAmountThreshold=${quote.otherAmountThreshold} priceImpactPct=${quote.priceImpactPct}`,
+  );
   const ixResp = await buildSwapInstructions({
     quoteResponse: quote,
     userPublicKey: params.userPubkey,
-    // jupUSD trips Jupiter's shared-accounts route — see comment in
-    // ensureUsdcOrConsolidate above.
+    // jupUSD trips Jupiter's shared-accounts route — plain Route is
+    // more forgiving on the pre-flight slippage check.
     useSharedAccounts: false,
   });
   const dripIx = buildUserSolDripIx({
