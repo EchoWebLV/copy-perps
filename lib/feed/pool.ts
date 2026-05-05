@@ -323,13 +323,34 @@ async function fetchPredictionPool(): Promise<
 // pre-computed rows. Locally, run `npm run refresh:whales` to populate
 // the table once; the data stays fresh as long as you re-run periodically
 // (or the deployed cron does it for you).
+// Backwards-compat shim for whale rows written under the previous schema
+// (walletPnl30d / openedAtRelative). The next refreshWhales run wipes
+// these atomically, but until then we coalesce to the new field names so
+// the card doesn't crash. Drop this once the live DB has only new-shape
+// rows for a few cron cycles.
+interface LegacyWhalePayload {
+  walletPnl30d?: number;
+  walletAccountValue?: number;
+  openedAtRelative?: string;
+  openedAt?: string;
+  [k: string]: unknown;
+}
+function normalizeWhalePayload(raw: unknown): WhaleSignal {
+  const p = raw as LegacyWhalePayload;
+  return {
+    ...(p as unknown as WhaleSignal),
+    walletAccountValue: p.walletAccountValue ?? p.walletPnl30d ?? 0,
+    openedAt: p.openedAt ?? new Date().toISOString(),
+  };
+}
+
 async function fetchWhalePool(): Promise<WhaleSignal[]> {
   const rows = await db
     .select()
     .from(signalsTable)
     .where(eq(signalsTable.type, "whale"))
     .orderBy(desc(signalsTable.heatScore));
-  return rows.map((r) => r.payload as WhaleSignal);
+  return rows.map((r) => normalizeWhalePayload(r.payload));
 }
 // ─── Per-rail caches + combined pool ──────────────────────────────────────
 //
