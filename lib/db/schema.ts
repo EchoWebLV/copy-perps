@@ -7,6 +7,7 @@ import {
   uuid,
   doublePrecision,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -54,6 +55,25 @@ export const whaleWallets = pgTable("whale_wallets", {
   label: text("label"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 });
+
+export const watchlistItems = pgTable(
+  "watchlist_items",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    signalId: text("signal_id").notNull(),
+    signalType: text("signal_type").notNull(),
+    payload: jsonb("payload").notNull(),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.signalId] }),
+    userIdx: index("watchlist_user_idx").on(t.userId, t.addedAt),
+  }),
+);
 
 export const feedViews = pgTable("feed_views", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -2,6 +2,7 @@ import type { WhaleSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 import { perpAssetImage } from "@/lib/feed/perp-image";
+import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 
 const fmtUsd = (n: number) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -31,6 +32,10 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#7c3aed] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Whale open
       </span>
+
+      <div className="absolute top-[120px] right-5 z-10">
+        <BookmarkButton signal={signal} />
+      </div>
 
       {coinIcon ? (
         // eslint-disable-next-line @next/next/no-img-element

@@ -4,6 +4,7 @@ import type { PredictionSignal } from "@/lib/types";
 import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
+import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 
 const fmtUsd = (n: number) =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}k`;
@@ -22,6 +23,10 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Market
       </span>
+
+      <div className="absolute top-[120px] right-5 z-10">
+        <BookmarkButton signal={signal} />
+      </div>
 
       {icon ? (
         // eslint-disable-next-line @next/next/no-img-element

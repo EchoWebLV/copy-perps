@@ -14,6 +14,13 @@ import {
   truncateAddress,
 } from "@/lib/privy/use-solana-wallet";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
+import { useWatchlist } from "@/components/watchlist/WatchlistProvider";
+import {
+  WatchlistRow,
+  EmptyWatchlist,
+} from "@/components/watchlist/WatchlistRow";
+import { WatchlistModal } from "@/components/watchlist/WatchlistModal";
+import type { Signal } from "@/lib/types";
 
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
@@ -23,7 +30,9 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"open" | "closed">("open");
+  const [tab, setTab] = useState<"open" | "closed" | "watchlist">("open");
+  const { items: watchlistItems } = useWatchlist();
+  const [modalSignal, setModalSignal] = useState<Signal | null>(null);
 
   const load = useCallback(async () => {
     if (!authenticated) return;
@@ -78,7 +87,12 @@ export default function PortfolioPage() {
   const realizedPnl = closedProceeds - closedCost;
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
-  const visiblePositions = tab === "open" ? openPositions : closedPositions;
+  const visiblePositions =
+    tab === "open"
+      ? openPositions
+      : tab === "closed"
+        ? closedPositions
+        : [];
 
   return (
     <main className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12">
@@ -178,7 +192,7 @@ export default function PortfolioPage() {
           <div className="mt-4 flex flex-none gap-1 rounded-full bg-white/5 p-1">
             <button
               onClick={() => setTab("open")}
-              className={`flex-1 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
                 tab === "open"
                   ? "bg-white text-black"
                   : "text-neutral-400 active:scale-95"
@@ -188,13 +202,23 @@ export default function PortfolioPage() {
             </button>
             <button
               onClick={() => setTab("closed")}
-              className={`flex-1 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
                 tab === "closed"
                   ? "bg-white text-black"
                   : "text-neutral-400 active:scale-95"
               }`}
             >
               Closed · {closedPositions.length}
+            </button>
+            <button
+              onClick={() => setTab("watchlist")}
+              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
+                tab === "watchlist"
+                  ? "bg-white text-black"
+                  : "text-neutral-400 active:scale-95"
+              }`}
+            >
+              Watchlist · {watchlistItems.length}
             </button>
           </div>
 
@@ -230,33 +254,52 @@ export default function PortfolioPage() {
 
           <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col gap-2 pb-24">
-              {error && (
-                <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
-                  {error}
-                </div>
+              {tab !== "watchlist" && (
+                <>
+                  {error && (
+                    <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+                      {error}
+                    </div>
+                  )}
+                  {positions === null && !error && (
+                    <div className="py-12 text-center text-sm text-neutral-500">
+                      Loading positions…
+                    </div>
+                  )}
+                  {positions && visiblePositions.length === 0 && (
+                    <div className="py-12 text-center">
+                      <p className="text-sm text-neutral-400">
+                        {tab === "open"
+                          ? "No open positions."
+                          : "No closed positions yet."}
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-600">
+                        {tab === "open"
+                          ? "Tap a meme card in the feed to open one."
+                          : "Closed bets show up here."}
+                      </p>
+                    </div>
+                  )}
+                  {visiblePositions.map((p) => (
+                    <PositionRow key={p.id} position={p} onClosed={load} />
+                  ))}
+                </>
               )}
-              {positions === null && !error && (
-                <div className="py-12 text-center text-sm text-neutral-500">
-                  Loading positions…
-                </div>
+              {tab === "watchlist" && (
+                <>
+                  {watchlistItems.length === 0 ? (
+                    <EmptyWatchlist />
+                  ) : (
+                    watchlistItems.map((item) => (
+                      <WatchlistRow
+                        key={item.signalId}
+                        signal={item.payload}
+                        onOpen={setModalSignal}
+                      />
+                    ))
+                  )}
+                </>
               )}
-              {positions && visiblePositions.length === 0 && (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-neutral-400">
-                    {tab === "open"
-                      ? "No open positions."
-                      : "No closed positions yet."}
-                  </p>
-                  <p className="mt-1 text-xs text-neutral-600">
-                    {tab === "open"
-                      ? "Tap a meme card in the feed to open one."
-                      : "Closed bets show up here."}
-                  </p>
-                </div>
-              )}
-              {visiblePositions.map((p) => (
-                <PositionRow key={p.id} position={p} onClosed={load} />
-              ))}
               <button
                 onClick={logout}
                 className="mt-6 flex items-center justify-center gap-2 self-center text-xs text-neutral-500 transition hover:text-neutral-300"
@@ -269,6 +312,7 @@ export default function PortfolioPage() {
       )}
 
       <BottomNav />
+      <WatchlistModal signal={modalSignal} onClose={() => setModalSignal(null)} />
     </main>
   );
 }

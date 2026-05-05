@@ -5,6 +5,7 @@ import { SignalChip } from "./SignalChip";
 import { StakeButtons } from "./StakeButtons";
 import { useJupiterTokenInfo } from "@/lib/feed/use-card-image";
 import { useDexScreenerPair } from "@/lib/feed/use-dexscreener-pair";
+import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 
 function fmtMarketCap(n: number | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "—";
@@ -36,6 +37,10 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
       <span className="absolute top-[60px] left-5 rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Coin
       </span>
+
+      <div className="absolute top-[120px] right-5 z-10">
+        <BookmarkButton signal={signal} />
+      </div>
 
       {icon ? (
         // eslint-disable-next-line @next/next/no-img-element
