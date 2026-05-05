@@ -105,7 +105,7 @@ async function main() {
     const valid = open
       .filter((m) => {
         const yes = parseFloat(m.outcomePrices?.[0] ?? "0");
-        return Number.isFinite(yes) && yes > 0.005 && yes < 0.99;
+        return Number.isFinite(yes) && yes >= 0.03 && yes <= 0.97;
       })
       .slice(0, 12);
     console.log(

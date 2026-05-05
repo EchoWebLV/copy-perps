@@ -205,6 +205,13 @@ function fmtResolveDate(closeTime: number): string {
 // 44-candidate election) doesn't dominate the rail. Sorted by per-market
 // volume so the most-watched outcomes come first.
 const PREDICTION_MAX_PER_EVENT = 12;
+// YES-price range a market must sit in to count as a bettable signal.
+// 3–97% drops "effectively settled" markets (99/1, 98/2) without killing
+// long-shot moonshots that still show meaningful action (5–10% probs).
+// Tighten to .05–.95 if 95/5 markets still feel stale, or .10–.90 to
+// keep only the genuinely-uncertain ones.
+const PREDICTION_MIN_PROB = 0.03;
+const PREDICTION_MAX_PROB = 0.97;
 
 interface PredictionCandidate {
   event: JPEvent;
@@ -239,7 +246,14 @@ async function fetchPredictionPool(): Promise<PredictionSignal[]> {
     const validMarkets = open
       .filter((m) => {
         const yes = parseFloat(m.outcomePrices?.[0] ?? "0");
-        return Number.isFinite(yes) && yes > 0.005 && yes < 0.99;
+        // Drop lopsided markets — 95/5 or worse isn't an interesting bet,
+        // the favored side has no edge to take and the other side's
+        // implied payout is huge but practically nil.
+        return (
+          Number.isFinite(yes) &&
+          yes >= PREDICTION_MIN_PROB &&
+          yes <= PREDICTION_MAX_PROB
+        );
       })
       .sort((a, b) => (b.pricing?.volume ?? 0) - (a.pricing?.volume ?? 0))
       .slice(0, PREDICTION_MAX_PER_EVENT);
