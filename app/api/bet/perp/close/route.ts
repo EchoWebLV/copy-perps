@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { buildClosePerpTx } from "@/lib/flash-trade/perp";
+import {
+  ensureGasWalletReady,
+  gasWalletPubkey,
+  partialSignAsFeePayer,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -56,7 +62,36 @@ export async function POST(request: Request) {
     );
   }
 
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
   try {
+    if (gasless) {
+      try {
+        await ensureGasWalletReady();
+      } catch (err) {
+        if (err instanceof GasWalletExhaustedError) {
+          return NextResponse.json({ error: err.message }, { status: 503 });
+        }
+        throw err;
+      }
+
+      const result = await buildClosePerpTx({
+        userPubkey: new PublicKey(user.solanaPubkey),
+        asset: flashAsset,
+        side: direction,
+        gaslessFeePayer: gasWalletPubkey,
+      });
+      const txBytes = Buffer.from(result.transaction, "base64");
+      const v0Tx = VersionedTransaction.deserialize(txBytes);
+      partialSignAsFeePayer(v0Tx);
+      return NextResponse.json({
+        swapTransaction: Buffer.from(v0Tx.serialize()).toString("base64"),
+        expectedProceedsAtomic: Math.floor(
+          (bet.amountUsdc + result.expectedProceedsUsd) * 1_000_000,
+        ).toString(),
+      });
+    }
+
     const result = await buildClosePerpTx({
       userPubkey: new PublicKey(user.solanaPubkey),
       asset: flashAsset,
