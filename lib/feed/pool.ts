@@ -33,8 +33,10 @@ const MULTI_OUTCOMES_TO_SHOW = 4;
 const WHALE_TOP_PER_WHALE = 5;
 // How "fresh" a position has to be to make the rail. We pull each watched
 // wallet's fills over this window and only surface positions whose latest
-// open-side fill lands inside it.
-const WHALE_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+// open-side fill lands inside it. 24h gives us enough density of SOL/BTC/ETH
+// opens (the assets Flash can execute) — anything tighter empties the pool
+// during quiet stretches.
+const WHALE_FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // Filters — tuned to keep the pool full of tokens Jupiter can actually
 // swap into without simulation errors (rugged authorities, dust
