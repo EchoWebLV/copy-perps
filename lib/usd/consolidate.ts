@@ -126,11 +126,13 @@ export async function ensureUsdcOrConsolidate(params: {
     inputMint: JUPUSD_MINT,
     tokenAmountAtomic: swapInputAtomic,
     userPublicKey: params.userPubkey,
-    // 2% slippage tolerance — jupUSD→USDC normally clears under 0.5%,
-    // but multi-hop routes through low-liquidity DEX pools (which
-    // Jupiter sometimes picks for small amounts) tripped the previous
-    // 50bps cap with 0x1788 SlippageToleranceExceeded.
-    slippageBps: 200,
+    // 5% slippage + non-shared-accounts route. jupUSD has thin
+    // liquidity in Jupiter's shared-accounts route, which trips 0x1788
+    // (SlippageToleranceExceeded) even at 2%. Plain Route + 5% headroom
+    // clears reliably and stable-to-stable rarely uses more than 1%
+    // of it in practice.
+    slippageBps: 500,
+    useSharedAccounts: false,
   });
 
   if (typeof swap.swapTransaction !== "string" || swap.swapTransaction.length === 0) {
@@ -189,11 +191,14 @@ export async function ensureUsdcOrConsolidateGasless(params: {
     inputMint: JUPUSD_MINT,
     outputMint: USDC_MINT,
     amount: swapInputAtomic,
-    slippageBps: 200,
+    slippageBps: 500,
   });
   const ixResp = await buildSwapInstructions({
     quoteResponse: quote,
     userPublicKey: params.userPubkey,
+    // jupUSD trips Jupiter's shared-accounts route — see comment in
+    // ensureUsdcOrConsolidate above.
+    useSharedAccounts: false,
   });
   const dripIx = buildUserSolDripIx({
     userPubkey: new PublicKey(params.userPubkey),

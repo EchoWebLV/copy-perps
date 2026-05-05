@@ -54,6 +54,7 @@ export async function getQuote(params: {
 export async function buildSwap(params: {
   quoteResponse: JupiterQuote;
   userPublicKey: string;
+  useSharedAccounts?: boolean;
 }): Promise<JupiterSwapResponse> {
   const res = await fetch(`${JUPITER_BASE}/swap/v1/swap`, {
     method: "POST",
@@ -63,6 +64,7 @@ export async function buildSwap(params: {
       userPublicKey: params.userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
+      useSharedAccounts: params.useSharedAccounts ?? true,
       // Privy's signer can't resolve address-lookup-table contents on its
       // own, so request a legacy (non-versioned) tx without ALT references.
       // For straightforward swaps this still fits well under Solana's
@@ -104,6 +106,7 @@ export async function sellTokenForUsdc(params: {
   tokenAmountAtomic: bigint;
   userPublicKey: string;
   slippageBps?: number;
+  useSharedAccounts?: boolean;
 }) {
   const quote = await getQuote({
     inputMint: params.inputMint,
@@ -114,6 +117,7 @@ export async function sellTokenForUsdc(params: {
   const swap = await buildSwap({
     quoteResponse: quote,
     userPublicKey: params.userPublicKey,
+    useSharedAccounts: params.useSharedAccounts,
   });
   return { quote, swap };
 }
@@ -135,6 +139,12 @@ export interface JupiterSwapInstructionsResponse {
 export async function buildSwapInstructions(params: {
   quoteResponse: JupiterQuote;
   userPublicKey: string;
+  // Default Jupiter behavior wraps routes through "shared accounts" —
+  // a single output token account reused across hops. Efficient, but
+  // strict about min-out and trips 0x1788 (SlippageToleranceExceeded)
+  // for low-liquidity tokens like jupUSD even with generous slippage.
+  // Set to false to force the plain Route path which is more forgiving.
+  useSharedAccounts?: boolean;
 }): Promise<JupiterSwapInstructionsResponse> {
   const res = await fetch(`${JUPITER_BASE}/swap/v1/swap-instructions`, {
     method: "POST",
@@ -144,6 +154,7 @@ export async function buildSwapInstructions(params: {
       userPublicKey: params.userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
+      useSharedAccounts: params.useSharedAccounts ?? true,
       prioritizationFeeLamports: {
         priorityLevelWithMaxLamports: {
           priorityLevel: "high",
