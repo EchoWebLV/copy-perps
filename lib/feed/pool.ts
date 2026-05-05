@@ -33,10 +33,13 @@ const MULTI_OUTCOMES_TO_SHOW = 4;
 const WHALE_TOP_PER_WHALE = 5;
 // How "fresh" a position has to be to make the rail. We pull each watched
 // wallet's fills over this window and only surface positions whose latest
-// open-side fill lands inside it. 24h gives us enough density of SOL/BTC/ETH
-// opens (the assets Flash can execute) — anything tighter empties the pool
-// during quiet stretches.
-const WHALE_FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
+// open-side fill lands inside it. 7 days is the floor that keeps the rail
+// stably populated — most curated whales hold SOL/BTC/ETH positions for
+// multiple days, and tighter cutoffs (24h, 6h) cause the pool to oscillate
+// between full and empty as positions cross the boundary. The heat-score
+// recency boost still pushes literally-fresh opens (last hour, last 3h)
+// to the top, so the user sees "minutes ago" cards first.
+const WHALE_FRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Filters — tuned to keep the pool full of tokens Jupiter can actually
 // swap into without simulation errors (rugged authorities, dust
@@ -189,7 +192,7 @@ async function fetchMemePool(): Promise<MemeSignal[]> {
         price: t.usdPrice ?? 0,
         marketCap: t.mcap ?? t.fdv ?? undefined,
         change24hPct: t.stats24h?.priceChange ?? 0,
-        sparklinePath: memeSparkline(pc),
+        sparklinePath: memeSparkline(pc, t.id),
       };
       return meme;
     });
@@ -340,16 +343,43 @@ function fillOpensSide(dir: string, side: "long" | "short"): boolean {
   return dir === "Open Short" || dir === "Long > Short";
 }
 
+// Cap concurrent Hyperliquid info calls. The endpoint is generous on a
+// per-minute basis (~1200/min) but bursting 55+ parallel calls during a
+// cache rebuild can trip per-second guards and cause some wallets to
+// silently drop out — visually the rail looks like it "lost" perps.
+// Concurrency 8 keeps us comfortably under the burst limit while still
+// finishing a full rebuild in 5–8 seconds.
+async function mapLimit<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+const WHALE_FETCH_CONCURRENCY = 8;
+
 async function fetchWhalePool(): Promise<WhaleSignal[]> {
   const now = Date.now();
   const windowStart = now - WHALE_FRESH_WINDOW_MS;
   const stamp = new Date(now).toISOString();
 
   // Pass 1 — pull recent fills per wallet. Most wallets sit idle in any
-  // given 6h window, so we use this as a cheap pre-filter. Wallets with no
+  // given window, so we use this as a cheap pre-filter. Wallets with no
   // recent fills can't have a fresh open and skip Pass 2 entirely.
-  const recentFillsByWallet = await Promise.all(
-    CURATED_WHALES.map(async (whale) => {
+  const recentFillsByWallet = await mapLimit(
+    CURATED_WHALES,
+    WHALE_FETCH_CONCURRENCY,
+    async (whale) => {
       try {
         const fills = await getUserFillsByTime(whale.address, windowStart);
         const opens = fills.filter((f) => /^(Open |Long > Short|Short > Long)/.test(String(f.dir)));
@@ -358,7 +388,7 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
         console.warn("[pool/whale fills]", whale.address, e);
         return { whale, opens: [] as HLFill[] };
       }
-    }),
+    },
   );
   const active = recentFillsByWallet.filter((r) => r.opens.length > 0);
 
@@ -366,8 +396,7 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
   // reference each currently-open position with the recent open-fills to
   // find the real openedAt; skip positions older than the window.
   const all: WhaleSignal[] = [];
-  await Promise.all(
-    active.map(async ({ whale, opens }) => {
+  await mapLimit(active, WHALE_FETCH_CONCURRENCY, async ({ whale, opens }) => {
       try {
         const state = await getClearinghouseState(whale.address);
         const accountValueUsd = parseFloat(state.marginSummary.accountValue);
@@ -446,7 +475,7 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
       } catch (e) {
         console.warn("[pool/whale state]", whale.address, e);
       }
-    }),
+    },
   );
 
   return all;
