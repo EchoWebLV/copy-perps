@@ -10,14 +10,9 @@ export async function GET(request: Request) {
   const authError = checkCronAuth(request);
   if (authError) return authError;
 
-  const start = Date.now();
   try {
     const result = await refreshWhales();
-    return NextResponse.json({
-      ok: true,
-      durationMs: Date.now() - start,
-      ...result,
-    });
+    return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[refresh-whales] failed:", err);
     return NextResponse.json(
