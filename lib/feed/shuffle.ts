@@ -39,37 +39,53 @@ interface Typed {
 }
 
 /**
- * Interleave a shuffled pool so memes never run more than `maxMemeRun` in a
- * row while non-memes (predictions + whales) are available. Once the
- * non-meme bucket is drained the remaining memes spill out at the tail —
- * unavoidable when memes outnumber the rest 7:1.
+ * Interleave a shuffled pool into a strict 1-meme / 1-non-meme rotation,
+ * and within the non-meme slot alternate whale and prediction so the
+ * smaller bucket (usually whales) gets equal billing instead of being
+ * drowned out by predictions when picked at random. Whales count as
+ * "perp", predictions and multipredictions both count as "market".
+ *
+ * Pattern: M W M P M W M P M W ... with predictions filling in once
+ * whales exhaust, then memes spilling at the tail.
  *
  * Same seed → same sequence, so paginated batches stay consistent.
  */
 export function interleaveByRail<T extends Typed>(
   signals: readonly T[],
   seed: number,
-  maxMemeRun = 2,
 ): T[] {
   const memes: T[] = [];
-  const others: T[] = [];
+  const whales: T[] = [];
+  const markets: T[] = [];
   for (const s of signals) {
-    (s.type === "meme" ? memes : others).push(s);
+    if (s.type === "meme") memes.push(s);
+    else if (s.type === "whale") whales.push(s);
+    else markets.push(s); // prediction + multiprediction
   }
-  const shuffledMemes = seededShuffle(memes, seed);
-  // XOR to derive an independent stream so the same seed doesn't produce
-  // the same relative order for both buckets.
-  const shuffledOthers = seededShuffle(others, seed ^ 0x9e3779b9);
+
+  // XOR each shuffle seed so the three buckets don't end up in lock-step
+  // when the same seed is used across requests.
+  const sM = seededShuffle(memes, seed);
+  const sW = seededShuffle(whales, seed ^ 0x9e3779b9);
+  const sP = seededShuffle(markets, seed ^ 0x12345678);
 
   const out: T[] = [];
   let mi = 0;
-  let oi = 0;
-  while (mi < shuffledMemes.length || oi < shuffledOthers.length) {
-    for (let k = 0; k < maxMemeRun && mi < shuffledMemes.length; k++) {
-      out.push(shuffledMemes[mi++]);
-    }
-    if (oi < shuffledOthers.length) {
-      out.push(shuffledOthers[oi++]);
+  let wi = 0;
+  let pi = 0;
+  let nonMemeTick = 0;
+  while (mi < sM.length || wi < sW.length || pi < sP.length) {
+    if (mi < sM.length) out.push(sM[mi++]);
+
+    // Alternate whale/market for the non-meme slot. If one bucket is
+    // exhausted, fall through to the other so we don't emit empty slots.
+    const preferWhale = nonMemeTick++ % 2 === 0;
+    if (preferWhale) {
+      if (wi < sW.length) out.push(sW[wi++]);
+      else if (pi < sP.length) out.push(sP[pi++]);
+    } else {
+      if (pi < sP.length) out.push(sP[pi++]);
+      else if (wi < sW.length) out.push(sW[wi++]);
     }
   }
   return out;

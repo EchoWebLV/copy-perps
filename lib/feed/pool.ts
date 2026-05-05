@@ -33,13 +33,11 @@ const MULTI_OUTCOMES_TO_SHOW = 4;
 const WHALE_TOP_PER_WHALE = 5;
 // How "fresh" a position has to be to make the rail. We pull each watched
 // wallet's fills over this window and only surface positions whose latest
-// open-side fill lands inside it. 7 days is the floor that keeps the rail
-// stably populated — most curated whales hold SOL/BTC/ETH positions for
-// multiple days, and tighter cutoffs (24h, 6h) cause the pool to oscillate
-// between full and empty as positions cross the boundary. The heat-score
-// recency boost still pushes literally-fresh opens (last hour, last 3h)
-// to the top, so the user sees "minutes ago" cards first.
-const WHALE_FRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// open-side fill lands inside it. 14 days captures most still-active
+// holdings; the heat-score recency boost still pushes sub-hour opens to
+// the top so users see "minutes ago" cards first and "10d ago" further
+// down the feed.
+const WHALE_FRESH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Filters — tuned to keep the pool full of tokens Jupiter can actually
 // swap into without simulation errors (rugged authorities, dust
