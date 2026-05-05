@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
@@ -8,10 +8,19 @@ import { flashSymbolFor } from "@/lib/flash-trade/client";
 import { buildOpenPerpTx } from "@/lib/flash-trade/perp";
 import {
   ensureUsdcOrConsolidate,
+  ensureUsdcOrConsolidateGasless,
   InsufficientCombinedBalanceError,
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import {
+  ensureGasWalletReady,
+  gasWalletPubkey,
+  partialSignAsFeePayer,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
+import { buildFeeTransferInstructions } from "@/lib/wallets/treasury";
+import { computeBetFee } from "@/lib/fees/calc";
 import type { WhaleSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -80,6 +89,118 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
+  if (gasless) {
+    try {
+      await ensureGasWalletReady();
+    } catch (err) {
+      if (err instanceof GasWalletExhaustedError) {
+        return NextResponse.json({ error: err.message }, { status: 503 });
+      }
+      throw err;
+    }
+
+    const fee = computeBetFee(body.amountUsdc);
+    const requiredUsd = body.amountUsdc + fee.totalFeeUsdc;
+
+    try {
+      const consolidation = await ensureUsdcOrConsolidateGasless({
+        userPubkey: user.solanaPubkey,
+        requiredUsd,
+      });
+      if (!consolidation.ready) {
+        return NextResponse.json({
+          phase: "consolidate",
+          consolidationTransaction: consolidation.consolidationTransaction,
+          usdcBalance: consolidation.usdcBalance,
+          jupUsdBalance: consolidation.jupUsdBalance,
+          requiredUsd: consolidation.requiredUsd,
+        });
+      }
+    } catch (err) {
+      if (err instanceof InsufficientCombinedBalanceError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      console.error("[bet/perp] consolidation check failed:", err);
+      return NextResponse.json(
+        { error: `Balance check failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    const userPk = new PublicKey(user.solanaPubkey);
+    const feeIxs = buildFeeTransferInstructions({
+      userPubkey: userPk,
+      feeUsdcDollars: fee.totalFeeUsdc,
+      feePayerForAta: gasWalletPubkey,
+    });
+
+    let openResult;
+    try {
+      openResult = await buildOpenPerpTx({
+        userPubkey: userPk,
+        asset: flashSymbol,
+        marketIndex,
+        direction,
+        marginUsdc: body.amountUsdc,
+        whaleLeverage: whale.leverage,
+        gaslessFeePayer: gasWalletPubkey,
+        appendInstructions: feeIxs,
+      });
+    } catch (err) {
+      console.error("[bet/perp] build failed:", err);
+      return NextResponse.json(
+        { error: `Flash Trade tx build failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    // Round-trip the tx through deserialize → partial-sign → serialize so
+    // the Gas Wallet's signature is on the wire alongside any ephemeral
+    // signers Flash already added.
+    const txBytes = Buffer.from(openResult.transaction, "base64");
+    const v0Tx = VersionedTransaction.deserialize(txBytes);
+    partialSignAsFeePayer(v0Tx);
+    const signedTxB64 = Buffer.from(v0Tx.serialize()).toString("base64");
+
+    const [bet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "perp",
+        amountUsdc: body.amountUsdc,
+        feeUsdc: fee.totalFeeUsdc,
+        status: "pending",
+        meta: {
+          signalId: whale.id,
+          venue: "FlashTrade",
+          flashAsset: flashSymbol,
+          whaleAddress: whale.walletAddress,
+          whaleAsset: whale.asset,
+          whaleSide: whale.side,
+          whaleLeverage: whale.leverage,
+          action: body.action,
+          direction,
+          marketIndex,
+          baseAssetAmount: openResult.baseAssetAmount,
+          notionalUsd: openResult.notionalUsd,
+        },
+      })
+      .returning();
+
+    return NextResponse.json({
+      phase: "open",
+      betId: bet.id,
+      swapTransaction: signedTxB64,
+      notionalUsd: openResult.notionalUsd,
+      direction: openResult.direction,
+      isFirstTimeUser: openResult.isFirstTimeUser,
+    });
+  }
+
+  // --- legacy path (FEATURE_GASLESS_BETS != "true") ---
 
   // SOL preflight — Flash's swapAndOpen allocates ATAs and a position
   // account inline; without ~0.01 SOL the tx fails with cryptic
