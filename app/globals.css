@@ -34,6 +34,57 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Phone-frame containment.
+   On mobile (< 768px) the wrapper is a no-op pass-through so existing
+   `h-dvh` / `min-h-dvh` / `fixed` layout keeps full-bleed behavior.
+   On desktop it caps the app to a phone-shaped box centered in the
+   viewport with a dark backdrop, and rewires viewport-relative units
+   inside the frame to be relative to the frame instead. */
+.phone-frame {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+@media (min-width: 768px) {
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    background:
+      radial-gradient(circle at 50% 20%, rgba(124, 58, 237, 0.12), transparent 55%),
+      radial-gradient(circle at 50% 80%, rgba(34, 197, 94, 0.08), transparent 60%),
+      #050505;
+  }
+
+  .phone-frame {
+    /* iPhone-Pro-ish ratio. Capped by viewport so a short window still fits. */
+    width: 420px;
+    height: min(910px, calc(100dvh - 32px));
+    min-height: 0;
+    border-radius: 32px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 40px 100px -20px rgba(0, 0, 0, 0.75),
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    /* `transform` makes this element the containing block for any
+       `position: fixed` descendants (BalancePill, BottomNav, modals),
+       so they snap to the frame instead of the viewport. */
+    transform: translateZ(0);
+    isolation: isolate;
+  }
+
+  /* Inside the frame, viewport-height utilities should resolve to the
+     frame's height instead of the actual viewport. */
+  .phone-frame .h-dvh,
+  .phone-frame .min-h-dvh {
+    height: 100% !important;
+    min-height: 100% !important;
+  }
+}
+
 @keyframes gwak-breathe {
   0%, 100% {
     background:

@@ -26,7 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <PrivyClientProvider>{children}</PrivyClientProvider>
+        <div className="phone-frame">
+          <PrivyClientProvider>{children}</PrivyClientProvider>
+        </div>
       </body>
     </html>
   );
