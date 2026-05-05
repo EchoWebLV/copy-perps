@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import ReactMarkdown from "react-markdown";
 import { X, Sparkles } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
 import type { Signal } from "@/lib/types";
@@ -149,8 +150,70 @@ export function AnalyzeModal({ signal, onClose }: Props) {
             </div>
           )}
           {text && (
-            <div className="text-[15px] leading-relaxed whitespace-pre-wrap text-neutral-200">
-              {text}
+            <div className="text-[15px] leading-relaxed text-neutral-200">
+              <ReactMarkdown
+                components={{
+                  // Tighten default markdown spacing for a chat-message feel
+                  // and keep colors on-brand.
+                  p: ({ children }) => (
+                    <p className="mb-3 last:mb-0">{children}</p>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-bold text-white">{children}</strong>
+                  ),
+                  em: ({ children }) => (
+                    <em className="italic text-neutral-100">{children}</em>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="mb-3 ml-4 list-disc space-y-1 marker:text-neutral-500">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="mb-3 ml-4 list-decimal space-y-1 marker:text-neutral-500">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => <li>{children}</li>,
+                  h1: ({ children }) => (
+                    <h1 className="mt-4 mb-2 text-base font-bold text-white">
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="mt-4 mb-2 text-base font-bold text-white">
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="mt-3 mb-1.5 text-sm font-bold text-white">
+                      {children}
+                    </h3>
+                  ),
+                  code: ({ children }) => (
+                    <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-emerald-200">
+                      {children}
+                    </code>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="my-3 border-l-2 border-emerald-400/40 pl-3 text-neutral-400">
+                      {children}
+                    </blockquote>
+                  ),
+                  a: ({ children, href }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-300 underline decoration-emerald-300/40 underline-offset-2 hover:decoration-emerald-300/80"
+                    >
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {text}
+              </ReactMarkdown>
               {!done && (
                 <span className="ml-0.5 inline-block h-4 w-[2px] -translate-y-[2px] animate-pulse bg-emerald-300 align-middle" />
               )}
