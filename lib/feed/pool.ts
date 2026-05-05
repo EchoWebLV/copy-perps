@@ -27,17 +27,17 @@ import { flashSymbolFor } from "@/lib/flash-trade/client";
 
 // Pool sizes — these gate "infinity" before a reshuffle / repeat.
 const MEME_FETCH_LIMIT = 100;
-const PREDICTION_FETCH_LIMIT = 100;
-const PREDICTION_KEEP = 40;
+const PREDICTION_FETCH_LIMIT = 200;
+const PREDICTION_KEEP = 80;
 const MULTI_OUTCOMES_TO_SHOW = 4;
 const WHALE_TOP_PER_WHALE = 5;
-// How "fresh" a position has to be to make the rail. We pull each watched
-// wallet's fills over this window and only surface positions whose latest
-// open-side fill lands inside it. 14 days captures most still-active
-// holdings; the heat-score recency boost still pushes sub-hour opens to
-// the top so users see "minutes ago" cards first and "10d ago" further
-// down the feed.
-const WHALE_FRESH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+// How "fresh" a position has to be to make the rail. The user's stated
+// recency cap is "not 30 days old," and the heat-score recency boost
+// still pushes sub-hour opens to the top so users see "minutes ago" cards
+// first and "Xd ago" further down. 21 days is the sweet spot — captures
+// almost every still-active holding without crossing the user's "stale"
+// threshold.
+const WHALE_FRESH_WINDOW_MS = 21 * 24 * 60 * 60 * 1000;
 
 // Filters — tuned to keep the pool full of tokens Jupiter can actually
 // swap into without simulation errors (rugged authorities, dust
@@ -52,7 +52,7 @@ const MEME_EXCLUDED_MINTS = new Set([
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
   "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4", // JLP (LP token)
 ]);
-const PREDICTION_MIN_VOL_USD = 10_000;
+const PREDICTION_MIN_VOL_USD = 3_000;
 const PREDICTION_MAX_DAYS = 365;
 const WHALE_MIN_POSITION_USD = 25_000;
 const WHALE_MIN_LEVERAGE = 1.5;
@@ -364,7 +364,11 @@ async function mapLimit<T, R>(
   await Promise.all(workers);
   return results;
 }
-const WHALE_FETCH_CONCURRENCY = 8;
+// HL's /info endpoint observed limit is ~20 requests/sec. With ~200ms
+// average response time, concurrency 4 keeps us at ~20/sec burst — any
+// higher and we trip the per-second guard and pass-1 errors balloon
+// (which then forces a throw, keeping the rail empty until next try).
+const WHALE_FETCH_CONCURRENCY = 4;
 
 async function fetchWhalePool(): Promise<WhaleSignal[]> {
   const now = Date.now();
@@ -374,6 +378,7 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
   // Pass 1 — pull recent fills per wallet. Most wallets sit idle in any
   // given window, so we use this as a cheap pre-filter. Wallets with no
   // recent fills can't have a fresh open and skip Pass 2 entirely.
+  let pass1Errors = 0;
   const recentFillsByWallet = await mapLimit(
     CURATED_WHALES,
     WHALE_FETCH_CONCURRENCY,
@@ -383,11 +388,21 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
         const opens = fills.filter((f) => /^(Open |Long > Short|Short > Long)/.test(String(f.dir)));
         return { whale, opens };
       } catch (e) {
+        pass1Errors++;
         console.warn("[pool/whale fills]", whale.address, e);
         return { whale, opens: [] as HLFill[] };
       }
     },
   );
+  // If a third or more of pass-1 calls failed, this rebuild is unreliable
+  // — throw so the per-rail cache doesn't latch onto an empty/partial
+  // result for the next 2 minutes. The outer caller catches this and
+  // serves whatever it has.
+  if (pass1Errors > CURATED_WHALES.length / 3) {
+    throw new Error(
+      `[pool/whale] too many fill errors: ${pass1Errors}/${CURATED_WHALES.length}`,
+    );
+  }
   const active = recentFillsByWallet.filter((r) => r.opens.length > 0);
 
   // Pass 2 — only fetch state for wallets that actually moved. Cross-
@@ -479,19 +494,42 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
   return all;
 }
 
-// ─── Combined pool, cached ────────────────────────────────────────────────
+// ─── Per-rail caches + combined pool ──────────────────────────────────────
+//
+// Each rail is cached independently. Without this, a transient whale-fetch
+// failure (rate limit, network blip) caches an empty whale list alongside
+// fresh memes/predictions for the full revalidate window — that's the
+// "perps disappear on refresh" symptom. With per-rail caches, only the
+// failing rail re-attempts on the next request; the others keep serving.
+//
+// Whale fetch is also wired to throw on too-many errors so a partial-empty
+// result isn't latched into the cache.
 
-async function buildPool(): Promise<Signal[]> {
+const cachedMemes = unstable_cache(fetchMemePool, ["meme-pool-v1"], {
+  revalidate: 90,
+  tags: ["feed-pool"],
+});
+const cachedPredictions = unstable_cache(
+  fetchPredictionPool,
+  ["prediction-pool-v1"],
+  { revalidate: 120, tags: ["feed-pool"] },
+);
+const cachedWhales = unstable_cache(fetchWhalePool, ["whale-pool-v1"], {
+  revalidate: 120,
+  tags: ["feed-pool"],
+});
+
+export async function getFeedPool(): Promise<Signal[]> {
   const [memes, predictions, whales] = await Promise.all([
-    fetchMemePool().catch((e) => {
+    cachedMemes().catch((e) => {
       console.error("[pool/meme]", e);
       return [] as MemeSignal[];
     }),
-    fetchPredictionPool().catch((e) => {
+    cachedPredictions().catch((e) => {
       console.error("[pool/prediction]", e);
       return [] as (PredictionSignal | MultiPredictionSignal)[];
     }),
-    fetchWhalePool().catch((e) => {
+    cachedWhales().catch((e) => {
       console.error("[pool/whale]", e);
       return [] as WhaleSignal[];
     }),
@@ -499,13 +537,3 @@ async function buildPool(): Promise<Signal[]> {
   const all: Signal[] = [...memes, ...predictions, ...whales];
   return all.sort((a, b) => b.heatScore - a.heatScore);
 }
-
-// 60s revalidate. The first request after expiry pays the upstream cost
-// (~1-3s) and refills the cache for everyone else in the next window.
-// Cache key includes a schema version — bump when WhaleSignal/MemeSignal/etc.
-// shapes change so cached payloads from a previous deploy can't leak into
-// the new render path.
-export const getFeedPool = unstable_cache(buildPool, ["feed-pool-v3"], {
-  revalidate: 60,
-  tags: ["feed-pool"],
-});

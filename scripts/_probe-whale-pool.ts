@@ -3,7 +3,7 @@ import { CURATED_WHALES } from "@/lib/hyperliquid/whales";
 const ASSETS = new Set(["SOL", "BTC", "ETH"]);
 const MIN_POSITION_USD = 25_000;
 const MIN_LEVERAGE = 1.5;
-const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const WINDOW_MS = 21 * 24 * 60 * 60 * 1000;
 const TOP_PER_WHALE = 5;
 
 interface RawPos {
