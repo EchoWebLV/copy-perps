@@ -57,7 +57,7 @@ export async function refreshWhales(): Promise<RefreshWhalesResult> {
             whale,
             position,
             accountValueUsd,
-            score: whaleHeatScore(position, accountValueUsd),
+            score: whaleHeatScore(position, accountValueUsd, Date.now()),
           });
         }
       } catch (e) {
@@ -96,16 +96,16 @@ export async function refreshWhales(): Promise<RefreshWhalesResult> {
       heatScore: score,
       createdAt: stamp.toISOString(),
       walletAddress: whale.label ?? truncateEthAddress(whale.address),
-      walletPnl30d: accountValueUsd,
+      walletAccountValue: accountValueUsd,
       asset: position.coin,
       side,
       leverage: position.leverage?.value ?? 1,
       size: sizeUsd,
       entry,
       liquidation,
-      openedAtRelative: "active position",
+      openedAt: stamp.toISOString(),
       venue: "Hyperliquid",
-      chips: whaleSignalChips(position, accountValueUsd),
+      chips: whaleSignalChips(position, accountValueUsd, stamp.getTime()),
     };
 
     return {

@@ -12,6 +12,17 @@ const fmtUsd = (n: number) => {
 const fmtPrice = (n: number) =>
   n >= 1000 ? `$${n.toLocaleString()}` : `$${n.toFixed(2)}`;
 
+function fmtRelativeOpened(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just opened";
+  const min = ms / 60_000;
+  if (min < 1) return "just opened";
+  if (min < 60) return `${Math.round(min)}m ago`;
+  const hr = min / 60;
+  if (hr < 24) return `${hr.toFixed(1)}h ago`;
+  return `${Math.round(hr / 24)}d ago`;
+}
+
 export function WhaleCard({ signal }: { signal: WhaleSignal }) {
   const coinIcon = perpAssetImage(signal.asset);
 
@@ -57,8 +68,8 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         />
         <div>
           <div className="text-base font-bold">{signal.walletAddress}</div>
-          <div className="text-xs font-medium text-[#22c55e]">
-            +{fmtUsd(signal.walletPnl30d)} PnL · 30d
+          <div className="text-xs font-medium text-neutral-400">
+            Account · {fmtUsd(signal.walletAccountValue)}
           </div>
         </div>
       </div>
@@ -67,7 +78,8 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         {signal.asset} {signal.leverage}× {signal.side.toUpperCase()}
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {signal.venue} · {signal.openedAtRelative}
+        {signal.venue} · {signal.scaledIn ? "added " : "opened "}
+        {fmtRelativeOpened(signal.openedAt)}
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">

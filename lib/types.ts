@@ -49,14 +49,15 @@ export interface PredictionSignal extends BaseSignal {
 export interface WhaleSignal extends BaseSignal {
   type: "whale";
   walletAddress: string;
-  walletPnl30d: number;
+  walletAccountValue: number;
   asset: string;
   side: "long" | "short";
   leverage: number;
   size: number;
   entry: number;
   liquidation: number;
-  openedAtRelative: string;
+  openedAt: string;
+  scaledIn?: boolean;
   venue: string;
 }
 

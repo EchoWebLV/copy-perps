@@ -16,16 +16,25 @@ import {
   type JPMarket,
 } from "@/lib/jupiter-prediction/client";
 import { predictionHeatScore, predictionSignalChips } from "@/lib/signals/heat-prediction";
-import { getClearinghouseState } from "@/lib/hyperliquid/client";
+import {
+  getClearinghouseState,
+  getUserFillsByTime,
+  type HLFill,
+} from "@/lib/hyperliquid/client";
 import { CURATED_WHALES, truncateEthAddress } from "@/lib/hyperliquid/whales";
 import { whaleHeatScore, whaleSignalChips } from "@/lib/signals/heat-whale";
+import { flashSymbolFor } from "@/lib/flash-trade/client";
 
 // Pool sizes — these gate "infinity" before a reshuffle / repeat.
 const MEME_FETCH_LIMIT = 100;
 const PREDICTION_FETCH_LIMIT = 100;
 const PREDICTION_KEEP = 40;
 const MULTI_OUTCOMES_TO_SHOW = 4;
-const WHALE_TOP_PER_WHALE = 3;
+const WHALE_TOP_PER_WHALE = 5;
+// How "fresh" a position has to be to make the rail. We pull each watched
+// wallet's fills over this window and only surface positions whose latest
+// open-side fill lands inside it.
+const WHALE_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 // Filters — tuned to keep the pool full of tokens Jupiter can actually
 // swap into without simulation errors (rugged authorities, dust
@@ -42,8 +51,8 @@ const MEME_EXCLUDED_MINTS = new Set([
 ]);
 const PREDICTION_MIN_VOL_USD = 10_000;
 const PREDICTION_MAX_DAYS = 365;
-const WHALE_MIN_POSITION_USD = 50_000;
-const WHALE_MIN_LEVERAGE = 2;
+const WHALE_MIN_POSITION_USD = 25_000;
+const WHALE_MIN_LEVERAGE = 1.5;
 
 // ─── Memes ────────────────────────────────────────────────────────────────
 
@@ -321,12 +330,42 @@ async function fetchPredictionPool(): Promise<
 
 // ─── Whales ───────────────────────────────────────────────────────────────
 
-async function fetchWhalePool(): Promise<WhaleSignal[]> {
-  const stamp = new Date().toISOString();
-  const all: WhaleSignal[] = [];
+// Match a position's coin+direction against fills to find when it was
+// (re)opened. "Long > Short" is a flip — the fill closes the long AND
+// opens the short, so it counts as the open for the resulting short.
+function fillOpensSide(dir: string, side: "long" | "short"): boolean {
+  if (side === "long") return dir === "Open Long" || dir === "Short > Long";
+  return dir === "Open Short" || dir === "Long > Short";
+}
 
-  await Promise.all(
+async function fetchWhalePool(): Promise<WhaleSignal[]> {
+  const now = Date.now();
+  const windowStart = now - WHALE_FRESH_WINDOW_MS;
+  const stamp = new Date(now).toISOString();
+
+  // Pass 1 — pull recent fills per wallet. Most wallets sit idle in any
+  // given 6h window, so we use this as a cheap pre-filter. Wallets with no
+  // recent fills can't have a fresh open and skip Pass 2 entirely.
+  const recentFillsByWallet = await Promise.all(
     CURATED_WHALES.map(async (whale) => {
+      try {
+        const fills = await getUserFillsByTime(whale.address, windowStart);
+        const opens = fills.filter((f) => /^(Open |Long > Short|Short > Long)/.test(String(f.dir)));
+        return { whale, opens };
+      } catch (e) {
+        console.warn("[pool/whale fills]", whale.address, e);
+        return { whale, opens: [] as HLFill[] };
+      }
+    }),
+  );
+  const active = recentFillsByWallet.filter((r) => r.opens.length > 0);
+
+  // Pass 2 — only fetch state for wallets that actually moved. Cross-
+  // reference each currently-open position with the recent open-fills to
+  // find the real openedAt; skip positions older than the window.
+  const all: WhaleSignal[] = [];
+  await Promise.all(
+    active.map(async ({ whale, opens }) => {
       try {
         const state = await getClearinghouseState(whale.address);
         const accountValueUsd = parseFloat(state.marginSummary.accountValue);
@@ -336,16 +375,45 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
           .map((ap) => ap.position)
           .filter(
             (p) =>
+              // Only emit signals for assets the bet flow can actually
+              // execute. Flash's Crypto.1 pool is SOL/BTC/ETH-only, so
+              // surfacing HYPE/DOGE/SUI/etc. would mint untradeable cards.
+              flashSymbolFor(p.coin) !== null &&
               parseFloat(p.positionValue) >= WHALE_MIN_POSITION_USD &&
               (p.leverage?.value ?? 0) >= WHALE_MIN_LEVERAGE,
-          )
-          .sort(
-            (a, b) =>
-              parseFloat(b.positionValue) - parseFloat(a.positionValue),
-          )
-          .slice(0, WHALE_TOP_PER_WHALE);
+          );
 
+        const fresh: { position: typeof positions[number]; openedAt: number; scaledIn: boolean }[] = [];
         for (const position of positions) {
+          const sizeNum = parseFloat(position.szi);
+          const side: "long" | "short" = sizeNum >= 0 ? "long" : "short";
+
+          // Latest open-side fill on this coin within the window.
+          const candidates = opens
+            .filter(
+              (f) =>
+                f.coin === position.coin && fillOpensSide(String(f.dir), side),
+            )
+            .sort((a, b) => b.time - a.time);
+          if (candidates.length === 0) continue;
+
+          const latest = candidates[0];
+          // startPosition is signed — non-zero with same sign as the new
+          // direction means this fill *added* to an existing position
+          // rather than creating a fresh one.
+          const startPos = parseFloat(latest.startPosition);
+          const scaledIn =
+            (side === "long" && startPos > 0) ||
+            (side === "short" && startPos < 0);
+
+          fresh.push({ position, openedAt: latest.time, scaledIn });
+        }
+
+        // Newest first, then cap per wallet so one whale doesn't dominate.
+        fresh.sort((a, b) => b.openedAt - a.openedAt);
+        const top = fresh.slice(0, WHALE_TOP_PER_WHALE);
+
+        for (const { position, openedAt, scaledIn } of top) {
           const sizeNum = parseFloat(position.szi);
           const side: "long" | "short" = sizeNum >= 0 ? "long" : "short";
           const sizeUsd = parseFloat(position.positionValue);
@@ -357,23 +425,24 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
           all.push({
             id: `whale:${whale.address.toLowerCase()}:${position.coin}`,
             type: "whale",
-            heatScore: whaleHeatScore(position, accountValueUsd),
+            heatScore: whaleHeatScore(position, accountValueUsd, openedAt),
             createdAt: stamp,
-            chips: whaleSignalChips(position, accountValueUsd),
+            chips: whaleSignalChips(position, accountValueUsd, openedAt),
             walletAddress: whale.label ?? truncateEthAddress(whale.address),
-            walletPnl30d: accountValueUsd,
+            walletAccountValue: accountValueUsd,
             asset: position.coin,
             side,
             leverage: position.leverage?.value ?? 1,
             size: sizeUsd,
             entry,
             liquidation,
-            openedAtRelative: "active position",
+            openedAt: new Date(openedAt).toISOString(),
+            scaledIn,
             venue: "Hyperliquid",
           });
         }
       } catch (e) {
-        console.warn("[pool/whale]", whale.address, e);
+        console.warn("[pool/whale state]", whale.address, e);
       }
     }),
   );
@@ -404,7 +473,10 @@ async function buildPool(): Promise<Signal[]> {
 
 // 60s revalidate. The first request after expiry pays the upstream cost
 // (~1-3s) and refills the cache for everyone else in the next window.
-export const getFeedPool = unstable_cache(buildPool, ["feed-pool"], {
+// Cache key includes a schema version — bump when WhaleSignal/MemeSignal/etc.
+// shapes change so cached payloads from a previous deploy can't leak into
+// the new render path.
+export const getFeedPool = unstable_cache(buildPool, ["feed-pool-v3"], {
   revalidate: 60,
   tags: ["feed-pool"],
 });
