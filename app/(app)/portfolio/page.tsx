@@ -81,8 +81,8 @@ export default function PortfolioPage() {
   const visiblePositions = tab === "open" ? openPositions : closedPositions;
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col px-5 pt-12 pb-28">
-      <div className="flex items-center justify-between">
+    <main className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12">
+      <div className="flex flex-none items-center justify-between">
         <h1 className="text-2xl font-black">Portfolio</h1>
         {authenticated && (
           <button
@@ -113,8 +113,8 @@ export default function PortfolioPage() {
       )}
 
       {ready && authenticated && (
-        <>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="mt-4 flex-none rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
               Net worth
             </div>
@@ -175,7 +175,7 @@ export default function PortfolioPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex gap-1 rounded-full bg-white/5 p-1">
+          <div className="mt-4 flex flex-none gap-1 rounded-full bg-white/5 p-1">
             <button
               onClick={() => setTab("open")}
               className={`flex-1 rounded-full px-4 py-1.5 text-xs font-bold transition ${
@@ -199,7 +199,7 @@ export default function PortfolioPage() {
           </div>
 
           {tab === "closed" && closedPositions.length > 0 && (
-            <div className="mt-3 rounded-xl bg-white/[0.04] px-3 py-2.5">
+            <div className="mt-3 flex-none rounded-xl bg-white/[0.04] px-3 py-2.5">
               <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
                 Realized PnL
               </div>
@@ -228,43 +228,44 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          <div className="mt-4 flex flex-col gap-2">
-            {error && (
-              <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
-                {error}
-              </div>
-            )}
-            {positions === null && !error && (
-              <div className="py-12 text-center text-sm text-neutral-500">
-                Loading positions…
-              </div>
-            )}
-            {positions && visiblePositions.length === 0 && (
-              <div className="py-12 text-center">
-                <p className="text-sm text-neutral-400">
-                  {tab === "open"
-                    ? "No open positions."
-                    : "No closed positions yet."}
-                </p>
-                <p className="mt-1 text-xs text-neutral-600">
-                  {tab === "open"
-                    ? "Tap a meme card in the feed to open one."
-                    : "Closed bets show up here."}
-                </p>
-              </div>
-            )}
-            {visiblePositions.map((p) => (
-              <PositionRow key={p.id} position={p} onClosed={load} />
-            ))}
+          <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
+            <div className="flex flex-col gap-2 pb-24">
+              {error && (
+                <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+              {positions === null && !error && (
+                <div className="py-12 text-center text-sm text-neutral-500">
+                  Loading positions…
+                </div>
+              )}
+              {positions && visiblePositions.length === 0 && (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-neutral-400">
+                    {tab === "open"
+                      ? "No open positions."
+                      : "No closed positions yet."}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-600">
+                    {tab === "open"
+                      ? "Tap a meme card in the feed to open one."
+                      : "Closed bets show up here."}
+                  </p>
+                </div>
+              )}
+              {visiblePositions.map((p) => (
+                <PositionRow key={p.id} position={p} onClosed={load} />
+              ))}
+              <button
+                onClick={logout}
+                className="mt-6 flex items-center justify-center gap-2 self-center text-xs text-neutral-500 transition hover:text-neutral-300"
+              >
+                <LogOut size={12} /> Log out
+              </button>
+            </div>
           </div>
-
-          <button
-            onClick={logout}
-            className="mt-8 flex items-center justify-center gap-2 self-center text-xs text-neutral-500 transition hover:text-neutral-300"
-          >
-            <LogOut size={12} /> Log out
-          </button>
-        </>
+        </div>
       )}
 
       <BottomNav />
