@@ -20,11 +20,10 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
-      <span className="absolute top-[60px] left-5 rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
-        Market
-      </span>
-
-      <div className="absolute top-[120px] right-5 z-10">
+      <div className="absolute top-[58px] left-5 z-10 flex items-center gap-2">
+        <span className="rounded-lg bg-[#2563eb] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
+          Market
+        </span>
         <BookmarkButton signal={signal} />
       </div>
 

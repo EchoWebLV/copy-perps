@@ -34,11 +34,10 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
-      <span className="absolute top-[60px] left-5 rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
-        Coin
-      </span>
-
-      <div className="absolute top-[120px] right-5 z-10">
+      <div className="absolute top-[58px] left-5 z-10 flex items-center gap-2">
+        <span className="rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
+          Coin
+        </span>
         <BookmarkButton signal={signal} />
       </div>
 
