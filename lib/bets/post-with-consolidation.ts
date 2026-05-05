@@ -109,6 +109,52 @@ export async function postBetWithConsolidation(
       await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
+    if (data.prefundTransaction && typeof data.prefundTransaction === "string") {
+      // Prediction-close drip-only prefund (legacy shape, only used by
+      // /api/bet/prediction/close): sign + submit, wait, then fall
+      // through so the caller signs + submits the actual close tx.
+      const prefundBytes = decodeBase64Tx(
+        data.prefundTransaction,
+        "prefund tx",
+      );
+      const sig = await signAndSubmitTx(prefundBytes, wallet, signTransaction);
+      const conn = new Connection(RPC_URL, "confirmed");
+      const result = await conn.confirmTransaction(sig, "confirmed");
+      if (result.value.err) {
+        throw new Error(
+          `Prefund tx failed on chain: ${JSON.stringify(result.value.err)}`,
+        );
+      }
+      const { prefundTransaction: _drop, ...rest } = data;
+      void _drop;
+      return rest;
+    }
+    if (
+      data.feeTransferTransaction &&
+      typeof data.feeTransferTransaction === "string"
+    ) {
+      // Prediction-open: server already landed a SOL drip into the
+      // user's wallet so Jupiter Prediction's API would accept the
+      // order. The fee transfer (user USDC → Treasury) couldn't go
+      // inside Jupiter's baked tx, so it lands as a sibling tx here.
+      // Sign+submit fee first, then fall through; caller signs+submits
+      // the actual prediction order via data.swapTransaction.
+      const feeBytes = decodeBase64Tx(
+        data.feeTransferTransaction,
+        "fee transfer tx",
+      );
+      const sig = await signAndSubmitTx(feeBytes, wallet, signTransaction);
+      const conn = new Connection(RPC_URL, "confirmed");
+      const result = await conn.confirmTransaction(sig, "confirmed");
+      if (result.value.err) {
+        throw new Error(
+          `Fee transfer failed on chain: ${JSON.stringify(result.value.err)}`,
+        );
+      }
+      const { feeTransferTransaction: _drop, ...rest } = data;
+      void _drop;
+      return rest;
+    }
     return data;
   }
   throw new Error("consolidation loop exhausted");

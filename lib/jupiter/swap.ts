@@ -1,3 +1,11 @@
+import {
+  AddressLookupTableAccount,
+  PublicKey,
+  TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import { getConnection } from "@/lib/solana/balance";
 import { JUPITER_BASE, USDC_MINT, USDC_DECIMALS } from "./constants";
 
 export interface JupiterQuote {
@@ -108,4 +116,102 @@ export async function sellTokenForUsdc(params: {
     userPublicKey: params.userPublicKey,
   });
   return { quote, swap };
+}
+
+interface JupIxJson {
+  programId: string;
+  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[];
+  data: string;
+}
+
+export interface JupiterSwapInstructionsResponse {
+  computeBudgetInstructions: JupIxJson[];
+  setupInstructions: JupIxJson[];
+  swapInstruction: JupIxJson;
+  cleanupInstruction: JupIxJson | null;
+  addressLookupTableAddresses: string[];
+}
+
+export async function buildSwapInstructions(params: {
+  quoteResponse: JupiterQuote;
+  userPublicKey: string;
+}): Promise<JupiterSwapInstructionsResponse> {
+  const res = await fetch(`${JUPITER_BASE}/swap/v1/swap-instructions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      quoteResponse: params.quoteResponse,
+      userPublicKey: params.userPublicKey,
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: {
+        priorityLevelWithMaxLamports: {
+          priorityLevel: "high",
+          maxLamports: 1_000_000,
+        },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Jupiter swap-instructions ${res.status}: ${txt}`);
+  }
+  return (await res.json()) as JupiterSwapInstructionsResponse;
+}
+
+function decodeJupIx(ix: JupIxJson): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programId),
+    keys: ix.accounts.map((a) => ({
+      pubkey: new PublicKey(a.pubkey),
+      isSigner: a.isSigner,
+      isWritable: a.isWritable,
+    })),
+    data: Buffer.from(ix.data, "base64"),
+  });
+}
+
+// Build a versioned tx from a Jupiter swap-instructions response, with
+// `feePayer` paying the SOL and optional `prependInstructions` /
+// `appendInstructions` slotted around Jupiter's ixs.
+//   - prependInstructions go BEFORE Jupiter's setupInstructions: use this
+//     for SOL drips so the user has lamports for ATA rent before the
+//     create-ATA setup ix runs.
+//   - appendInstructions go AFTER cleanupInstruction: use this for the
+//     Treasury fee transfer (USDC must already be in user's ATA).
+// Caller is responsible for partial-signing as the fee payer before
+// returning to the client.
+export async function buildSwapTx(params: {
+  ixResp: JupiterSwapInstructionsResponse;
+  feePayer: PublicKey;
+  appendInstructions: TransactionInstruction[];
+  prependInstructions?: TransactionInstruction[];
+}): Promise<VersionedTransaction> {
+  const conn = getConnection();
+  const altAccounts: AddressLookupTableAccount[] = [];
+  for (const addr of params.ixResp.addressLookupTableAddresses) {
+    const r = await conn.getAddressLookupTable(new PublicKey(addr));
+    if (!r.value) throw new Error(`ALT not found: ${addr}`);
+    altAccounts.push(r.value);
+  }
+
+  const ixs: TransactionInstruction[] = [
+    ...params.ixResp.computeBudgetInstructions.map(decodeJupIx),
+    ...(params.prependInstructions ?? []),
+    ...params.ixResp.setupInstructions.map(decodeJupIx),
+    decodeJupIx(params.ixResp.swapInstruction),
+    ...(params.ixResp.cleanupInstruction
+      ? [decodeJupIx(params.ixResp.cleanupInstruction)]
+      : []),
+    ...params.appendInstructions,
+  ];
+
+  const { blockhash } = await conn.getLatestBlockhash("confirmed");
+  const message = new TransactionMessage({
+    payerKey: params.feePayer,
+    recentBlockhash: blockhash,
+    instructions: ixs,
+  }).compileToV0Message(altAccounts);
+
+  return new VersionedTransaction(message);
 }

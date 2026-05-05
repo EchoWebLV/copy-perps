@@ -3,8 +3,19 @@ import {
   getJupUsdBalance,
   getSolBalance,
 } from "@/lib/solana/balance";
-import { sellTokenForUsdc } from "@/lib/jupiter/swap";
-import { JUPUSD_MINT } from "@/lib/jupiter/constants";
+import {
+  buildSwapInstructions,
+  buildSwapTx,
+  getQuote,
+  sellTokenForUsdc,
+} from "@/lib/jupiter/swap";
+import { JUPUSD_MINT, USDC_MINT } from "@/lib/jupiter/constants";
+import {
+  buildUserSolDripIx,
+  getGasWalletPubkey,
+  partialSignAsFeePayer,
+} from "@/lib/wallets/gas";
+import { PublicKey } from "@solana/web3.js";
 
 // Minimum SOL we require in the user's wallet before letting them open
 // any position. Covers tx fees + ATA rent + Flash position account
@@ -127,6 +138,74 @@ export async function ensureUsdcOrConsolidate(params: {
   return {
     ready: false,
     consolidationTransaction: swap.swapTransaction,
+    requiredUsd: params.requiredUsd,
+    usdcBalance,
+    jupUsdBalance,
+  };
+}
+
+// Gasless variant: returns a base64 versioned tx where Gas Wallet is
+// the fee payer. Tx is partial-signed by Gas Wallet; caller just needs
+// the user's signature.
+export async function ensureUsdcOrConsolidateGasless(params: {
+  userPubkey: string;
+  requiredUsd: number;
+}): Promise<ConsolidationResult> {
+  const [usdcBalance, jupUsdBalance] = await Promise.all([
+    getUsdcBalance(params.userPubkey),
+    getJupUsdBalance(params.userPubkey),
+  ]);
+
+  console.log(
+    `[consolidate-gasless] required=$${params.requiredUsd} usdc=$${usdcBalance.toFixed(4)} jupUsd=$${jupUsdBalance.toFixed(4)}`,
+  );
+
+  if (usdcBalance >= params.requiredUsd) {
+    return {
+      ready: true,
+      consolidationTransaction: null,
+      requiredUsd: params.requiredUsd,
+      usdcBalance,
+      jupUsdBalance,
+    };
+  }
+
+  if (usdcBalance + jupUsdBalance < params.requiredUsd) {
+    throw new InsufficientCombinedBalanceError(
+      params.requiredUsd,
+      usdcBalance,
+      jupUsdBalance,
+    );
+  }
+
+  const shortfall = params.requiredUsd - usdcBalance;
+  const swapInputAtomic = BigInt(Math.ceil(shortfall * 1.02 * 1_000_000));
+
+  const quote = await getQuote({
+    inputMint: JUPUSD_MINT,
+    outputMint: USDC_MINT,
+    amount: swapInputAtomic,
+    slippageBps: 50,
+  });
+  const ixResp = await buildSwapInstructions({
+    quoteResponse: quote,
+    userPublicKey: params.userPubkey,
+  });
+  const dripIx = buildUserSolDripIx({
+    userPubkey: new PublicKey(params.userPubkey),
+    numAtasToFund: ixResp.setupInstructions.length,
+  });
+  const tx = await buildSwapTx({
+    ixResp,
+    feePayer: getGasWalletPubkey(),
+    prependInstructions: dripIx ? [dripIx] : [],
+    appendInstructions: [],
+  });
+  partialSignAsFeePayer(tx);
+
+  return {
+    ready: false,
+    consolidationTransaction: Buffer.from(tx.serialize()).toString("base64"),
     requiredUsd: params.requiredUsd,
     usdcBalance,
     jupUsdBalance,

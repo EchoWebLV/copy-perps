@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
+import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { closePosition, getPosition } from "@/lib/jupiter-prediction/client";
+import {
+  buildPredictionPrefundTx,
+  ensureGasWalletReady,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -52,6 +58,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
   try {
     // Read position mark-to-market BEFORE building the close. Jupiter's
     // close response sets `orderCostUsd` to the user's spend on the order
@@ -70,6 +78,30 @@ export async function POST(request: Request) {
     }
     const expectedProceedsAtomic =
       position?.valueUsd ?? result.order.orderCostUsd;
+
+    if (gasless) {
+      try {
+        await ensureGasWalletReady();
+      } catch (err) {
+        if (err instanceof GasWalletExhaustedError) {
+          return NextResponse.json({ error: err.message }, { status: 503 });
+        }
+        throw err;
+      }
+      // Closes don't carry a platform fee; the prefund tx (if needed) is
+      // a pure SOL drip so the user's untouched Jupiter Prediction tx
+      // can pay its own fee.
+      const prefundB64 = await buildPredictionPrefundTx({
+        userPubkey: new PublicKey(user.solanaPubkey),
+        appendInstructions: [],
+      });
+      return NextResponse.json({
+        prefundTransaction: prefundB64,
+        swapTransaction: result.transaction,
+        expectedProceedsAtomic,
+      });
+    }
+
     return NextResponse.json({
       swapTransaction: result.transaction,
       expectedProceedsAtomic,

@@ -3,8 +3,22 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
-import { sellTokenForUsdc } from "@/lib/jupiter/swap";
+import {
+  buildSwapInstructions,
+  buildSwapTx,
+  getQuote,
+  sellTokenForUsdc,
+} from "@/lib/jupiter/swap";
 import { getTokenAtomicBalance } from "@/lib/solana/balance";
+import { USDC_MINT } from "@/lib/jupiter/constants";
+import { PublicKey } from "@solana/web3.js";
+import {
+  buildUserSolDripIx,
+  ensureGasWalletReady,
+  getGasWalletPubkey,
+  partialSignAsFeePayer,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -84,6 +98,53 @@ export async function POST(request: Request) {
   const stored = BigInt(tokenAmount);
   const tokenAmountAtomic =
     onChainBalance < stored ? onChainBalance : stored;
+
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
+  if (gasless) {
+    try {
+      await ensureGasWalletReady();
+    } catch (err) {
+      if (err instanceof GasWalletExhaustedError) {
+        return NextResponse.json({ error: err.message }, { status: 503 });
+      }
+      throw err;
+    }
+
+    try {
+      const quote = await getQuote({
+        inputMint: tokenAddress,
+        outputMint: USDC_MINT,
+        amount: tokenAmountAtomic,
+        slippageBps: 300,
+      });
+      const ixResp = await buildSwapInstructions({
+        quoteResponse: quote,
+        userPublicKey: user.solanaPubkey,
+      });
+      const dripIx = buildUserSolDripIx({
+        userPubkey: new PublicKey(user.solanaPubkey),
+        numAtasToFund: ixResp.setupInstructions.length,
+      });
+      const tx = await buildSwapTx({
+        ixResp,
+        feePayer: getGasWalletPubkey(),
+        prependInstructions: dripIx ? [dripIx] : [],
+        appendInstructions: [],
+      });
+      partialSignAsFeePayer(tx);
+      return NextResponse.json({
+        swapTransaction: Buffer.from(tx.serialize()).toString("base64"),
+        expectedUsdcOut: quote.outAmount,
+      });
+    } catch (err) {
+      console.error("[bet/meme/close] Jupiter failed (gasless):", err);
+      return NextResponse.json(
+        { error: `Jupiter sell quote failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+  }
 
   try {
     const result = await sellTokenForUsdc({

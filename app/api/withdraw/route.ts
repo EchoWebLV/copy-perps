@@ -4,6 +4,8 @@ import {
   ComputeBudgetProgram,
   PublicKey,
   Transaction,
+  TransactionMessage,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import {
   createAssociatedTokenAccountIdempotentInstruction,
@@ -17,10 +19,17 @@ import { getConnection } from "@/lib/solana/balance";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 import {
   ensureUsdcOrConsolidate,
+  ensureUsdcOrConsolidateGasless,
   InsufficientCombinedBalanceError,
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import {
+  ensureGasWalletReady,
+  getGasWalletPubkey,
+  partialSignAsFeePayer,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -78,6 +87,92 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
+  if (gasless) {
+    try {
+      await ensureGasWalletReady();
+    } catch (err) {
+      if (err instanceof GasWalletExhaustedError) {
+        return NextResponse.json({ error: err.message }, { status: 503 });
+      }
+      throw err;
+    }
+
+    try {
+      const consolidation = await ensureUsdcOrConsolidateGasless({
+        userPubkey: user.solanaPubkey,
+        requiredUsd: body.amountUsd,
+      });
+      if (!consolidation.ready) {
+        return NextResponse.json({
+          phase: "consolidate",
+          consolidationTransaction: consolidation.consolidationTransaction,
+          usdcBalance: consolidation.usdcBalance,
+          jupUsdBalance: consolidation.jupUsdBalance,
+          requiredUsd: consolidation.requiredUsd,
+        });
+      }
+    } catch (err) {
+      if (err instanceof InsufficientCombinedBalanceError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      console.error("[withdraw] consolidation check failed:", err);
+      return NextResponse.json(
+        { error: `Balance check failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    const senderPk = new PublicKey(user.solanaPubkey);
+    const destinationPk = new PublicKey(body.destination);
+    const senderAta = getAssociatedTokenAddressSync(USDC_MINT_PK, senderPk);
+    const destAta = getAssociatedTokenAddressSync(USDC_MINT_PK, destinationPk);
+    const amountAtomic = BigInt(
+      Math.floor(body.amountUsd * 10 ** USDC_DECIMALS),
+    );
+
+    const conn = getConnection();
+    const { blockhash } = await conn.getLatestBlockhash("confirmed");
+
+    // Same instructions as the legacy path, but Gas Wallet is the fee
+    // payer and pays the (idempotent) destination-ATA rent if needed.
+    const message = new TransactionMessage({
+      payerKey: getGasWalletPubkey(),
+      recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50 }),
+        createAssociatedTokenAccountIdempotentInstruction(
+          getGasWalletPubkey(),
+          destAta,
+          destinationPk,
+          USDC_MINT_PK,
+        ),
+        createTransferCheckedInstruction(
+          senderAta,
+          USDC_MINT_PK,
+          destAta,
+          senderPk,
+          amountAtomic,
+          USDC_DECIMALS,
+        ),
+      ],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(message);
+    partialSignAsFeePayer(tx);
+
+    return NextResponse.json({
+      phase: "transfer",
+      transferTransaction: Buffer.from(tx.serialize()).toString("base64"),
+      amountUsd: body.amountUsd,
+      destination: body.destination,
+    });
+  }
+
+  // --- legacy path (FEATURE_GASLESS_BETS != "true") ---
 
   // SOL preflight — sender pays tx fees + may pay rent for the
   // destination's USDC ATA (if it doesn't exist yet, ~0.00203 SOL).
