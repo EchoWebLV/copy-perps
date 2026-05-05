@@ -40,7 +40,10 @@ const MEME_EXCLUDED_MINTS = new Set([
   "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4", // JLP (LP token)
 ]);
 const PREDICTION_MIN_VOL_USD = 3_000;
-const PREDICTION_MAX_DAYS = 365;
+// 1000d (~2.7y) keeps long-horizon political events (2028 nominations
+// etc.) in the pool. Anything past that is too far out to feel like
+// "live" content.
+const PREDICTION_MAX_DAYS = 1000;
 
 // ─── Memes ────────────────────────────────────────────────────────────────
 
@@ -198,19 +201,23 @@ function fmtResolveDate(closeTime: number): string {
   });
 }
 
-type PredictionCandidate =
-  | { kind: "binary"; event: JPEvent; market: JPMarket; score: number }
-  | {
-      kind: "multi";
-      event: JPEvent;
-      markets: JPMarket[];
-      outcomes: MultiPredictionOutcome[];
-      score: number;
-    };
+// Cap markets surfaced per event so a single multi-outcome event (e.g. a
+// 44-candidate election) doesn't dominate the rail. Sorted by per-market
+// volume so the most-watched outcomes come first.
+const PREDICTION_MAX_PER_EVENT = 12;
 
-async function fetchPredictionPool(): Promise<
-  (PredictionSignal | MultiPredictionSignal)[]
-> {
+interface PredictionCandidate {
+  event: JPEvent;
+  market: JPMarket;
+  isMultiOutcome: boolean;
+  score: number;
+}
+
+async function fetchPredictionPool(): Promise<PredictionSignal[]> {
+  // Jupiter's /events endpoint caps at 10 events regardless of `limit`.
+  // The unlock for "more markets" is splitting multi-outcome events into
+  // their nested per-candidate markets — those 10 events typically hold
+  // 100–250 markets between them.
   const events = await listEvents({ limit: PREDICTION_FETCH_LIMIT });
   const now = Date.now();
   const candidates: PredictionCandidate[] = [];
@@ -220,6 +227,7 @@ async function fetchPredictionPool(): Promise<
     const open = openFutureMarkets(ev);
     if (open.length === 0) continue;
 
+    // Event-level filters apply to all of its markets.
     const days = open
       .map((m) => (m.closeTime * 1000 - now) / (24 * 3600 * 1000))
       .reduce((min, v) => Math.min(min, v), Infinity);
@@ -228,42 +236,21 @@ async function fetchPredictionPool(): Promise<
     const vol24 = Number(ev.volume24hr) / 1e6;
     if (vol24 < PREDICTION_MIN_VOL_USD) continue;
 
-    if (open.length === 1) {
-      const market = open[0];
-      const yesPrice = parseFloat(market.outcomePrices?.[0] ?? "0");
-      if (!Number.isFinite(yesPrice)) continue;
-      if (yesPrice >= 0.99 || yesPrice <= 0.005) continue;
+    const validMarkets = open
+      .filter((m) => {
+        const yes = parseFloat(m.outcomePrices?.[0] ?? "0");
+        return Number.isFinite(yes) && yes > 0.005 && yes < 0.99;
+      })
+      .sort((a, b) => (b.pricing?.volume ?? 0) - (a.pricing?.volume ?? 0))
+      .slice(0, PREDICTION_MAX_PER_EVENT);
+
+    const isMultiOutcome = open.length > 1;
+    for (const market of validMarkets) {
       candidates.push({
-        kind: "binary",
         event: ev,
         market,
+        isMultiOutcome,
         score: predictionHeatScore(ev, market),
-      });
-    } else {
-      const outcomes = open
-        .map((m) => ({
-          label: m.title,
-          marketId: m.marketId,
-          yesProbability: parseFloat(m.outcomePrices?.[0] ?? "0"),
-        }))
-        .filter(
-          (o) =>
-            Number.isFinite(o.yesProbability) &&
-            o.yesProbability > 0.005 &&
-            o.yesProbability < 0.99,
-        )
-        .sort((a, b) => b.yesProbability - a.yesProbability);
-
-      if (outcomes.length === 0) continue;
-
-      const leadMarket =
-        open.find((m) => m.marketId === outcomes[0].marketId) ?? open[0];
-      candidates.push({
-        kind: "multi",
-        event: ev,
-        markets: open,
-        outcomes,
-        score: predictionHeatScore(ev, leadMarket),
       });
     }
   }
@@ -272,45 +259,28 @@ async function fetchPredictionPool(): Promise<
   const top = candidates.slice(0, PREDICTION_KEEP);
 
   const stamp = new Date().toISOString();
-  return top.map((c) => {
-    if (c.kind === "binary") {
-      const { event, market, score } = c;
-      const yesProbability = parseFloat(market.outcomePrices[0]);
-      const sig: PredictionSignal = {
-        id: `prediction:${event.eventId}:${market.marketId}`,
-        type: "prediction",
-        heatScore: score,
-        createdAt: stamp,
-        chips: predictionSignalChips(event, market),
-        question: event.metadata.title,
-        resolveDate: fmtResolveDate(market.closeTime),
-        volume24h: Number(event.volume24hr) / 1e6,
-        yesProbability,
-        eventId: event.eventId,
-        marketId: market.marketId,
-        series: event.metadata.series,
-        imageUrl: market.imageUrl ?? event.metadata.imageUrl ?? null,
-      };
-      return sig;
-    }
-    const { event, markets, outcomes, score } = c;
-    const earliestClose = Math.min(...markets.map((m) => m.closeTime));
-    const leadMarket =
-      markets.find((m) => m.marketId === outcomes[0].marketId) ?? markets[0];
-    const sig: MultiPredictionSignal = {
-      id: `multiprediction:${event.eventId}`,
-      type: "multiprediction",
+  return top.map(({ event, market, isMultiOutcome, score }) => {
+    const yesProbability = parseFloat(market.outcomePrices[0]);
+    // For multi-outcome events the market title alone is just the option
+    // name (e.g. "Gavin Newsom") — combine with event title so the
+    // question reads as a complete bet.
+    const question = isMultiOutcome
+      ? `${event.metadata.title} — ${market.title}`
+      : event.metadata.title;
+    const sig: PredictionSignal = {
+      id: `prediction:${event.eventId}:${market.marketId}`,
+      type: "prediction",
       heatScore: score,
       createdAt: stamp,
-      chips: predictionSignalChips(event, leadMarket),
-      question: event.metadata.title,
-      resolveDate: fmtResolveDate(earliestClose),
+      chips: predictionSignalChips(event, market),
+      question,
+      resolveDate: fmtResolveDate(market.closeTime),
       volume24h: Number(event.volume24hr) / 1e6,
+      yesProbability,
       eventId: event.eventId,
+      marketId: market.marketId,
       series: event.metadata.series,
-      outcomes: outcomes.slice(0, MULTI_OUTCOMES_TO_SHOW),
-      totalOutcomes: outcomes.length,
-      imageUrl: event.metadata.imageUrl ?? null,
+      imageUrl: market.imageUrl ?? event.metadata.imageUrl ?? null,
     };
     return sig;
   });
