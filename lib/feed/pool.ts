@@ -364,45 +364,63 @@ async function mapLimit<T, R>(
   await Promise.all(workers);
   return results;
 }
-// HL's /info endpoint observed limit is ~20 requests/sec. With ~200ms
-// average response time, concurrency 4 keeps us at ~20/sec burst — any
-// higher and we trip the per-second guard and pass-1 errors balloon
-// (which then forces a throw, keeping the rail empty until next try).
-const WHALE_FETCH_CONCURRENCY = 4;
+const WHALE_FETCH_CONCURRENCY = 2;
+
+// Per-wallet cached info calls. This is the actual rate-limit defense:
+// each wallet's recent fills / state changes slowly enough that a 5-minute
+// cache is fine, and bucketing the fills' startTime to the nearest minute
+// lets unstable_cache reuse the same key across many calls inside the
+// window. Net effect: a fully warm cache produces zero HL hits per page
+// load; a fully cold cache produces 1 fills + 1 state call per wallet
+// across the entire 5-minute window, regardless of how many users hit
+// the feed.
+const WALLET_FILLS_TTL = 300; // 5 min
+const WALLET_STATE_TTL = 300; // 5 min
+
+const cachedWalletFills = unstable_cache(
+  async (address: string, _bucket: number): Promise<HLFill[]> => {
+    return getUserFillsByTime(address, Date.now() - WHALE_FRESH_WINDOW_MS);
+  },
+  ["wallet-fills-v1"],
+  { revalidate: WALLET_FILLS_TTL, tags: ["feed-pool"] },
+);
+
+const cachedWalletState = unstable_cache(
+  async (address: string, _bucket: number) => {
+    return getClearinghouseState(address);
+  },
+  ["wallet-state-v1"],
+  { revalidate: WALLET_STATE_TTL, tags: ["feed-pool"] },
+);
+
+// Bucket helper — same address + same bucket within a 5-min window
+// hits the same cache slot regardless of when within the window it
+// fires. Without this, the unstable_cache would key off the precise
+// timestamp and never reuse anything.
+function fiveMinBucket(): number {
+  return Math.floor(Date.now() / (5 * 60 * 1000));
+}
 
 async function fetchWhalePool(): Promise<WhaleSignal[]> {
   const now = Date.now();
-  const windowStart = now - WHALE_FRESH_WINDOW_MS;
   const stamp = new Date(now).toISOString();
+  const bucket = fiveMinBucket();
 
-  // Pass 1 — pull recent fills per wallet. Most wallets sit idle in any
-  // given window, so we use this as a cheap pre-filter. Wallets with no
-  // recent fills can't have a fresh open and skip Pass 2 entirely.
-  let pass1Errors = 0;
+  // Pass 1 — pull recent fills per wallet (cached 5min per wallet).
   const recentFillsByWallet = await mapLimit(
     CURATED_WHALES,
     WHALE_FETCH_CONCURRENCY,
     async (whale) => {
       try {
-        const fills = await getUserFillsByTime(whale.address, windowStart);
+        const fills = await cachedWalletFills(whale.address, bucket);
         const opens = fills.filter((f) => /^(Open |Long > Short|Short > Long)/.test(String(f.dir)));
         return { whale, opens };
       } catch (e) {
-        pass1Errors++;
         console.warn("[pool/whale fills]", whale.address, e);
         return { whale, opens: [] as HLFill[] };
       }
     },
   );
-  // If a third or more of pass-1 calls failed, this rebuild is unreliable
-  // — throw so the per-rail cache doesn't latch onto an empty/partial
-  // result for the next 2 minutes. The outer caller catches this and
-  // serves whatever it has.
-  if (pass1Errors > CURATED_WHALES.length / 3) {
-    throw new Error(
-      `[pool/whale] too many fill errors: ${pass1Errors}/${CURATED_WHALES.length}`,
-    );
-  }
   const active = recentFillsByWallet.filter((r) => r.opens.length > 0);
 
   // Pass 2 — only fetch state for wallets that actually moved. Cross-
@@ -411,7 +429,7 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
   const all: WhaleSignal[] = [];
   await mapLimit(active, WHALE_FETCH_CONCURRENCY, async ({ whale, opens }) => {
       try {
-        const state = await getClearinghouseState(whale.address);
+        const state = await cachedWalletState(whale.address, bucket);
         const accountValueUsd = parseFloat(state.marginSummary.accountValue);
         if (accountValueUsd <= 0) return;
 
