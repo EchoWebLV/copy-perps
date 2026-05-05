@@ -10,7 +10,12 @@ import {
   sellTokenForUsdc,
 } from "@/lib/jupiter/swap";
 import { JUPUSD_MINT, USDC_MINT } from "@/lib/jupiter/constants";
-import { gasWalletPubkey, partialSignAsFeePayer } from "@/lib/wallets/gas";
+import {
+  buildUserSolDripIx,
+  gasWalletPubkey,
+  partialSignAsFeePayer,
+} from "@/lib/wallets/gas";
+import { PublicKey } from "@solana/web3.js";
 
 // Minimum SOL we require in the user's wallet before letting them open
 // any position. Covers tx fees + ATA rent + Flash position account
@@ -186,9 +191,14 @@ export async function ensureUsdcOrConsolidateGasless(params: {
     quoteResponse: quote,
     userPublicKey: params.userPubkey,
   });
+  const dripIx = buildUserSolDripIx({
+    userPubkey: new PublicKey(params.userPubkey),
+    numAtasToFund: ixResp.setupInstructions.length,
+  });
   const tx = await buildSwapTx({
     ixResp,
     feePayer: gasWalletPubkey,
+    prependInstructions: dripIx ? [dripIx] : [],
     appendInstructions: [],
   });
   partialSignAsFeePayer(tx);

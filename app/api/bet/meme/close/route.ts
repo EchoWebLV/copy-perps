@@ -11,7 +11,9 @@ import {
 } from "@/lib/jupiter/swap";
 import { getTokenAtomicBalance } from "@/lib/solana/balance";
 import { USDC_MINT } from "@/lib/jupiter/constants";
+import { PublicKey } from "@solana/web3.js";
 import {
+  buildUserSolDripIx,
   ensureGasWalletReady,
   gasWalletPubkey,
   partialSignAsFeePayer,
@@ -120,9 +122,14 @@ export async function POST(request: Request) {
         quoteResponse: quote,
         userPublicKey: user.solanaPubkey,
       });
+      const dripIx = buildUserSolDripIx({
+        userPubkey: new PublicKey(user.solanaPubkey),
+        numAtasToFund: ixResp.setupInstructions.length,
+      });
       const tx = await buildSwapTx({
         ixResp,
         feePayer: gasWalletPubkey,
+        prependInstructions: dripIx ? [dripIx] : [],
         appendInstructions: [],
       });
       partialSignAsFeePayer(tx);

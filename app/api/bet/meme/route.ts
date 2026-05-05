@@ -18,6 +18,7 @@ import {
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import {
+  buildUserSolDripIx,
   ensureGasWalletReady,
   gasWalletPubkey,
   partialSignAsFeePayer,
@@ -129,9 +130,18 @@ export async function POST(request: Request) {
       feeUsdcDollars: fee.totalFeeUsdc,
       feePayerForAta: gasWalletPubkey,
     });
+    // Jupiter's setupInstructions hard-code the user as the funder for
+    // any new ATA they create (e.g. the destination meme-token ATA).
+    // Drip enough SOL from Gas Wallet → user IN THE SAME TX so ATA rent
+    // is covered before Jupiter's setup ix runs.
+    const dripIx = buildUserSolDripIx({
+      userPubkey: userPk,
+      numAtasToFund: ixResp.setupInstructions.length,
+    });
     const tx = await buildSwapTx({
       ixResp,
       feePayer: gasWalletPubkey,
+      prependInstructions: dripIx ? [dripIx] : [],
       appendInstructions: feeIxs,
     });
     partialSignAsFeePayer(tx);

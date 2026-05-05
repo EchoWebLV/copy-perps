@@ -172,13 +172,20 @@ function decodeJupIx(ix: JupIxJson): TransactionInstruction {
 }
 
 // Build a versioned tx from a Jupiter swap-instructions response, with
-// `feePayer` paying the SOL and `appendInstructions` (typically a fee
-// transfer to Treasury) tacked on at the end. Caller is responsible for
-// partial-signing as the fee payer before returning to the client.
+// `feePayer` paying the SOL and optional `prependInstructions` /
+// `appendInstructions` slotted around Jupiter's ixs.
+//   - prependInstructions go BEFORE Jupiter's setupInstructions: use this
+//     for SOL drips so the user has lamports for ATA rent before the
+//     create-ATA setup ix runs.
+//   - appendInstructions go AFTER cleanupInstruction: use this for the
+//     Treasury fee transfer (USDC must already be in user's ATA).
+// Caller is responsible for partial-signing as the fee payer before
+// returning to the client.
 export async function buildSwapTx(params: {
   ixResp: JupiterSwapInstructionsResponse;
   feePayer: PublicKey;
   appendInstructions: TransactionInstruction[];
+  prependInstructions?: TransactionInstruction[];
 }): Promise<VersionedTransaction> {
   const conn = getConnection();
   const altAccounts: AddressLookupTableAccount[] = [];
@@ -190,6 +197,7 @@ export async function buildSwapTx(params: {
 
   const ixs: TransactionInstruction[] = [
     ...params.ixResp.computeBudgetInstructions.map(decodeJupIx),
+    ...(params.prependInstructions ?? []),
     ...params.ixResp.setupInstructions.map(decodeJupIx),
     decodeJupIx(params.ixResp.swapInstruction),
     ...(params.ixResp.cleanupInstruction

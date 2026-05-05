@@ -51,6 +51,36 @@ export function partialSignAsFeePayer(tx: VersionedTransaction): void {
 const PREFUND_TARGET_SOL = 0.005;
 const PREFUND_SKIP_THRESHOLD_SOL = 0.005;
 
+// Per-ATA rent (Solana standard) + small headroom. Jupiter's
+// setupInstructions include a "create destination token ATA" ix that
+// charges this rent to the *userPublicKey* we passed Jupiter — not to
+// our fee payer. Without an in-tx drip the user's 0-lamport wallet
+// fails ATA creation with custom program error 0x1.
+const SOL_DRIP_PER_ATA_LAMPORTS = 2_500_000; // 0.0025 SOL
+const SOL_DRIP_BUFFER_LAMPORTS = 200_000; // covers the user's tx fee share
+
+// Returns a single SystemProgram.transfer ix that drips enough SOL
+// from Gas Wallet → user to cover N new ATAs' rent + the user's share
+// of tx fees. Returns null when no drip is needed (numAtasToFund = 0).
+//
+// Used inside Jupiter swap txs (meme buy, consolidation) where Jupiter
+// hard-codes the user as the ATA funder. Place the returned ix BEFORE
+// Jupiter's setupInstructions so the lamports land in the user's
+// wallet before the ATA-create ix runs in the same tx.
+export function buildUserSolDripIx(params: {
+  userPubkey: PublicKey;
+  numAtasToFund: number;
+}): TransactionInstruction | null {
+  if (params.numAtasToFund <= 0) return null;
+  const lamports =
+    params.numAtasToFund * SOL_DRIP_PER_ATA_LAMPORTS + SOL_DRIP_BUFFER_LAMPORTS;
+  return SystemProgram.transfer({
+    fromPubkey: gasWalletPubkey,
+    toPubkey: params.userPubkey,
+    lamports,
+  });
+}
+
 // Returns a base64-encoded prefund tx (Gas Wallet as fee payer). When
 // the user already has enough SOL for the upcoming Jupiter Prediction
 // tx, no SOL drip is added — but appendInstructions (the USDC fee
