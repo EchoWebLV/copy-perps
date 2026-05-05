@@ -32,8 +32,10 @@ import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 // Jupiter Prediction's /orders endpoint server-side checks user SOL
 // before building. Below this floor it returns 400 INSUFFICIENT_FUNDS
 // even if we'd cover the user's actual on-chain costs in a follow-up
-// tx. Drip enough to clear their bar plus position-PDA rent headroom.
-const PREDICTION_USER_SOL_FLOOR_LAMPORTS = 6_000_000; // 0.006 SOL
+// tx. The user pays for: tx fee (~5k) + position PDA rent (~3M) +
+// their order-pubkey PDA rent (~2M) + jupUSD ATA if any (~2M) + slack.
+// We over-provision so Jupiter's pre-flight always sees enough.
+const PREDICTION_USER_SOL_FLOOR_LAMPORTS = 15_000_000; // 0.015 SOL ≈ $2.40
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -183,10 +185,14 @@ export async function POST(request: Request) {
     // gas-wallet-only drip on chain first.
     const conn = getConnection();
     const userPk = new PublicKey(user.solanaPubkey);
-    const userLamports = await conn.getBalance(userPk, "confirmed");
-    if (userLamports < PREDICTION_USER_SOL_FLOOR_LAMPORTS) {
+    const userLamportsBefore = await conn.getBalance(userPk, "confirmed");
+    console.log(
+      `[bet/prediction gasless] user lamports=${userLamportsBefore}, floor=${PREDICTION_USER_SOL_FLOOR_LAMPORTS}`,
+    );
+    if (userLamportsBefore < PREDICTION_USER_SOL_FLOOR_LAMPORTS) {
       const dripLamports =
-        PREDICTION_USER_SOL_FLOOR_LAMPORTS - userLamports;
+        PREDICTION_USER_SOL_FLOOR_LAMPORTS - userLamportsBefore;
+      console.log(`[bet/prediction gasless] dripping ${dripLamports} lamports`);
       const { blockhash } = await conn.getLatestBlockhash("confirmed");
       const dripMessage = new TransactionMessage({
         payerKey: gasWalletPubkey,
@@ -205,14 +211,20 @@ export async function POST(request: Request) {
         const sig = await conn.sendRawTransaction(dripTx.serialize(), {
           skipPreflight: false,
         });
-        const result = await conn.confirmTransaction(sig, "confirmed");
+        // Use "finalized" not just "confirmed" — Jupiter's RPC may lag
+        // behind ours on confirmed slots and still see the old balance.
+        const result = await conn.confirmTransaction(sig, "finalized");
         if (result.value.err) {
           throw new Error(
             `drip failed on chain: ${JSON.stringify(result.value.err)}`,
           );
         }
-        // Brief buffer for Jupiter's API to see the new balance.
-        await new Promise((r) => setTimeout(r, 1500));
+        // Extra propagation buffer.
+        await new Promise((r) => setTimeout(r, 3000));
+        const userLamportsAfter = await conn.getBalance(userPk, "confirmed");
+        console.log(
+          `[bet/prediction gasless] drip landed sig=${sig} userLamportsAfter=${userLamportsAfter}`,
+        );
       } catch (err) {
         console.error("[bet/prediction] server-side drip failed:", err);
         return NextResponse.json(
