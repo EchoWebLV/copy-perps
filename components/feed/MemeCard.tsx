@@ -34,11 +34,11 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
-      <span className="absolute top-[60px] left-5 rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
+      <span className="absolute top-[60px] right-5 rounded-lg bg-[#ff5e3a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Coin
       </span>
 
-      <div className="absolute top-[120px] right-5 z-10">
+      <div className="absolute top-[100px] right-5 z-10">
         <BookmarkButton signal={signal} />
       </div>
 
@@ -47,7 +47,7 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
         <img
           src={icon}
           alt={signal.ticker}
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
+          className="absolute top-[56px] left-5 h-14 w-14 rounded-full bg-white/5 object-cover ring-1 ring-white/10"
           loading="lazy"
         />
       ) : null}

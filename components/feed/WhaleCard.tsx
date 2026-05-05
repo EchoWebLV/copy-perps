@@ -29,11 +29,11 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
-      <span className="absolute top-[60px] left-5 rounded-lg bg-[#7c3aed] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
+      <span className="absolute top-[60px] right-5 rounded-lg bg-[#7c3aed] px-2.5 py-1 text-[10px] font-bold tracking-[1px] uppercase">
         Whale open
       </span>
 
-      <div className="absolute top-[120px] right-5 z-10">
+      <div className="absolute top-[100px] right-5 z-10">
         <BookmarkButton signal={signal} />
       </div>
 
@@ -42,12 +42,12 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         <img
           src={coinIcon}
           alt={signal.asset}
-          className="absolute top-[56px] right-5 h-14 w-14 rounded-full bg-white/5 object-contain p-1.5 ring-1 ring-white/10"
+          className="absolute top-[56px] left-5 h-14 w-14 rounded-full bg-white/5 object-contain p-1.5 ring-1 ring-white/10"
           loading="lazy"
         />
       ) : (
         <div
-          className="absolute top-[56px] right-5 flex h-14 w-14 items-center justify-center rounded-full ring-1 ring-white/10"
+          className="absolute top-[56px] left-5 flex h-14 w-14 items-center justify-center rounded-full ring-1 ring-white/10"
           style={{
             background:
               signal.side === "long"
