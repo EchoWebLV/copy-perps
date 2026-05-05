@@ -14,6 +14,7 @@ import {
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import {
+  buildUserSolDripIx,
   ensureGasWalletReady,
   gasWalletPubkey,
   partialSignAsFeePayer,
@@ -137,6 +138,16 @@ export async function POST(request: Request) {
       feePayerForAta: gasWalletPubkey,
     });
 
+    // Flash's swapAndOpen creates ATAs inline (collateral USDC ATA at
+    // minimum, sometimes more) with the user as funder. Prepend a SOL
+    // drip sized for ~2 ATAs so the in-tx state has lamports for rent
+    // before Flash's create-ATA ix runs. Conservative — over-drip is
+    // residual that stays in user's wallet for future bets.
+    const dripIx = buildUserSolDripIx({
+      userPubkey: userPk,
+      numAtasToFund: 2,
+    });
+
     let openResult;
     try {
       openResult = await buildOpenPerpTx({
@@ -147,6 +158,7 @@ export async function POST(request: Request) {
         marginUsdc: body.amountUsdc,
         whaleLeverage: whale.leverage,
         gaslessFeePayer: gasWalletPubkey,
+        prependInstructions: dripIx ? [dripIx] : [],
         appendInstructions: feeIxs,
       });
     } catch (err) {

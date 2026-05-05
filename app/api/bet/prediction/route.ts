@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
-import { PublicKey } from "@solana/web3.js";
+import {
+  PublicKey,
+  SystemProgram,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
+import { getConnection } from "@/lib/solana/balance";
 import { createOrder } from "@/lib/jupiter-prediction/client";
 import {
   ensureUsdcOrConsolidate,
@@ -13,14 +19,21 @@ import {
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
 import {
-  buildPredictionPrefundTx,
   ensureGasWalletReady,
+  gasWalletKeypair,
   gasWalletPubkey,
+  partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
 import { buildFeeTransferInstructions } from "@/lib/wallets/treasury";
 import { computeBetFee } from "@/lib/fees/calc";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
+
+// Jupiter Prediction's /orders endpoint server-side checks user SOL
+// before building. Below this floor it returns 400 INSUFFICIENT_FUNDS
+// even if we'd cover the user's actual on-chain costs in a follow-up
+// tx. Drip enough to clear their bar plus position-PDA rent headroom.
+const PREDICTION_USER_SOL_FLOOR_LAMPORTS = 6_000_000; // 0.006 SOL
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -165,6 +178,50 @@ export async function POST(request: Request) {
       );
     }
 
+    // Jupiter Prediction's API checks user SOL server-side BEFORE
+    // building the order tx, so we can't drip inside the order. Land a
+    // gas-wallet-only drip on chain first.
+    const conn = getConnection();
+    const userPk = new PublicKey(user.solanaPubkey);
+    const userLamports = await conn.getBalance(userPk, "confirmed");
+    if (userLamports < PREDICTION_USER_SOL_FLOOR_LAMPORTS) {
+      const dripLamports =
+        PREDICTION_USER_SOL_FLOOR_LAMPORTS - userLamports;
+      const { blockhash } = await conn.getLatestBlockhash("confirmed");
+      const dripMessage = new TransactionMessage({
+        payerKey: gasWalletPubkey,
+        recentBlockhash: blockhash,
+        instructions: [
+          SystemProgram.transfer({
+            fromPubkey: gasWalletPubkey,
+            toPubkey: userPk,
+            lamports: dripLamports,
+          }),
+        ],
+      }).compileToV0Message();
+      const dripTx = new VersionedTransaction(dripMessage);
+      dripTx.sign([gasWalletKeypair]);
+      try {
+        const sig = await conn.sendRawTransaction(dripTx.serialize(), {
+          skipPreflight: false,
+        });
+        const result = await conn.confirmTransaction(sig, "confirmed");
+        if (result.value.err) {
+          throw new Error(
+            `drip failed on chain: ${JSON.stringify(result.value.err)}`,
+          );
+        }
+        // Brief buffer for Jupiter's API to see the new balance.
+        await new Promise((r) => setTimeout(r, 1500));
+      } catch (err) {
+        console.error("[bet/prediction] server-side drip failed:", err);
+        return NextResponse.json(
+          { error: `SOL drip failed: ${String(err)}` },
+          { status: 502 },
+        );
+      }
+    }
+
     let order;
     try {
       order = await createOrder({
@@ -189,16 +246,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const userPk = new PublicKey(user.solanaPubkey);
+    // Build a separate fee-transfer tx that the client signs+submits
+    // alongside the order. Gas Wallet pays the SOL fee on this tx; the
+    // user signs to authorize the USDC transfer.
     const feeIxs = buildFeeTransferInstructions({
       userPubkey: userPk,
       feeUsdcDollars: fee.totalFeeUsdc,
       feePayerForAta: gasWalletPubkey,
     });
-    const prefundB64 = await buildPredictionPrefundTx({
-      userPubkey: userPk,
-      appendInstructions: feeIxs,
-    });
+    const { blockhash: feeBlockhash } = await conn.getLatestBlockhash("confirmed");
+    const feeMessage = new TransactionMessage({
+      payerKey: gasWalletPubkey,
+      recentBlockhash: feeBlockhash,
+      instructions: feeIxs,
+    }).compileToV0Message();
+    const feeTx = new VersionedTransaction(feeMessage);
+    partialSignAsFeePayer(feeTx);
 
     const [bet] = await db
       .insert(bets)
@@ -227,7 +290,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       phase: "open",
       betId: bet.id,
-      prefundTransaction: prefundB64,
+      feeTransferTransaction: Buffer.from(feeTx.serialize()).toString("base64"),
       swapTransaction: order.transaction,
       contracts: order.order.contracts,
       avgPriceUsd: order.order.newAvgPriceUsd,

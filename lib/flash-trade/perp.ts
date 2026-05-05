@@ -66,8 +66,9 @@ export async function buildOpenPerpTx(params: {
   marginUsdc: number;
   whaleLeverage: number;
   // Gasless overrides — when set, fee payer is the gas wallet, and any
-  // appendInstructions are added before the message is compiled.
+  // prepend/append instructions are added before the message is compiled.
   gaslessFeePayer?: PublicKey;
+  prependInstructions?: TransactionInstruction[];
   appendInstructions?: TransactionInstruction[];
 }): Promise<BuildOpenPerpResult> {
   if (params.marginUsdc < MIN_USDC || params.marginUsdc > MAX_USDC) {
@@ -145,6 +146,7 @@ export async function buildOpenPerpTx(params: {
     cuLimit,
     cuPrice,
     ...backupOracleIxs,
+    ...(params.prependInstructions ?? []),
     ...openData.instructions,
     ...(params.appendInstructions ?? []),
   ];
