@@ -51,17 +51,33 @@ export function partialSignAsFeePayer(tx: VersionedTransaction): void {
 const PREFUND_TARGET_SOL = 0.005;
 const PREFUND_SKIP_THRESHOLD_SOL = 0.005;
 
-// Per-ATA rent (Solana standard) + small headroom. Jupiter's
-// setupInstructions include a "create destination token ATA" ix that
-// charges this rent to the *userPublicKey* we passed Jupiter — not to
-// our fee payer. Without an in-tx drip the user's 0-lamport wallet
-// fails ATA creation with custom program error 0x1.
-const SOL_DRIP_PER_ATA_LAMPORTS = 2_500_000; // 0.0025 SOL
-const SOL_DRIP_BUFFER_LAMPORTS = 200_000; // covers the user's tx fee share
+// Per-ATA rent (Solana standard). Jupiter's setupInstructions include
+// a "create destination token ATA" ix that charges this rent to the
+// *userPublicKey* we passed Jupiter — not to our fee payer. Without
+// an in-tx drip the user's 0-lamport wallet fails ATA creation with
+// custom program error 0x1.
+const ATA_RENT_LAMPORTS = 2_039_280; // SPL token ATA, exact
+
+// Rent-exempt minimum for an empty system account. Solana refuses to
+// let any modified account settle below this. If we drip exactly the
+// ATA rent, the user's wallet ends at 0 lamports after the create-ATA
+// ix and the tx fails with "insufficient funds for rent" on account
+// index 1. Drip enough extra to leave the user rent-exempt.
+const SYSTEM_RENT_EXEMPT_MIN_LAMPORTS = 890_880;
+
+// Small headroom — covers Solana's per-tx priority fees and any
+// minor fluctuation in the rent-exempt min between runtime versions.
+const SOL_DRIP_BUFFER_LAMPORTS = 250_000;
 
 // Returns a single SystemProgram.transfer ix that drips enough SOL
-// from Gas Wallet → user to cover N new ATAs' rent + the user's share
-// of tx fees. Returns null when no drip is needed (numAtasToFund = 0).
+// from Gas Wallet → user to cover N new ATAs' rent AND leave the
+// user's system account rent-exempt afterwards. Returns null when no
+// drip is needed (numAtasToFund = 0).
+//
+// Drip math:
+//   N * ATA_RENT       — paid out to each new ATA's account
+//   + SYSTEM_RENT_EXEMPT_MIN — what the user's wallet must hold AFTER
+//   + buffer
 //
 // Used inside Jupiter swap txs (meme buy, consolidation) where Jupiter
 // hard-codes the user as the ATA funder. Place the returned ix BEFORE
@@ -73,7 +89,9 @@ export function buildUserSolDripIx(params: {
 }): TransactionInstruction | null {
   if (params.numAtasToFund <= 0) return null;
   const lamports =
-    params.numAtasToFund * SOL_DRIP_PER_ATA_LAMPORTS + SOL_DRIP_BUFFER_LAMPORTS;
+    params.numAtasToFund * ATA_RENT_LAMPORTS +
+    SYSTEM_RENT_EXEMPT_MIN_LAMPORTS +
+    SOL_DRIP_BUFFER_LAMPORTS;
   return SystemProgram.transfer({
     fromPubkey: gasWalletPubkey,
     toPubkey: params.userPubkey,
