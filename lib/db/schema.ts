@@ -40,6 +40,7 @@ export const bets = pgTable("bets", {
   signalId: text("signal_id").references(() => signals.id),
   type: text("type").notNull(),
   amountUsdc: doublePrecision("amount_usdc").notNull(),
+  feeUsdc: doublePrecision("fee_usdc"),
   txHash: text("tx_hash"),
   status: text("status").notNull().default("pending"),
   meta: jsonb("meta"),
