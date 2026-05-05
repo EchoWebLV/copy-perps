@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignTransaction } from "@privy-io/react-auth/solana";
-import type { Signal, StakeAmount } from "@/lib/types";
+import type { Signal } from "@/lib/types";
+import { CustomAmountModal } from "./CustomAmountModal";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
   decodeBase64Tx,
@@ -42,8 +43,28 @@ function StakeBurst({
   );
 }
 
+// Per-rail input bounds for the custom-amount modal. Server validates
+// these too — we mirror them client-side for instant feedback.
+//   meme   — Jupiter swap accepts arbitrary > 0; floor at $1 so the
+//            platform fee + slippage don't eat the trade entirely.
+//   prediction / whale — hard $5 floor (Jupiter Prediction's effective
+//            min after fees + Flash SDK's hard limit).
+const RAIL_MIN: Record<Signal["type"], number> = {
+  meme: 1,
+  prediction: 5,
+  multiprediction: 5,
+  whale: 5,
+};
+const RAIL_MAX = 1000;
+
 export function StakeButtons({ signal }: Props) {
   const [state, setState] = useState<ButtonState>({});
+  const [customAction, setCustomAction] = useState<
+    "buy" | "yes" | "tail" | null
+  >(null);
+  // Remembered between modal opens so the user doesn't retype on a
+  // second custom bet within the same session.
+  const [lastCustom, setLastCustom] = useState<number | undefined>(undefined);
   const { getAccessToken, authenticated, login } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -69,7 +90,7 @@ export function StakeButtons({ signal }: Props) {
     setTimeout(() => setState((s) => (s.error === msg ? {} : s)), 4000);
   }
 
-  async function executeMemeBuy(amount: StakeAmount) {
+  async function executeMemeBuy(amount: number) {
     if (signal.type !== "meme") return;
     if (!requireAuth()) return;
     if (!wallet?.address) {
@@ -140,7 +161,7 @@ export function StakeButtons({ signal }: Props) {
     }
   }
 
-  function fireOptimistic(action: string, amount: StakeAmount) {
+  function fireOptimistic(action: string, amount: number) {
     const key = `${action}-${amount}`;
     setState({ pending: key });
     setTimeout(() => {
@@ -153,7 +174,7 @@ export function StakeButtons({ signal }: Props) {
 
   async function executePredictionBuy(
     outcome: "yes" | "no",
-    amount: StakeAmount,
+    amount: number,
   ) {
     if (signal.type !== "prediction") return;
     if (!requireAuth()) return;
@@ -228,6 +249,53 @@ export function StakeButtons({ signal }: Props) {
     </div>
   );
 
+  // Opens the custom-amount modal for the appropriate side. Tap auths
+  // the user lazily so anonymous browsers see the login prompt before
+  // the modal opens (matches preset buttons' behavior).
+  function openCustom(action: "buy" | "yes" | "tail") {
+    if (!requireAuth()) return;
+    setCustomAction(action);
+  }
+
+  function handleCustomConfirm(amount: number) {
+    setLastCustom(amount);
+    if (customAction === "buy") void executeMemeBuy(amount);
+    else if (customAction === "yes") void executePredictionBuy("yes", amount);
+    else if (customAction === "tail") void executePerp("tail", amount);
+  }
+
+  // Modal config per rail. The actual element renders inside each
+  // signal-type branch below; this just centralizes the prop wiring.
+  const customModal = (
+    <CustomAmountModal
+      open={customAction !== null}
+      onClose={() => setCustomAction(null)}
+      onConfirm={handleCustomConfirm}
+      title={
+        signal.type === "meme"
+          ? `Buy ${(signal as { ticker?: string }).ticker ?? "token"}`
+          : signal.type === "prediction" || signal.type === "multiprediction"
+            ? "Buy YES"
+            : signal.type === "whale"
+              ? `Tail ${(signal as { asset?: string }).asset ?? "position"}`
+              : "Custom amount"
+      }
+      actionLabel={
+        customAction === "buy"
+          ? "Buy"
+          : customAction === "yes"
+            ? "YES"
+            : customAction === "tail"
+              ? "Tail"
+              : "Confirm"
+      }
+      tone="win"
+      minUsd={RAIL_MIN[signal.type] ?? 5}
+      maxUsd={RAIL_MAX}
+      initialAmount={lastCustom}
+    />
+  );
+
   if (signal.type === "meme") {
     return (
       <div className="mt-auto pt-4">
@@ -240,7 +308,7 @@ export function StakeButtons({ signal }: Props) {
             return (
               <button
                 key={amt}
-                onClick={() => executeMemeBuy(amt as StakeAmount)}
+                onClick={() => executeMemeBuy(amt)}
                 disabled={isPending || !!state.pending}
                 className={`relative flex-1 rounded-2xl border px-0 py-3.5 text-[15px] font-bold transition active:scale-[0.97] disabled:opacity-60 ${
                   isPrimary
@@ -253,8 +321,16 @@ export function StakeButtons({ signal }: Props) {
               </button>
             );
           })}
+          <button
+            onClick={() => openCustom("buy")}
+            disabled={!!state.pending}
+            className="flex-1 rounded-2xl border border-dashed border-white/15 bg-white/[0.04] px-0 py-3.5 text-[13px] font-bold text-neutral-300 transition active:scale-[0.97] disabled:opacity-60 hover:bg-white/[0.07]"
+          >
+            Custom
+          </button>
         </div>
         {errorBar}
+        {customModal}
       </div>
     );
   }
@@ -304,7 +380,7 @@ export function StakeButtons({ signal }: Props) {
             return (
               <button
                 key={amt}
-                onClick={() => executePredictionBuy("yes", amt as StakeAmount)}
+                onClick={() => executePredictionBuy("yes", amt)}
                 disabled={!!state.pending}
                 className={`relative flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
                   confirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""
@@ -315,13 +391,21 @@ export function StakeButtons({ signal }: Props) {
               </button>
             );
           })}
+          <button
+            onClick={() => openCustom("yes")}
+            disabled={!!state.pending}
+            className="flex-1 rounded-xl border border-dashed border-white/15 bg-white/[0.04] px-0 py-2.5 text-[12px] font-bold text-neutral-300 transition active:scale-[0.97] disabled:opacity-60 hover:bg-white/[0.07]"
+          >
+            Custom YES
+          </button>
         </div>
         {errorBar}
+        {customModal}
       </div>
     );
   }
 
-  async function executePerp(action: "tail" | "fade", amount: StakeAmount) {
+  async function executePerp(action: "tail" | "fade", amount: number) {
     if (signal.type !== "whale") return;
     if (!requireAuth()) return;
     if (!wallet?.address) {
@@ -429,7 +513,7 @@ export function StakeButtons({ signal }: Props) {
           return (
             <button
               key={amt}
-              onClick={() => executePerp("tail", amt as StakeAmount)}
+              onClick={() => executePerp("tail", amt)}
               disabled={!!state.pending}
               className={`relative flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
                 confirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""
@@ -440,8 +524,16 @@ export function StakeButtons({ signal }: Props) {
             </button>
           );
         })}
+        <button
+          onClick={() => openCustom("tail")}
+          disabled={!!state.pending}
+          className="flex-1 rounded-xl border border-dashed border-white/15 bg-white/[0.04] px-0 py-2.5 text-[12px] font-bold text-neutral-300 transition active:scale-[0.97] disabled:opacity-60 hover:bg-white/[0.07]"
+        >
+          Custom Tail
+        </button>
       </div>
       {errorBar}
+      {customModal}
     </div>
   );
 }

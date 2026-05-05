@@ -6,7 +6,6 @@ import { useSignTransaction } from "@privy-io/react-auth/solana";
 import type {
   MultiPredictionSignal,
   MultiPredictionOutcome,
-  StakeAmount,
 } from "@/lib/types";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
@@ -18,6 +17,7 @@ import { SignalChip } from "./SignalChip";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { useAnalyze } from "./AnalyzeProvider";
 import { useCountdown } from "@/lib/feed/use-countdown";
+import { CustomAmountModal } from "./CustomAmountModal";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000
@@ -32,7 +32,11 @@ interface State {
 
 export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
   const [state, setState] = useState<State>({});
-  const [stake, setStake] = useState<StakeAmount>(10);
+  // `stake` is the user's selected bet size — preset (5/10/20/50) or
+  // a custom value typed via the modal. Widened beyond StakeAmount to
+  // allow custom amounts in $1 steps up to $1000.
+  const [stake, setStake] = useState<number>(10);
+  const [customOpen, setCustomOpen] = useState(false);
   const fallbackIcon = useJupiterEventImage(
     signal.imageUrl ? undefined : signal.eventId,
   );
@@ -247,7 +251,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
             return (
               <button
                 key={amt}
-                onClick={() => setStake(amt as StakeAmount)}
+                onClick={() => setStake(amt)}
                 className={`flex-1 rounded-lg px-0 py-2 text-[12px] font-bold transition active:scale-95 ${
                   selected
                     ? "bg-white text-black"
@@ -258,10 +262,31 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
               </button>
             );
           })}
+          <button
+            onClick={() => setCustomOpen(true)}
+            className={`flex-1 rounded-lg border border-dashed px-0 py-2 text-[12px] font-bold transition active:scale-95 ${
+              ![5, 10, 20, 50].includes(stake)
+                ? "border-white bg-white text-black"
+                : "border-white/15 bg-white/[0.04] text-neutral-300 hover:bg-white/[0.07]"
+            }`}
+          >
+            {![5, 10, 20, 50].includes(stake) ? `$${stake}` : "Custom"}
+          </button>
         </div>
         <div className="mt-3 text-center text-[11px] text-neutral-600">
           Tap an outcome to buy YES on it · Jupiter Prediction
         </div>
+        <CustomAmountModal
+          open={customOpen}
+          onClose={() => setCustomOpen(false)}
+          onConfirm={(amount) => setStake(amount)}
+          title="Bet size"
+          actionLabel="Use"
+          tone="neutral"
+          minUsd={5}
+          maxUsd={1000}
+          initialAmount={stake}
+        />
       </div>
     </div>
   );
