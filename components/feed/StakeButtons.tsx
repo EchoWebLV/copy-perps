@@ -277,7 +277,7 @@ export function StakeButtons({ signal }: Props) {
           : signal.type === "prediction" || signal.type === "multiprediction"
             ? "Buy YES"
             : signal.type === "whale"
-              ? `Tail ${(signal as { asset?: string }).asset ?? "position"}`
+              ? `Copy ${(signal as { asset?: string }).asset ?? "position"}`
               : "Custom amount"
       }
       actionLabel={
@@ -286,7 +286,7 @@ export function StakeButtons({ signal }: Props) {
           : customAction === "yes"
             ? "YES"
             : customAction === "tail"
-              ? "Tail"
+              ? "Copy"
               : "Confirm"
       }
       tone="win"
@@ -475,36 +475,20 @@ export function StakeButtons({ signal }: Props) {
   // whale
   return (
     <div className="mt-auto pt-4">
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={() => executePerp("tail", 10)}
-          disabled={!!state.pending}
-          className={`relative rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
-            state.confirmed === "tail-10" ? "stake-confirm ring-4 ring-white/40" : ""
-          }`}
-        >
-          {state.confirmed === "tail-10"
-            ? "✓ Tailing"
-            : state.pending === "tail-10"
-              ? "…"
-              : "Tail $10"}
-          {state.confirmed === "tail-10" && <StakeBurst label="TAILED $10" />}
-        </button>
-        <button
-          onClick={() => executePerp("fade", 10)}
-          disabled={!!state.pending}
-          className={`relative rounded-2xl border border-neutral-700 bg-neutral-800 px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-            state.confirmed === "fade-10" ? "stake-confirm ring-4 ring-white/40" : ""
-          }`}
-        >
-          {state.confirmed === "fade-10"
-            ? "✓ Fading"
-            : state.pending === "fade-10"
-              ? "…"
-              : "Fade $10"}
-          {state.confirmed === "fade-10" && <StakeBurst label="FADED $10" tone="fade" />}
-        </button>
-      </div>
+      <button
+        onClick={() => executePerp("tail", 10)}
+        disabled={!!state.pending}
+        className={`relative w-full rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
+          state.confirmed === "tail-10" ? "stake-confirm ring-4 ring-white/40" : ""
+        }`}
+      >
+        {state.confirmed === "tail-10"
+          ? "✓ Copying"
+          : state.pending === "tail-10"
+            ? "…"
+            : "Copy $10"}
+        {state.confirmed === "tail-10" && <StakeBurst label="COPIED $10" />}
+      </button>
       <div className="mt-2 flex gap-2">
         {[5, 20, 50].map((amt) => {
           const k = `tail-${amt}`;
@@ -520,7 +504,7 @@ export function StakeButtons({ signal }: Props) {
               }`}
             >
               {confirmed ? "✓" : pending ? "…" : `$${amt}`}
-              {confirmed && <StakeBurst label={`TAILED $${amt}`} />}
+              {confirmed && <StakeBurst label={`COPIED $${amt}`} />}
             </button>
           );
         })}
@@ -529,7 +513,7 @@ export function StakeButtons({ signal }: Props) {
           disabled={!!state.pending}
           className="flex-1 rounded-xl border border-dashed border-white/15 bg-white/[0.04] px-0 py-2.5 text-[12px] font-bold text-neutral-300 transition active:scale-[0.97] disabled:opacity-60 hover:bg-white/[0.07]"
         >
-          Custom Tail
+          Custom
         </button>
       </div>
       {errorBar}

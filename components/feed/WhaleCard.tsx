@@ -216,15 +216,6 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
         ))}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        <span className="rounded-md bg-white/[0.06] px-2 py-1 text-[10px] text-neutral-400">
-          Tail = same direction, scaled
-        </span>
-        <span className="rounded-md bg-white/[0.06] px-2 py-1 text-[10px] text-neutral-400">
-          Fade = opposite
-        </span>
-      </div>
-
       <StakeButtons signal={signal} />
     </div>
   );
