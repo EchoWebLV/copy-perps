@@ -81,7 +81,7 @@ export default function PortfolioPage() {
   const visiblePositions = tab === "open" ? openPositions : closedPositions;
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pt-12 pb-28">
+    <main className="mx-auto flex min-h-full max-w-md flex-col px-5 pt-12 pb-28">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black">Portfolio</h1>
         {authenticated && (
