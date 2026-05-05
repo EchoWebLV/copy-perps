@@ -109,6 +109,29 @@ export async function postBetWithConsolidation(
       await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
+    if (data.prefundTransaction && typeof data.prefundTransaction === "string") {
+      // Prediction-rail atomic prefund: sign + submit the prefund tx
+      // (drips SOL to user + sweeps USDC fee to Treasury), wait for
+      // confirmation, then fall through to return `data` so the caller
+      // signs + submits the actual prediction swap.
+      const prefundBytes = decodeBase64Tx(
+        data.prefundTransaction,
+        "prefund tx",
+      );
+      const sig = await signAndSubmitTx(prefundBytes, wallet, signTransaction);
+      const conn = new Connection(RPC_URL, "confirmed");
+      const result = await conn.confirmTransaction(sig, "confirmed");
+      if (result.value.err) {
+        throw new Error(
+          `Prefund tx failed on chain: ${JSON.stringify(result.value.err)}`,
+        );
+      }
+      // Strip prefundTransaction from the returned shape so the caller
+      // doesn't accidentally re-submit it.
+      const { prefundTransaction: _drop, ...rest } = data;
+      void _drop;
+      return rest;
+    }
     return data;
   }
   throw new Error("consolidation loop exhausted");
