@@ -9,7 +9,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (!ready) {
     return (
-      <main className="flex min-h-dvh items-center justify-center text-neutral-500">
+      <main className="flex min-h-full items-center justify-center text-neutral-500">
         <div className="text-sm">Loading…</div>
       </main>
     );
@@ -17,7 +17,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (!authenticated) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+      <main className="flex min-h-full flex-col items-center justify-center px-6 text-center">
         <div className="mb-3 text-xs font-bold tracking-[0.2em] text-neutral-500 uppercase">
           Fast Bet
         </div>

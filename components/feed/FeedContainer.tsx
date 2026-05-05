@@ -114,7 +114,7 @@ export function FeedContainer({
 
   return (
     <div
-      className="relative h-dvh w-full overflow-hidden"
+      className="relative h-full w-full overflow-hidden"
       style={{
         background: activeGradient,
         transition: "background 700ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -132,7 +132,7 @@ export function FeedContainer({
               itemRefs.current[i] = el;
             }}
             data-idx={i}
-            className="h-dvh w-full snap-start"
+            className="h-full w-full snap-start"
           >
             <CardContent signal={signal} active={i === activeIdx} />
           </div>
