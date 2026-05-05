@@ -1,15 +1,31 @@
 import { NextResponse } from "next/server";
+import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { buyTokenWithUsdc } from "@/lib/jupiter/swap";
+import {
+  buildSwapInstructions,
+  buildSwapTx,
+  buyTokenWithUsdc,
+  getQuote,
+} from "@/lib/jupiter/swap";
 import {
   ensureUsdcOrConsolidate,
+  ensureUsdcOrConsolidateGasless,
   InsufficientCombinedBalanceError,
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import {
+  ensureGasWalletReady,
+  gasWalletPubkey,
+  partialSignAsFeePayer,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
+import { buildFeeTransferInstructions } from "@/lib/wallets/treasury";
+import { computeBetFee } from "@/lib/fees/calc";
+import { USDC_MINT } from "@/lib/jupiter/constants";
 import type { MemeSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -56,6 +72,100 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
+  if (gasless) {
+    try {
+      await ensureGasWalletReady();
+    } catch (err) {
+      if (err instanceof GasWalletExhaustedError) {
+        return NextResponse.json({ error: err.message }, { status: 503 });
+      }
+      throw err;
+    }
+
+    const fee = computeBetFee(amount);
+    const requiredUsd = amount + fee.totalFeeUsdc;
+
+    try {
+      const consolidation = await ensureUsdcOrConsolidateGasless({
+        userPubkey: user.solanaPubkey,
+        requiredUsd,
+      });
+      if (!consolidation.ready) {
+        return NextResponse.json({
+          phase: "consolidate",
+          consolidationTransaction: consolidation.consolidationTransaction,
+          usdcBalance: consolidation.usdcBalance,
+          jupUsdBalance: consolidation.jupUsdBalance,
+          requiredUsd: consolidation.requiredUsd,
+        });
+      }
+    } catch (err) {
+      if (err instanceof InsufficientCombinedBalanceError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      console.error("[bet/meme] consolidation check failed:", err);
+      return NextResponse.json(
+        { error: `Balance check failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    const userPk = new PublicKey(user.solanaPubkey);
+    const inAmount = BigInt(Math.floor(amount * 1_000_000));
+    const quote = await getQuote({
+      inputMint: USDC_MINT,
+      outputMint: memePayload.tokenAddress,
+      amount: inAmount,
+    });
+    const ixResp = await buildSwapInstructions({
+      quoteResponse: quote,
+      userPublicKey: user.solanaPubkey,
+    });
+    const feeIxs = buildFeeTransferInstructions({
+      userPubkey: userPk,
+      feeUsdcDollars: fee.totalFeeUsdc,
+      feePayerForAta: gasWalletPubkey,
+    });
+    const tx = await buildSwapTx({
+      ixResp,
+      feePayer: gasWalletPubkey,
+      appendInstructions: feeIxs,
+    });
+    partialSignAsFeePayer(tx);
+
+    const [bet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "meme",
+        amountUsdc: amount,
+        feeUsdc: fee.totalFeeUsdc,
+        status: "pending",
+        meta: {
+          signalId: memePayload.id,
+          tokenAddress: memePayload.tokenAddress,
+          tokenSymbol: memePayload.ticker,
+          tokenName: memePayload.name,
+          entryPriceUsd: memePayload.price,
+          expectedOutAmount: quote.outAmount,
+          priceImpactPct: quote.priceImpactPct,
+        },
+      })
+      .returning();
+
+    return NextResponse.json({
+      phase: "open",
+      betId: bet.id,
+      swapTransaction: Buffer.from(tx.serialize()).toString("base64"),
+      expectedOutAmount: quote.outAmount,
+      priceImpactPct: quote.priceImpactPct,
+    });
+  }
+
+  // --- legacy path (FEATURE_GASLESS_BETS != "true") ---
 
   // SOL preflight — Jupiter swap creates the destination token ATA
   // inline, which needs rent. Surface a clear "low SOL" error before
