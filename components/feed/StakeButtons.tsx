@@ -216,9 +216,6 @@ export function StakeButtons({ signal }: Props) {
           })}
         </div>
         {errorBar}
-        <div className="mt-3 text-center text-[11px] text-neutral-600">
-          Executes on Jupiter Swap · ↑ swipe for next
-        </div>
       </div>
     );
   }
@@ -278,9 +275,6 @@ export function StakeButtons({ signal }: Props) {
           })}
         </div>
         {errorBar}
-        <div className="mt-3 text-center text-[11px] text-neutral-600">
-          Executes on Jupiter Prediction · ↑ swipe for next
-        </div>
       </div>
     );
   }
@@ -402,9 +396,6 @@ export function StakeButtons({ signal }: Props) {
         })}
       </div>
       {errorBar}
-      <div className="mt-3 text-center text-[11px] text-neutral-600">
-        Executes on Drift Perps · ↑ swipe for next
-      </div>
     </div>
   );
 }
