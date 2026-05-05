@@ -112,3 +112,68 @@ body {
     animation: none;
   }
 }
+
+/* Pulse-on-change: applied for ~600ms when a live value updates. The
+   color of the flash hints direction — green when the new value is
+   greater than the previous, red when smaller. Kept short and subtle
+   so it reads as "alive" not "alarmed." */
+@keyframes pulse-up {
+  0% { color: var(--color-up); text-shadow: 0 0 12px rgba(34, 197, 94, 0.55); }
+  100% { color: inherit; text-shadow: none; }
+}
+@keyframes pulse-down {
+  0% { color: var(--color-down); text-shadow: 0 0 12px rgba(239, 68, 68, 0.55); }
+  100% { color: inherit; text-shadow: none; }
+}
+
+.pulse-up {
+  animation: pulse-up 600ms ease-out;
+}
+.pulse-down {
+  animation: pulse-down 600ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-up, .pulse-down { animation: none; }
+}
+
+/* Stake-button confirm: brief green flash + scale + a rising "+" chip
+   that floats up out of the button. Tied to data-state="confirmed".
+   The chip is positioned absolutely off the button so it doesn't shift
+   layout during the animation. */
+@keyframes stake-confirm-flash {
+  0% {
+    background-color: var(--color-up);
+    color: black;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  30% {
+    background-color: var(--color-up);
+    color: black;
+    transform: scale(1.06);
+    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+  }
+  100% {
+    background-color: var(--color-up);
+    color: black;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+@keyframes stake-confirm-rise {
+  0% { opacity: 0; transform: translate(-50%, 0); }
+  20% { opacity: 1; transform: translate(-50%, -8px); }
+  100% { opacity: 0; transform: translate(-50%, -36px); }
+}
+
+.stake-confirm {
+  animation: stake-confirm-flash 700ms ease-out;
+}
+.stake-rise {
+  animation: stake-confirm-rise 1100ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stake-confirm, .stake-rise { animation: none; }
+}

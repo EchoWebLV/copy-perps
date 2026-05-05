@@ -17,6 +17,31 @@ interface Props {
 
 type ButtonState = { pending?: string; confirmed?: string; error?: string | null };
 
+// Floating chip that rises out of a stake button on confirm. The
+// caller renders <StakeBurst /> conditionally when confirmed === key;
+// mounting it triggers the CSS rise animation in globals.css. Colors
+// pick green/red to match the rail's semantics (green = bullish stake,
+// red = bearish/fade).
+function StakeBurst({
+  label,
+  tone = "win",
+}: {
+  label: string;
+  tone?: "win" | "fade";
+}) {
+  return (
+    <span
+      className={`stake-rise pointer-events-none absolute left-1/2 -top-2 z-20 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-black tracking-wide ${
+        tone === "fade"
+          ? "bg-[#ef4444] text-white shadow-lg shadow-red-500/40"
+          : "bg-[#22c55e] text-black shadow-lg shadow-emerald-500/40"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function StakeButtons({ signal }: Props) {
   const [state, setState] = useState<ButtonState>({});
   const { getAccessToken, authenticated, login } = usePrivy();
@@ -217,13 +242,14 @@ export function StakeButtons({ signal }: Props) {
                 key={amt}
                 onClick={() => executeMemeBuy(amt as StakeAmount)}
                 disabled={isPending || !!state.pending}
-                className={`flex-1 rounded-2xl border px-0 py-3.5 text-[15px] font-bold transition active:scale-[0.97] disabled:opacity-60 ${
+                className={`relative flex-1 rounded-2xl border px-0 py-3.5 text-[15px] font-bold transition active:scale-[0.97] disabled:opacity-60 ${
                   isPrimary
                     ? "border-white bg-white text-black"
                     : "border-white/5 bg-white/10 text-white"
-                } ${isConfirmed ? "!border-[#22c55e] !bg-[#22c55e] !text-black" : ""}`}
+                } ${isConfirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""}`}
               >
                 {isConfirmed ? "✓ Bought" : isPending ? "…" : `$${amt}`}
+                {isConfirmed && <StakeBurst label={`+$${amt}`} />}
               </button>
             );
           })}
@@ -244,8 +270,8 @@ export function StakeButtons({ signal }: Props) {
           <button
             onClick={() => executePredictionBuy("yes", 10)}
             disabled={!!state.pending}
-            className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
-              yesConfirmed ? "ring-4 ring-white/40" : ""
+            className={`relative rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
+              yesConfirmed ? "stake-confirm ring-4 ring-white/40" : ""
             }`}
           >
             {yesConfirmed
@@ -253,12 +279,13 @@ export function StakeButtons({ signal }: Props) {
               : yesPending
                 ? "…"
                 : "$10 YES"}
+            {yesConfirmed && <StakeBurst label="YES +$10" />}
           </button>
           <button
             onClick={() => executePredictionBuy("no", 10)}
             disabled={!!state.pending}
-            className={`rounded-2xl border border-[#ef4444] bg-[#ef4444] px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-              noConfirmed ? "ring-4 ring-white/40" : ""
+            className={`relative rounded-2xl border border-[#ef4444] bg-[#ef4444] px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+              noConfirmed ? "stake-confirm ring-4 ring-white/40" : ""
             }`}
           >
             {noConfirmed
@@ -266,6 +293,7 @@ export function StakeButtons({ signal }: Props) {
               : noPending
                 ? "…"
                 : "$10 NO"}
+            {noConfirmed && <StakeBurst label="NO +$10" tone="fade" />}
           </button>
         </div>
         <div className="mt-2 flex gap-2">
@@ -278,11 +306,12 @@ export function StakeButtons({ signal }: Props) {
                 key={amt}
                 onClick={() => executePredictionBuy("yes", amt as StakeAmount)}
                 disabled={!!state.pending}
-                className={`flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-                  confirmed ? "!border-[#22c55e] !bg-[#22c55e] !text-black" : ""
+                className={`relative flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+                  confirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""
                 }`}
               >
                 {confirmed ? "✓" : pending ? "…" : `$${amt} YES`}
+                {confirmed && <StakeBurst label={`YES +$${amt}`} />}
               </button>
             );
           })}
@@ -366,8 +395,8 @@ export function StakeButtons({ signal }: Props) {
         <button
           onClick={() => executePerp("tail", 10)}
           disabled={!!state.pending}
-          className={`rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
-            state.confirmed === "tail-10" ? "ring-4 ring-white/40" : ""
+          className={`relative rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
+            state.confirmed === "tail-10" ? "stake-confirm ring-4 ring-white/40" : ""
           }`}
         >
           {state.confirmed === "tail-10"
@@ -375,12 +404,13 @@ export function StakeButtons({ signal }: Props) {
             : state.pending === "tail-10"
               ? "…"
               : "Tail $10"}
+          {state.confirmed === "tail-10" && <StakeBurst label="TAILED $10" />}
         </button>
         <button
           onClick={() => executePerp("fade", 10)}
           disabled={!!state.pending}
-          className={`rounded-2xl border border-neutral-700 bg-neutral-800 px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-            state.confirmed === "fade-10" ? "ring-4 ring-white/40" : ""
+          className={`relative rounded-2xl border border-neutral-700 bg-neutral-800 px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+            state.confirmed === "fade-10" ? "stake-confirm ring-4 ring-white/40" : ""
           }`}
         >
           {state.confirmed === "fade-10"
@@ -388,6 +418,7 @@ export function StakeButtons({ signal }: Props) {
             : state.pending === "fade-10"
               ? "…"
               : "Fade $10"}
+          {state.confirmed === "fade-10" && <StakeBurst label="FADED $10" tone="fade" />}
         </button>
       </div>
       <div className="mt-2 flex gap-2">
@@ -400,11 +431,12 @@ export function StakeButtons({ signal }: Props) {
               key={amt}
               onClick={() => executePerp("tail", amt as StakeAmount)}
               disabled={!!state.pending}
-              className={`flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-                confirmed ? "!border-[#22c55e] !bg-[#22c55e] !text-black" : ""
+              className={`relative flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
+                confirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""
               }`}
             >
               {confirmed ? "✓" : pending ? "…" : `$${amt}`}
+              {confirmed && <StakeBurst label={`TAILED $${amt}`} />}
             </button>
           );
         })}

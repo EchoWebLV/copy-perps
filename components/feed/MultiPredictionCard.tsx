@@ -187,9 +187,9 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
               key={o.marketId}
               onClick={() => buy(o)}
               disabled={!!state.pendingMarketId}
-              className={`group flex items-center gap-3 rounded-xl border bg-white/[0.03] px-3 py-2.5 text-left transition active:scale-[0.99] disabled:opacity-60 ${
+              className={`group relative flex items-center gap-3 rounded-xl border bg-white/[0.03] px-3 py-2.5 text-left transition active:scale-[0.99] disabled:opacity-60 ${
                 isConfirmed
-                  ? "border-[#22c55e] bg-[#22c55e]/15"
+                  ? "stake-confirm border-[#22c55e] bg-[#22c55e]/15"
                   : "border-white/10 hover:bg-white/[0.06]"
               }`}
             >
@@ -212,6 +212,11 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
                   {isConfirmed ? "✓" : isPending ? "…" : `Buy $${stake}`}
                 </div>
               </div>
+              {isConfirmed && (
+                <span className="stake-rise pointer-events-none absolute left-1/2 -top-2 z-20 whitespace-nowrap rounded-full bg-[#22c55e] px-2.5 py-0.5 text-[10px] font-black tracking-wide text-black shadow-lg shadow-emerald-500/40">
+                  +${stake}
+                </span>
+              )}
             </button>
           );
         })}

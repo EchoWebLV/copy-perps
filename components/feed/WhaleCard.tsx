@@ -7,6 +7,7 @@ import { perpAssetImage } from "@/lib/feed/perp-image";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 import { useAnalyze } from "./AnalyzeProvider";
 import { usePerpPrice } from "@/lib/feed/use-perp-price";
+import { usePulseOnChange } from "@/lib/feed/use-pulse-on-change";
 
 const fmtUsd = (n: number) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -63,6 +64,12 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
     referencePrice > 0 && signal.liquidation > 0
       ? Math.abs((referencePrice - signal.liquidation) / referencePrice) * 100
       : null;
+
+  // Pulse animations on each tick. Mark price pulses raw value; PnL
+  // pulses on signed dollar value so going from +$10 to +$11 fires
+  // up-pulse, +$11 to +$9 fires down-pulse.
+  const markPulse = usePulseOnChange(markPrice);
+  const pnlPulse = usePulseOnChange(pnlUsd);
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -136,14 +143,28 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
             <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
               Mark · live
             </div>
-            <div className="mt-0.5 text-2xl font-extrabold">
+            <div
+              className={`mt-0.5 text-2xl font-extrabold ${
+                markPulse === "up"
+                  ? "pulse-up"
+                  : markPulse === "down"
+                    ? "pulse-down"
+                    : ""
+              }`}
+            >
               {markPrice != null ? fmtPrice(markPrice) : "—"}
             </div>
           </div>
           {pnlUsd != null && pnlPct != null ? (
             <div className="text-right">
               <div
-                className="text-base font-extrabold"
+                className={`text-base font-extrabold ${
+                  pnlPulse === "up"
+                    ? "pulse-up"
+                    : pnlPulse === "down"
+                      ? "pulse-down"
+                      : ""
+                }`}
                 style={{ color: pnlUsd >= 0 ? "#22c55e" : "#ef4444" }}
               >
                 {fmtSignedUsd(pnlUsd)}
