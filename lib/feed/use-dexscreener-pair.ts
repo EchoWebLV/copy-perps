@@ -54,7 +54,7 @@ export function useDexScreenerPair(mint: string | undefined): DexScreenerLive {
               marketCap: best.marketCap ?? best.fdv ?? null,
               priceUsd: Number(best.priceUsd) || null,
               sparklinePath: best.priceChange
-                ? memeSparkline(best.priceChange)
+                ? memeSparkline(best.priceChange, mint)
                 : null,
               change24hPct: best.priceChange?.h24 ?? null,
             }

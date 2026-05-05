@@ -77,7 +77,7 @@ export async function refreshMemes(): Promise<RefreshMemesResult> {
       price: Number(pair.priceUsd),
       marketCap: pair.marketCap ?? pair.fdv,
       change24hPct: pair.priceChange?.h24 ?? 0,
-      sparklinePath: memeSparkline(pair.priceChange ?? {}),
+      sparklinePath: memeSparkline(pair.priceChange ?? {}, pair.baseToken.address),
       chips: memeSignalChips(pair),
     };
 

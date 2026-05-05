@@ -26,7 +26,10 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
     0;
   const sparklinePath = live.sparklinePath ?? signal.sparklinePath;
   const up = change >= 0;
-  const stroke = up ? "#22c55e" : "#ef4444";
+  const stroke = up ? "#34d399" : "#f87171";
+  const areaPath = sparklinePath ? `${sparklinePath} L 300,90 L 0,90 Z` : "";
+  const gradId = `mc-area-${signal.id}`;
+  const glowId = `mc-glow-${signal.id}`;
 
   return (
     <div className="relative flex h-full w-full flex-col px-5 pt-[60px] pb-24 text-white">
@@ -65,16 +68,59 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
         </div>
       </div>
 
-      <div
-        className="relative mt-5 h-[90px] rounded"
-        style={{
-          background: up
-            ? "linear-gradient(180deg, rgba(34,197,94,0.15), transparent)"
-            : "linear-gradient(180deg, rgba(239,68,68,0.15), transparent)",
-        }}
-      >
-        <svg viewBox="0 0 300 90" preserveAspectRatio="none" className="h-full w-full">
-          <path d={sparklinePath} fill="none" stroke={stroke} strokeWidth={2.5} />
+      <div className="relative mt-5 h-[110px]">
+        <svg
+          viewBox="0 0 300 90"
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full overflow-visible"
+        >
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={stroke} stopOpacity="0.45" />
+              <stop offset="60%" stopColor={stroke} stopOpacity="0.08" />
+              <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+            </linearGradient>
+            <filter
+              id={glowId}
+              x="-10%"
+              y="-30%"
+              width="120%"
+              height="160%"
+            >
+              <feGaussianBlur stdDeviation="2.4" result="b1" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" result="b2" />
+              <feMerge>
+                <feMergeNode in="b1" />
+                <feMergeNode in="b2" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          {areaPath ? <path d={areaPath} fill={`url(#${gradId})`} /> : null}
+          {sparklinePath ? (
+            <path
+              d={sparklinePath}
+              fill="none"
+              stroke={stroke}
+              strokeOpacity="0.4"
+              strokeWidth={4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter={`url(#${glowId})`}
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : null}
+          {sparklinePath ? (
+            <path
+              d={sparklinePath}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : null}
         </svg>
       </div>
 
