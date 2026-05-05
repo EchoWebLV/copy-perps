@@ -9,13 +9,26 @@ import {
 import bs58 from "bs58";
 import { getConnection } from "@/lib/solana/balance";
 
-const secret = process.env.GAS_WALLET_PRIVATE_KEY;
-if (!secret) {
-  throw new Error("GAS_WALLET_PRIVATE_KEY is required");
+// Lazy. Importing this module never reads env vars — the keypair is
+// built on first call to getGasWalletKeypair(). Lets routes import gas
+// helpers safely even when GAS_WALLET_PRIVATE_KEY isn't set (legacy
+// code path keeps working without the env var).
+let _kp: Keypair | null = null;
+export function getGasWalletKeypair(): Keypair {
+  if (_kp) return _kp;
+  const secret = process.env.GAS_WALLET_PRIVATE_KEY;
+  if (!secret) {
+    throw new Error(
+      "GAS_WALLET_PRIVATE_KEY is required for the gasless bet path",
+    );
+  }
+  _kp = Keypair.fromSecretKey(bs58.decode(secret));
+  return _kp;
 }
 
-export const gasWalletKeypair = Keypair.fromSecretKey(bs58.decode(secret));
-export const gasWalletPubkey: PublicKey = gasWalletKeypair.publicKey;
+export function getGasWalletPubkey(): PublicKey {
+  return getGasWalletKeypair().publicKey;
+}
 
 // Per-request floor. If Gas Wallet is below this we refuse to build
 // new bet txs — better than handing the client a tx that'll fail on
@@ -34,7 +47,7 @@ export class GasWalletExhaustedError extends Error {
 
 export async function ensureGasWalletReady(): Promise<void> {
   const conn = getConnection();
-  const lamports = await conn.getBalance(gasWalletPubkey, "confirmed");
+  const lamports = await conn.getBalance(getGasWalletPubkey(), "confirmed");
   const sol = lamports / 1_000_000_000;
   if (sol < GAS_WALLET_MIN_BALANCE_SOL) {
     throw new GasWalletExhaustedError(sol);
@@ -45,7 +58,7 @@ export async function ensureGasWalletReady(): Promise<void> {
 // VersionedTransaction. The user's signature is added on the client by
 // Privy's signTransaction without overwriting this one.
 export function partialSignAsFeePayer(tx: VersionedTransaction): void {
-  tx.sign([gasWalletKeypair]);
+  tx.sign([getGasWalletKeypair()]);
 }
 
 const PREFUND_TARGET_SOL = 0.005;
@@ -93,7 +106,7 @@ export function buildUserSolDripIx(params: {
     SYSTEM_RENT_EXEMPT_MIN_LAMPORTS +
     SOL_DRIP_BUFFER_LAMPORTS;
   return SystemProgram.transfer({
-    fromPubkey: gasWalletPubkey,
+    fromPubkey: getGasWalletPubkey(),
     toPubkey: params.userPubkey,
     lamports,
   });
@@ -113,12 +126,13 @@ export async function buildPredictionPrefundTx(params: {
   const userSol = userLamports / 1_000_000_000;
 
   const ixs: TransactionInstruction[] = [];
+  const gasPk = getGasWalletPubkey();
   if (userSol < PREFUND_SKIP_THRESHOLD_SOL) {
     const dripSol = PREFUND_TARGET_SOL - userSol;
     const dripLamports = Math.ceil(dripSol * 1_000_000_000);
     ixs.push(
       SystemProgram.transfer({
-        fromPubkey: gasWalletPubkey,
+        fromPubkey: gasPk,
         toPubkey: params.userPubkey,
         lamports: dripLamports,
       }),
@@ -128,7 +142,7 @@ export async function buildPredictionPrefundTx(params: {
 
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const message = new TransactionMessage({
-    payerKey: gasWalletPubkey,
+    payerKey: gasPk,
     recentBlockhash: blockhash,
     instructions: ixs,
   }).compileToV0Message();

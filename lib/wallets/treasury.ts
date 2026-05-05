@@ -6,14 +6,35 @@ import {
 } from "@solana/spl-token";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 
-const treasuryStr = process.env.TREASURY_PUBKEY;
-if (!treasuryStr) {
-  throw new Error("TREASURY_PUBKEY is required");
+// Lazy — same reasoning as lib/wallets/gas.ts. Routes can import this
+// module safely; the env-var check fires only when Treasury actually
+// gets used (i.e. on the gasless path).
+let _treasuryPubkey: PublicKey | null = null;
+let _treasuryUsdcAta: PublicKey | null = null;
+
+function getTreasuryPubkey(): PublicKey {
+  if (_treasuryPubkey) return _treasuryPubkey;
+  const treasuryStr = process.env.TREASURY_PUBKEY;
+  if (!treasuryStr) {
+    throw new Error(
+      "TREASURY_PUBKEY is required for the gasless bet path",
+    );
+  }
+  _treasuryPubkey = new PublicKey(treasuryStr);
+  return _treasuryPubkey;
 }
 
-export const treasuryPubkey = new PublicKey(treasuryStr);
+function getTreasuryUsdcAta(): PublicKey {
+  if (_treasuryUsdcAta) return _treasuryUsdcAta;
+  _treasuryUsdcAta = getAssociatedTokenAddressSync(
+    new PublicKey(USDC_MINT),
+    getTreasuryPubkey(),
+  );
+  return _treasuryUsdcAta;
+}
+
+export { getTreasuryPubkey };
 const usdcMintPk = new PublicKey(USDC_MINT);
-const treasuryUsdcAta = getAssociatedTokenAddressSync(usdcMintPk, treasuryPubkey);
 
 // Returns a pair of instructions:
 //   1. Idempotent create of Treasury's USDC ATA (no-op after first call).
@@ -33,17 +54,19 @@ export function buildFeeTransferInstructions(params: {
     Math.ceil(params.feeUsdcDollars * 10 ** USDC_DECIMALS),
   );
 
+  const treasuryPk = getTreasuryPubkey();
+  const treasuryAta = getTreasuryUsdcAta();
   return [
     createAssociatedTokenAccountIdempotentInstruction(
       params.feePayerForAta,
-      treasuryUsdcAta,
-      treasuryPubkey,
+      treasuryAta,
+      treasuryPk,
       usdcMintPk,
     ),
     createTransferCheckedInstruction(
       userUsdcAta,
       usdcMintPk,
-      treasuryUsdcAta,
+      treasuryAta,
       params.userPubkey,
       amountAtomic,
       USDC_DECIMALS,

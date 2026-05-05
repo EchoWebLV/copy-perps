@@ -16,7 +16,7 @@ import {
 import {
   buildUserSolDripIx,
   ensureGasWalletReady,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     const feeIxs = buildFeeTransferInstructions({
       userPubkey: userPk,
       feeUsdcDollars: fee.totalFeeUsdc,
-      feePayerForAta: gasWalletPubkey,
+      feePayerForAta: getGasWalletPubkey(),
     });
 
     // Flash's swapAndOpen creates ATAs inline (collateral USDC ATA at
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
         direction,
         marginUsdc: body.amountUsdc,
         whaleLeverage: whale.leverage,
-        gaslessFeePayer: gasWalletPubkey,
+        gaslessFeePayer: getGasWalletPubkey(),
         prependInstructions: dripIx ? [dripIx] : [],
         appendInstructions: feeIxs,
       });

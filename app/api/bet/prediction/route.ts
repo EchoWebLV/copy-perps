@@ -20,8 +20,8 @@ import {
 } from "@/lib/usd/consolidate";
 import {
   ensureGasWalletReady,
-  gasWalletKeypair,
-  gasWalletPubkey,
+  getGasWalletKeypair,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -195,18 +195,18 @@ export async function POST(request: Request) {
       console.log(`[bet/prediction gasless] dripping ${dripLamports} lamports`);
       const { blockhash } = await conn.getLatestBlockhash("confirmed");
       const dripMessage = new TransactionMessage({
-        payerKey: gasWalletPubkey,
+        payerKey: getGasWalletPubkey(),
         recentBlockhash: blockhash,
         instructions: [
           SystemProgram.transfer({
-            fromPubkey: gasWalletPubkey,
+            fromPubkey: getGasWalletPubkey(),
             toPubkey: userPk,
             lamports: dripLamports,
           }),
         ],
       }).compileToV0Message();
       const dripTx = new VersionedTransaction(dripMessage);
-      dripTx.sign([gasWalletKeypair]);
+      dripTx.sign([getGasWalletKeypair()]);
       try {
         const sig = await conn.sendRawTransaction(dripTx.serialize(), {
           skipPreflight: false,
@@ -264,11 +264,11 @@ export async function POST(request: Request) {
     const feeIxs = buildFeeTransferInstructions({
       userPubkey: userPk,
       feeUsdcDollars: fee.totalFeeUsdc,
-      feePayerForAta: gasWalletPubkey,
+      feePayerForAta: getGasWalletPubkey(),
     });
     const { blockhash: feeBlockhash } = await conn.getLatestBlockhash("confirmed");
     const feeMessage = new TransactionMessage({
-      payerKey: gasWalletPubkey,
+      payerKey: getGasWalletPubkey(),
       recentBlockhash: feeBlockhash,
       instructions: feeIxs,
     }).compileToV0Message();

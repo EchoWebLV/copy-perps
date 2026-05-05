@@ -12,7 +12,7 @@ import {
 import { JUPUSD_MINT, USDC_MINT } from "@/lib/jupiter/constants";
 import {
   buildUserSolDripIx,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
 } from "@/lib/wallets/gas";
 import { PublicKey } from "@solana/web3.js";
@@ -197,7 +197,7 @@ export async function ensureUsdcOrConsolidateGasless(params: {
   });
   const tx = await buildSwapTx({
     ixResp,
-    feePayer: gasWalletPubkey,
+    feePayer: getGasWalletPubkey(),
     prependInstructions: dripIx ? [dripIx] : [],
     appendInstructions: [],
   });

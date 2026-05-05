@@ -26,7 +26,7 @@ import {
 } from "@/lib/usd/consolidate";
 import {
   ensureGasWalletReady,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -139,13 +139,13 @@ export async function POST(request: Request) {
     // Same instructions as the legacy path, but Gas Wallet is the fee
     // payer and pays the (idempotent) destination-ATA rent if needed.
     const message = new TransactionMessage({
-      payerKey: gasWalletPubkey,
+      payerKey: getGasWalletPubkey(),
       recentBlockhash: blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 }),
         ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50 }),
         createAssociatedTokenAccountIdempotentInstruction(
-          gasWalletPubkey,
+          getGasWalletPubkey(),
           destAta,
           destinationPk,
           USDC_MINT_PK,

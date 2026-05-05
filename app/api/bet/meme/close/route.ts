@@ -15,7 +15,7 @@ import { PublicKey } from "@solana/web3.js";
 import {
   buildUserSolDripIx,
   ensureGasWalletReady,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       });
       const tx = await buildSwapTx({
         ixResp,
-        feePayer: gasWalletPubkey,
+        feePayer: getGasWalletPubkey(),
         prependInstructions: dripIx ? [dripIx] : [],
         appendInstructions: [],
       });

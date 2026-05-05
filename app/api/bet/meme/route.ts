@@ -20,7 +20,7 @@ import {
 import {
   buildUserSolDripIx,
   ensureGasWalletReady,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     const feeIxs = buildFeeTransferInstructions({
       userPubkey: userPk,
       feeUsdcDollars: fee.totalFeeUsdc,
-      feePayerForAta: gasWalletPubkey,
+      feePayerForAta: getGasWalletPubkey(),
     });
     // Jupiter's setupInstructions hard-code the user as the funder for
     // any new ATA they create (e.g. the destination meme-token ATA).
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
     });
     const tx = await buildSwapTx({
       ixResp,
-      feePayer: gasWalletPubkey,
+      feePayer: getGasWalletPubkey(),
       prependInstructions: dripIx ? [dripIx] : [],
       appendInstructions: feeIxs,
     });

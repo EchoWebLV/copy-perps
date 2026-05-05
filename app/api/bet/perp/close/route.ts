@@ -7,7 +7,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { buildClosePerpTx } from "@/lib/flash-trade/perp";
 import {
   ensureGasWalletReady,
-  gasWalletPubkey,
+  getGasWalletPubkey,
   partialSignAsFeePayer,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         userPubkey: new PublicKey(user.solanaPubkey),
         asset: flashAsset,
         side: direction,
-        gaslessFeePayer: gasWalletPubkey,
+        gaslessFeePayer: getGasWalletPubkey(),
       });
       const txBytes = Buffer.from(result.transaction, "base64");
       const v0Tx = VersionedTransaction.deserialize(txBytes);
