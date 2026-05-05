@@ -19,9 +19,20 @@ type ButtonState = { pending?: string; confirmed?: string; error?: string | null
 
 export function StakeButtons({ signal }: Props) {
   const [state, setState] = useState<ButtonState>({});
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, authenticated, login } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
+
+  // Anonymous users can scroll the feed but need to log in to bet. Calling
+  // Privy's login() opens the auth modal; the user can return and tap the
+  // stake button again once signed in.
+  function requireAuth(): boolean {
+    if (!authenticated) {
+      login();
+      return false;
+    }
+    return true;
+  }
 
   function flashConfirmed(key: string) {
     setState({ confirmed: key });
@@ -35,6 +46,7 @@ export function StakeButtons({ signal }: Props) {
 
   async function executeMemeBuy(amount: StakeAmount) {
     if (signal.type !== "meme") return;
+    if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
       return;
@@ -119,6 +131,7 @@ export function StakeButtons({ signal }: Props) {
     amount: StakeAmount,
   ) {
     if (signal.type !== "prediction") return;
+    if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
       return;
@@ -281,6 +294,7 @@ export function StakeButtons({ signal }: Props) {
 
   async function executePerp(action: "tail" | "fade", amount: StakeAmount) {
     if (signal.type !== "whale") return;
+    if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
       return;

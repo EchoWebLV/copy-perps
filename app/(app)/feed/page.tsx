@@ -1,4 +1,3 @@
-import { AuthGate } from "@/components/auth/AuthGate";
 import { FeedContainer } from "@/components/feed/FeedContainer";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { getFeedPool } from "@/lib/feed/pool";
@@ -8,6 +7,11 @@ export const dynamic = "force-dynamic";
 
 const INITIAL_BATCH = 10;
 
+// Feed is public — anyone can scroll and read. Action buttons (stake,
+// bookmark, "ask Gwak") prompt login on tap when the user isn't signed
+// in. UserEnsure runs at the (app)/layout level so it still syncs the
+// user row on the first authed visit, regardless of which page they
+// land on.
 export default async function FeedPage() {
   const seed = randomSeed();
   const pool = await getFeedPool();
@@ -16,14 +20,12 @@ export default async function FeedPage() {
 
   return (
     <>
-      <AuthGate>
-        <FeedContainer
-          initialSignals={initial}
-          initialSeed={seed.toString()}
-          initialCursor={INITIAL_BATCH}
-          initialTotal={shuffled.length}
-        />
-      </AuthGate>
+      <FeedContainer
+        initialSignals={initial}
+        initialSeed={seed.toString()}
+        initialCursor={INITIAL_BATCH}
+        initialTotal={shuffled.length}
+      />
       <BottomNav />
     </>
   );

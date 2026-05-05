@@ -1,17 +1,23 @@
 "use client";
 
 import { Bookmark } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
 import { useWatchlist } from "./WatchlistProvider";
 import type { Signal } from "@/lib/types";
 
 export function BookmarkButton({ signal }: { signal: Signal }) {
   const { isSaved, toggle } = useWatchlist();
+  const { authenticated, login } = usePrivy();
   const saved = isSaved(signal.id);
 
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
+        if (!authenticated) {
+          login();
+          return;
+        }
         void toggle(signal);
       }}
       aria-label={saved ? "Remove from watchlist" : "Save to watchlist"}
