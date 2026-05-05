@@ -17,6 +17,7 @@ import {
 import { SignalChip } from "./SignalChip";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { useAnalyze } from "./AnalyzeProvider";
+import { useCountdown } from "@/lib/feed/use-countdown";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000
@@ -37,6 +38,11 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
   );
   const icon = signal.imageUrl ?? fallbackIcon;
   const { open: openAnalyze } = useAnalyze();
+  const countdown = useCountdown(signal.resolveAt);
+  const isUrgent =
+    signal.resolveAt != null &&
+    signal.resolveAt - Date.now() / 1000 < 86_400 &&
+    signal.resolveAt - Date.now() / 1000 > 0;
   const { getAccessToken } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -149,9 +155,26 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
       <div className="mt-12 pr-16 text-xl font-bold leading-tight">
         {signal.question}
       </div>
-      <div className="mt-2 text-[11px] text-neutral-500">
-        Resolves {signal.resolveDate} · {fmtVol(signal.volume24h)} 24h vol ·{" "}
-        {signal.totalOutcomes} outcomes
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+        {countdown ? (
+          <span
+            className={`rounded-md px-2 py-0.5 font-bold ${
+              countdown === "Resolved"
+                ? "bg-white/[0.06] text-neutral-400"
+                : isUrgent
+                  ? "bg-[#ef4444]/15 text-[#fca5a5]"
+                  : "bg-white/[0.06] text-neutral-300"
+            }`}
+          >
+            {countdown === "Resolved" ? "Resolved" : `${countdown} left`}
+          </span>
+        ) : (
+          <span>Resolves {signal.resolveDate}</span>
+        )}
+        <span>·</span>
+        <span>{fmtVol(signal.volume24h)} 24h vol</span>
+        <span>·</span>
+        <span>{signal.totalOutcomes} outcomes</span>
       </div>
 
       <div className="mt-4 flex flex-col gap-2">

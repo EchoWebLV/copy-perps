@@ -38,6 +38,10 @@ export interface PredictionSignal extends BaseSignal {
   type: "prediction";
   question: string;
   resolveDate: string;
+  // Unix seconds. Optional for backwards compat with signals already in
+  // the cache that predate this field — gets populated on next cron
+  // refresh. Used by the card's countdown timer.
+  resolveAt?: number;
   volume24h: number;
   yesProbability: number;
   eventId?: string;
@@ -65,6 +69,7 @@ export interface MultiPredictionSignal extends BaseSignal {
   type: "multiprediction";
   question: string;
   resolveDate: string;
+  resolveAt?: number;
   volume24h: number;
   eventId: string;
   series?: string;
