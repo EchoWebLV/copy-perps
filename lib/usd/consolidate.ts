@@ -113,20 +113,24 @@ export async function ensureUsdcOrConsolidate(params: {
   }
 
   const shortfall = params.requiredUsd - usdcBalance;
-  // 2% over-swap buffer covers stable-to-stable slippage AND any
+  // 3% over-swap buffer covers stable-to-stable slippage AND any
   // Jupiter Prediction fee that's deducted from the deposit at order
   // time. Without enough headroom, post-swap USDC sits right at the
   // required threshold and the prediction order rejects with
   // INSUFFICIENT_FUNDS even though the swap landed.
   const swapInputAtomic = BigInt(
-    Math.ceil(shortfall * 1.02 * 1_000_000),
+    Math.ceil(shortfall * 1.03 * 1_000_000),
   );
 
   const { swap } = await sellTokenForUsdc({
     inputMint: JUPUSD_MINT,
     tokenAmountAtomic: swapInputAtomic,
     userPublicKey: params.userPubkey,
-    slippageBps: 50,
+    // 2% slippage tolerance — jupUSD→USDC normally clears under 0.5%,
+    // but multi-hop routes through low-liquidity DEX pools (which
+    // Jupiter sometimes picks for small amounts) tripped the previous
+    // 50bps cap with 0x1788 SlippageToleranceExceeded.
+    slippageBps: 200,
   });
 
   if (typeof swap.swapTransaction !== "string" || swap.swapTransaction.length === 0) {
@@ -179,13 +183,13 @@ export async function ensureUsdcOrConsolidateGasless(params: {
   }
 
   const shortfall = params.requiredUsd - usdcBalance;
-  const swapInputAtomic = BigInt(Math.ceil(shortfall * 1.02 * 1_000_000));
+  const swapInputAtomic = BigInt(Math.ceil(shortfall * 1.03 * 1_000_000));
 
   const quote = await getQuote({
     inputMint: JUPUSD_MINT,
     outputMint: USDC_MINT,
     amount: swapInputAtomic,
-    slippageBps: 50,
+    slippageBps: 200,
   });
   const ixResp = await buildSwapInstructions({
     quoteResponse: quote,
