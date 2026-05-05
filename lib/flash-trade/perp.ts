@@ -65,6 +65,10 @@ export async function buildOpenPerpTx(params: {
   direction: "long" | "short";
   marginUsdc: number;
   whaleLeverage: number;
+  // Gasless overrides — when set, fee payer is the gas wallet, and any
+  // appendInstructions are added before the message is compiled.
+  gaslessFeePayer?: PublicKey;
+  appendInstructions?: TransactionInstruction[];
 }): Promise<BuildOpenPerpResult> {
   if (params.marginUsdc < MIN_USDC || params.marginUsdc > MAX_USDC) {
     throw new Error(`amount must be between $${MIN_USDC} and $${MAX_USDC}`);
@@ -142,6 +146,7 @@ export async function buildOpenPerpTx(params: {
     cuPrice,
     ...backupOracleIxs,
     ...openData.instructions,
+    ...(params.appendInstructions ?? []),
   ];
 
   const conn = getConnection();
@@ -149,8 +154,9 @@ export async function buildOpenPerpTx(params: {
 
   const altsResult = await flash.getOrLoadAddressLookupTable(POOL_CONFIG);
 
+  const payerKey = params.gaslessFeePayer ?? params.userPubkey;
   const message = new TransactionMessage({
-    payerKey: params.userPubkey,
+    payerKey,
     recentBlockhash: blockhash,
     instructions: ixs,
   }).compileToV0Message(altsResult.addressLookupTables);
@@ -187,6 +193,7 @@ export async function buildClosePerpTx(params: {
   userPubkey: PublicKey;
   asset: string;
   side: "long" | "short";
+  gaslessFeePayer?: PublicKey;
 }): Promise<BuildClosePerpResult> {
   const flash = makeFlashClient(params.userPubkey);
   const targetSym = params.asset.toUpperCase() as FlashPerpSymbol;
@@ -238,8 +245,9 @@ export async function buildClosePerpTx(params: {
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const altsResult = await flash.getOrLoadAddressLookupTable(POOL_CONFIG);
 
+  const payerKey = params.gaslessFeePayer ?? params.userPubkey;
   const message = new TransactionMessage({
-    payerKey: params.userPubkey,
+    payerKey,
     recentBlockhash: blockhash,
     instructions: ixs,
   }).compileToV0Message(altsResult.addressLookupTables);
