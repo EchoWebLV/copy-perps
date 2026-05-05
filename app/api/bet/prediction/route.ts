@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
@@ -6,10 +7,19 @@ import { ensureUser } from "@/lib/users/ensure";
 import { createOrder } from "@/lib/jupiter-prediction/client";
 import {
   ensureUsdcOrConsolidate,
+  ensureUsdcOrConsolidateGasless,
   InsufficientCombinedBalanceError,
   requireSolForBet,
   InsufficientSolForFeesError,
 } from "@/lib/usd/consolidate";
+import {
+  buildPredictionPrefundTx,
+  ensureGasWalletReady,
+  gasWalletPubkey,
+  GasWalletExhaustedError,
+} from "@/lib/wallets/gas";
+import { buildFeeTransferInstructions } from "@/lib/wallets/treasury";
+import { computeBetFee } from "@/lib/fees/calc";
 import type { PredictionSignal, MultiPredictionSignal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -114,6 +124,117 @@ export async function POST(request: Request) {
   // padded value so PnL math stays consistent.
   const effectiveAmount = Math.max(body.amountUsdc, PREDICTION_DEPOSIT_FLOOR);
   const depositAtomic = BigInt(Math.floor(effectiveAmount * 1_000_000));
+
+  const gasless = process.env.FEATURE_GASLESS_BETS === "true";
+
+  if (gasless) {
+    try {
+      await ensureGasWalletReady();
+    } catch (err) {
+      if (err instanceof GasWalletExhaustedError) {
+        return NextResponse.json({ error: err.message }, { status: 503 });
+      }
+      throw err;
+    }
+
+    const fee = computeBetFee(effectiveAmount);
+    const requiredUsd = effectiveAmount + fee.totalFeeUsdc;
+
+    try {
+      const consolidation = await ensureUsdcOrConsolidateGasless({
+        userPubkey: user.solanaPubkey,
+        requiredUsd,
+      });
+      if (!consolidation.ready) {
+        return NextResponse.json({
+          phase: "consolidate",
+          consolidationTransaction: consolidation.consolidationTransaction,
+          usdcBalance: consolidation.usdcBalance,
+          jupUsdBalance: consolidation.jupUsdBalance,
+          requiredUsd: consolidation.requiredUsd,
+        });
+      }
+    } catch (err) {
+      if (err instanceof InsufficientCombinedBalanceError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      console.error("[bet/prediction] consolidation check failed:", err);
+      return NextResponse.json(
+        { error: `Balance check failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    let order;
+    try {
+      order = await createOrder({
+        ownerPubkey: user.solanaPubkey,
+        marketId: resolvedMarketId,
+        isYes,
+        isBuy: true,
+        depositAmountMicroUsd: depositAtomic,
+      });
+    } catch (err) {
+      console.error("[bet/prediction] order failed:", err);
+      return NextResponse.json(
+        { error: `Order build failed: ${String(err)}` },
+        { status: 502 },
+      );
+    }
+
+    if (!order.transaction) {
+      return NextResponse.json(
+        { error: "Order build returned no transaction" },
+        { status: 502 },
+      );
+    }
+
+    const userPk = new PublicKey(user.solanaPubkey);
+    const feeIxs = buildFeeTransferInstructions({
+      userPubkey: userPk,
+      feeUsdcDollars: fee.totalFeeUsdc,
+      feePayerForAta: gasWalletPubkey,
+    });
+    const prefundB64 = await buildPredictionPrefundTx({
+      userPubkey: userPk,
+      appendInstructions: feeIxs,
+    });
+
+    const [bet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "prediction",
+        amountUsdc: effectiveAmount,
+        feeUsdc: fee.totalFeeUsdc,
+        status: "pending",
+        meta: {
+          signalId: body.signal.id,
+          marketId: resolvedMarketId,
+          eventId: resolvedEventId,
+          outcome: body.outcome,
+          outcomeLabel: resolvedOutcomeLabel,
+          question: resolvedQuestion,
+          entryYesProbability,
+          contracts: order.order.contracts,
+          avgPriceUsd: order.order.newAvgPriceUsd,
+          orderCostUsd: order.order.orderCostUsd,
+          positionPubkey: order.order.positionPubkey,
+        },
+      })
+      .returning();
+
+    return NextResponse.json({
+      phase: "open",
+      betId: bet.id,
+      prefundTransaction: prefundB64,
+      swapTransaction: order.transaction,
+      contracts: order.order.contracts,
+      avgPriceUsd: order.order.newAvgPriceUsd,
+    });
+  }
+
+  // --- legacy path (FEATURE_GASLESS_BETS != "true") ---
 
   // SOL preflight — Jupiter Prediction's createOrder allocates ATAs
   // for the position; without ~0.01 SOL the API returns "Insufficient
