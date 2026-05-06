@@ -34,31 +34,83 @@ export default function PortfolioPage() {
   const { items: watchlistItems } = useWatchlist();
   const [modalSignal, setModalSignal] = useState<Signal | null>(null);
 
-  const load = useCallback(async () => {
-    if (!authenticated) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Not signed in");
-      const r = await fetch("/api/portfolio", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      setPositions(data.positions);
-      void refreshBalance();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [authenticated, getAccessToken, refreshBalance]);
+  // `silent` = true skips the spinner + error UI flash; used by the
+  // background polling loop so live updates don't feel like a manual
+  // reload every 5 seconds. Manual refresh button still shows the spinner.
+  const load = useCallback(
+    async (silent = false) => {
+      if (!authenticated) return;
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
+      try {
+        const token = await getAccessToken();
+        if (!token) throw new Error("Not signed in");
+        const r = await fetch("/api/portfolio", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        setPositions(data.positions);
+        void refreshBalance();
+      } catch (e) {
+        if (!silent) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [authenticated, getAccessToken, refreshBalance],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Live PnL: re-fetch every 5s while the tab is visible and the user is
+  // signed in. Skips while `document.hidden` so we don't burn Jupiter
+  // API quota / Flash on-chain reads when nobody's looking. Manual
+  // refresh button still works the same way.
+  useEffect(() => {
+    if (!authenticated) return;
+    const POLL_MS = 5000;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (timer) return;
+      timer = setInterval(() => {
+        if (typeof document !== "undefined" && document.hidden) return;
+        void load(true);
+      }, POLL_MS);
+    };
+    const stop = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        // Catch up immediately on tab refocus; then resume polling.
+        void load(true);
+        start();
+      }
+    };
+
+    if (typeof document !== "undefined" && !document.hidden) {
+      start();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [authenticated, load]);
 
   // Pending and failed bets don't represent a real position — exclude entirely.
   // Closed bets' proceeds are already back in the wallet, so they don't belong
@@ -100,7 +152,7 @@ export default function PortfolioPage() {
         <h1 className="text-2xl font-black">Portfolio</h1>
         {authenticated && (
           <button
-            onClick={load}
+            onClick={() => void load()}
             disabled={loading}
             className="rounded-lg bg-white/10 p-2 text-neutral-300 transition active:scale-95 disabled:opacity-50"
             aria-label="Refresh"
