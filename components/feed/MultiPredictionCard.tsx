@@ -6,7 +6,6 @@ import { useSignTransaction } from "@privy-io/react-auth/solana";
 import type {
   MultiPredictionSignal,
   MultiPredictionOutcome,
-  StakeAmount,
 } from "@/lib/types";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
@@ -17,6 +16,8 @@ import {
 import { SignalChip } from "./SignalChip";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { useAnalyze } from "./AnalyzeProvider";
+import { useCountdown } from "@/lib/feed/use-countdown";
+import { CustomAmountModal } from "./CustomAmountModal";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000
@@ -31,12 +32,21 @@ interface State {
 
 export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
   const [state, setState] = useState<State>({});
-  const [stake, setStake] = useState<StakeAmount>(10);
+  // `stake` is the user's selected bet size — preset (5/10/20/50) or
+  // a custom value typed via the modal. Widened beyond StakeAmount to
+  // allow custom amounts in $1 steps up to $1000.
+  const [stake, setStake] = useState<number>(10);
+  const [customOpen, setCustomOpen] = useState(false);
   const fallbackIcon = useJupiterEventImage(
     signal.imageUrl ? undefined : signal.eventId,
   );
   const icon = signal.imageUrl ?? fallbackIcon;
   const { open: openAnalyze } = useAnalyze();
+  const countdown = useCountdown(signal.resolveAt);
+  const isUrgent =
+    signal.resolveAt != null &&
+    signal.resolveAt - Date.now() / 1000 < 86_400 &&
+    signal.resolveAt - Date.now() / 1000 > 0;
   const { getAccessToken } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -149,9 +159,26 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
       <div className="mt-12 pr-16 text-xl font-bold leading-tight">
         {signal.question}
       </div>
-      <div className="mt-2 text-[11px] text-neutral-500">
-        Resolves {signal.resolveDate} · {fmtVol(signal.volume24h)} 24h vol ·{" "}
-        {signal.totalOutcomes} outcomes
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+        {countdown ? (
+          <span
+            className={`rounded-md px-2 py-0.5 font-bold ${
+              countdown === "Resolved"
+                ? "bg-white/[0.06] text-neutral-400"
+                : isUrgent
+                  ? "bg-[#ef4444]/15 text-[#fca5a5]"
+                  : "bg-white/[0.06] text-neutral-300"
+            }`}
+          >
+            {countdown === "Resolved" ? "Resolved" : `${countdown} left`}
+          </span>
+        ) : (
+          <span>Resolves {signal.resolveDate}</span>
+        )}
+        <span>·</span>
+        <span>{fmtVol(signal.volume24h)} 24h vol</span>
+        <span>·</span>
+        <span>{signal.totalOutcomes} outcomes</span>
       </div>
 
       <div className="mt-4 flex flex-col gap-2">
@@ -164,9 +191,9 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
               key={o.marketId}
               onClick={() => buy(o)}
               disabled={!!state.pendingMarketId}
-              className={`group flex items-center gap-3 rounded-xl border bg-white/[0.03] px-3 py-2.5 text-left transition active:scale-[0.99] disabled:opacity-60 ${
+              className={`group relative flex items-center gap-3 rounded-xl border bg-white/[0.03] px-3 py-2.5 text-left transition active:scale-[0.99] disabled:opacity-60 ${
                 isConfirmed
-                  ? "border-[#22c55e] bg-[#22c55e]/15"
+                  ? "stake-confirm border-[#22c55e] bg-[#22c55e]/15"
                   : "border-white/10 hover:bg-white/[0.06]"
               }`}
             >
@@ -189,6 +216,11 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
                   {isConfirmed ? "✓" : isPending ? "…" : `Buy $${stake}`}
                 </div>
               </div>
+              {isConfirmed && (
+                <span className="stake-rise pointer-events-none absolute left-1/2 -top-2 z-20 whitespace-nowrap rounded-full bg-[#22c55e] px-2.5 py-0.5 text-[10px] font-black tracking-wide text-black shadow-lg shadow-emerald-500/40">
+                  +${stake}
+                </span>
+              )}
             </button>
           );
         })}
@@ -219,7 +251,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
             return (
               <button
                 key={amt}
-                onClick={() => setStake(amt as StakeAmount)}
+                onClick={() => setStake(amt)}
                 className={`flex-1 rounded-lg px-0 py-2 text-[12px] font-bold transition active:scale-95 ${
                   selected
                     ? "bg-white text-black"
@@ -230,10 +262,31 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
               </button>
             );
           })}
+          <button
+            onClick={() => setCustomOpen(true)}
+            className={`flex-1 rounded-lg border border-dashed px-0 py-2 text-[12px] font-bold transition active:scale-95 ${
+              ![5, 10, 20, 50].includes(stake)
+                ? "border-white bg-white text-black"
+                : "border-white/15 bg-white/[0.04] text-neutral-300 hover:bg-white/[0.07]"
+            }`}
+          >
+            {![5, 10, 20, 50].includes(stake) ? `$${stake}` : "Custom"}
+          </button>
         </div>
         <div className="mt-3 text-center text-[11px] text-neutral-600">
           Tap an outcome to buy YES on it · Jupiter Prediction
         </div>
+        <CustomAmountModal
+          open={customOpen}
+          onClose={() => setCustomOpen(false)}
+          onConfirm={(amount) => setStake(amount)}
+          title="Bet size"
+          actionLabel="Use"
+          tone="neutral"
+          minUsd={5}
+          maxUsd={1000}
+          initialAmount={stake}
+        />
       </div>
     </div>
   );
