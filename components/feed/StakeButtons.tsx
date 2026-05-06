@@ -59,12 +59,16 @@ const RAIL_MAX = 1000;
 
 export function StakeButtons({ signal }: Props) {
   const [state, setState] = useState<ButtonState>({});
-  const [customAction, setCustomAction] = useState<
-    "buy" | "yes" | "tail" | null
-  >(null);
+  const [customAction, setCustomAction] = useState<"buy" | "tail" | null>(null);
   // Remembered between modal opens so the user doesn't retype on a
   // second custom bet within the same session.
   const [lastCustom, setLastCustom] = useState<number | undefined>(undefined);
+  // Prediction-only: which stake the user has selected for an upcoming
+  // YES/NO tap. The stake row above the YES/NO buttons sets this; the
+  // tappable price-buttons read it to know how much to bet.
+  const [predictionStake, setPredictionStake] = useState<number>(10);
+  const [predictionStakeModalOpen, setPredictionStakeModalOpen] =
+    useState(false);
   const { getAccessToken, authenticated, login } = usePrivy();
   const { signTransaction } = useSignTransaction();
   const wallet = useEmbeddedSolanaWallet();
@@ -252,7 +256,7 @@ export function StakeButtons({ signal }: Props) {
   // Opens the custom-amount modal for the appropriate side. Tap auths
   // the user lazily so anonymous browsers see the login prompt before
   // the modal opens (matches preset buttons' behavior).
-  function openCustom(action: "buy" | "yes" | "tail") {
+  function openCustom(action: "buy" | "tail") {
     if (!requireAuth()) return;
     setCustomAction(action);
   }
@@ -260,7 +264,6 @@ export function StakeButtons({ signal }: Props) {
   function handleCustomConfirm(amount: number) {
     setLastCustom(amount);
     if (customAction === "buy") void executeMemeBuy(amount);
-    else if (customAction === "yes") void executePredictionBuy("yes", amount);
     else if (customAction === "tail") void executePerp("tail", amount);
   }
 
@@ -274,20 +277,16 @@ export function StakeButtons({ signal }: Props) {
       title={
         signal.type === "meme"
           ? `Buy ${(signal as { ticker?: string }).ticker ?? "token"}`
-          : signal.type === "prediction" || signal.type === "multiprediction"
-            ? "Buy YES"
-            : signal.type === "whale"
-              ? `Copy ${(signal as { asset?: string }).asset ?? "position"}`
-              : "Custom amount"
+          : signal.type === "whale"
+            ? `Copy ${(signal as { asset?: string }).asset ?? "position"}`
+            : "Custom amount"
       }
       actionLabel={
         customAction === "buy"
           ? "Buy"
-          : customAction === "yes"
-            ? "YES"
-            : customAction === "tail"
-              ? "Copy"
-              : "Confirm"
+          : customAction === "tail"
+            ? "Copy"
+            : "Confirm"
       }
       tone="win"
       minUsd={RAIL_MIN[signal.type] ?? 5}
@@ -336,71 +335,125 @@ export function StakeButtons({ signal }: Props) {
   }
 
   if (signal.type === "prediction") {
-    const yesPending = state.pending === "yes-10";
-    const noPending = state.pending === "no-10";
-    const yesConfirmed = state.confirmed === "yes-10";
-    const noConfirmed = state.confirmed === "no-10";
+    const yesCents = Math.round(signal.yesProbability * 100);
+    const noCents = 100 - yesCents;
+    const yesKey = `yes-${predictionStake}`;
+    const noKey = `no-${predictionStake}`;
+    const yesPending = state.pending === yesKey;
+    const noPending = state.pending === noKey;
+    const yesConfirmed = state.confirmed === yesKey;
+    const noConfirmed = state.confirmed === noKey;
+    const PRESETS = [5, 10, 20, 50];
+    const isPresetStake = PRESETS.includes(predictionStake);
+
+    function openPredictionStakeModal() {
+      if (!requireAuth()) return;
+      setPredictionStakeModalOpen(true);
+    }
+
     return (
       <div className="mt-auto pt-4">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => executePredictionBuy("yes", 10)}
-            disabled={!!state.pending}
-            className={`relative rounded-2xl border border-[#22c55e] bg-[#22c55e] px-0 py-3.5 text-[14px] font-bold text-black transition active:scale-[0.97] disabled:opacity-60 ${
-              yesConfirmed ? "stake-confirm ring-4 ring-white/40" : ""
-            }`}
-          >
-            {yesConfirmed
-              ? "✓ Bought $10 YES"
-              : yesPending
-                ? "…"
-                : "$10 YES"}
-            {yesConfirmed && <StakeBurst label="YES +$10" />}
-          </button>
-          <button
-            onClick={() => executePredictionBuy("no", 10)}
-            disabled={!!state.pending}
-            className={`relative rounded-2xl border border-[#ef4444] bg-[#ef4444] px-0 py-3.5 text-[14px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-              noConfirmed ? "stake-confirm ring-4 ring-white/40" : ""
-            }`}
-          >
-            {noConfirmed
-              ? "✓ Bought $10 NO"
-              : noPending
-                ? "…"
-                : "$10 NO"}
-            {noConfirmed && <StakeBurst label="NO +$10" tone="fade" />}
-          </button>
-        </div>
-        <div className="mt-2 flex gap-2">
-          {[5, 20, 50].map((amt) => {
-            const k = `yes-${amt}`;
-            const pending = state.pending === k;
-            const confirmed = state.confirmed === k;
+        {/* Stake selector — sets the amount for the YES/NO buttons below.
+            Tapping a preset just selects it; "Custom" opens the bottom-
+            sheet to type any value within the rail's bounds. */}
+        <div className="flex items-center gap-1.5">
+          <span className="pl-0.5 pr-1 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+            Bet
+          </span>
+          {PRESETS.map((amt) => {
+            const selected = predictionStake === amt;
             return (
               <button
                 key={amt}
-                onClick={() => executePredictionBuy("yes", amt)}
+                onClick={() => setPredictionStake(amt)}
                 disabled={!!state.pending}
-                className={`relative flex-1 rounded-xl border border-white/5 bg-white/10 px-0 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.97] disabled:opacity-60 ${
-                  confirmed ? "stake-confirm !border-[#22c55e] !bg-[#22c55e] !text-black" : ""
+                className={`flex-1 rounded-lg px-0 py-1.5 text-[12px] font-bold transition active:scale-95 disabled:opacity-60 ${
+                  selected
+                    ? "bg-white text-black"
+                    : "bg-white/10 text-neutral-300 hover:bg-white/15"
                 }`}
               >
-                {confirmed ? "✓" : pending ? "…" : `$${amt} YES`}
-                {confirmed && <StakeBurst label={`YES +$${amt}`} />}
+                ${amt}
               </button>
             );
           })}
           <button
-            onClick={() => openCustom("yes")}
+            onClick={openPredictionStakeModal}
             disabled={!!state.pending}
-            className="flex-1 rounded-xl border border-dashed border-white/15 bg-white/[0.04] px-0 py-2.5 text-[12px] font-bold text-neutral-300 transition active:scale-[0.97] disabled:opacity-60 hover:bg-white/[0.07]"
+            className={`flex-1 rounded-lg border border-dashed px-0 py-1.5 text-[12px] font-bold transition active:scale-95 disabled:opacity-60 ${
+              !isPresetStake
+                ? "border-white bg-white text-black"
+                : "border-white/15 bg-white/[0.04] text-neutral-300 hover:bg-white/[0.07]"
+            }`}
           >
-            Custom YES
+            {!isPresetStake ? `$${predictionStake}` : "Custom"}
           </button>
         </div>
+
+        {/* YES + NO action buttons. The price IS the button — tapping
+            buys the selected stake on that side. */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => executePredictionBuy("yes", predictionStake)}
+            disabled={!!state.pending}
+            className={`relative rounded-2xl border-2 border-[#22c55e] bg-[#22c55e]/10 px-0 py-4 text-center transition active:scale-[0.97] disabled:opacity-60 hover:bg-[#22c55e]/15 ${
+              yesConfirmed ? "stake-confirm !bg-[#22c55e]" : ""
+            }`}
+          >
+            <div className="text-[10px] font-black tracking-[1.5px] uppercase text-[#22c55e]">
+              YES
+            </div>
+            <div className="mt-0.5 text-3xl font-black text-[#22c55e]">
+              {yesCents}¢
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-neutral-400">
+              {yesConfirmed
+                ? "✓ Bought"
+                : yesPending
+                  ? "Buying…"
+                  : `Buy $${predictionStake}`}
+            </div>
+            {yesConfirmed && <StakeBurst label={`YES +$${predictionStake}`} />}
+          </button>
+          <button
+            onClick={() => executePredictionBuy("no", predictionStake)}
+            disabled={!!state.pending}
+            className={`relative rounded-2xl border-2 border-[#ef4444] bg-[#ef4444]/10 px-0 py-4 text-center transition active:scale-[0.97] disabled:opacity-60 hover:bg-[#ef4444]/15 ${
+              noConfirmed ? "stake-confirm !bg-[#ef4444]" : ""
+            }`}
+          >
+            <div className="text-[10px] font-black tracking-[1.5px] uppercase text-[#ef4444]">
+              NO
+            </div>
+            <div className="mt-0.5 text-3xl font-black text-[#ef4444]">
+              {noCents}¢
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-neutral-400">
+              {noConfirmed
+                ? "✓ Bought"
+                : noPending
+                  ? "Buying…"
+                  : `Buy $${predictionStake}`}
+            </div>
+            {noConfirmed && (
+              <StakeBurst label={`NO +$${predictionStake}`} tone="fade" />
+            )}
+          </button>
+        </div>
+
         {errorBar}
-        {customModal}
+
+        <CustomAmountModal
+          open={predictionStakeModalOpen}
+          onClose={() => setPredictionStakeModalOpen(false)}
+          onConfirm={(amount) => setPredictionStake(amount)}
+          title="Bet size"
+          actionLabel="Use"
+          tone="neutral"
+          minUsd={RAIL_MIN.prediction}
+          maxUsd={RAIL_MAX}
+          initialAmount={predictionStake}
+        />
       </div>
     );
   }

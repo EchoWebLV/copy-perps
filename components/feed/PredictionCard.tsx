@@ -12,8 +12,6 @@ const fmtUsd = (n: number) =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}k`;
 
 export function PredictionCard({ signal }: { signal: PredictionSignal }) {
-  const yesCents = Math.round(signal.yesProbability * 100);
-  const noCents = 100 - yesCents;
   const fallbackIcon = useJupiterEventImage(
     signal.imageUrl ? undefined : signal.eventId,
     signal.marketId,
@@ -74,18 +72,7 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
         <span>{fmtUsd(signal.volume24h)} volume</span>
       </div>
 
-      <div className="mt-6 flex gap-2.5">
-        <div className="flex-1 rounded-2xl bg-white/[0.04] p-4">
-          <div className="text-[11px] tracking-[1px] text-neutral-500 uppercase">YES</div>
-          <div className="mt-1 text-3xl font-extrabold text-[#22c55e]">{yesCents}¢</div>
-        </div>
-        <div className="flex-1 rounded-2xl bg-white/[0.04] p-4">
-          <div className="text-[11px] tracking-[1px] text-neutral-500 uppercase">NO</div>
-          <div className="mt-1 text-3xl font-extrabold text-[#ef4444]">{noCents}¢</div>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-col gap-2">
+      <div className="mt-5 flex flex-col gap-2">
         {signal.chips.map((chip, i) => (
           <SignalChip key={i} text={chip.text} level={chip.level} />
         ))}
