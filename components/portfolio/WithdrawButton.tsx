@@ -10,6 +10,7 @@ import {
   postBetWithConsolidation,
   signAndSubmitTx,
 } from "@/lib/bets/post-with-consolidation";
+import { ev } from "@/lib/analytics";
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
@@ -54,6 +55,7 @@ export function WithdrawButton({ maxUsd, onComplete }: Props) {
     if (!destination.trim()) return setError("Enter a destination address");
 
     setBusy(true);
+    ev.withdrawStarted({ amount_usd: amt });
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Not signed in");
@@ -82,12 +84,15 @@ export function WithdrawButton({ maxUsd, onComplete }: Props) {
         throw new Error(`tx failed: ${JSON.stringify(conf.value.err)}`);
       }
 
+      ev.withdrawConfirmed({ amount_usd: amt, tx_hash: sig });
       setSuccess(`Sent $${amt.toFixed(2)} USDC. Tx: ${sig.slice(0, 12)}…`);
       onComplete();
       setTimeout(() => close(), 3000);
     } catch (err) {
       console.error("[withdraw]", err);
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      ev.withdrawFailed({ amount_usd: amt, error: msg.slice(0, 200) });
+      setError(msg);
     } finally {
       setBusy(false);
     }

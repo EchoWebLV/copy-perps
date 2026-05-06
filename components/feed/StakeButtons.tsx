@@ -11,6 +11,7 @@ import {
   postBetWithConsolidation,
   signAndSubmitTx as signAndSubmit,
 } from "@/lib/bets/post-with-consolidation";
+import { ev } from "@/lib/analytics";
 
 interface Props {
   signal: Signal;
@@ -96,6 +97,11 @@ export function StakeButtons({ signal }: Props) {
 
   async function executeMemeBuy(amount: number) {
     if (signal.type !== "meme") return;
+    ev.stakeButtonClicked("meme", {
+      signal_id: signal.id,
+      amount_usdc: amount,
+      authenticated,
+    });
     if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
@@ -103,6 +109,7 @@ export function StakeButtons({ signal }: Props) {
     }
     const key = `buy-${amount}`;
     setState({ pending: key });
+    ev.betStarted("meme", { signal_id: signal.id, amount_usdc: amount });
 
     let betId: string | undefined;
     let token: string | null = null;
@@ -126,6 +133,11 @@ export function StakeButtons({ signal }: Props) {
 
       const txBytes = decodeBase64Tx(data.swapTransaction, "meme open tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
+      ev.betSigned("meme", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       await fetch("/api/bet/meme/confirm", {
         method: "POST",
@@ -139,12 +151,22 @@ export function StakeButtons({ signal }: Props) {
           actualOutAmount: data.expectedOutAmount,
         }),
       });
+      ev.betConfirmed("meme", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       flashConfirmed(key);
     } catch (err) {
       console.error("[meme buy]", err);
       const msg = err instanceof Error ? err.message : String(err);
       flashError(msg.slice(0, 80));
+      ev.betFailed("meme", {
+        bet_id: betId,
+        amount_usdc: amount,
+        error: msg.slice(0, 200),
+      });
 
       if (betId && token) {
         await fetch("/api/bet/meme/confirm", {
@@ -181,6 +203,12 @@ export function StakeButtons({ signal }: Props) {
     amount: number,
   ) {
     if (signal.type !== "prediction") return;
+    ev.stakeButtonClicked("prediction", {
+      signal_id: signal.id,
+      amount_usdc: amount,
+      side: outcome,
+      authenticated,
+    });
     if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
@@ -188,6 +216,11 @@ export function StakeButtons({ signal }: Props) {
     }
     const key = `${outcome}-${amount}`;
     setState({ pending: key });
+    ev.betStarted("prediction", {
+      signal_id: signal.id,
+      amount_usdc: amount,
+      side: outcome,
+    });
 
     let betId: string | undefined;
     let token: string | null = null;
@@ -212,6 +245,11 @@ export function StakeButtons({ signal }: Props) {
 
       const txBytes = decodeBase64Tx(data.swapTransaction, "prediction order tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
+      ev.betSigned("prediction", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       await fetch("/api/bet/prediction/confirm", {
         method: "POST",
@@ -221,12 +259,22 @@ export function StakeButtons({ signal }: Props) {
         },
         body: JSON.stringify({ betId, txHash: sigB58 }),
       });
+      ev.betConfirmed("prediction", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       flashConfirmed(key);
     } catch (err) {
       console.error("[prediction buy]", err);
       const msg = err instanceof Error ? err.message : String(err);
       flashError(msg.slice(0, 80));
+      ev.betFailed("prediction", {
+        bet_id: betId,
+        amount_usdc: amount,
+        error: msg.slice(0, 200),
+      });
 
       if (betId && token) {
         await fetch("/api/bet/prediction/confirm", {
@@ -460,6 +508,12 @@ export function StakeButtons({ signal }: Props) {
 
   async function executePerp(action: "tail" | "fade", amount: number) {
     if (signal.type !== "whale") return;
+    ev.stakeButtonClicked("whale", {
+      signal_id: signal.id,
+      amount_usdc: amount,
+      side: action,
+      authenticated,
+    });
     if (!requireAuth()) return;
     if (!wallet?.address) {
       flashError("Wallet not ready yet");
@@ -467,6 +521,11 @@ export function StakeButtons({ signal }: Props) {
     }
     const key = `${action}-${amount}`;
     setState({ pending: key });
+    ev.betStarted("whale", {
+      signal_id: signal.id,
+      amount_usdc: amount,
+      side: action,
+    });
 
     let betId: string | undefined;
     let token: string | null = null;
@@ -491,6 +550,11 @@ export function StakeButtons({ signal }: Props) {
 
       const txBytes = decodeBase64Tx(data.swapTransaction, "perp open tx");
       const sigB58 = await signAndSubmit(txBytes, wallet, signTransaction);
+      ev.betSigned("whale", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       await fetch("/api/bet/perp/confirm", {
         method: "POST",
@@ -500,12 +564,22 @@ export function StakeButtons({ signal }: Props) {
         },
         body: JSON.stringify({ betId, txHash: sigB58 }),
       });
+      ev.betConfirmed("whale", {
+        bet_id: betId,
+        amount_usdc: amount,
+        tx_hash: sigB58,
+      });
 
       flashConfirmed(key);
     } catch (err) {
       console.error("[perp]", err);
       const msg = err instanceof Error ? err.message : String(err);
       flashError(msg.slice(0, 80));
+      ev.betFailed("whale", {
+        bet_id: betId,
+        amount_usdc: amount,
+        error: msg.slice(0, 200),
+      });
       if (betId && token) {
         await fetch("/api/bet/perp/confirm", {
           method: "POST",
