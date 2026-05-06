@@ -83,3 +83,9 @@ export const feedViews = pgTable("feed_views", {
   action: text("action").notNull(),
   viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const waitlist = pgTable("waitlist", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
