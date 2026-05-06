@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import Image from "next/image";
 import Link from "next/link";
+import { WaitlistForm } from "@/components/landing/WaitlistForm";
 
 // Target launch timestamp (UTC). 2 days from 2026-05-04T18:14:39Z.
 const LAUNCH_AT_MS = Date.UTC(2026, 4, 6, 18, 14, 39); // months are 0-indexed
@@ -47,14 +48,7 @@ function CountdownCell({ value, label }: { value: number; label: string }) {
   );
 }
 
-function Countdown() {
-  const [remaining, setRemaining] = useState<Remaining>(() => diff(LAUNCH_AT_MS));
-
-  useEffect(() => {
-    const id = setInterval(() => setRemaining(diff(LAUNCH_AT_MS)), 1000);
-    return () => clearInterval(id);
-  }, []);
-
+function Countdown({ remaining }: { remaining: Remaining }) {
   if (remaining.reached) {
     return (
       <div className="mt-8 text-sm font-bold uppercase tracking-[3px] text-[#22c55e]">
@@ -89,6 +83,14 @@ function Countdown() {
 
 export default function LandingPage() {
   const { ready, authenticated, login } = usePrivy();
+  const [remaining, setRemaining] = useState<Remaining>(() => diff(LAUNCH_AT_MS));
+
+  useEffect(() => {
+    const id = setInterval(() => setRemaining(diff(LAUNCH_AT_MS)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const showWaitlist = !remaining.reached && !SHOW_LOGIN;
 
   return (
     <main className="gwak-breathe flex min-h-dvh flex-col items-center justify-center px-6 text-center">
@@ -101,7 +103,9 @@ export default function LandingPage() {
         className="h-auto w-full max-w-[360px] drop-shadow-[0_0_30px_rgba(74,222,128,0.18)]"
       />
 
-      <Countdown />
+      <Countdown remaining={remaining} />
+
+      {showWaitlist && <WaitlistForm />}
 
       {SHOW_LOGIN && !ready && (
         <div className="mt-10 text-sm text-neutral-600">Loading…</div>
