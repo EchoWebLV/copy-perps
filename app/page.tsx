@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import Image from "next/image";
 import Link from "next/link";
+import { ev } from "@/lib/analytics";
 
 // Target launch timestamp (UTC). 2 days from 2026-05-04T18:14:39Z.
 const LAUNCH_AT_MS = Date.UTC(2026, 4, 6, 18, 14, 39); // months are 0-indexed
@@ -109,7 +110,10 @@ export default function LandingPage() {
 
       {SHOW_LOGIN && ready && !authenticated && (
         <button
-          onClick={login}
+          onClick={() => {
+            ev.loginClicked("landing");
+            login();
+          }}
           className="mt-10 rounded-2xl bg-white px-8 py-4 text-lg font-bold text-black transition active:scale-[0.97]"
         >
           Log in

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Copy, Check, LogOut } from "lucide-react";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { ev } from "@/lib/analytics";
 
 export default function DepositPage() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -14,6 +15,7 @@ export default function DepositPage() {
   const copy = async () => {
     if (!wallet?.address) return;
     await navigator.clipboard.writeText(wallet.address);
+    ev.depositAddressCopied();
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -30,7 +32,10 @@ export default function DepositPage() {
             Log in to see your Solana wallet address.
           </p>
           <button
-            onClick={login}
+            onClick={() => {
+              ev.loginClicked("deposit");
+              login();
+            }}
             className="mt-8 rounded-2xl bg-white px-8 py-4 text-base font-bold text-black transition active:scale-[0.97]"
           >
             Log in
