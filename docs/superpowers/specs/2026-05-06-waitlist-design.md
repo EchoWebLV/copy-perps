@@ -40,11 +40,13 @@ When the countdown reaches zero (`remaining.reached === true`), the waitlist for
 
 We use **Vercel BotID** (GA, June 2025) — invisible bot detection, no checkbox, free.
 
-- Client: `<BotIdClient>` provider in `app/layout.tsx`. The `WaitlistForm` calls `getBotIdToken()` from `botid/client` before submitting and includes it in the POST body.
-- Server: `/api/waitlist/route.ts` calls `verifyBotId(token, request)` from `botid/server`. If verification fails, return `403`.
-- Config: register `/api/waitlist` as a protected path in the project config (`vercel.ts` or equivalent).
+How the pieces fit together (per the official BotID docs):
 
-If BotID's invisible mode causes false positives on legitimate traffic in practice, we can switch to Cloudflare Turnstile later — both are token-in-body designs, so the swap is contained to the verification step on the server and the token-fetch step on the client.
+- **Rewrites:** wrap `next.config.ts` with `withBotId()` from `botid/next/config`. This adds the proxy rewrites BotID needs so ad-blockers don't break it.
+- **Client:** since this repo runs Next.js 16, we use the recommended path — call `initBotId({ protect: [{ path: '/api/waitlist', method: 'POST' }] })` in `instrumentation-client.ts`. The BotID client transparently attaches verification headers to outbound `fetch` calls that match a protected path, so `WaitlistForm` does **not** need to handle a token.
+- **Server:** `/api/waitlist/route.ts` calls `await checkBotId()` from `botid/server` with no arguments — it reads the headers off the incoming request. If `verification.isBot` is true, return `403`.
+
+If BotID causes false positives in practice we can swap to Cloudflare Turnstile later — most of the change would be contained to the route handler.
 
 ### 2. Database
 
@@ -69,15 +71,18 @@ File: `app/api/waitlist/route.ts`. `runtime: "nodejs"`, no auth (public).
 
 **Request body**
 ```json
-{ "email": "user@example.com", "botIdToken": "..." }
+{ "email": "user@example.com" }
 ```
+The BotID verification is carried in headers attached automatically by the client init script — not in the body.
 
 **Validation pipeline (server-side, in this order)**
-1. Body parse. If JSON is malformed → `400 { error: "invalid_body" }`.
-2. Email shape: trim, lowercase, regex `^[^\s@]+@[^\s@]+\.[^\s@]+$`, length ≤ 254. If fails → `400 { error: "invalid_email" }`.
-3. BotID verify against the token. If fails → `403 { error: "bot_check_failed" }`.
+1. `await checkBotId()`. If `verification.isBot` → `403 { error: "bot_check_failed" }`.
+2. Body parse. If JSON is malformed → `400 { error: "invalid_body" }`.
+3. Email shape: trim, lowercase, regex `^[^\s@]+@[^\s@]+\.[^\s@]+$`, length ≤ 254. If fails → `400 { error: "invalid_email" }`.
 4. Insert via Drizzle with `.onConflictDoNothing({ target: waitlist.email })`.
 5. Return `200 { ok: true }` whether the row was new or a duplicate. Duplicates are not surfaced to the user — same success state either way (avoids leaking which emails are on the list).
+
+(BotID runs first so we never burn a DB roundtrip on bot traffic.)
 
 **Errors**
 - DB outages → `500 { error: "server_error" }`. Logged server-side.
@@ -106,21 +111,21 @@ Styling matches the existing landing aesthetic:
 - The existing `SHOW_LOGIN`-gated branches (Loading / Log in / Enter) stay as-is so flipping `SHOW_LOGIN = true` post-launch still works without further changes.
 - `LAUNCH_AT_MS` stays where it is in `app/page.tsx` — it's only consumed inside that file.
 
-### 5. Layout / provider wiring
+### 5. Client init wiring
 
-`app/layout.tsx` — add `<BotIdClient />` inside the existing provider tree. It only adds a tiny client script; no impact on the rest of the app.
+We add `instrumentation-client.ts` at the project root with a single `initBotId({ protect: [...] })` call listing `/api/waitlist`. Next.js 16 picks this file up automatically — no edits to `app/layout.tsx` are required.
 
 ### 6. Project config
 
-Register the waitlist endpoint as a BotID-protected path so the script knows what to instrument. The repo already has `vercel.json` (with the cron declarations), so we add the BotID config there alongside the existing `crons` array. (We don't migrate to `vercel.ts` as part of this change — out of scope.)
+Wrap the existing `next.config.ts` export with `withBotId(...)` from `botid/next/config`. That's the only build-time config change; `vercel.json` is unchanged.
 
 ## Data flow (happy path)
 
 ```
 User types email
-  → WaitlistForm calls getBotIdToken()
-  → POST /api/waitlist { email, botIdToken }
-  → server: parse → validate email shape → verifyBotId → drizzle insert (onConflictDoNothing)
+  → WaitlistForm calls fetch('/api/waitlist', { method: 'POST', body: { email } })
+  → BotID client (registered via initBotId) auto-attaches verification headers
+  → server: checkBotId() → parse body → validate email shape → drizzle insert (onConflictDoNothing)
   → 200 { ok: true }
   → client transitions to "success" state
 ```
@@ -143,8 +148,8 @@ User types email
 | `app/api/waitlist/route.ts` | **New** — POST handler |
 | `components/landing/WaitlistForm.tsx` | **New** — client component |
 | `app/page.tsx` | Lift `remaining` state into `LandingPage`; render `<WaitlistForm />` while countdown is running |
-| `app/layout.tsx` | Mount `<BotIdClient />` |
-| `vercel.json` | Register `/api/waitlist` for BotID |
+| `instrumentation-client.ts` | **New** — `initBotId({ protect: [{ path: '/api/waitlist', method: 'POST' }] })` |
+| `next.config.ts` | Wrap export with `withBotId(...)` |
 | `package.json` | Add `botid` dependency |
 | (DB) | Run `npm run db:push` to create the table |
 
@@ -157,5 +162,5 @@ There is no test runner in this repo. Acceptance:
 3. Submit a valid email → success state renders inline.
 4. Submit a malformed email → red error line appears, input still editable.
 5. Submit the same email twice → both attempts show success (no duplicate row in DB; verify with `npm run db:studio`).
-6. Open devtools, manually fire the POST without a BotID token → 403.
+6. From a separate terminal (no browser, no BotID headers) `curl -X POST http://localhost:3000/api/waitlist -H 'Content-Type: application/json' -d '{"email":"x@y.com"}'`. Note: per the BotID docs, **local dev returns `isBot: false` by default** — so this call will succeed locally. It's the production deployment that will reject curl. We sanity-check the prod behavior after first deploy.
 7. Once countdown logic returns `reached: true` (test by temporarily setting `LAUNCH_AT_MS` to a past timestamp), waitlist form is hidden and the existing flow takes over.
