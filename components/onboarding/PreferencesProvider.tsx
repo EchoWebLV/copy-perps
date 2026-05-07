@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { TrendingUp, Target, Fish, Check } from "lucide-react";
 import {
   DEFAULT_PREFS,
   fetchPrefs,
@@ -32,40 +31,42 @@ interface Ctx {
 const PreferencesContext = createContext<Ctx | null>(null);
 
 interface RailDef {
+  num: string;
   key: keyof FeedPrefs;
-  icon: typeof TrendingUp;
   label: string;
   description: string;
-  gradient: string;
+  /** CSS gradient, used as a 4px stripe on the row's left edge. */
+  stripe: string;
+  /** Tailwind text colour for the [ON] indicator. */
   accent: string;
 }
 
 const RAILS: RailDef[] = [
   {
+    num: "01",
     key: "meme",
-    icon: TrendingUp,
-    label: "Memecoins",
-    description: "Trending Solana memes",
-    gradient:
-      "radial-gradient(ellipse at top right, hsl(15 85% 30%), hsl(15 60% 8%) 80%)",
+    label: "MEMECOINS",
+    description: "Trending Solana tokens",
+    stripe:
+      "linear-gradient(180deg, hsl(15 95% 55%), hsl(15 80% 35%))",
     accent: "text-orange-300",
   },
   {
+    num: "02",
     key: "prediction",
-    icon: Target,
-    label: "Predictions",
-    description: "Yes/No on real-world events",
-    gradient:
-      "radial-gradient(ellipse at top right, hsl(220 75% 30%), hsl(220 60% 8%) 80%)",
+    label: "PREDICTIONS",
+    description: "Yes / No on real-world events",
+    stripe:
+      "linear-gradient(180deg, hsl(220 90% 60%), hsl(220 75% 35%))",
     accent: "text-sky-300",
   },
   {
+    num: "03",
     key: "whale",
-    icon: Fish,
-    label: "Whale plays",
-    description: "Tail or fade top traders",
-    gradient:
-      "radial-gradient(ellipse at top right, hsl(285 70% 30%), hsl(285 50% 8%) 80%)",
+    label: "LEVERAGE",
+    description: "Bet with — or against — top traders",
+    stripe:
+      "linear-gradient(180deg, hsl(285 80% 60%), hsl(285 65% 35%))",
     accent: "text-purple-300",
   },
 ];
@@ -147,95 +148,123 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     <PreferencesContext.Provider value={{ prefs, open, close }}>
       {children}
       {openState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 px-6 py-10 backdrop-blur">
-          <div className="flex w-full max-w-md flex-col">
-            <h1 className="text-center text-3xl font-bold">
-              {mode === "onboarding"
-                ? "What do you want to see?"
-                : "Feed preferences"}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#080808] text-white">
+          <div className="mx-auto flex min-h-full max-w-md flex-col px-7 pb-10 pt-14">
+            {/* eyebrow + masthead */}
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">
+              {mode === "onboarding" ? "// step 01 / first run" : "// preferences"}
+            </div>
+            <h1 className="mt-5 text-[44px] font-bold leading-[0.95] tracking-tight">
+              {mode === "onboarding" ? (
+                <>
+                  Pick your
+                  <br />
+                  channels.
+                </>
+              ) : (
+                <>
+                  Tune your
+                  <br />
+                  feed.
+                </>
+              )}
             </h1>
-            <p className="mt-3 text-center text-sm text-neutral-400">
+            <p className="mt-4 max-w-[18rem] text-sm leading-relaxed text-neutral-400">
               {mode === "onboarding"
-                ? "Pick the rails you care about. All on by default — change anytime."
+                ? "Three rails feed the timeline. All on by default — switch off anything you don't care about."
                 : "Toggle rails on or off. Saved across devices."}
             </p>
 
-            <div className="mt-8 space-y-3">
-              {RAILS.map(({ key, icon: Icon, label, description, gradient, accent }) => {
+            {/* rail rows */}
+            <div className="mt-12 flex flex-col">
+              {RAILS.map(({ num, key, label, description, stripe, accent }, i) => {
                 const enabled = prefs[key];
                 return (
                   <button
                     key={key}
                     onClick={() => toggle(key)}
-                    style={{
-                      background: gradient,
-                      filter: enabled ? "none" : "saturate(0.25) brightness(0.55)",
-                    }}
-                    className={`relative w-full overflow-hidden rounded-2xl border p-5 text-left transition-all duration-200 ${
-                      enabled ? "border-white/25" : "border-white/10"
-                    }`}
+                    className={`group relative -mx-7 px-7 py-6 text-left transition-colors ${
+                      i === 0 ? "border-t border-white/[0.08]" : ""
+                    } border-b border-white/[0.08]`}
                   >
-                    <div className="flex items-center gap-4">
-                      <Icon
-                        size={26}
-                        className={enabled ? accent : "text-neutral-400"}
-                      />
+                    {/* gradient stripe at far-left edge — the only colour
+                        in the row when off, full-bleed when on. */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[3px] transition-opacity"
+                      style={{
+                        background: stripe,
+                        opacity: enabled ? 1 : 0.25,
+                      }}
+                    />
+                    <div className="flex items-baseline gap-5">
+                      <span
+                        className={`font-mono text-[11px] tabular-nums tracking-wider transition-colors ${
+                          enabled ? "text-white" : "text-neutral-700"
+                        }`}
+                      >
+                        {num}
+                      </span>
                       <div className="flex-1">
-                        <div className="text-base font-semibold text-white">
+                        <div
+                          className={`text-2xl font-bold leading-none tracking-tight transition-colors ${
+                            enabled ? "text-white" : "text-neutral-600"
+                          }`}
+                        >
                           {label}
                         </div>
-                        <div className="mt-0.5 text-xs text-neutral-300">
+                        <div
+                          className={`mt-2 text-[13px] leading-snug transition-colors ${
+                            enabled ? "text-neutral-400" : "text-neutral-700"
+                          }`}
+                        >
                           {description}
                         </div>
                       </div>
-                      <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition ${
-                          enabled
-                            ? "border-white bg-white"
-                            : "border-white/30 bg-transparent"
+                      <span
+                        className={`font-mono text-[11px] font-semibold tracking-[0.15em] transition-colors ${
+                          enabled ? accent : "text-neutral-700"
                         }`}
                       >
-                        {enabled && (
-                          <Check
-                            size={14}
-                            className="text-black"
-                            strokeWidth={3}
-                          />
-                        )}
-                      </div>
+                        [{enabled ? "ON" : "OFF"}]
+                      </span>
                     </div>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-8 flex gap-3">
-              {mode === "edit" && (
-                <button
-                  onClick={close}
-                  className="flex-1 rounded-2xl border border-white/15 bg-white/5 px-6 py-4 text-base font-semibold text-white transition active:scale-[0.97]"
-                >
-                  Cancel
-                </button>
+            {/* CTA pinned to bottom of column, mono accent */}
+            <div className="mt-auto pt-12">
+              {!anySelected && (
+                <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-amber-400/80">
+                  ! pick at least one
+                </p>
               )}
-              <button
-                onClick={handleSave}
-                disabled={!anySelected || saving}
-                className="flex-1 rounded-2xl bg-white px-8 py-4 text-base font-bold text-black transition active:scale-[0.97] disabled:opacity-40"
-              >
-                {saving
-                  ? "Saving…"
-                  : mode === "onboarding"
-                    ? "Continue"
-                    : "Save"}
-              </button>
+              <div className="flex gap-3">
+                {mode === "edit" && (
+                  <button
+                    onClick={close}
+                    className="font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-500 transition hover:text-white"
+                  >
+                    [esc] cancel
+                  </button>
+                )}
+                <button
+                  onClick={handleSave}
+                  disabled={!anySelected || saving}
+                  className="ml-auto flex items-center gap-3 bg-white px-7 py-4 text-sm font-bold uppercase tracking-[0.15em] text-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+                >
+                  <span>
+                    {saving
+                      ? "Saving"
+                      : mode === "onboarding"
+                        ? "Continue"
+                        : "Save"}
+                  </span>
+                  <span className="font-mono">{saving ? "…" : "→"}</span>
+                </button>
+              </div>
             </div>
-
-            {!anySelected && (
-              <p className="mt-3 text-center text-xs text-neutral-500">
-                Pick at least one rail.
-              </p>
-            )}
           </div>
         </div>
       )}
