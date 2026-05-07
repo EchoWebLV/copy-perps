@@ -53,6 +53,12 @@ export function FeedContainer({
   const [total, setTotal] = useState(initialTotal);
   const [activeIdx, setActiveIdx] = useState(0);
   const [flipNonce, setFlipNonce] = useState(0);
+  // Index of the single card the current flip is targeted at. Without
+  // this, the conditional `flipNonce={active ? flipNonce : 0}` makes
+  // every newly-active card see a 0→N transition and re-play the
+  // animation — turning a once-every-10-20-slides hint into a per-slide
+  // tic.
+  const [flipTargetIdx, setFlipTargetIdx] = useState(-1);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const slideCountRef = useRef(0);
   const prevIdxRef = useRef(0);
@@ -185,6 +191,7 @@ export function FeedContainer({
     slideCountRef.current += 1;
     if (slideCountRef.current >= nextFlipAtRef.current) {
       setFlipNonce((n) => n + 1);
+      setFlipTargetIdx(activeIdx);
       // Reset target to a fresh number of slides ahead in [10, 20].
       nextFlipAtRef.current =
         slideCountRef.current + 10 + Math.floor(Math.random() * 11);
@@ -221,7 +228,7 @@ export function FeedContainer({
             <CardContent
               signal={signal}
               active={i === activeIdx}
-              flipNonce={i === activeIdx ? flipNonce : 0}
+              flipNonce={i === flipTargetIdx ? flipNonce : 0}
             />
           </div>
         ))}
