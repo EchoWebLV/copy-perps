@@ -16,29 +16,39 @@ interface RailDef {
   icon: typeof TrendingUp;
   label: string;
   description: string;
+  gradient: string;
+  accent: string;
 }
 
+// Hue families mirror lib/feed/card-color.ts so the wizard previews
+// the colour the rail's cards will actually use in the feed.
 const RAILS: RailDef[] = [
   {
     key: "meme",
     icon: TrendingUp,
     label: "Memecoins",
-    description:
-      "Hot Solana meme tokens trending right now. One tap to buy at $5-50 stakes.",
+    description: "Trending Solana memes",
+    gradient:
+      "radial-gradient(ellipse at top right, hsl(15 85% 30%), hsl(15 60% 8%) 80%)",
+    accent: "text-orange-300",
   },
   {
     key: "prediction",
     icon: Target,
     label: "Predictions",
-    description:
-      "Yes/No markets from Polymarket and Kalshi. Bet on real-world outcomes — politics, sports, crypto.",
+    description: "Yes/No on real-world events",
+    gradient:
+      "radial-gradient(ellipse at top right, hsl(220 75% 30%), hsl(220 60% 8%) 80%)",
+    accent: "text-sky-300",
   },
   {
     key: "whale",
     icon: Fish,
     label: "Whale plays",
-    description:
-      "Tail or fade leveraged perp positions from top Hyperliquid traders. Executes on Solana.",
+    description: "Tail or fade top traders",
+    gradient:
+      "radial-gradient(ellipse at top right, hsl(285 70% 30%), hsl(285 50% 8%) 80%)",
+    accent: "text-purple-300",
   },
 ];
 
@@ -107,37 +117,41 @@ export function OnboardingWizard() {
         </p>
 
         <div className="mt-8 space-y-3">
-          {RAILS.map(({ key, icon: Icon, label, description }) => {
+          {RAILS.map(({ key, icon: Icon, label, description, gradient, accent }) => {
             const enabled = prefs[key];
             return (
               <button
                 key={key}
                 onClick={() => toggle(key)}
-                className={`w-full rounded-2xl border p-4 text-left transition ${
-                  enabled
-                    ? "border-green-500 bg-green-500/10"
-                    : "border-white/10 bg-white/5"
+                style={{
+                  background: gradient,
+                  filter: enabled ? "none" : "saturate(0.25) brightness(0.55)",
+                }}
+                className={`relative w-full overflow-hidden rounded-2xl border p-5 text-left transition-all duration-200 ${
+                  enabled ? "border-white/25" : "border-white/10"
                 }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-4">
                   <Icon
-                    size={22}
-                    className={enabled ? "text-green-400" : "text-neutral-500"}
+                    size={26}
+                    className={enabled ? accent : "text-neutral-400"}
                   />
                   <div className="flex-1">
-                    <div className="text-base font-semibold">{label}</div>
-                    <div className="mt-1 text-xs leading-relaxed text-neutral-400">
+                    <div className="text-base font-semibold text-white">
+                      {label}
+                    </div>
+                    <div className="mt-0.5 text-xs text-neutral-300">
                       {description}
                     </div>
                   </div>
                   <div
-                    className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition ${
                       enabled
-                        ? "border-green-500 bg-green-500"
+                        ? "border-white bg-white"
                         : "border-white/30 bg-transparent"
                     }`}
                   >
-                    {enabled && <Check size={12} className="text-black" />}
+                    {enabled && <Check size={14} className="text-black" strokeWidth={3} />}
                   </div>
                 </div>
               </button>
