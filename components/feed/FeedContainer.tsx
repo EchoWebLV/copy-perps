@@ -56,6 +56,9 @@ export function FeedContainer({
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const slideCountRef = useRef(0);
   const prevIdxRef = useRef(0);
+  // Pick the next slide to fire on. Re-randomised in [10, 20] after
+  // each flip — avoids the metronome feel of a fixed cadence.
+  const nextFlipAtRef = useRef(10 + Math.floor(Math.random() * 11));
   // Prefs come from PreferencesProvider — single fetch for the
   // whole app. Modal saves update the same context state, so the
   // feed re-filters instantly without a refetch.
