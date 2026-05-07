@@ -76,20 +76,16 @@ export function FeedContainer({
   }, [signals, prefs]);
 
   // Stable refs so the fetcher closure always sees the latest values
-  // without having to retrigger the IntersectionObserver effect.
-  // `visibleLength` is what the prefetch threshold compares against —
-  // the rendered list is `visibleSignals`, so `data-idx` is an index
-  // into that filtered array, not the raw `signals` pool.
-  // `allowed` lets loadMore detect batches that produce 0 new visible
-  // items (e.g. user has only "whale" on and a batch contains none),
-  // so it can retry instead of silently dead-ending the feed.
+  // without having to be re-created. `allowed` lets loadMore detect
+  // batches that produce 0 new visible items (e.g. user has only
+  // "whale" on and a batch contains none), so it can retry instead of
+  // silently dead-ending the feed.
   const allowedTypes = useMemo(() => buildAllowedTypes(prefs), [prefs]);
   const stateRef = useRef({
     signals,
     seed,
     cursor,
     total,
-    visibleLength: visibleSignals.length,
     allowed: allowedTypes,
     loading: false,
   });
@@ -97,7 +93,6 @@ export function FeedContainer({
   stateRef.current.seed = seed;
   stateRef.current.cursor = cursor;
   stateRef.current.total = total;
-  stateRef.current.visibleLength = visibleSignals.length;
   stateRef.current.allowed = allowedTypes;
 
   const loadMore = useCallback(async () => {
@@ -156,6 +151,9 @@ export function FeedContainer({
     }
   }, []);
 
+  // Observer's only job: track which card is dominantly in view, set
+  // activeIdx. Prefetch is handled separately so it doesn't depend on
+  // the observer firing at exactly the right moment after a re-attach.
   useEffect(() => {
     const els = itemRefs.current.filter((el): el is HTMLDivElement => !!el);
     if (els.length === 0) return;
@@ -168,19 +166,26 @@ export function FeedContainer({
         if (!visible) return;
         const idx = Number((visible.target as HTMLElement).dataset.idx);
         if (!Number.isFinite(idx)) return;
-
         setActiveIdx(idx);
-
-        if (idx >= stateRef.current.visibleLength - PREFETCH_BUFFER) {
-          loadMore();
-        }
       },
       { threshold: [0.6] },
     );
 
     els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [visibleSignals.length, loadMore]);
+  }, [visibleSignals.length]);
+
+  // Prefetch trigger: fires whenever activeIdx or visibleSignals.length
+  // changes. This is more reliable than the inline-in-observer approach
+  // because we don't depend on a fresh-observer's first-fire to deliver
+  // the threshold check — any state change that affects "am I near the
+  // end?" re-runs this naturally. loadMore's internal `loading` guard
+  // prevents racing.
+  useEffect(() => {
+    if (activeIdx >= visibleSignals.length - PREFETCH_BUFFER) {
+      loadMore();
+    }
+  }, [activeIdx, visibleSignals.length, loadMore]);
 
   // Bot-icon coin-flip cadence: count actual slide changes (not the
   // initial mount) and fire a flip when we hit the next random target.
