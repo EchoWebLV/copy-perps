@@ -102,6 +102,10 @@ export const ev = {
   ) => track("bet_failed", { rail, ...props }),
 
   depositAddressCopied: () => track("deposit_address_copied"),
+  fundWithCardClicked: () => track("fund_with_card_clicked"),
+  fundWithCardCompleted: () => track("fund_with_card_completed"),
+  fundWithCardFailed: (props: { error: string }) =>
+    track("fund_with_card_failed", props),
 
   onboardingCompleted: (props: {
     meme: boolean;
