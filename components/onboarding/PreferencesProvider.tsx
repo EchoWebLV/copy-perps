@@ -15,6 +15,7 @@ import {
   savePrefs,
   type FeedPrefs,
 } from "@/lib/feed/preferences";
+import { RAILS } from "@/lib/feed/rails";
 import { ev } from "@/lib/analytics";
 
 type Mode = "onboarding" | "edit";
@@ -22,6 +23,9 @@ type Mode = "onboarding" | "edit";
 interface Ctx {
   /** Current rail prefs. Defaults to all-on (matches SSR/unauthed). */
   prefs: FeedPrefs;
+  /** Optimistically update + persist a new prefs object. Used by the
+   *  Settings page checkboxes; wizard uses staged local state. */
+  setPrefs: (next: FeedPrefs) => Promise<void>;
   /** Open the preferences modal in edit mode. No-op when unauthed. */
   open: () => void;
   /** Close the modal without saving. */
@@ -29,47 +33,6 @@ interface Ctx {
 }
 
 const PreferencesContext = createContext<Ctx | null>(null);
-
-interface RailDef {
-  num: string;
-  key: keyof FeedPrefs;
-  label: string;
-  description: string;
-  /** CSS gradient, used as a 4px stripe on the row's left edge. */
-  stripe: string;
-  /** Tailwind text colour for the [ON] indicator. */
-  accent: string;
-}
-
-const RAILS: RailDef[] = [
-  {
-    num: "01",
-    key: "meme",
-    label: "MEMECOINS",
-    description: "Trending Solana tokens",
-    stripe:
-      "linear-gradient(180deg, hsl(15 95% 55%), hsl(15 80% 35%))",
-    accent: "text-orange-300",
-  },
-  {
-    num: "02",
-    key: "prediction",
-    label: "PREDICTIONS",
-    description: "Yes / No on real-world events",
-    stripe:
-      "linear-gradient(180deg, hsl(220 90% 60%), hsl(220 75% 35%))",
-    accent: "text-sky-300",
-  },
-  {
-    num: "03",
-    key: "whale",
-    label: "LEVERAGE",
-    description: "Bet with top traders",
-    stripe:
-      "linear-gradient(180deg, hsl(285 80% 60%), hsl(285 65% 35%))",
-    accent: "text-purple-300",
-  },
-];
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const { ready, authenticated, getAccessToken, login } = usePrivy();
@@ -117,35 +80,44 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const toggle = (key: keyof FeedPrefs) =>
     setLocalPrefs((p) => ({ ...p, [key]: !p[key] }));
 
+  // Optimistic + persist. Used both by the wizard's Save handler and
+  // the inline Settings checkboxes. On failure we log but don't roll
+  // back — the next page load will correct from the server.
+  const setPrefsAndSave = useCallback(
+    async (next: FeedPrefs) => {
+      setLocalPrefs(next);
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
+        await savePrefs(token, next);
+      } catch (e) {
+        console.error("[PreferencesProvider] save", e);
+      }
+    },
+    [getAccessToken],
+  );
+
   const handleSave = async () => {
     if (saving) return;
     setSaving(true);
-    try {
-      const token = await getAccessToken();
-      if (!token) {
-        setSaving(false);
-        return;
-      }
-      await savePrefs(token, prefs);
-      if (mode === "onboarding") {
-        ev.onboardingCompleted({
-          meme: prefs.meme,
-          prediction: prefs.prediction,
-          whale: prefs.whale,
-        });
-      }
-      setOpenState(false);
-    } catch (e) {
-      console.error("[PreferencesProvider] save", e);
-    } finally {
-      setSaving(false);
+    await setPrefsAndSave(prefs);
+    if (mode === "onboarding") {
+      ev.onboardingCompleted({
+        meme: prefs.meme,
+        prediction: prefs.prediction,
+        whale: prefs.whale,
+      });
     }
+    setOpenState(false);
+    setSaving(false);
   };
 
   const anySelected = prefs.meme || prefs.prediction || prefs.whale;
 
   return (
-    <PreferencesContext.Provider value={{ prefs, open, close }}>
+    <PreferencesContext.Provider
+      value={{ prefs, setPrefs: setPrefsAndSave, open, close }}
+    >
       {children}
       {openState && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#080808] text-white">
@@ -206,7 +178,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
                       </span>
                       <div className="flex-1">
                         <div
-                          className={`text-2xl font-bold leading-none tracking-tight transition-colors ${
+                          className={`text-2xl font-bold uppercase leading-none tracking-tight transition-colors ${
                             enabled ? "text-white" : "text-neutral-600"
                           }`}
                         >
@@ -275,7 +247,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 export function usePreferences(): Ctx {
   const ctx = useContext(PreferencesContext);
   if (!ctx) {
-    return { prefs: DEFAULT_PREFS, open: () => {}, close: () => {} };
+    return {
+      prefs: DEFAULT_PREFS,
+      setPrefs: async () => {},
+      open: () => {},
+      close: () => {},
+    };
   }
   return ctx;
 }
