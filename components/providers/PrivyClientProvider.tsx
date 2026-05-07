@@ -51,6 +51,11 @@ export function PrivyClientProvider({ children }: { children: ReactNode }) {
         solana: {
           rpcs: buildRpcs(),
         },
+        fundingMethodConfig: {
+          moonpay: {
+            useSandbox: process.env.NEXT_PUBLIC_MOONPAY_SANDBOX === "true",
+          },
+        },
       }}
     >
       {children}

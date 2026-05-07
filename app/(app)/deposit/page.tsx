@@ -26,10 +26,18 @@ export default function DepositPage() {
   };
 
   const buyWithCard = async () => {
-    if (!wallet?.address || funding) return;
+    console.log("[deposit] buyWithCard clicked", {
+      address: wallet?.address,
+      funding,
+    });
+    if (!wallet?.address || funding) {
+      console.warn("[deposit] click ignored — no wallet or already funding");
+      return;
+    }
     ev.fundWithCardClicked();
     setFunding(true);
     try {
+      console.log("[deposit] calling fundWallet…");
       await fundWallet({
         address: wallet.address,
         options: {
@@ -39,8 +47,10 @@ export default function DepositPage() {
           card: { preferredProvider: "moonpay" },
         },
       });
+      console.log("[deposit] fundWallet resolved");
       ev.fundWithCardCompleted();
     } catch (err) {
+      console.error("[deposit] fundWallet error:", err);
       ev.fundWithCardFailed({
         error: err instanceof Error ? err.message : String(err),
       });
