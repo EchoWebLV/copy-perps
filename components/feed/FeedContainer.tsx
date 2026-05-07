@@ -133,14 +133,17 @@ export function FeedContainer({
   }, [visibleSignals.length, loadMore]);
 
   // Bot-icon coin-flip cadence: count actual slide changes (not the
-  // initial mount) and fire a flip on every 3rd slide. Acts as a subtle
-  // tap-me hint — quick enough to land soon, sparse enough not to nag.
+  // initial mount) and fire a flip when we hit the next random target.
+  // Sparse + irregular — feels like a hint, not a tic.
   useEffect(() => {
     if (activeIdx === prevIdxRef.current) return;
     prevIdxRef.current = activeIdx;
     slideCountRef.current += 1;
-    if (slideCountRef.current % 3 === 0) {
+    if (slideCountRef.current >= nextFlipAtRef.current) {
       setFlipNonce((n) => n + 1);
+      // Reset target to a fresh number of slides ahead in [10, 20].
+      nextFlipAtRef.current =
+        slideCountRef.current + 10 + Math.floor(Math.random() * 11);
     }
   }, [activeIdx]);
 
