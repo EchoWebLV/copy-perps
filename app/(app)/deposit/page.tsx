@@ -2,14 +2,16 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { useState } from "react";
-import { Copy, Check, LogOut } from "lucide-react";
+import { Copy, Check, LogOut, SlidersHorizontal } from "lucide-react";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { ev } from "@/lib/analytics";
 
 export default function DepositPage() {
   const { ready, authenticated, login, logout } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
+  const { open: openPreferences } = usePreferences();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -67,8 +69,15 @@ export default function DepositPage() {
           </div>
 
           <button
-            onClick={logout}
+            onClick={openPreferences}
             className="mt-8 flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-300"
+          >
+            <SlidersHorizontal size={12} /> Feed preferences
+          </button>
+
+          <button
+            onClick={logout}
+            className="mt-3 flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-300"
           >
             <LogOut size={12} /> Log out
           </button>

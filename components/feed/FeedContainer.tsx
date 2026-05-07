@@ -7,7 +7,6 @@ import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { BalancePill } from "@/components/shell/BalancePill";
-import { FeedSettingsButton } from "@/components/onboarding/FeedSettingsButton";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
 import type { FeedPrefs } from "@/lib/feed/preferences";
@@ -159,7 +158,6 @@ export function FeedContainer({
       }}
     >
       <BalancePill />
-      <FeedSettingsButton />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}

@@ -6,8 +6,8 @@ import { Flame, Wallet, PieChart } from "lucide-react";
 
 const tabs = [
   { href: "/feed", icon: Flame, label: "Feed" },
-  { href: "/deposit", icon: Wallet, label: "Deposit" },
   { href: "/portfolio", icon: PieChart, label: "Portfolio" },
+  { href: "/deposit", icon: Wallet, label: "Wallet" },
 ];
 
 export function BottomNav() {
