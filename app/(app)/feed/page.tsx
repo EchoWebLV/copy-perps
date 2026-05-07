@@ -5,7 +5,7 @@ import { interleaveByRail, randomSeed } from "@/lib/feed/shuffle";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_BATCH = 10;
+const INITIAL_BATCH = 20;
 
 // Feed is public — anyone can scroll and read. Action buttons (stake,
 // bookmark, "ask Gwak") prompt login on tap when the user isn't signed

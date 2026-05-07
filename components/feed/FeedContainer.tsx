@@ -27,8 +27,8 @@ interface FeedResponse {
   done: boolean;
 }
 
-const PREFETCH_BUFFER = 3; // start fetching this many cards before the end
-const BATCH_LIMIT = 10;
+const PREFETCH_BUFFER = 6; // start fetching this many cards before the end
+const BATCH_LIMIT = 20;
 
 function buildAllowedTypes(prefs: FeedPrefs): Set<SignalType> {
   const allowed = new Set<SignalType>();
