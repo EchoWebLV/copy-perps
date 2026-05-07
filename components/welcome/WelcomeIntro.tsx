@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 
 const STORAGE_KEY = "gwak.welcomed.v1";
-const SLIDE_COUNT = 3;
+const SLIDE_COUNT = 2;
 
 // First-open intro. Localised to the device — backed by localStorage,
 // not the users table — so it shows once per browser even before login.
-// Mounted at the (app)/layout level so it covers the feed, portfolio,
-// or any other app surface the user lands on first.
+// Mounted at the (app)/layout level so it covers any first app surface
+// the user lands on (feed, portfolio, deposit, etc.).
+//
+// Visual language matches the rail picker (PreferencesProvider): solid
+// black, mono eyebrow with step counter, 44px tracking-tight headline,
+// numbered rows with vertical accent stripes, white-on-black CTA.
 export function WelcomeIntro() {
   const [shown, setShown] = useState(false);
   const [slide, setSlide] = useState(0);
@@ -37,172 +40,165 @@ export function WelcomeIntro() {
     try {
       localStorage.setItem(STORAGE_KEY, new Date().toISOString());
     } catch {}
-    setTimeout(() => setShown(false), 450);
+    setTimeout(() => setShown(false), 360);
   };
 
+  const stepLabel = `// step ${String(slide + 1).padStart(2, "0")} / ${String(
+    SLIDE_COUNT,
+  ).padStart(2, "0")}`;
+
   return (
     <div
-      className={`welcome-overlay gwak-breathe ${closing ? "welcome-out" : "welcome-in"}`}
-      onClick={advance}
+      className={`fixed inset-0 z-50 overflow-y-auto bg-[#080808] text-white ${
+        closing ? "welcome-out" : "welcome-in"
+      }`}
     >
-      {/* Skip — top-right, doesn't intercept the tap-anywhere advance */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          finish();
-        }}
-        className="welcome-skip"
-        aria-label="Skip intro"
-      >
-        Skip
-      </button>
+      <div className="mx-auto flex min-h-full max-w-md flex-col px-7 pb-10 pt-14">
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">
+          {stepLabel}
+        </div>
 
-      <div className="welcome-stage">
-        {slide === 0 && <SlideWelcome />}
-        {slide === 1 && <SlideRails />}
-        {slide === 2 && <SlideStart onStart={finish} />}
-      </div>
+        {slide === 0 && <SlideWhat />}
+        {slide === 1 && <SlideHow />}
 
-      <div className="welcome-dots" aria-hidden>
-        {Array.from({ length: SLIDE_COUNT }).map((_, i) => (
-          <span
-            key={i}
-            className={`welcome-dot ${i === slide ? "welcome-dot-on" : ""}`}
-          />
-        ))}
+        {/* CTA pinned to bottom of column, mirrors the picker layout */}
+        <div className="mt-auto pt-12">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={finish}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-neutral-500 transition hover:text-white"
+            >
+              [esc] skip
+            </button>
+            <button
+              type="button"
+              onClick={advance}
+              className="ml-auto flex items-center gap-3 bg-white px-7 py-4 text-sm font-bold uppercase tracking-[0.15em] text-black transition active:scale-[0.97]"
+            >
+              <span>
+                {slide < SLIDE_COUNT - 1 ? "Continue" : "Let's go"}
+              </span>
+              <span className="font-mono">→</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function SlideWelcome() {
+interface Row {
+  num: string;
+  label: string;
+  description: string;
+  stripe: string;
+}
+
+const RAIL_ROWS: Row[] = [
+  {
+    num: "01",
+    label: "Memecoins",
+    description: "Trending Solana tokens",
+    stripe: "linear-gradient(180deg, hsl(15 95% 55%), hsl(15 80% 35%))",
+  },
+  {
+    num: "02",
+    label: "Predictions",
+    description: "Yes / No on real-world events",
+    stripe: "linear-gradient(180deg, hsl(220 90% 60%), hsl(220 75% 35%))",
+  },
+  {
+    num: "03",
+    label: "Leverage",
+    description: "Bet with top traders",
+    stripe: "linear-gradient(180deg, hsl(285 80% 60%), hsl(285 65% 35%))",
+  },
+];
+
+const HOW_ROWS: Row[] = [
+  {
+    num: "01",
+    label: "Stake",
+    description: "Pick $5, $10, $20 or $50 on any card",
+    stripe: "linear-gradient(180deg, hsl(142 70% 55%), hsl(142 60% 35%))",
+  },
+  {
+    num: "02",
+    label: "Ask Gwak",
+    description: "Tap the bot icon for a live AI take",
+    stripe: "linear-gradient(180deg, hsl(160 70% 55%), hsl(160 60% 35%))",
+  },
+  {
+    num: "03",
+    label: "Bookmark",
+    description: "Save signals to your portfolio",
+    stripe: "linear-gradient(180deg, hsl(45 90% 55%), hsl(45 75% 35%))",
+  },
+];
+
+function SlideWhat() {
   return (
-    <div key="s0" className="welcome-slide flex flex-col items-center text-center">
-      <div className="welcome-logo-wrap">
-        <Image
-          src="/logo.png"
-          alt="gwak.gg"
-          width={1280}
-          height={853}
-          priority
-          className="welcome-logo h-auto w-[280px] drop-shadow-[0_0_40px_rgba(74,222,128,0.25)]"
-        />
-      </div>
-      <h1 className="welcome-h1 mt-8 text-4xl font-black tracking-tight">
-        Welcome to <span className="welcome-grad">gwak</span>
+    <div key="s0" className="welcome-slide">
+      <h1 className="mt-5 text-[44px] font-bold leading-[0.95] tracking-tight">
+        Three rails.
+        <br />
+        One feed.
       </h1>
-      <p className="welcome-sub mt-3 text-lg text-neutral-300">
-        the degen feed
+      <p className="mt-4 max-w-[18rem] text-sm leading-relaxed text-neutral-400">
+        Welcome to gwak — a TikTok-style feed for degens. Scroll, tap, stake.
+        All on Solana.
       </p>
-      <p className="welcome-hint mt-12 text-sm text-neutral-500">
-        Tap anywhere to continue
-      </p>
+      <RowList rows={RAIL_ROWS} />
     </div>
   );
 }
 
-function SlideRails() {
-  const rails = [
-    {
-      emoji: "🪙",
-      name: "Memes",
-      desc: "Buy hot Solana tokens",
-      color: "#ff5e3a",
-    },
-    {
-      emoji: "🎯",
-      name: "Predictions",
-      desc: "Yes/No on real markets",
-      color: "#2563eb",
-    },
-    {
-      emoji: "🐋",
-      name: "Whales",
-      desc: "Tail or fade pro traders",
-      color: "#7c3aed",
-    },
-  ];
+function SlideHow() {
   return (
-    <div key="s1" className="welcome-slide flex flex-col text-left">
-      <h2 className="welcome-h1 text-center text-3xl font-black tracking-tight">
-        Three rails.<br />One feed.
-      </h2>
-      <div className="mt-10 flex flex-col gap-3">
-        {rails.map((r, i) => (
-          <div
-            key={r.name}
-            className="welcome-rail"
-            style={{
-              animationDelay: `${120 + i * 110}ms`,
-              borderColor: `${r.color}55`,
-              background: `linear-gradient(120deg, ${r.color}22, ${r.color}08 60%)`,
-            }}
-          >
-            <span className="text-3xl">{r.emoji}</span>
-            <div>
-              <div className="text-base font-bold">{r.name}</div>
-              <div className="text-sm text-neutral-300">{r.desc}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="welcome-hint mt-10 text-center text-sm text-neutral-500">
-        Tap to continue
+    <div key="s1" className="welcome-slide">
+      <h1 className="mt-5 text-[44px] font-bold leading-[0.95] tracking-tight">
+        One tap.
+        <br />
+        One bet.
+      </h1>
+      <p className="mt-4 max-w-[18rem] text-sm leading-relaxed text-neutral-400">
+        Three things to know before you start.
       </p>
+      <RowList rows={HOW_ROWS} />
     </div>
   );
 }
 
-function SlideStart({ onStart }: { onStart: () => void }) {
-  const tips = [
-    {
-      icon: "💸",
-      title: "One-tap stakes",
-      desc: "Pick $5, $10, $20 or $50 on any card",
-    },
-    {
-      icon: "🤖",
-      title: "Ask Gwak",
-      desc: "Tap the bot icon for an AI take",
-    },
-    {
-      icon: "🔖",
-      title: "Bookmark",
-      desc: "Save signals to your portfolio",
-    },
-  ];
+function RowList({ rows }: { rows: Row[] }) {
   return (
-    <div
-      key="s2"
-      className="welcome-slide flex flex-col text-left"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <h2 className="welcome-h1 text-center text-3xl font-black tracking-tight">
-        Get started
-      </h2>
-      <div className="mt-8 flex flex-col gap-4">
-        {tips.map((t, i) => (
+    <div className="mt-12 flex flex-col">
+      {rows.map((r, i) => (
+        <div
+          key={r.num}
+          className={`relative -mx-7 px-7 py-6 ${
+            i === 0 ? "border-t border-white/[0.08]" : ""
+          } border-b border-white/[0.08]`}
+        >
           <div
-            key={t.title}
-            className="welcome-tip"
-            style={{ animationDelay: `${120 + i * 110}ms` }}
-          >
-            <span className="text-2xl">{t.icon}</span>
-            <div>
-              <div className="text-base font-bold">{t.title}</div>
-              <div className="text-sm text-neutral-300">{t.desc}</div>
+            className="absolute left-0 top-0 bottom-0 w-[3px]"
+            style={{ background: r.stripe }}
+          />
+          <div className="flex items-baseline gap-5">
+            <span className="font-mono text-[11px] tabular-nums tracking-wider text-white">
+              {r.num}
+            </span>
+            <div className="flex-1">
+              <div className="text-2xl font-bold uppercase leading-none tracking-tight text-white">
+                {r.label}
+              </div>
+              <div className="mt-2 text-[13px] leading-snug text-neutral-400">
+                {r.description}
+              </div>
             </div>
           </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={onStart}
-        className="welcome-cta mt-10 self-center rounded-2xl bg-emerald-400 px-10 py-4 text-lg font-bold text-black transition active:scale-[0.97]"
-      >
-        Let&apos;s go →
-      </button>
+        </div>
+      ))}
     </div>
   );
 }

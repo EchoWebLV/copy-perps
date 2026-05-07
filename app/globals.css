@@ -194,27 +194,12 @@ body {
   .coin-flip { animation: none; }
 }
 
-/* First-open welcome intro. Fullscreen overlay above everything else,
-   with the gwak-breathe gradient as the backdrop. Each slide does a
-   gentle fade-up on enter; rails/tips stagger via per-item
-   animation-delay. The whole overlay fades in on mount and out on
-   dismiss so it doesn't pop. */
-.welcome-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 24px 36px;
-  color: #ededed;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.welcome-in { animation: welcome-fade-in 480ms ease-out both; }
-.welcome-out { animation: welcome-fade-out 420ms ease-in both; }
+/* First-open welcome intro. Solid black overlay matching the rail
+   picker's editorial language — a fade-in on mount, fade-out on
+   dismiss, and per-slide fade-up that re-fires when slide changes
+   so the second slide also animates in. */
+.welcome-in { animation: welcome-fade-in 380ms ease-out both; }
+.welcome-out { animation: welcome-fade-out 320ms ease-in both; }
 
 @keyframes welcome-fade-in {
   0% { opacity: 0; }
@@ -222,139 +207,21 @@ body {
 }
 @keyframes welcome-fade-out {
   0% { opacity: 1; }
-  100% { opacity: 0; transform: scale(1.02); }
-}
-
-.welcome-skip {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 200ms, background 200ms;
-}
-.welcome-skip:hover {
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.welcome-stage {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  max-width: 400px;
+  100% { opacity: 0; }
 }
 
 .welcome-slide {
-  width: 100%;
-  animation: welcome-slide-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes welcome-slide-in {
-  0% { opacity: 0; transform: translateY(14px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.welcome-logo-wrap {
-  animation: welcome-logo-pop 700ms cubic-bezier(0.22, 1.2, 0.36, 1) 80ms both;
-}
-@keyframes welcome-logo-pop {
-  0% { opacity: 0; transform: scale(0.82); }
-  60% { opacity: 1; transform: scale(1.04); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.welcome-h1 {
-  animation: welcome-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) 240ms both;
-}
-.welcome-sub {
-  animation: welcome-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) 360ms both;
+  animation: welcome-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes welcome-rise {
   0% { opacity: 0; transform: translateY(12px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
-.welcome-grad {
-  background: linear-gradient(110deg, #4ade80, #a78bfa 60%, #4ade80);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: welcome-grad-pan 4s ease-in-out infinite;
-}
-@keyframes welcome-grad-pan {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-.welcome-hint {
-  animation: welcome-pulse-hint 2.4s ease-in-out 800ms infinite both;
-}
-@keyframes welcome-pulse-hint {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.95; }
-}
-
-.welcome-rail,
-.welcome-tip {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  animation: welcome-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  opacity: 0;
-}
-
-.welcome-cta {
-  animation: welcome-cta-in 600ms cubic-bezier(0.22, 1.2, 0.36, 1) 480ms both;
-  box-shadow: 0 18px 40px -10px rgba(74, 222, 128, 0.55),
-    0 0 0 1px rgba(74, 222, 128, 0.4) inset;
-}
-@keyframes welcome-cta-in {
-  0% { opacity: 0; transform: translateY(20px) scale(0.92); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.welcome-dots {
-  display: flex;
-  gap: 8px;
-  margin-top: 20px;
-}
-.welcome-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  transition: background 240ms, width 240ms;
-}
-.welcome-dot-on {
-  width: 22px;
-  background: rgba(74, 222, 128, 0.85);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .welcome-in,
   .welcome-out,
-  .welcome-slide,
-  .welcome-logo-wrap,
-  .welcome-h1,
-  .welcome-sub,
-  .welcome-grad,
-  .welcome-hint,
-  .welcome-rail,
-  .welcome-tip,
-  .welcome-cta {
+  .welcome-slide {
     animation: none;
     opacity: 1;
   }
