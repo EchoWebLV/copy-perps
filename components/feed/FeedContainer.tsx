@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Signal } from "@/lib/types";
+import type { Signal, SignalType } from "@/lib/types";
 import { MemeCard } from "./MemeCard";
 import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { BalancePill } from "@/components/shell/BalancePill";
+import { FeedSettingsButton } from "@/components/onboarding/FeedSettingsButton";
+import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
+import type { FeedPrefs } from "@/lib/feed/preferences";
 
 interface Props {
   initialSignals: Signal[];
@@ -28,6 +31,17 @@ interface FeedResponse {
 const PREFETCH_BUFFER = 3; // start fetching this many cards before the end
 const BATCH_LIMIT = 10;
 
+function buildAllowedTypes(prefs: FeedPrefs): Set<SignalType> {
+  const allowed = new Set<SignalType>();
+  if (prefs.meme) allowed.add("meme");
+  if (prefs.prediction) {
+    allowed.add("prediction");
+    allowed.add("multiprediction");
+  }
+  if (prefs.whale) allowed.add("whale");
+  return allowed;
+}
+
 export function FeedContainer({
   initialSignals,
   initialSeed,
@@ -43,6 +57,15 @@ export function FeedContainer({
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const slideCountRef = useRef(0);
   const prevIdxRef = useRef(0);
+  // Prefs come from PreferencesProvider — single fetch for the
+  // whole app. Modal saves update the same context state, so the
+  // feed re-filters instantly without a refetch.
+  const { prefs } = usePreferences();
+  const visibleSignals = useMemo(() => {
+    const allowed = buildAllowedTypes(prefs);
+    if (allowed.size === 4) return signals; // all rails on — skip filter
+    return signals.filter((s) => allowed.has(s.type));
+  }, [signals, prefs]);
 
   // Stable refs so the fetcher closure always sees the latest values
   // without having to retrigger the IntersectionObserver effect.
@@ -108,7 +131,7 @@ export function FeedContainer({
 
     els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [signals.length, loadMore]);
+  }, [visibleSignals.length, loadMore]);
 
   // Bot-icon coin-flip cadence: count actual slide changes (not the
   // initial mount) and fire a flip on every 3rd slide. Acts as a subtle
@@ -123,8 +146,8 @@ export function FeedContainer({
   }, [activeIdx]);
 
   const activeGradient = useMemo(
-    () => cardGradient(signals[activeIdx]),
-    [signals, activeIdx],
+    () => cardGradient(visibleSignals[activeIdx]),
+    [visibleSignals, activeIdx],
   );
 
   return (
@@ -136,11 +159,12 @@ export function FeedContainer({
       }}
     >
       <BalancePill />
+      <FeedSettingsButton />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}
       >
-        {signals.map((signal, i) => (
+        {visibleSignals.map((signal, i) => (
           <div
             key={`${i}-${signal.id}`}
             ref={(el) => {

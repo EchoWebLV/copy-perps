@@ -10,10 +10,23 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 
+export interface FeedPrefs {
+  meme: boolean;
+  prediction: boolean;
+  whale: boolean;
+}
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   privyId: text("privy_id").notNull().unique(),
   solanaPubkey: text("solana_pubkey"),
+  // Feed rail toggles. JSONB so adding future rails (e.g. sports)
+  // doesn't need a migration. Null = user hasn't completed the
+  // onboarding wizard yet → show all rails by default.
+  feedPrefs: jsonb("feed_prefs").$type<FeedPrefs>(),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -37,7 +50,10 @@ export const signals = pgTable(
 export const bets = pgTable("bets", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id),
-  signalId: text("signal_id").references(() => signals.id),
+  // No FK — signals are an evictable cache (cron does DELETE+INSERT
+  // every 1-2 min), so a hard FK would either block eviction or cascade
+  // bet history away. Keep the column as a soft pointer.
+  signalId: text("signal_id"),
   type: text("type").notNull(),
   amountUsdc: doublePrecision("amount_usdc").notNull(),
   feeUsdc: doublePrecision("fee_usdc"),
@@ -79,7 +95,8 @@ export const watchlistItems = pgTable(
 export const feedViews = pgTable("feed_views", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id),
-  signalId: text("signal_id").notNull().references(() => signals.id),
+  // Soft pointer — see comment on bets.signalId. Signals get evicted.
+  signalId: text("signal_id").notNull(),
   action: text("action").notNull(),
   viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
 });
