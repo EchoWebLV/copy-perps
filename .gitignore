@@ -7,3 +7,8 @@ node_modules/
 .DS_Store
 *.tsbuildinfo
 .vercel
+
+# Claude Code — ephemeral worktrees + per-user local overrides.
+# Shared config (.claude/settings.json, .claude/skills/) stays tracked.
+.claude/worktrees/
+.claude/settings.local.json
