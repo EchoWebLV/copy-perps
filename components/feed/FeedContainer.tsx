@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
 import type { Signal, SignalType } from "@/lib/types";
 import { MemeCard } from "./MemeCard";
 import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { BalancePill } from "@/components/shell/BalancePill";
+import { FeedSettingsButton } from "@/components/onboarding/FeedSettingsButton";
+import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
-import { DEFAULT_PREFS, fetchPrefs, type FeedPrefs } from "@/lib/feed/preferences";
+import type { FeedPrefs } from "@/lib/feed/preferences";
 
 interface Props {
   initialSignals: Signal[];
@@ -53,28 +54,10 @@ export function FeedContainer({
   const [total, setTotal] = useState(initialTotal);
   const [activeIdx, setActiveIdx] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
-  // Pre-hydration / unauthed: render everything (matches SSR). For
-  // authed users, fetch their server-stored prefs and filter once
-  // they arrive. Source of truth is users.feed_prefs.
-  const { ready, authenticated, getAccessToken } = usePrivy();
-  const [prefs, setLocalPrefs] = useState<FeedPrefs>(DEFAULT_PREFS);
-  useEffect(() => {
-    if (!ready || !authenticated) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getAccessToken();
-        if (!token || cancelled) return;
-        const data = await fetchPrefs(token);
-        if (!cancelled) setLocalPrefs(data.prefs);
-      } catch (e) {
-        console.error("[feed] prefs fetch failed:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, authenticated, getAccessToken]);
+  // Prefs come from PreferencesProvider — single fetch for the
+  // whole app. Modal saves update the same context state, so the
+  // feed re-filters instantly without a refetch.
+  const { prefs } = usePreferences();
   const visibleSignals = useMemo(() => {
     const allowed = buildAllowedTypes(prefs);
     if (allowed.size === 4) return signals; // all rails on — skip filter
@@ -161,6 +144,7 @@ export function FeedContainer({
       }}
     >
       <BalancePill />
+      <FeedSettingsButton />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}
