@@ -87,9 +87,9 @@ export function WelcomeIntro() {
           </div>
 
           <div className="welcome-tips mt-8 flex flex-col gap-1.5 text-[13px] text-white/55">
-            <TipLine k="01" v="Pick as little as $1 on cards" />
-            <TipLine k="02" v="Tap the bot for a live AI take" />
-            <TipLine k="03" v="Bookmark signals to your portfolio" />
+            <TipLine k="01" v="Buy hottest meme." />
+            <TipLine k="02" v="Copy the best whales." />
+            <TipLine k="03" v="Bet on every event." />
           </div>
         </div>
 
