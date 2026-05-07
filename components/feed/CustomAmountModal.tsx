@@ -98,15 +98,13 @@ export function CustomAmountModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-3xl border-t border-x border-white/10 bg-neutral-950 px-5 pt-5 pb-6 sm:rounded-3xl sm:border"
+        className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-950 px-5 pt-5 pb-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
-
         <div className="text-[11px] font-bold uppercase tracking-[1.5px] text-neutral-500">
           Custom amount
         </div>
