@@ -71,37 +71,78 @@ export function FeedContainer({
 
   // Stable refs so the fetcher closure always sees the latest values
   // without having to retrigger the IntersectionObserver effect.
-  const stateRef = useRef({ signals, seed, cursor, total, loading: false });
+  // `visibleLength` is what the prefetch threshold compares against —
+  // the rendered list is `visibleSignals`, so `data-idx` is an index
+  // into that filtered array, not the raw `signals` pool.
+  // `allowed` lets loadMore detect batches that produce 0 new visible
+  // items (e.g. user has only "whale" on and a batch contains none),
+  // so it can retry instead of silently dead-ending the feed.
+  const allowedTypes = useMemo(() => buildAllowedTypes(prefs), [prefs]);
+  const stateRef = useRef({
+    signals,
+    seed,
+    cursor,
+    total,
+    visibleLength: visibleSignals.length,
+    allowed: allowedTypes,
+    loading: false,
+  });
   stateRef.current.signals = signals;
   stateRef.current.seed = seed;
   stateRef.current.cursor = cursor;
   stateRef.current.total = total;
+  stateRef.current.visibleLength = visibleSignals.length;
+  stateRef.current.allowed = allowedTypes;
 
   const loadMore = useCallback(async () => {
     if (stateRef.current.loading) return;
     stateRef.current.loading = true;
+    // Loop until we either add at least one visible item or hit the
+    // retry cap. Without this, an aggressive filter (one rail on) can
+    // dead-end the feed when a batch happens to contain zero matching
+    // signals — visibleLength wouldn't grow and the observer wouldn't
+    // refire.
+    const MAX_RETRIES = 5;
+    let visibleAdded = 0;
     try {
-      // If we've consumed the current shuffle, request a fresh seed by
-      // omitting it; the server picks one and we reset the cursor.
-      const exhausted =
-        stateRef.current.cursor >= stateRef.current.total &&
-        stateRef.current.total > 0;
-      const params = new URLSearchParams({
-        cursor: exhausted ? "0" : String(stateRef.current.cursor),
-        limit: String(BATCH_LIMIT),
-      });
-      if (!exhausted) params.set("seed", stateRef.current.seed);
+      for (let i = 0; i < MAX_RETRIES && visibleAdded === 0; i++) {
+        // If we've consumed the current shuffle, request a fresh seed
+        // by omitting it; the server picks one and we reset the cursor.
+        const exhausted =
+          stateRef.current.cursor >= stateRef.current.total &&
+          stateRef.current.total > 0;
+        const params = new URLSearchParams({
+          cursor: exhausted ? "0" : String(stateRef.current.cursor),
+          limit: String(BATCH_LIMIT),
+        });
+        if (!exhausted) params.set("seed", stateRef.current.seed);
 
-      const r = await fetch(`/api/feed?${params}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`feed ${r.status}`);
-      const data = (await r.json()) as FeedResponse;
+        const r = await fetch(`/api/feed?${params}`, { cache: "no-store" });
+        if (!r.ok) throw new Error(`feed ${r.status}`);
+        const data = (await r.json()) as FeedResponse;
 
-      // Allow repeats — once the pool exhausts, reshuffles bring the same
-      // items back in a different M-M-N arrangement. That's the infinite.
-      setSignals((prev) => [...prev, ...data.signals]);
-      setSeed(data.seed);
-      setCursor(data.nextCursor);
-      setTotal(data.total);
+        const allowed = stateRef.current.allowed;
+        const matched =
+          allowed.size === 4
+            ? data.signals.length
+            : data.signals.filter((s) => allowed.has(s.type)).length;
+        visibleAdded += matched;
+
+        // Allow repeats — once the pool exhausts, reshuffles bring the
+        // same items back in a different M-M-N arrangement. That's the
+        // infinite.
+        setSignals((prev) => [...prev, ...data.signals]);
+        setSeed(data.seed);
+        setCursor(data.nextCursor);
+        setTotal(data.total);
+
+        // Mirror the freshly-bumped cursor/seed into the ref so the
+        // next iteration's exhaustion check sees the post-fetch values
+        // (React state updates above don't apply until after this loop).
+        stateRef.current.cursor = data.nextCursor;
+        stateRef.current.total = data.total;
+        stateRef.current.seed = data.seed;
+      }
     } catch (e) {
       console.error("[feed] loadMore failed:", e);
     } finally {
@@ -124,7 +165,7 @@ export function FeedContainer({
 
         setActiveIdx(idx);
 
-        if (idx >= stateRef.current.signals.length - PREFETCH_BUFFER) {
+        if (idx >= stateRef.current.visibleLength - PREFETCH_BUFFER) {
           loadMore();
         }
       },
