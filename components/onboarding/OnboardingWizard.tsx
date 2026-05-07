@@ -5,9 +5,8 @@ import { usePrivy } from "@privy-io/react-auth";
 import { TrendingUp, Target, Fish, Check } from "lucide-react";
 import {
   DEFAULT_PREFS,
-  hasOnboarded,
-  markOnboarded,
-  setPrefs,
+  fetchPrefs,
+  savePrefs,
   type FeedPrefs,
 } from "@/lib/feed/preferences";
 import { ev } from "@/lib/analytics";
@@ -44,31 +43,57 @@ const RAILS: RailDef[] = [
 ];
 
 export function OnboardingWizard() {
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, getAccessToken } = usePrivy();
   const [open, setOpen] = useState(false);
   const [prefs, setLocalPrefs] = useState<FeedPrefs>(DEFAULT_PREFS);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!ready || !authenticated) return;
-    if (!hasOnboarded()) {
-      setOpen(true);
-    }
-  }, [ready, authenticated]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token || cancelled) return;
+        const data = await fetchPrefs(token);
+        if (cancelled) return;
+        if (!data.onboardingCompletedAt) {
+          setOpen(true);
+        }
+      } catch (e) {
+        console.error("[OnboardingWizard] fetch", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, authenticated, getAccessToken]);
 
   if (!open) return null;
 
   const toggle = (key: keyof FeedPrefs) =>
     setLocalPrefs((p) => ({ ...p, [key]: !p[key] }));
 
-  const handleContinue = () => {
-    setPrefs(prefs);
-    markOnboarded();
-    ev.onboardingCompleted({
-      meme: prefs.meme,
-      prediction: prefs.prediction,
-      whale: prefs.whale,
-    });
-    setOpen(false);
+  const handleContinue = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setSaving(false);
+        return;
+      }
+      await savePrefs(token, prefs);
+      ev.onboardingCompleted({
+        meme: prefs.meme,
+        prediction: prefs.prediction,
+        whale: prefs.whale,
+      });
+      setOpen(false);
+    } catch (e) {
+      console.error("[OnboardingWizard] save", e);
+      setSaving(false);
+    }
   };
 
   const anySelected = prefs.meme || prefs.prediction || prefs.whale;
@@ -122,10 +147,10 @@ export function OnboardingWizard() {
 
         <button
           onClick={handleContinue}
-          disabled={!anySelected}
+          disabled={!anySelected || saving}
           className="mt-8 rounded-2xl bg-white px-8 py-4 text-base font-bold text-black transition active:scale-[0.97] disabled:opacity-40"
         >
-          Continue
+          {saving ? "Saving…" : "Continue"}
         </button>
 
         {!anySelected && (
