@@ -64,7 +64,7 @@ const RAILS: RailDef[] = [
     num: "03",
     key: "whale",
     label: "LEVERAGE",
-    description: "Bet with — or against — top traders",
+    description: "Bet with top traders",
     stripe:
       "linear-gradient(180deg, hsl(285 80% 60%), hsl(285 65% 35%))",
     accent: "text-purple-300",
