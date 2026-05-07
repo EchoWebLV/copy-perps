@@ -3,6 +3,7 @@ import { WatchlistProvider } from "@/components/watchlist/WatchlistProvider";
 import { AnalyzeProvider } from "@/components/feed/AnalyzeProvider";
 import { UserEnsure } from "@/components/auth/UserEnsure";
 import { PreferencesProvider } from "@/components/onboarding/PreferencesProvider";
+import { WelcomeIntro } from "@/components/welcome/WelcomeIntro";
 
 // Pages inside this route group render inside the phone-frame: full-bleed
 // on mobile, centered phone-shaped container on desktop. The landing page
@@ -24,6 +25,7 @@ export default function ContainedLayout({ children }: { children: ReactNode }) {
           <AnalyzeProvider>{children}</AnalyzeProvider>
         </WatchlistProvider>
       </PreferencesProvider>
+      <WelcomeIntro />
     </div>
   );
 }
