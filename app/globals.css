@@ -194,11 +194,11 @@ body {
   .coin-flip { animation: none; }
 }
 
-/* First-open welcome intro. Solid black overlay matching the rail
-   picker's editorial language — a fade-in on mount, fade-out on
-   dismiss, and per-slide fade-up that re-fires when slide changes
-   so the second slide also animates in. */
-.welcome-in { animation: welcome-fade-in 380ms ease-out both; }
+/* First-open welcome intro. Brand-hero treatment, intentionally
+   distinct from the rail-picker's solid-black editorial style:
+   animated mesh-gradient backdrop, large display headline, colourful
+   chips, full-width emerald CTA. */
+.welcome-in { animation: welcome-fade-in 420ms ease-out both; }
 .welcome-out { animation: welcome-fade-out 320ms ease-in both; }
 
 @keyframes welcome-fade-in {
@@ -210,19 +210,99 @@ body {
   100% { opacity: 0; }
 }
 
-.welcome-slide {
-  animation: welcome-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Mesh: three coloured radial gradients drifting against each other.
+   Slower than gwak-breathe and uses a different palette so the welcome
+   doesn't read as the same surface as the landing page. */
+.welcome-mesh {
+  background:
+    radial-gradient(58% 42% at 18% 22%, rgba(74, 222, 128, 0.28), transparent 60%),
+    radial-gradient(50% 38% at 82% 30%, rgba(167, 139, 250, 0.26), transparent 62%),
+    radial-gradient(70% 50% at 50% 92%, rgba(59, 130, 246, 0.22), transparent 65%),
+    #050505;
+  filter: saturate(1.05);
+  animation: welcome-mesh-pan 18s ease-in-out infinite;
+}
+@keyframes welcome-mesh-pan {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-2%, -1.5%, 0) scale(1.04); }
+}
+
+/* Subtle film grain to make the mesh feel less plasticky. SVG noise
+   inlined as a data URI — no extra request. */
+.welcome-grain {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+  background-size: 160px 160px;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.welcome-logo-wrap {
+  animation: welcome-logo-pop 700ms cubic-bezier(0.22, 1.2, 0.36, 1) 80ms both;
+}
+@keyframes welcome-logo-pop {
+  0% { opacity: 0; transform: scale(0.84); }
+  60% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.welcome-eyebrow {
+  animation: welcome-rise 540ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both;
+}
+.welcome-headline {
+  animation: welcome-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) 140ms both;
+}
+.welcome-sub {
+  animation: welcome-rise 580ms cubic-bezier(0.22, 1, 0.36, 1) 260ms both;
+}
+.welcome-chips {
+  animation: welcome-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) 360ms both;
+}
+.welcome-tips {
+  animation: welcome-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) 460ms both;
+}
+.welcome-cta {
+  animation: welcome-cta-in 640ms cubic-bezier(0.22, 1.2, 0.36, 1) 580ms both;
+  box-shadow: 0 18px 48px -12px rgba(74, 222, 128, 0.55);
 }
 @keyframes welcome-rise {
-  0% { opacity: 0; transform: translateY(12px); }
+  0% { opacity: 0; transform: translateY(14px); }
   100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes welcome-cta-in {
+  0% { opacity: 0; transform: translateY(20px) scale(0.94); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Animated emerald→violet→emerald gradient on the "feed." word so the
+   headline isn't static. Slow pan, no flicker. */
+.welcome-grad {
+  background: linear-gradient(110deg, #4ade80, #a78bfa 55%, #4ade80);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: welcome-grad-pan 6s ease-in-out infinite;
+}
+@keyframes welcome-grad-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .welcome-in,
   .welcome-out,
-  .welcome-slide {
+  .welcome-mesh,
+  .welcome-logo-wrap,
+  .welcome-eyebrow,
+  .welcome-headline,
+  .welcome-sub,
+  .welcome-chips,
+  .welcome-tips,
+  .welcome-cta,
+  .welcome-grad {
     animation: none;
     opacity: 1;
+    transform: none;
   }
 }
