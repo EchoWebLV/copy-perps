@@ -7,11 +7,18 @@ import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 import { useAnalyze } from "./AnalyzeProvider";
 import { useCountdown } from "@/lib/feed/use-countdown";
+import { useCoinFlip } from "@/lib/feed/use-coin-flip";
 
 const fmtUsd = (n: number) =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${(n / 1_000).toFixed(0)}k`;
 
-export function PredictionCard({ signal }: { signal: PredictionSignal }) {
+export function PredictionCard({
+  signal,
+  flipNonce = 0,
+}: {
+  signal: PredictionSignal;
+  flipNonce?: number;
+}) {
   const fallbackIcon = useJupiterEventImage(
     signal.imageUrl ? undefined : signal.eventId,
     signal.marketId,
@@ -19,6 +26,7 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
   const icon = signal.imageUrl ?? fallbackIcon;
   const { open: openAnalyze } = useAnalyze();
   const countdown = useCountdown(signal.resolveAt);
+  const botBtnRef = useCoinFlip(flipNonce);
   // Urgent = under 24h to resolve. Drives the red countdown chip.
   const isUrgent =
     signal.resolveAt != null &&
@@ -36,6 +44,7 @@ export function PredictionCard({ signal }: { signal: PredictionSignal }) {
 
       {icon ? (
         <button
+          ref={botBtnRef}
           type="button"
           onClick={() => openAnalyze(signal)}
           aria-label="Ask Gwak about this market"

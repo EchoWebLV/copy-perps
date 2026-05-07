@@ -177,3 +177,19 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .stake-confirm, .stake-rise { animation: none; }
 }
+
+/* Bot-icon coin-flip: a single 360° Y-axis rotation on the AI-analyze
+   button that fires every few slides as a subtle "tap me" reminder.
+   Built-in `perspective()` in the keyframe gives it a coin-like depth
+   without needing a parent perspective container. */
+@keyframes coin-flip {
+  0%   { transform: perspective(600px) rotateY(0deg); }
+  100% { transform: perspective(600px) rotateY(360deg); }
+}
+.coin-flip {
+  animation: coin-flip 800ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coin-flip { animation: none; }
+}

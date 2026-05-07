@@ -8,6 +8,7 @@ import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 import { useAnalyze } from "./AnalyzeProvider";
 import { usePerpPrice } from "@/lib/feed/use-perp-price";
 import { usePulseOnChange } from "@/lib/feed/use-pulse-on-change";
+import { useCoinFlip } from "@/lib/feed/use-coin-flip";
 
 const fmtUsd = (n: number) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -37,10 +38,17 @@ function fmtRelativeOpened(iso: string): string {
   return `${Math.round(hr / 24)}d ago`;
 }
 
-export function WhaleCard({ signal }: { signal: WhaleSignal }) {
+export function WhaleCard({
+  signal,
+  flipNonce = 0,
+}: {
+  signal: WhaleSignal;
+  flipNonce?: number;
+}) {
   const coinIcon = perpAssetImage(signal.asset);
   const { open: openAnalyze } = useAnalyze();
   const markPrice = usePerpPrice(signal.asset);
+  const botBtnRef = useCoinFlip(flipNonce);
 
   // Live PnL on the whale's position. Long pnl = (mark - entry) / entry × size,
   // short flips the sign. Returns null while waiting for the first Pyth tick.
@@ -81,6 +89,7 @@ export function WhaleCard({ signal }: { signal: WhaleSignal }) {
       </div>
 
       <button
+        ref={botBtnRef}
         type="button"
         onClick={() => openAnalyze(signal)}
         aria-label="Ask Gwak about this whale position"

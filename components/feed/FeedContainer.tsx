@@ -39,7 +39,10 @@ export function FeedContainer({
   const [cursor, setCursor] = useState(initialCursor);
   const [total, setTotal] = useState(initialTotal);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [flipNonce, setFlipNonce] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const slideCountRef = useRef(0);
+  const prevIdxRef = useRef(0);
 
   // Stable refs so the fetcher closure always sees the latest values
   // without having to retrigger the IntersectionObserver effect.
@@ -107,6 +110,18 @@ export function FeedContainer({
     return () => observer.disconnect();
   }, [signals.length, loadMore]);
 
+  // Bot-icon coin-flip cadence: count actual slide changes (not the
+  // initial mount) and fire a flip on every 3rd slide. Acts as a subtle
+  // tap-me hint — quick enough to land soon, sparse enough not to nag.
+  useEffect(() => {
+    if (activeIdx === prevIdxRef.current) return;
+    prevIdxRef.current = activeIdx;
+    slideCountRef.current += 1;
+    if (slideCountRef.current % 3 === 0) {
+      setFlipNonce((n) => n + 1);
+    }
+  }, [activeIdx]);
+
   const activeGradient = useMemo(
     () => cardGradient(signals[activeIdx]),
     [signals, activeIdx],
@@ -134,7 +149,11 @@ export function FeedContainer({
             data-idx={i}
             className="h-full w-full snap-start"
           >
-            <CardContent signal={signal} active={i === activeIdx} />
+            <CardContent
+              signal={signal}
+              active={i === activeIdx}
+              flipNonce={i === activeIdx ? flipNonce : 0}
+            />
           </div>
         ))}
       </div>
@@ -142,7 +161,15 @@ export function FeedContainer({
   );
 }
 
-function CardContent({ signal, active }: { signal: Signal; active: boolean }) {
+function CardContent({
+  signal,
+  active,
+  flipNonce,
+}: {
+  signal: Signal;
+  active: boolean;
+  flipNonce: number;
+}) {
   return (
     <div
       className="h-full w-full transition-[transform,opacity] duration-500 ease-out will-change-transform"
@@ -151,10 +178,12 @@ function CardContent({ signal, active }: { signal: Signal; active: boolean }) {
         opacity: active ? 1 : 0.55,
       }}
     >
-      {signal.type === "meme" && <MemeCard signal={signal} />}
-      {signal.type === "prediction" && <PredictionCard signal={signal} />}
-      {signal.type === "multiprediction" && <MultiPredictionCard signal={signal} />}
-      {signal.type === "whale" && <WhaleCard signal={signal} />}
+      {signal.type === "meme" && <MemeCard signal={signal} flipNonce={flipNonce} />}
+      {signal.type === "prediction" && <PredictionCard signal={signal} flipNonce={flipNonce} />}
+      {signal.type === "multiprediction" && (
+        <MultiPredictionCard signal={signal} flipNonce={flipNonce} />
+      )}
+      {signal.type === "whale" && <WhaleCard signal={signal} flipNonce={flipNonce} />}
     </div>
   );
 }

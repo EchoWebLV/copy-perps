@@ -17,6 +17,7 @@ import { SignalChip } from "./SignalChip";
 import { useJupiterEventImage } from "@/lib/feed/use-card-image";
 import { useAnalyze } from "./AnalyzeProvider";
 import { useCountdown } from "@/lib/feed/use-countdown";
+import { useCoinFlip } from "@/lib/feed/use-coin-flip";
 import { CustomAmountModal } from "./CustomAmountModal";
 
 const fmtVol = (n: number) =>
@@ -30,7 +31,13 @@ interface State {
   error?: string | null;
 }
 
-export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal }) {
+export function MultiPredictionCard({
+  signal,
+  flipNonce = 0,
+}: {
+  signal: MultiPredictionSignal;
+  flipNonce?: number;
+}) {
   const [state, setState] = useState<State>({});
   // `stake` is the user's selected bet size — preset (5/10/20/50) or
   // a custom value typed via the modal. Widened beyond StakeAmount to
@@ -43,6 +50,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
   const icon = signal.imageUrl ?? fallbackIcon;
   const { open: openAnalyze } = useAnalyze();
   const countdown = useCountdown(signal.resolveAt);
+  const botBtnRef = useCoinFlip(flipNonce);
   const isUrgent =
     signal.resolveAt != null &&
     signal.resolveAt - Date.now() / 1000 < 86_400 &&
@@ -141,6 +149,7 @@ export function MultiPredictionCard({ signal }: { signal: MultiPredictionSignal 
 
       {icon ? (
         <button
+          ref={botBtnRef}
           type="button"
           onClick={() => openAnalyze(signal)}
           aria-label="Ask Gwak about this market"

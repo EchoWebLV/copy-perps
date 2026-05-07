@@ -10,6 +10,7 @@ import {
 } from "@/lib/feed/use-dexscreener-pair";
 import { BookmarkButton } from "@/components/watchlist/BookmarkButton";
 import { useAnalyze } from "./AnalyzeProvider";
+import { useCoinFlip } from "@/lib/feed/use-coin-flip";
 
 function fmtMarketCap(n: number | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "—";
@@ -126,10 +127,17 @@ function StatCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function MemeCard({ signal }: { signal: MemeSignal }) {
+export function MemeCard({
+  signal,
+  flipNonce = 0,
+}: {
+  signal: MemeSignal;
+  flipNonce?: number;
+}) {
   const { icon } = useJupiterTokenInfo(signal.tokenAddress);
   const live = useDexScreenerPair(signal.tokenAddress);
   const { open: openAnalyze } = useAnalyze();
+  const botBtnRef = useCoinFlip(flipNonce);
 
   const marketCap = live.marketCap ?? signal.marketCap;
   const change =
@@ -155,6 +163,7 @@ export function MemeCard({ signal }: { signal: MemeSignal }) {
 
       {icon ? (
         <button
+          ref={botBtnRef}
           type="button"
           onClick={() => openAnalyze(signal)}
           aria-label="Ask Gwak about this signal"
