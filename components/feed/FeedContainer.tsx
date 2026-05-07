@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Signal } from "@/lib/types";
+import type { Signal, SignalType } from "@/lib/types";
 import { MemeCard } from "./MemeCard";
 import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { cardGradient } from "@/lib/feed/card-color";
+import { DEFAULT_PREFS, getPrefs, type FeedPrefs } from "@/lib/feed/preferences";
 
 interface Props {
   initialSignals: Signal[];
@@ -28,6 +29,17 @@ interface FeedResponse {
 const PREFETCH_BUFFER = 3; // start fetching this many cards before the end
 const BATCH_LIMIT = 10;
 
+function buildAllowedTypes(prefs: FeedPrefs): Set<SignalType> {
+  const allowed = new Set<SignalType>();
+  if (prefs.meme) allowed.add("meme");
+  if (prefs.prediction) {
+    allowed.add("prediction");
+    allowed.add("multiprediction");
+  }
+  if (prefs.whale) allowed.add("whale");
+  return allowed;
+}
+
 export function FeedContainer({
   initialSignals,
   initialSeed,
@@ -40,6 +52,18 @@ export function FeedContainer({
   const [total, setTotal] = useState(initialTotal);
   const [activeIdx, setActiveIdx] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Pre-hydration: render everything (matches SSR). After mount we
+  // read the user's saved rail prefs from localStorage and filter
+  // client-side. The wizard writes these on first authed visit.
+  const [prefs, setLocalPrefs] = useState<FeedPrefs>(DEFAULT_PREFS);
+  useEffect(() => {
+    setLocalPrefs(getPrefs());
+  }, []);
+  const visibleSignals = useMemo(() => {
+    const allowed = buildAllowedTypes(prefs);
+    if (allowed.size === 4) return signals; // all rails on — skip filter
+    return signals.filter((s) => allowed.has(s.type));
+  }, [signals, prefs]);
 
   // Stable refs so the fetcher closure always sees the latest values
   // without having to retrigger the IntersectionObserver effect.
@@ -105,11 +129,11 @@ export function FeedContainer({
 
     els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [signals.length, loadMore]);
+  }, [visibleSignals.length, loadMore]);
 
   const activeGradient = useMemo(
-    () => cardGradient(signals[activeIdx]),
-    [signals, activeIdx],
+    () => cardGradient(visibleSignals[activeIdx]),
+    [visibleSignals, activeIdx],
   );
 
   return (
@@ -125,7 +149,7 @@ export function FeedContainer({
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}
       >
-        {signals.map((signal, i) => (
+        {visibleSignals.map((signal, i) => (
           <div
             key={`${i}-${signal.id}`}
             ref={(el) => {

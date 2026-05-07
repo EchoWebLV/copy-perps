@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { WatchlistProvider } from "@/components/watchlist/WatchlistProvider";
 import { AnalyzeProvider } from "@/components/feed/AnalyzeProvider";
 import { UserEnsure } from "@/components/auth/UserEnsure";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 
 // Pages inside this route group render inside the phone-frame: full-bleed
 // on mobile, centered phone-shaped container on desktop. The landing page
@@ -18,6 +19,7 @@ export default function ContainedLayout({ children }: { children: ReactNode }) {
   return (
     <div className="phone-frame">
       <UserEnsure />
+      <OnboardingWizard />
       <WatchlistProvider>
         <AnalyzeProvider>{children}</AnalyzeProvider>
       </WatchlistProvider>

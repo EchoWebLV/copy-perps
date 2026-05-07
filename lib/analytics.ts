@@ -103,6 +103,12 @@ export const ev = {
 
   depositAddressCopied: () => track("deposit_address_copied"),
 
+  onboardingCompleted: (props: {
+    meme: boolean;
+    prediction: boolean;
+    whale: boolean;
+  }) => track("onboarding_completed", props),
+
   withdrawStarted: (props: { amount_usd: number }) =>
     track("withdraw_started", props),
   withdrawConfirmed: (props: { amount_usd: number; tx_hash: string }) =>
