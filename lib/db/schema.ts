@@ -47,24 +47,34 @@ export const signals = pgTable(
   }),
 );
 
-export const bets = pgTable("bets", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  // No FK — signals are an evictable cache (cron does DELETE+INSERT
-  // every 1-2 min), so a hard FK would either block eviction or cascade
-  // bet history away. Keep the column as a soft pointer.
-  signalId: text("signal_id"),
-  type: text("type").notNull(),
-  amountUsdc: doublePrecision("amount_usdc").notNull(),
-  feeUsdc: doublePrecision("fee_usdc"),
-  txHash: text("tx_hash"),
-  status: text("status").notNull().default("pending"),
-  meta: jsonb("meta"),
-  closedAt: timestamp("closed_at", { withTimezone: true }),
-  closeTxHash: text("close_tx_hash"),
-  proceedsUsdc: doublePrecision("proceeds_usdc"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const bets = pgTable(
+  "bets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    // No FK — signals are an evictable cache (cron does DELETE+INSERT
+    // every 1-2 min), so a hard FK would either block eviction or cascade
+    // bet history away. Keep the column as a soft pointer.
+    signalId: text("signal_id"),
+    type: text("type").notNull(),
+    amountUsdc: doublePrecision("amount_usdc").notNull(),
+    feeUsdc: doublePrecision("fee_usdc"),
+    txHash: text("tx_hash"),
+    status: text("status").notNull().default("pending"),
+    meta: jsonb("meta"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closeTxHash: text("close_tx_hash"),
+    proceedsUsdc: doublePrecision("proceeds_usdc"),
+    // When set, the bet is published to the public leaderboard. We don't
+    // snapshot the card payload — render uses the live `status`, so an
+    // open share auto-flips to "final" once closed.
+    sharedAt: timestamp("shared_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    sharedIdx: index("bets_shared_idx").on(t.sharedAt),
+  }),
+);
 
 export const whaleWallets = pgTable("whale_wallets", {
   address: text("address").primaryKey(),
