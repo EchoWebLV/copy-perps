@@ -7,9 +7,13 @@ import type { CSSProperties, ReactNode } from "react";
 export function PhoneFrame({
   activeTab,
   children,
+  balance = "$86.40 ready",
+  balancePulse = 0,
 }: {
-  activeTab: "feed" | "portfolio";
+  activeTab: "feed" | "portfolio" | "deposit";
   children: ReactNode;
+  balance?: string;
+  balancePulse?: number;
 }) {
   return (
     <div
@@ -46,7 +50,7 @@ export function PhoneFrame({
       >
         <StatusBar />
         <DynamicIsland />
-        <BalancePillMock />
+        <BalancePillMock label={balance} pulse={balancePulse} />
         <div className="absolute inset-x-0 top-[44px] bottom-[68px] overflow-hidden">
           {children}
         </div>
@@ -160,15 +164,33 @@ function BatteryIcon() {
   );
 }
 
-function BalancePillMock() {
+function BalancePillMock({
+  label,
+  pulse,
+}: {
+  label: string;
+  pulse: number;
+}) {
+  const scale = 1 + 0.08 * pulse;
+  const glow = 0.18 + pulse * 0.55;
   return (
-    <div className="pointer-events-none absolute top-[60px] left-1/2 z-20 -translate-x-1/2 rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-3.5 py-1.5 text-[11px] font-semibold text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.18)] backdrop-blur-xl">
-      $86.40 ready
+    <div
+      className="pointer-events-none absolute top-[60px] left-1/2 z-20 rounded-2xl border border-emerald-400/30 bg-emerald-500/15 px-3.5 py-1.5 text-[11px] font-semibold text-emerald-300 backdrop-blur-xl"
+      style={{
+        transform: `translateX(-50%) scale(${scale})`,
+        boxShadow: `0 0 24px rgba(16,185,129,${glow})`,
+      }}
+    >
+      {label}
     </div>
   );
 }
 
-function BottomNav({ activeTab }: { activeTab: "feed" | "portfolio" }) {
+function BottomNav({
+  activeTab,
+}: {
+  activeTab: "feed" | "portfolio" | "deposit";
+}) {
   const tabs = [
     { key: "feed", icon: Flame, label: "Feed" },
     { key: "deposit", icon: Wallet, label: "Deposit" },
