@@ -18,6 +18,8 @@ const sections = [
   { id: "watchlist", label: "Watchlist" },
   { id: "gwak-take", label: "Gwak's take" },
   { id: "control", label: "What you control" },
+  { id: "aggregation", label: "Where the data comes from" },
+  { id: "wallet", label: "Wallet and signing" },
 ];
 
 export default function DocsPage() {
@@ -239,6 +241,108 @@ export default function DocsPage() {
             <p>
               If you stop using gwak, you can withdraw your full balance at
               any time. There is no lock-up and no minimum.
+            </p>
+          </Section>
+
+          <Section
+            id="aggregation"
+            kicker="11"
+            title="Where the data comes from"
+            blurb="Heat is built from public sources. We do not pick what you see, the market does."
+          >
+            <p>
+              Each rail watches a different corner of the public market. The
+              cards that rise to the top of the feed are the ones the rest of
+              the market is already paying attention to, scored on a few
+              public signals.
+            </p>
+            <p className="font-semibold text-white">Signal sources</p>
+            <ul className="ml-5 list-disc space-y-2 marker:text-white/30">
+              <li>
+                <span className="font-semibold text-white">Memes</span> are
+                surfaced from DexScreener, the Solana pair tracker the rest of
+                the market uses. We pull boosted and trending pairs and rank
+                them by volume, momentum, and social signal.
+              </li>
+              <li>
+                <span className="font-semibold text-white">Markets</span> come
+                from Jupiter Prediction, which itself aggregates real
+                liquidity from Polymarket and Kalshi. The card you tap is an
+                actual position on a real prediction market, not a synthetic
+                odds feed.
+              </li>
+              <li>
+                <span className="font-semibold text-white">Whales</span> are
+                polled from Hyperliquid, where many of the loudest crypto
+                traders run their public books. We watch a curated list of
+                wallets and surface fresh opens and meaningful size-ups.
+              </li>
+            </ul>
+            <p className="font-semibold text-white">Where trades execute</p>
+            <p>
+              The signal can come from anywhere, the trade always lands on
+              Solana. Memes route through Jupiter Swap, the best-of-DEX
+              aggregator, so you take the deepest liquidity available across
+              every venue at once. Markets route into the same Jupiter
+              Prediction pool the signal came from. Whale trades replicate
+              the perp on Solana through Flash Trade, since Hyperliquid runs
+              on its own chain. You get the direction and the leverage,
+              sized in your USDC, on Solana rails.
+            </p>
+            <p>
+              Pricing on cards is live. Heat refreshes every couple of
+              minutes, prices and odds refresh every few seconds while you
+              are looking at a position.
+            </p>
+          </Section>
+
+          <Section
+            id="wallet"
+            kicker="12"
+            title="Wallet and signing"
+            blurb="Your wallet is yours. Your keys are not on our servers. Every move that touches money is signed by you."
+          >
+            <p>
+              The wallet behind your login is provided by Privy. It is
+              non-custodial: the private key is held in a secure enclave that
+              gwak does not have access to, and it is bound to your login the
+              way a password manager is bound to yours. We never see, store,
+              or transmit your key.
+            </p>
+            <p>
+              We cannot move your USDC on our own. Every open, close, and
+              withdraw is a transaction that gwak builds and your wallet
+              signs. The signature is the authorisation. Without it, nothing
+              happens. If gwak vanished tomorrow, you could sign in with the
+              same login on any Privy-compatible app and your balance would
+              still be there.
+            </p>
+            <p>
+              We do pay your network gas, but from a separate pocket. Two
+              server-controlled wallets sit alongside yours and have no
+              ability to spend your USDC.
+            </p>
+            <ul className="ml-5 list-disc space-y-2 marker:text-white/30">
+              <li>
+                The <span className="font-semibold text-white">gas wallet</span>{" "}
+                pays the few hundredths of a cent of SOL each transaction
+                costs to land on chain. It is set as the fee payer on every
+                bet, close, and withdraw, so you never need to hold SOL.
+              </li>
+              <li>
+                The{" "}
+                <span className="font-semibold text-white">treasury wallet</span>{" "}
+                only ever receives the small platform fee on opens. Closes
+                and withdraws do not pay it. Neither wallet can touch your
+                funds.
+              </li>
+            </ul>
+            <p>
+              Your login itself is also light on data. Privy returns gwak a
+              stable identifier and your wallet handle, nothing else. We do
+              not get your provider password, your saved payment methods, or
+              anything beyond what is needed to recognise you the next time
+              you open the app.
             </p>
           </Section>
         </article>
