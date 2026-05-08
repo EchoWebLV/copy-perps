@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Settings, PieChart } from "lucide-react";
+import { Flame, Settings, PieChart, Trophy } from "lucide-react";
 
 const tabs = [
   { href: "/feed", icon: Flame, label: "Feed" },
+  { href: "/leaderboard", icon: Trophy, label: "Wins" },
   { href: "/portfolio", icon: PieChart, label: "Portfolio" },
   { href: "/deposit", icon: Settings, label: "Settings" },
 ];

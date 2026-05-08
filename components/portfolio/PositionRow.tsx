@@ -2,6 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 import { CloseButton } from "./CloseButton";
+import { ShareButton } from "./ShareButton";
 
 export interface PortfolioPosition {
   id: string;
@@ -31,6 +32,7 @@ export interface PortfolioPosition {
   closeTxHash?: string | null;
   createdAt: string;
   closedAt?: string | null;
+  sharedAt?: string | null;
 }
 
 const fmtUsd = (n: number | null | undefined) =>
@@ -45,9 +47,11 @@ const fmtPct = (n: number | null | undefined) => {
 export function PositionRow({
   position,
   onClosed,
+  onShared,
 }: {
   position: PortfolioPosition;
   onClosed: () => void;
+  onShared?: () => void;
 }) {
   const pnlColor =
     position.pnlUsdc == null
@@ -109,6 +113,7 @@ export function PositionRow({
   ) : null;
 
   const closeable = !isClosed && !isPending && !isFailed;
+  const shareable = (isClosed || position.status === "confirmed") && !dim;
   const apiBase:
     | "/api/bet/meme"
     | "/api/bet/prediction"
@@ -192,13 +197,22 @@ export function PositionRow({
               {dim ? "—" : fmtPct(position.pnlPct)}
             </div>
           </div>
-          {closeable && apiBase && (
-            <CloseButton
-              betId={position.id}
-              apiBase={apiBase}
-              onClosed={onClosed}
-            />
-          )}
+          <div className="flex items-center gap-1.5">
+            {shareable && (
+              <ShareButton
+                betId={position.id}
+                alreadyShared={!!position.sharedAt}
+                onShared={onShared ?? onClosed}
+              />
+            )}
+            {closeable && apiBase && (
+              <CloseButton
+                betId={position.id}
+                apiBase={apiBase}
+                onClosed={onClosed}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

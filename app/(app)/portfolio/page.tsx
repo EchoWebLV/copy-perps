@@ -333,7 +333,12 @@ export default function PortfolioPage() {
                     </div>
                   )}
                   {visiblePositions.map((p) => (
-                    <PositionRow key={p.id} position={p} onClosed={load} />
+                    <PositionRow
+                      key={p.id}
+                      position={p}
+                      onClosed={load}
+                      onShared={load}
+                    />
                   ))}
                 </>
               )}
