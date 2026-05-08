@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Settings, PieChart, Trophy } from "lucide-react";
+import { Flame, Settings, PieChart } from "lucide-react";
 
+// /leaderboard exists but is not exposed in the nav yet — pre-launch
+// hide while we polish the shared-card flow. Re-add the Trophy entry
+// here when ready.
 const tabs = [
   { href: "/feed", icon: Flame, label: "Feed" },
-  { href: "/leaderboard", icon: Trophy, label: "Wins" },
   { href: "/portfolio", icon: PieChart, label: "Portfolio" },
   { href: "/deposit", icon: Settings, label: "Settings" },
 ];
