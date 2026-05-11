@@ -14,6 +14,9 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
+// Jupiter Prediction's close endpoint geofences egress IPs the same way
+// the open endpoint does. Pin to Frankfurt — see /api/bet/prediction.
+export const preferredRegion = "fra1";
 
 export async function POST(request: Request) {
   const claims = await verifyPrivyRequest(request);

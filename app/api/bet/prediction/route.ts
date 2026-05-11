@@ -40,6 +40,12 @@ const PREDICTION_USER_SOL_FLOOR_LAMPORTS = 15_000_000; // 0.015 SOL ≈ $2.40
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
+// Jupiter Prediction's /orders endpoint geofences by the caller's IP
+// and rejects US egress with code "unsupported_region". Pin this route
+// to Frankfurt so the outbound request comes from a non-blocked region.
+// The route doesn't touch user-locale data, only Jupiter — region
+// placement is purely an egress-IP concern.
+export const preferredRegion = "fra1";
 
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
