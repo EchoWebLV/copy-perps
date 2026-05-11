@@ -15,6 +15,7 @@ import { signals as signalsTable } from "@/lib/db/schema";
 import { memeSparkline } from "@/lib/signals/sparkline";
 import {
   listEvents,
+  marketYesProbability,
   type JPEvent,
   type JPMarket,
 } from "@/lib/jupiter-prediction/client";
@@ -245,7 +246,7 @@ async function fetchPredictionPool(): Promise<PredictionSignal[]> {
 
     const validMarkets = open
       .filter((m) => {
-        const yes = parseFloat(m.outcomePrices?.[0] ?? "0");
+        const yes = marketYesProbability(m);
         // Drop lopsided markets — 95/5 or worse isn't an interesting bet,
         // the favored side has no edge to take and the other side's
         // implied payout is huge but practically nil.
@@ -274,7 +275,7 @@ async function fetchPredictionPool(): Promise<PredictionSignal[]> {
 
   const stamp = new Date().toISOString();
   return top.map(({ event, market, isMultiOutcome, score }) => {
-    const yesProbability = parseFloat(market.outcomePrices[0]);
+    const yesProbability = marketYesProbability(market);
     // For multi-outcome events the market title alone is just the option
     // name (e.g. "Gavin Newsom") — combine with event title so the
     // question reads as a complete bet.

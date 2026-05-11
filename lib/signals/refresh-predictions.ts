@@ -1,7 +1,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { signals } from "@/lib/db/schema";
-import { listEvents, type JPEvent, type JPMarket } from "@/lib/jupiter-prediction/client";
+import {
+  listEvents,
+  marketYesProbability,
+  type JPEvent,
+  type JPMarket,
+} from "@/lib/jupiter-prediction/client";
 import { predictionHeatScore, predictionSignalChips } from "./heat-prediction";
 import type {
   PredictionSignal,
@@ -67,7 +72,7 @@ export async function refreshPredictions(): Promise<RefreshPredictionsResult> {
 
     if (open.length === 1) {
       const market = open[0];
-      const yesPrice = parseFloat(market.outcomePrices?.[0] ?? "0");
+      const yesPrice = marketYesProbability(market);
       if (!Number.isFinite(yesPrice)) continue;
       if (yesPrice >= 0.99 || yesPrice <= 0.005) continue;
 
@@ -78,7 +83,7 @@ export async function refreshPredictions(): Promise<RefreshPredictionsResult> {
         .map((m) => ({
           label: m.title,
           marketId: m.marketId,
-          yesProbability: parseFloat(m.outcomePrices?.[0] ?? "0"),
+          yesProbability: marketYesProbability(m),
         }))
         .filter(
           (o) =>
@@ -116,7 +121,7 @@ export async function refreshPredictions(): Promise<RefreshPredictionsResult> {
     if (c.kind === "binary") {
       const { event, market, score } = c;
       const id = `prediction:${event.eventId}:${market.marketId}`;
-      const yesProbability = parseFloat(market.outcomePrices[0]);
+      const yesProbability = marketYesProbability(market);
 
       const payload: PredictionSignal = {
         id,

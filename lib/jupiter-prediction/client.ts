@@ -22,9 +22,22 @@ export interface JPMarket {
   imageUrl: string | null;
   team: unknown;
   outcomes: string[];
-  outcomePrices: string[];
+  outcomePrices?: string[];
   clobTokenIds: string[];
   resolution: string | null;
+}
+
+// Jupiter Prediction's `/events` payload no longer ships `outcomePrices`;
+// the YES side price now lives in `pricing.buyYesPriceUsd` as micro-USD
+// (1e6 = $1.00 = implied 100%). Older payloads (and `/markets/{id}` on some
+// edges) still include `outcomePrices`, so fall back to it.
+export function marketYesProbability(market: JPMarket): number {
+  const buy = market.pricing?.buyYesPriceUsd;
+  if (typeof buy === "number" && Number.isFinite(buy) && buy > 0) {
+    return buy / 1_000_000;
+  }
+  const fallback = parseFloat(market.outcomePrices?.[0] ?? "0");
+  return Number.isFinite(fallback) ? fallback : 0;
 }
 
 export interface JPEvent {
