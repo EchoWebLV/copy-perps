@@ -5,7 +5,7 @@ import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { flashSymbolFor } from "@/lib/flash-trade/client";
-import { buildOpenPerpTx } from "@/lib/flash-trade/perp";
+import { buildOpenPerpTx, readPerpPosition } from "@/lib/flash-trade/perp";
 import {
   ensureUsdcOrConsolidate,
   ensureUsdcOrConsolidateGasless,
@@ -89,6 +89,31 @@ export async function POST(request: Request) {
       { error: "no Solana wallet on user" },
       { status: 400 },
     );
+  }
+
+  // Flash position PDAs are unique per (user, market, side). Calling
+  // swapAndOpen when one already exists fails on chain with confusing
+  // errors (AccountNotInitialized 0xbc4 or InvalidArgument depending on
+  // state). Reject early — the user should close before re-opening on
+  // the same asset+side.
+  try {
+    const existing = await readPerpPosition(
+      new PublicKey(user.solanaPubkey),
+      flashSymbol,
+      direction,
+    );
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: `You already have an open ${flashSymbol} ${direction} position. Close it from Portfolio before opening another.`,
+        },
+        { status: 409 },
+      );
+    }
+  } catch (err) {
+    // Non-fatal — if the precheck itself errors, fall through to the
+    // build path and let on-chain simulation surface the real issue.
+    console.warn("[bet/perp] position precheck failed:", err);
   }
 
   const gasless = process.env.FEATURE_GASLESS_BETS === "true";
