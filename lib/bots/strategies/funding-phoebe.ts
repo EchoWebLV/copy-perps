@@ -5,7 +5,7 @@ import type {
   ExternalSignals,
   MarketContext,
   PaperPosition,
-  Strategy,
+  SyncStrategy,
 } from "../types";
 
 const ALLOWED_MARKETS = [
@@ -27,7 +27,7 @@ interface PhoebeParams {
   leverage: number;
 }
 
-export function createFundingPhoebeStrategy(p: PhoebeParams): Strategy {
+export function createFundingPhoebeStrategy(p: PhoebeParams): SyncStrategy {
   return {
     id: p.id,
     markets: ALLOWED_MARKETS,

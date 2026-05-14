@@ -5,7 +5,7 @@ import type {
   ExternalSignals,
   MarketContext,
   PaperPosition,
-  Strategy,
+  SyncStrategy,
 } from "../types";
 
 const LIQUIDATION_STALE_MS = 60_000;
@@ -19,7 +19,7 @@ interface LizardParams {
   leverage: number;
 }
 
-export function createLiquidationLizardStrategy(p: LizardParams): Strategy {
+export function createLiquidationLizardStrategy(p: LizardParams): SyncStrategy {
   return {
     id: p.id,
     markets: ALLOWED_MARKETS,

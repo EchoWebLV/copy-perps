@@ -62,9 +62,17 @@ export interface Strategy {
   evaluateEntry(
     ctx: MarketContext,
     signals: ExternalSignals,
-  ): EntryDecision | null;
+  ): EntryDecision | null | Promise<EntryDecision | null>;
   evaluateExit(
     ctx: MarketContext,
     position: PaperPosition,
   ): boolean;
+}
+
+/** Sync-only specialisation — satisfies Strategy, but evaluateEntry is guaranteed synchronous. */
+export interface SyncStrategy extends Strategy {
+  evaluateEntry(
+    ctx: MarketContext,
+    signals: ExternalSignals,
+  ): EntryDecision | null;
 }

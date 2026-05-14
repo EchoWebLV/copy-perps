@@ -67,7 +67,7 @@ export async function tick(): Promise<{
       const mark = marks.get(asset);
       if (mark == null) continue;
       const ctx: MarketContext = { asset, mark };
-      const decision = strategy.evaluateEntry(ctx, signals);
+      const decision = await strategy.evaluateEntry(ctx, signals);
       if (!decision) continue;
       await openPaperPosition({
         botId: bot.id,
