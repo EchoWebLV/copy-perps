@@ -6,6 +6,7 @@ import { getMarksSnapshot } from "@/lib/data/marks";
 import { computeLivePaperPnlPct } from "@/lib/bots/paper";
 import { getCrossBotSnapshot } from "@/lib/bots/cross-bot";
 import { computeMoodBadge } from "@/lib/bots/mood";
+import { getThoughtSettings } from "@/lib/bots/thoughts/settings";
 import type { BotConfig } from "@/lib/bots/types";
 import type { BotSignal } from "@/lib/types";
 
@@ -27,8 +28,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
   const marks = await getMarksSnapshot();
   // Fetch the cross-bot snapshot once; used for disagreement computation per position.
   const crossBot = await getCrossBotSnapshot();
-  // TODO Task 5: replace with `await getThoughtSettings()` once it exists.
-  const enableMoodBadges = true;
+  const settings = await getThoughtSettings();
   const signals: BotSignal[] = [];
   const stamp = new Date().toISOString();
 
@@ -151,26 +151,10 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
     const recentClosedPnls = closedRows
       .slice(0, 10)
       .map((r) => r.paperPnlUsd ?? 0);
-    const mood = enableMoodBadges
+    const mood = settings.enableMoodBadges
       ? computeMoodBadge({
           botStatus: bot.status as BotConfig["status"],
-          openPositions: openRows.map((r) => ({
-            id: r.id,
-            botId: r.botId,
-            asset: r.asset,
-            side: r.side as "long" | "short",
-            leverage: r.leverage,
-            stakeUsd: r.stakeUsd,
-            entryMark: r.entryMark,
-            entryTs: r.entryTs,
-            exitMark: r.exitMark,
-            exitTs: r.exitTs,
-            paperPnlUsd: r.paperPnlUsd,
-            triggerMeta: (r.triggerMeta as Record<string, unknown> | null) ?? null,
-            narrationOpen: r.narrationOpen,
-            narrationClose: r.narrationClose,
-            status: r.status as "open" | "closed" | "expired",
-          })),
+          openPositions: openRows.map((r) => ({ id: r.id })),
           recentClosedPnls,
           livePnlPctByPositionId,
         })

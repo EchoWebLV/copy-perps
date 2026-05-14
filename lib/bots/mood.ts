@@ -5,7 +5,7 @@
 // current state. Order of precedence below matters: BUSTED > WOUNDED >
 // ON_STREAK > LOADED > HUNTING > DORMANT.
 
-import type { PaperPosition, BotConfig } from "./types";
+import type { BotConfig } from "./types";
 
 export type MoodBadge =
   | "BUSTED"
@@ -17,7 +17,7 @@ export type MoodBadge =
 
 export interface MoodInput {
   botStatus: BotConfig["status"];
-  openPositions: PaperPosition[];
+  openPositions: Array<{ id: string }>;
   recentClosedPnls: number[]; // last N closed paper_pnl_usd values, newest first
   /** Map from positionId → live PnL fraction on stake. Used to detect WOUNDED. */
   livePnlPctByPositionId?: Record<string, number>;
