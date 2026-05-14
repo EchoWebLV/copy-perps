@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { MessageCircle } from "lucide-react";
 import type { BotSignal, StakeAmount } from "@/lib/types";
+import type { MoodBadge } from "@/lib/bots/mood";
 import { BotChatSheet } from "./BotChatSheet";
 
 const STAKES: StakeAmount[] = [5, 10, 20, 50];
@@ -36,7 +37,7 @@ function fmtAge(ms: number, now: number): string {
 }
 
 const MOOD_BADGES: Record<
-  string,
+  MoodBadge,
   { label: string; emoji: string; classes: string; pulse: boolean }
 > = {
   HUNTING: {
@@ -208,9 +209,10 @@ export function BotCard({ signal }: Props) {
             {p.mood && MOOD_BADGES[p.mood] && (
               <span
                 className={`mt-1.5 mr-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ${MOOD_BADGES[p.mood].classes} ${MOOD_BADGES[p.mood].pulse ? "animate-pulse" : ""}`}
-                title={`${MOOD_BADGES[p.mood].label}: deterministic state`}
+                aria-label={`${MOOD_BADGES[p.mood].label}: bot state`}
               >
-                {MOOD_BADGES[p.mood].emoji} {MOOD_BADGES[p.mood].label}
+                <span aria-hidden="true">{MOOD_BADGES[p.mood].emoji}</span>
+                {MOOD_BADGES[p.mood].label}
               </span>
             )}
             <button
