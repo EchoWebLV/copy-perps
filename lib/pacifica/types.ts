@@ -52,6 +52,27 @@ export interface PacificaPosition {
   // implied by margin/notional (isolated).
 }
 
+// Row shape returned by GET /positions/history?account=... — one row
+// per fill (an order may produce several maker/taker fills). The pnl
+// field is the realized PnL contribution of THAT FILL specifically;
+// to get per-order PnL group rows by order_id and sum.
+export interface PacificaPositionHistoryRow {
+  history_id: number;
+  order_id: number;
+  client_order_id: string | null;
+  symbol: string;
+  amount: string;
+  price: string;
+  entry_price: string;
+  fee: string;                 // negative = rebate, positive = paid
+  spot_fee: string | null;
+  pnl: string;                 // realized PnL of this fill (decimal string)
+  event_type: string;          // "fulfill_maker", "fulfill_taker", etc.
+  side: string;                // "open_long" | "close_long" | "open_short" | "close_short" | ...
+  created_at: number;          // ms epoch
+  cause: string;
+}
+
 export interface PacificaAccountInfo {
   balance: string;
   fee_level: number;

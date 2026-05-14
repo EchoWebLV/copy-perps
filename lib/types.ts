@@ -96,6 +96,9 @@ export interface PacificaTraderPosition {
   // Null in Phase 1 (compute via WS mark price in Phase 2 if needed).
   // Identify positions by (account, market, side) — no per-position id.
   unrealizedPnlPct: number | null;
+  // ms epoch when the leader opened this position. Used for "opened
+  // 4m ago" labels and the "fresh" pulse on positions <15min old.
+  openedAtMs: number;
 }
 
 export interface PacificaTraderStats {
@@ -107,13 +110,22 @@ export interface PacificaTraderStats {
   pnlAllTimeUsdc: number;
   volume1dUsdc: number;
   volume7dUsdc: number;
+  // From recent trades-history. Streak = consecutive winning trades
+  // ending at the latest close (0 if their last close was a loser).
+  // 1d win rate is wins / total closes in the last 24h, or null when
+  // the trader hasn't closed anything in the window.
+  winStreak: number;
+  winRatePct1d: number | null;
+  totalCloses1d: number;
 }
 
 export interface PacificaTraderSignal extends BaseSignal {
   type: "pacifica_trader";
   address: string;          // base58 Solana pubkey (user's main wallet on Pacifica)
   username: string | null;  // Pacifica display name, if set
-  position: PacificaTraderPosition | null;
+  // Up to 3 open positions ordered by notional desc. Cards render
+  // each as its own tap-to-copy row. Empty array = "watching".
+  positions: PacificaTraderPosition[];
   stats: PacificaTraderStats;
 }
 

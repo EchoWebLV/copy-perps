@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
-import type { PacificaTraderSignal, StakeAmount } from "@/lib/types";
+import type {
+  PacificaTraderSignal,
+  PacificaTraderPosition,
+  StakeAmount,
+} from "@/lib/types";
 
 const STAKES: StakeAmount[] = [5, 10, 20, 50];
 const RPC =
@@ -40,8 +44,6 @@ function b64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-// Compact USD formatter so big numbers don't overflow the card.
-// $498,256 -> "$498k", $52,460,750 -> "$52M", $1,151,847 -> "$1.2M".
 function fmtUsd(v: number, opts: { signed?: boolean } = {}): string {
   const sign = v < 0 ? "-" : opts.signed ? "+" : "";
   const abs = Math.abs(v);
@@ -69,24 +71,49 @@ function pnlColor(v: number): string {
   return "text-white/50";
 }
 
+function fmtAge(ms: number, now: number): string {
+  const diff = Math.max(0, now - ms);
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
 export function CopyCard({ signal, isActive }: Props) {
   const { getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
   const { signMessage } = useSignMessage();
   const { signTransaction } = useSignTransaction();
-  const [busy, setBusy] = useState<StakeAmount | null>(null);
+  // busy is keyed by `${positionIndex}:${stake}` so each row's button
+  // shows its own loading state.
+  const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const pos = signal.position;
   const stats = signal.stats;
+  const positions = signal.positions;
   const truncated = useMemo(
     () => `${signal.address.slice(0, 4)}…${signal.address.slice(-4)}`,
     [signal.address],
   );
+  const allTimeUp = stats.pnlAllTimeUsdc >= 0;
+
+  // Tick every 15s so "opened 4m ago" stays fresh while the user
+  // dwells on a card. Cheap; no network calls.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    if (!isActive) return;
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, [isActive]);
 
   const onTap = useCallback(
-    async (stake: StakeAmount) => {
+    async (positionIdx: number, stake: StakeAmount) => {
+      const pos = positions[positionIdx];
       if (!pos || busy || !wallet) return;
-      setBusy(stake);
+      const key = `${positionIdx}:${stake}`;
+      setBusy(key);
       setStatus("Placing order…");
       try {
         const token = await getAccessToken();
@@ -187,7 +214,7 @@ export function CopyCard({ signal, isActive }: Props) {
     [
       busy,
       getAccessToken,
-      pos,
+      positions,
       signal.address,
       signal.id,
       signMessage,
@@ -196,16 +223,11 @@ export function CopyCard({ signal, isActive }: Props) {
     ],
   );
 
-  const isLong = pos?.side === "long";
-  const lev = pos && pos.leverage > 0 ? `${Math.round(pos.leverage)}x` : "cross";
-  const allTimeUp = stats.pnlAllTimeUsdc >= 0;
-
   return (
     <div
       className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[60px] pb-24 text-white"
       data-card-type="pacifica_trader"
     >
-      {/* Glow accent driven by the trader's all-time PnL direction. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-48 opacity-40 blur-3xl"
         style={{
@@ -243,115 +265,154 @@ export function CopyCard({ signal, isActive }: Props) {
         </div>
       </div>
 
-      {/* Position hero */}
-      <div className="relative mt-5 flex-1">
-        {pos ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="text-3xl font-black tracking-tight">
-                {pos.market}
-              </div>
-              <div
-                className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${
-                  isLong
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "bg-rose-500/20 text-rose-300"
-                }`}
-              >
-                {pos.side}
-              </div>
-              <div className="rounded-md bg-white/10 px-2 py-0.5 text-xs font-bold uppercase text-white/80">
-                {lev}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-white/40">
-                  Size
-                </div>
-                <div className="font-semibold">{fmtUsd(pos.notionalUsd)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-white/40">
-                  Entry
-                </div>
-                <div className="font-semibold">{fmtPrice(pos.entryPrice)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-white/40">
-                  Equity
-                </div>
-                <div className="font-semibold">{fmtUsd(stats.equityUsdc)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-white/40">
-                  Total OI
-                </div>
-                <div className="font-semibold">
-                  {fmtUsd(stats.openInterestUsdc)}
-                </div>
-              </div>
-            </div>
-
-            {/* PnL strip */}
-            <div className="mt-3 flex items-stretch gap-2 rounded-xl bg-white/5 p-2">
-              {[
-                { label: "1d", v: stats.pnl1dUsdc },
-                { label: "7d", v: stats.pnl7dUsdc },
-                { label: "30d", v: stats.pnl30dUsdc },
-              ].map(({ label, v }) => (
-                <div
-                  key={label}
-                  className="flex-1 rounded-lg px-2 py-1.5 text-center"
-                >
-                  <div className="text-[10px] uppercase tracking-wider text-white/40">
-                    {label} pnl
-                  </div>
-                  <div className={`text-sm font-bold ${pnlColor(v)}`}>
-                    {fmtUsd(v, { signed: true })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
+      {/* Stats strip */}
+      <div className="relative mt-3 flex items-stretch gap-2 rounded-xl bg-white/5 p-2">
+        {[
+          { label: "1d", v: stats.pnl1dUsdc },
+          { label: "7d", v: stats.pnl7dUsdc },
+          { label: "30d", v: stats.pnl30dUsdc },
+        ].map(({ label, v }) => (
+          <div key={label} className="flex-1 rounded-lg px-2 py-1.5 text-center">
             <div className="text-[10px] uppercase tracking-wider text-white/40">
-              7d vol {fmtUsd(stats.volume7dUsdc)} · 1d vol{" "}
-              {fmtUsd(stats.volume1dUsdc)}
+              {label}
             </div>
+            <div className={`text-sm font-bold ${pnlColor(v)}`}>
+              {fmtUsd(v, { signed: true })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Chips row: streak + win rate */}
+      {(stats.winStreak >= 3 ||
+        (stats.winRatePct1d !== null && stats.totalCloses1d >= 3)) && (
+        <div className="relative mt-3 flex flex-wrap gap-1.5">
+          {stats.winStreak >= 3 && (
+            <div className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-200">
+              🔥 {stats.winStreak} in a row
+            </div>
+          )}
+          {stats.winRatePct1d !== null && stats.totalCloses1d >= 3 && (
+            <div className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80">
+              {Math.round(stats.winRatePct1d)}% wins · {stats.totalCloses1d} trades 24h
+            </div>
+          )}
+          <div className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80">
+            equity {fmtUsd(stats.equityUsdc)}
+          </div>
+        </div>
+      )}
+
+      {/* Position stack */}
+      <div className="relative mt-3 flex-1 space-y-2 overflow-y-auto">
+        {positions.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-white/40">
+            No open positions. Watching.
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-white/40">
-            No open position. Watching.
-          </div>
+          positions.map((pos, idx) => (
+            <PositionRow
+              key={`${pos.market}:${pos.side}`}
+              pos={pos}
+              now={now}
+              busyKey={busy}
+              positionIdx={idx}
+              isActive={isActive}
+              onTap={onTap}
+            />
+          ))
         )}
       </div>
 
-      {/* Stake row */}
-      <div className="relative mt-5">
-        <div className="mb-1.5 text-[10px] uppercase tracking-widest text-white/50">
-          {pos ? `Copy this ${isLong ? "long" : "short"}` : "Waiting for trade"}
+      {status && (
+        <div className="relative mt-2 text-center text-xs text-white/70">
+          {status}
         </div>
-        <div className="flex gap-2">
-          {STAKES.map((s) => (
+      )}
+    </div>
+  );
+}
+
+function PositionRow({
+  pos,
+  now,
+  busyKey,
+  positionIdx,
+  isActive,
+  onTap,
+}: {
+  pos: PacificaTraderPosition;
+  now: number;
+  busyKey: string | null;
+  positionIdx: number;
+  isActive: boolean;
+  onTap: (positionIdx: number, stake: StakeAmount) => void;
+}) {
+  const isLong = pos.side === "long";
+  const lev = pos.leverage > 0 ? `${pos.leverage}x` : "cross";
+  const ageMs = now - pos.openedAtMs;
+  const fresh = ageMs < 15 * 60 * 1000;
+
+  return (
+    <div className="rounded-2xl bg-white/[0.04] p-3 ring-1 ring-white/5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="text-lg font-black tracking-tight">{pos.market}</div>
+          <div
+            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+              isLong
+                ? "bg-emerald-500/20 text-emerald-300"
+                : "bg-rose-500/20 text-rose-300"
+            }`}
+          >
+            {pos.side}
+          </div>
+          <div className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/80">
+            {lev}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-white/50">
+          {fresh && (
+            <span
+              className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
+              aria-hidden
+            />
+          )}
+          {fmtAge(pos.openedAtMs, now)}
+        </div>
+      </div>
+
+      <div className="mt-1.5 grid grid-cols-2 gap-x-3 text-[11px]">
+        <div>
+          <span className="text-white/40">Size </span>
+          <span className="font-semibold">{fmtUsd(pos.notionalUsd)}</span>
+        </div>
+        <div>
+          <span className="text-white/40">Entry </span>
+          <span className="font-semibold">{fmtPrice(pos.entryPrice)}</span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex gap-1.5">
+        {STAKES.map((s) => {
+          const key = `${positionIdx}:${s}`;
+          const isBusy = busyKey === key;
+          return (
             <button
               key={s}
               type="button"
-              disabled={!pos || busy !== null || !isActive}
-              onClick={() => onTap(s)}
-              className={`flex-1 rounded-xl py-3 text-sm font-bold transition disabled:opacity-30 ${
+              disabled={busyKey !== null || !isActive}
+              onClick={() => onTap(positionIdx, s)}
+              className={`flex-1 rounded-lg py-2 text-xs font-bold transition disabled:opacity-30 ${
                 isLong
                   ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                   : "bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
               }`}
             >
-              {busy === s ? "…" : `$${s}`}
+              {isBusy ? "…" : `$${s}`}
             </button>
-          ))}
-        </div>
-        {status && (
-          <div className="mt-2 text-center text-xs text-white/70">{status}</div>
-        )}
+          );
+        })}
       </div>
     </div>
   );
