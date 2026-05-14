@@ -26,3 +26,7 @@ export function getStrategy(strategyKey: string): Strategy | null {
 export function listBots(): BotConfig[] {
   return Array.from(BOTS.values());
 }
+
+// Bot strategy implementations register themselves on import. Phase 1 ships
+// Liquidation Lizard only; Phase 2 adds the rest.
+import "./strategies/liquidation-lizard";
