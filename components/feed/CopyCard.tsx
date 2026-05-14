@@ -92,7 +92,10 @@ export function CopyCard({ signal, isActive }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const stats = signal.stats;
-  const positions = signal.positions;
+  // Defensive default — stale payloads cached before the multi-position
+  // refactor may still lack `positions` until the 60s feed-pool cache
+  // rotates. Don't crash; show empty.
+  const positions = signal.positions ?? [];
   const truncated = useMemo(
     () => `${signal.address.slice(0, 4)}…${signal.address.slice(-4)}`,
     [signal.address],
