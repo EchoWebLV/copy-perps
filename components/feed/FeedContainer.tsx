@@ -8,6 +8,7 @@ import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { CopyCard } from "./CopyCard";
 import { LiveTape } from "./LiveTape";
+import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
@@ -213,6 +214,7 @@ export function FeedContainer({
   );
 
   return (
+    <PacificaLiveProvider>
     <div
       className="relative h-full w-full overflow-hidden"
       style={{
@@ -244,6 +246,7 @@ export function FeedContainer({
         ))}
       </div>
     </div>
+    </PacificaLiveProvider>
   );
 }
 

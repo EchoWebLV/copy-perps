@@ -10,6 +10,7 @@ import type {
   PacificaTraderPosition,
   StakeAmount,
 } from "@/lib/types";
+import { useLiveMark } from "@/lib/pacifica/live-context";
 
 const STAKES: StakeAmount[] = [5, 10, 20, 50];
 const RPC =
@@ -356,6 +357,24 @@ function PositionRow({
   const ageMs = now - pos.openedAtMs;
   const fresh = ageMs < 15 * 60 * 1000;
 
+  // Live mark from WS trades. Compute live PnL% the same way Pacifica
+  // would: (mark - entry) / entry * sideMultiplier * leverage. For
+  // cross positions (leverage=0) we report price-move % instead.
+  const mark = useLiveMark(pos.market);
+  let livePnlPct: number | null = null;
+  let livePnlLabel = "";
+  if (mark && pos.entryPrice > 0) {
+    const priceMovePct =
+      ((mark - pos.entryPrice) / pos.entryPrice) * (isLong ? 1 : -1) * 100;
+    if (pos.leverage > 0) {
+      livePnlPct = priceMovePct * pos.leverage;
+      livePnlLabel = "PnL";
+    } else {
+      livePnlPct = priceMovePct;
+      livePnlLabel = "Move";
+    }
+  }
+
   return (
     <div className="rounded-2xl bg-white/[0.04] p-3 ring-1 ring-white/5">
       <div className="flex items-center justify-between">
@@ -385,7 +404,7 @@ function PositionRow({
         </div>
       </div>
 
-      <div className="mt-1.5 grid grid-cols-2 gap-x-3 text-[11px]">
+      <div className="mt-1.5 grid grid-cols-3 gap-x-3 text-[11px]">
         <div>
           <span className="text-white/40">Size </span>
           <span className="font-semibold">{fmtUsd(pos.notionalUsd)}</span>
@@ -393,6 +412,19 @@ function PositionRow({
         <div>
           <span className="text-white/40">Entry </span>
           <span className="font-semibold">{fmtPrice(pos.entryPrice)}</span>
+        </div>
+        <div>
+          {livePnlPct !== null ? (
+            <>
+              <span className="text-white/40">{livePnlLabel} </span>
+              <span className={`font-semibold ${pnlColor(livePnlPct)}`}>
+                {livePnlPct >= 0 ? "+" : ""}
+                {livePnlPct.toFixed(1)}%
+              </span>
+            </>
+          ) : (
+            <span className="text-white/30">live</span>
+          )}
         </div>
       </div>
 
