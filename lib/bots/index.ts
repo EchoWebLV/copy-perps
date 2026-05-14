@@ -1,5 +1,6 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
+import { buildStrategyFromBot } from "./factories";
 import {
   LiquidationLizardStrategy,
   LiquidationLizardJrStrategy,
@@ -58,6 +59,26 @@ export function getStrategy(strategyKey: string): Strategy | null {
 
 export function listBots(): BotConfig[] {
   return Array.from(BOTS.values());
+}
+
+/**
+ * Returns the Strategy instance for a bot. Fast-path hits the static
+ * registry populated below; cache-miss (e.g. an admin-cloned variant
+ * persisted to the DB after this module loaded) falls through to the
+ * factory map and back-fills the registry so subsequent ticks are O(1).
+ *
+ * Returns null when the bot's strategyKey doesn't map to a known family.
+ */
+export function resolveStrategyForBot(bot: BotConfig): Strategy | null {
+  const cached = STRATEGIES.get(bot.strategyKey);
+  if (cached) return cached;
+  const built = buildStrategyFromBot({
+    strategyKey: bot.strategyKey,
+    config: bot.config,
+  });
+  if (!built) return null;
+  STRATEGIES.set(bot.strategyKey, built);
+  return built;
 }
 
 // Register all 12 bots at module load. Order is informational; the registry

@@ -117,6 +117,7 @@ describe("BoomerTrend.evaluateExit", () => {
     asset: "BTC",
     side: "long",
     leverage: 10,
+    stakeUsd: 100,
     entryMark: 100,
     entryTs: new Date(),
     exitMark: null,

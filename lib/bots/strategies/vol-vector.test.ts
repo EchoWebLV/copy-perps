@@ -110,6 +110,7 @@ describe("VolVector.evaluateExit", () => {
     asset: "SOL",
     side: "long",
     leverage: 30,
+    stakeUsd: 100,
     entryMark: 100,
     entryTs: new Date(),
     exitMark: null,

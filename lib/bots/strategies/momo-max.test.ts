@@ -124,6 +124,7 @@ describe("MomoMax.evaluateExit", () => {
     asset: "SOL",
     side: "long",
     leverage: 20,
+    stakeUsd: 100,
     entryMark: 100,
     entryTs: new Date(),
     exitMark: null,

@@ -17,6 +17,7 @@ export interface PaperPosition {
   asset: string;
   side: "long" | "short";
   leverage: number;
+  stakeUsd: number; // NEW
   entryMark: number;
   entryTs: Date;
   exitMark: number | null;

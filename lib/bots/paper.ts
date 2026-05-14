@@ -40,8 +40,8 @@ export function computeLivePaperPnlPct(args: LivePaperPnlArgs): number {
 
 // lib/bots/paper.ts (append)
 import { db } from "@/lib/db";
-import { paperPositions } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { bots, paperPositions } from "@/lib/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import type { PaperPosition, EntryDecision } from "./types";
 
 function rowToPosition(row: typeof paperPositions.$inferSelect): PaperPosition {
@@ -51,6 +51,7 @@ function rowToPosition(row: typeof paperPositions.$inferSelect): PaperPosition {
     asset: row.asset,
     side: row.side as "long" | "short",
     leverage: row.leverage,
+    stakeUsd: row.stakeUsd, // NEW
     entryMark: row.entryMark,
     entryTs: row.entryTs,
     exitMark: row.exitMark,
@@ -88,6 +89,7 @@ export async function openPaperPosition(args: {
   botId: string;
   decision: EntryDecision;
   entryMark: number;
+  stakeUsd: number; // NEW
   narration: string | null;
 }): Promise<PaperPosition> {
   const [row] = await db
@@ -97,6 +99,7 @@ export async function openPaperPosition(args: {
       asset: args.decision.asset,
       side: args.decision.side,
       leverage: args.decision.leverage,
+      stakeUsd: args.stakeUsd, // NEW
       entryMark: args.entryMark,
       triggerMeta: args.decision.triggerMeta,
       narrationOpen: args.narration,
@@ -108,10 +111,12 @@ export async function openPaperPosition(args: {
 
 export async function closePaperPosition(args: {
   positionId: string;
+  botId: string; // NEW — needed for balance update
   exitMark: number;
   paperPnlUsd: number;
   narration: string | null;
 }): Promise<void> {
+  // Update the position
   await db
     .update(paperPositions)
     .set({
@@ -122,4 +127,41 @@ export async function closePaperPosition(args: {
       status: "closed",
     })
     .where(eq(paperPositions.id, args.positionId));
+
+  // Credit the bot's balance with the PnL
+  // (Two sequential updates — Neon HTTP doesn't support nested transactions cleanly.)
+  await db
+    .update(bots)
+    .set({
+      balanceUsd: sql`${bots.balanceUsd} + ${args.paperPnlUsd}`,
+    })
+    .where(eq(bots.id, args.botId));
+}
+
+/** Returns all open positions for a given bot. Used by the resolver. */
+export async function fetchOpenPositionsForBot(
+  botId: string,
+): Promise<PaperPosition[]> {
+  const rows = await db
+    .select()
+    .from(paperPositions)
+    .where(
+      and(eq(paperPositions.botId, botId), eq(paperPositions.status, "open")),
+    );
+  return rows.map(rowToPosition);
+}
+
+/** Returns the bot's current paper balance in USD. */
+export async function getBotBalance(botId: string): Promise<number> {
+  const [row] = await db
+    .select({ balance: bots.balanceUsd })
+    .from(bots)
+    .where(eq(bots.id, botId))
+    .limit(1);
+  return row?.balance ?? 0;
+}
+
+/** Marks a bot as busted (balance <= 0 / blown up). */
+export async function markBotBusted(botId: string): Promise<void> {
+  await db.update(bots).set({ status: "busted" }).where(eq(bots.id, botId));
 }

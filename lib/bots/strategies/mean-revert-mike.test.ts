@@ -75,6 +75,7 @@ describe("MeanRevertMike.evaluateExit", () => {
     asset: "SOL",
     side: "short",
     leverage: 25,
+    stakeUsd: 100,
     entryMark: 110,
     entryTs: new Date(),
     exitMark: null,

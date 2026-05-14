@@ -28,13 +28,21 @@ vi.mock("./paper", async () => {
     ...actual,
     openPaperPosition: vi.fn(),
     closePaperPosition: vi.fn(),
-    fetchOpenPositions: vi.fn(async () => []),
+    fetchOpenPositionsForBot: vi.fn(async () => []),
+    getBotBalance: vi.fn(async () => 1000),
+    markBotBusted: vi.fn(),
   };
 });
 
 import { tick } from "./resolver";
 import { listBots, getStrategy } from "./index";
-import { openPaperPosition, closePaperPosition, fetchOpenPositions } from "./paper";
+import {
+  openPaperPosition,
+  closePaperPosition,
+  fetchOpenPositionsForBot,
+  getBotBalance,
+  markBotBusted,
+} from "./paper";
 
 describe("resolver.tick", () => {
   beforeEach(() => {
@@ -67,11 +75,17 @@ describe("resolver.tick", () => {
     };
     vi.mocked(listBots).mockReturnValue([bot]);
     vi.mocked(getStrategy).mockReturnValue(strategy);
-    vi.mocked(fetchOpenPositions).mockResolvedValue([]);
+    // First call: no open positions (exit phase)
+    // Second call: still no positions (entry phase free-balance calc)
+    vi.mocked(fetchOpenPositionsForBot).mockResolvedValue([]);
+    vi.mocked(getBotBalance).mockResolvedValue(1000);
 
     await tick();
 
     expect(openPaperPosition).toHaveBeenCalledTimes(1);
+    // 1000 balance × 0.5 MAX_STAKE_PCT × 0.5 conviction = 250
+    const callArg = vi.mocked(openPaperPosition).mock.calls[0][0];
+    expect(callArg.stakeUsd).toBe(250);
     expect(closePaperPosition).not.toHaveBeenCalled();
   });
 
@@ -98,6 +112,7 @@ describe("resolver.tick", () => {
       asset: "SOL",
       side: "long",
       leverage: 10,
+      stakeUsd: 100,
       entryMark: 90,
       entryTs: new Date(),
       exitMark: null,
@@ -110,11 +125,19 @@ describe("resolver.tick", () => {
     };
     vi.mocked(listBots).mockReturnValue([bot]);
     vi.mocked(getStrategy).mockReturnValue(strategy);
-    vi.mocked(fetchOpenPositions).mockResolvedValue([openPos]);
+    // First call (exit phase): one open position
+    // Second call (entry-eval phase): empty after close
+    vi.mocked(fetchOpenPositionsForBot)
+      .mockResolvedValueOnce([openPos])
+      .mockResolvedValueOnce([]);
+    vi.mocked(getBotBalance).mockResolvedValue(1000);
 
     await tick();
 
     expect(closePaperPosition).toHaveBeenCalledTimes(1);
+    const closeArg = vi.mocked(closePaperPosition).mock.calls[0][0];
+    expect(closeArg.positionId).toBe("pp-1");
+    expect(closeArg.botId).toBe("test-bot");
     expect(openPaperPosition).not.toHaveBeenCalled();
   });
 
@@ -135,5 +158,54 @@ describe("resolver.tick", () => {
 
     expect(openPaperPosition).not.toHaveBeenCalled();
     expect(closePaperPosition).not.toHaveBeenCalled();
+    expect(fetchOpenPositionsForBot).not.toHaveBeenCalled();
+  });
+
+  it("marks a bot busted when balance drops below $10", async () => {
+    const bot: BotConfig = {
+      id: "test-bot",
+      parentId: null,
+      name: "Test",
+      avatarEmoji: "🧪",
+      personaVoiceKey: "test",
+      strategyKey: "test",
+      config: {},
+      status: "paper",
+    };
+    const strategy: Strategy = {
+      id: "test",
+      markets: ["SOL"],
+      evaluateEntry: () => null,
+      evaluateExit: () => true,
+    };
+    const openPos: PaperPosition = {
+      id: "pp-bust",
+      botId: "test-bot",
+      asset: "SOL",
+      side: "long",
+      leverage: 10,
+      stakeUsd: 500,
+      entryMark: 100,
+      entryTs: new Date(),
+      exitMark: null,
+      exitTs: null,
+      paperPnlUsd: null,
+      triggerMeta: null,
+      narrationOpen: null,
+      narrationClose: null,
+      status: "open",
+    };
+    vi.mocked(listBots).mockReturnValue([bot]);
+    vi.mocked(getStrategy).mockReturnValue(strategy);
+    // Exit phase: one open position that will be closed
+    vi.mocked(fetchOpenPositionsForBot).mockResolvedValueOnce([openPos]);
+    // After close, balance is $5 (below bust threshold of $10)
+    vi.mocked(getBotBalance).mockResolvedValue(5);
+
+    const result = await tick();
+
+    expect(closePaperPosition).toHaveBeenCalledTimes(1);
+    expect(markBotBusted).toHaveBeenCalledWith("test-bot");
+    expect(result.busted).toBe(1);
   });
 });

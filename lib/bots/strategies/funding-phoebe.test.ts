@@ -69,6 +69,7 @@ describe("FundingPhoebe.evaluateExit", () => {
     asset: "BTC",
     side: "short",
     leverage: 20,
+    stakeUsd: 100,
     entryMark: 80_000,
     entryTs: new Date(),
     exitMark: null,
