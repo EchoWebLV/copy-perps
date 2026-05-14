@@ -336,11 +336,10 @@ git commit -m "feat(pacifica): add API response type shapes"
 
 ```ts
 import * as ed25519 from "@noble/ed25519";
-import { sha512 } from "@noble/hashes/sha512";
 import bs58 from "bs58";
 
-// @noble/ed25519 v2 requires the hash setter; do this once at load.
-ed25519.etc.sha512Sync = (...m) => sha512(ed25519.etc.concatBytes(...m));
+// @noble/ed25519 v3 bundles SHA-512 internally, so no etc.sha512Sync
+// setter is needed (that was a v2 requirement).
 
 // Pacifica's canonical-JSON signing recipe (per pacifica-fi/python-sdk
 // common/utils.py): recursively sort all object keys alphabetically,
