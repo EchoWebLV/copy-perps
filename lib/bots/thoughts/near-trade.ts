@@ -16,6 +16,8 @@ import type { ThoughtCandidate } from "./types";
 const MODEL_ID = "grok-4.20-non-reasoning";
 const NEAR_LOW = 0.7;
 const NEAR_HIGH = 0.99;
+const LIQUIDATION_FRESH_MS = 60_000;
+const LIZARD_MARKETS: ReadonlySet<string> = new Set(["BTC", "ETH", "SOL"]);
 
 interface BotForDetector {
   id: string;
@@ -67,7 +69,12 @@ export function detectNearTradeCandidates(
       }
     } else if (family === "liquidation-lizard") {
       const minNotional = readNumber(bot.config.minLiqNotionalUsd, 50_000);
+      const now = Date.now();
       for (const liq of args.signals.liquidations) {
+        // Match the strategy's staleness + market gates so we don't emit
+        // ghost commentary on events the bot can never act on.
+        if (now - liq.ts >= LIQUIDATION_FRESH_MS) continue;
+        if (!LIZARD_MARKETS.has(liq.asset)) continue;
         const pct = liq.notionalUsd / minNotional;
         if (pct >= NEAR_LOW && pct < NEAR_HIGH) {
           cand = {

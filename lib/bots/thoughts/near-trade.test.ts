@@ -106,6 +106,52 @@ describe("detectNearTradeCandidates — liquidation strategies", () => {
     expect(out).toHaveLength(1);
     expect(out[0].meta.signalKind).toBe("liquidation");
   });
+
+  it("rejects liquidations on assets outside the lizard's allowed markets", () => {
+    const signals: ExternalSignals = {
+      liquidations: [
+        {
+          asset: "AVAX", // not in BTC/ETH/SOL
+          side: "long",
+          notionalUsd: 40_000, // in 70-99% band
+          ts: Date.now(),
+          source: "hyperliquid",
+        },
+      ],
+      funding: {},
+    };
+    const bots = [
+      {
+        id: "liquidation-lizard",
+        strategyKey: "liquidation-lizard",
+        config: { minLiqNotionalUsd: 50_000 },
+      },
+    ];
+    expect(detectNearTradeCandidates({ bots, signals })).toHaveLength(0);
+  });
+
+  it("rejects liquidations older than the staleness window", () => {
+    const signals: ExternalSignals = {
+      liquidations: [
+        {
+          asset: "BTC",
+          side: "long",
+          notionalUsd: 40_000,
+          ts: Date.now() - 90_000, // 90s old, past the 60s fresh window
+          source: "hyperliquid",
+        },
+      ],
+      funding: {},
+    };
+    const bots = [
+      {
+        id: "liquidation-lizard",
+        strategyKey: "liquidation-lizard",
+        config: { minLiqNotionalUsd: 50_000 },
+      },
+    ];
+    expect(detectNearTradeCandidates({ bots, signals })).toHaveLength(0);
+  });
 });
 
 describe("detectNearTradeCandidates — limit + filtering", () => {
