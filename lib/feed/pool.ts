@@ -8,6 +8,7 @@ import type {
   MultiPredictionSignal,
   MultiPredictionOutcome,
   WhaleSignal,
+  PacificaTraderSignal,
   SignalChipData,
 } from "@/lib/types";
 import { db } from "@/lib/db";
@@ -20,6 +21,7 @@ import {
   type JPMarket,
 } from "@/lib/jupiter-prediction/client";
 import { predictionHeatScore, predictionSignalChips } from "@/lib/signals/heat-prediction";
+import { legacyRailsEnabled } from "@/lib/features";
 
 // Pool sizes — these gate "infinity" before a reshuffle / repeat.
 const MEME_FETCH_LIMIT = 100;
@@ -337,6 +339,19 @@ async function fetchWhalePool(): Promise<WhaleSignal[]> {
     .orderBy(desc(signalsTable.heatScore));
   return rows.map((r) => normalizeWhalePayload(r.payload));
 }
+
+// ─── Pacifica traders (Phase-1 wallet rail) ───────────────────────────────
+// Cron-driven, same as the whale rail. refresh-traders writes
+// pacifica_trader rows every 2 min. Local: `npm run refresh:traders`.
+
+async function fetchPacificaTraderPool(): Promise<PacificaTraderSignal[]> {
+  const rows = await db
+    .select()
+    .from(signalsTable)
+    .where(eq(signalsTable.type, "pacifica_trader"))
+    .orderBy(desc(signalsTable.heatScore));
+  return rows.map((r) => r.payload as PacificaTraderSignal);
+}
 // ─── Per-rail caches + combined pool ──────────────────────────────────────
 //
 // Each rail is cached independently. Without this, a transient whale-fetch
@@ -361,9 +376,27 @@ const cachedWhales = unstable_cache(fetchWhalePool, ["whale-pool-v1"], {
   revalidate: 120,
   tags: ["feed-pool"],
 });
+const cachedPacificaTraders = unstable_cache(
+  fetchPacificaTraderPool,
+  ["pacifica-trader-pool-v1"],
+  { revalidate: 60, tags: ["feed-pool"] },
+);
 
 export async function getFeedPool(): Promise<Signal[]> {
-  const [memes, predictions, whales] = await Promise.all([
+  // Pacifica copy-trade rail is always on in Phase 1. Legacy rails
+  // (meme / prediction / whale) only fetch when FEATURE_LEGACY_RAILS=true.
+  const pacificaPromise = cachedPacificaTraders().catch((e) => {
+    console.error("[pool/pacifica]", e);
+    return [] as PacificaTraderSignal[];
+  });
+
+  if (!legacyRailsEnabled()) {
+    const traders = await pacificaPromise;
+    return [...traders].sort((a, b) => b.heatScore - a.heatScore);
+  }
+
+  const [traders, memes, predictions, whales] = await Promise.all([
+    pacificaPromise,
     cachedMemes().catch((e) => {
       console.error("[pool/meme]", e);
       return [] as MemeSignal[];
@@ -377,6 +410,6 @@ export async function getFeedPool(): Promise<Signal[]> {
       return [] as WhaleSignal[];
     }),
   ]);
-  const all: Signal[] = [...memes, ...predictions, ...whales];
+  const all: Signal[] = [...traders, ...memes, ...predictions, ...whales];
   return all.sort((a, b) => b.heatScore - a.heatScore);
 }
