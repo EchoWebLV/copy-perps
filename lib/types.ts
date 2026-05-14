@@ -136,18 +136,26 @@ export interface BotSignal extends BaseSignal {
     botId: string;
     botName: string;
     avatarEmoji: string;
-    currentPosition: {
+    balanceUsd: number;
+    startingBalanceUsd: number;
+    lifetimeReturnPct: number; // (balance − starting) / starting
+    freeBalanceUsd: number;
+    busted: boolean;
+    currentPositions: Array<{
+      positionId: string;
       asset: string;
       side: "long" | "short";
       leverage: number;
       entryMark: number;
       currentMark: number;
+      stakeUsd: number;
       livePaperPnlPct: number;
+      livePaperPnlUsd: number;
       openSinceMs: number;
-    } | null;
+    }>;
     stats: {
       totalTrades: number;
-      winRate: number; // 0..1
+      winRate: number;
       paperPnl24hUsd: number;
       paperPnl7dUsd: number;
       paperPnlAllUsd: number;

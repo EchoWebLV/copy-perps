@@ -35,19 +35,25 @@ function fmtAge(ms: number, now: number): string {
 
 export function BotCard({ signal }: Props) {
   const { getAccessToken } = usePrivy();
-  const [busy, setBusy] = useState<string | null>(null);
+  // busyKey = `${positionId}-${stakeAmt}` while a stake is in-flight
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const p = signal.payload;
-  const pos = p.currentPosition;
-  const isLong = pos?.side === "long";
-  const allTimeUp = p.stats.paperPnlAllUsd >= 0;
+  const positions = p.currentPositions;
+  const lifetimePct = p.lifetimeReturnPct;
+  const allTimeUp = p.balanceUsd >= p.startingBalanceUsd;
 
-  async function onStake(stake: StakeAmount) {
-    if (!pos) return;
-    const key = `copy-${stake}`;
-    if (busy) return;
-    setBusy(key);
+  async function onStake(
+    positionId: string,
+    asset: string,
+    side: "long" | "short",
+    leverage: number,
+    stakeUsdc: StakeAmount,
+  ) {
+    const key = `${positionId}-${stakeUsdc}`;
+    if (busyKey) return;
+    setBusyKey(key);
     setStatus("Placing order…");
     try {
       const token = await getAccessToken();
@@ -61,10 +67,10 @@ export function BotCard({ signal }: Props) {
         },
         body: JSON.stringify({
           botId: p.botId,
-          market: pos.asset,
-          side: pos.side,
-          leverage: pos.leverage,
-          stakeUsdc: stake,
+          market: asset,
+          side,
+          leverage,
+          stakeUsdc,
           signalId: signal.id,
         }),
       });
@@ -80,14 +86,14 @@ export function BotCard({ signal }: Props) {
       const price = data.fill?.avgFillPrice;
       setStatus(
         price
-          ? `Opened ${pos.asset} ${pos.side} ${pos.leverage}x @ $${Number(price).toFixed(4)}`
-          : `Opened ${pos.asset} ${pos.side} ${pos.leverage}x`,
+          ? `Opened ${asset} ${side} ${leverage}x @ $${Number(price).toFixed(4)}`
+          : `Opened ${asset} ${side} ${leverage}x`,
       );
     } catch (err) {
       console.error("[bot] stake failed:", err);
       setStatus(`Failed: ${String(err).slice(0, 80)}`);
     } finally {
-      setBusy(null);
+      setBusyKey(null);
       setTimeout(() => setStatus(null), 5000);
     }
   }
@@ -109,7 +115,7 @@ export function BotCard({ signal }: Props) {
         }}
       />
 
-      {/* Header */}
+      {/* Header: persona + bankroll + lifetime return */}
       <div className="relative flex items-start justify-between">
         <div className="flex items-center gap-3">
           <span className="text-4xl leading-none">{p.avatarEmoji}</span>
@@ -122,11 +128,14 @@ export function BotCard({ signal }: Props) {
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-widest text-white/50">
-            All-time paper
+            Bankroll
           </div>
-          <div className={`text-2xl font-bold ${pnlColor(p.stats.paperPnlAllUsd)}`}>
-            {p.stats.paperPnlAllUsd >= 0 ? "+" : ""}$
-            {Math.abs(p.stats.paperPnlAllUsd).toFixed(0)}
+          <div className="text-2xl font-bold">
+            ${p.balanceUsd.toFixed(0)}
+          </div>
+          <div className={`text-xs font-semibold ${pnlColor(lifetimePct)}`}>
+            {lifetimePct >= 0 ? "+" : ""}
+            {(lifetimePct * 100).toFixed(1)}%
           </div>
         </div>
       </div>
@@ -167,84 +176,104 @@ export function BotCard({ signal }: Props) {
         </div>
       </div>
 
-      {/* Position or idle */}
+      {/* Positions list or idle state */}
       <div className="relative mt-3 flex-1 space-y-2 overflow-y-auto">
-        {pos ? (
-          <div className="rounded-2xl bg-neutral-900/60 p-3 ring-1 ring-white/10 backdrop-blur-sm">
-            {/* Position header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="text-lg font-black tracking-tight">{pos.asset}</div>
-                <div
-                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                    isLong
-                      ? "bg-emerald-500/30 text-emerald-200"
-                      : "bg-rose-500/30 text-rose-200"
-                  }`}
-                >
-                  {pos.side}
-                </div>
-                <div className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/90">
-                  {pos.leverage}x
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-white/50">
-                {Date.now() - pos.openSinceMs < 15 * 60 * 1000 && (
-                  <span
-                    className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
-                    aria-hidden
-                  />
-                )}
-                {fmtAge(pos.openSinceMs, now)}
-              </div>
-            </div>
-
-            {/* Price info */}
-            <div className="mt-1.5 grid grid-cols-3 gap-x-3 text-[11px]">
-              <div>
-                <span className="text-white/40">Entry </span>
-                <span className="font-semibold">{fmtPrice(pos.entryMark)}</span>
-              </div>
-              <div>
-                <span className="text-white/40">Now </span>
-                <span className="font-semibold">{fmtPrice(pos.currentMark)}</span>
-              </div>
-              <div>
-                <span className="text-white/40">PnL </span>
-                <span className={`font-semibold ${pnlColor(pos.livePaperPnlPct)}`}>
-                  {pos.livePaperPnlPct >= 0 ? "+" : ""}
-                  {(pos.livePaperPnlPct * 100).toFixed(1)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Stake buttons */}
-            <div className="mt-2 flex gap-1.5">
-              {STAKES.map((s) => {
-                const key = `copy-${s}`;
-                const isBusy = busy === key;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => onStake(s)}
-                    className={`flex-1 rounded-lg py-2.5 text-sm font-extrabold transition active:scale-95 disabled:opacity-40 ${
-                      isLong
-                        ? "bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/40 hover:bg-emerald-500/45 hover:ring-emerald-400/60"
-                        : "bg-rose-500/30 text-rose-100 ring-1 ring-rose-400/40 hover:bg-rose-500/45 hover:ring-rose-400/60"
-                    }`}
-                  >
-                    {isBusy ? "…" : `$${s}`}
-                  </button>
-                );
-              })}
+        {positions.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-center text-sm text-white/40">
+            <div>
+              <p className="font-semibold text-white/60">Watching the tape</p>
+              <p className="mt-1 text-xs">
+                No active positions · ${p.freeBalanceUsd.toFixed(0)} free
+              </p>
             </div>
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-white/40">
-            Watching the tape — no active position.
-          </div>
+          positions.map((pos) => {
+            const isLong = pos.side === "long";
+            const isBusy = busyKey !== null && busyKey.startsWith(pos.positionId);
+            return (
+              <div
+                key={pos.positionId}
+                className="rounded-2xl bg-neutral-900/60 p-3 ring-1 ring-white/10 backdrop-blur-sm"
+              >
+                {/* Position header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="text-lg font-black tracking-tight">{pos.asset}</div>
+                    <div
+                      className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                        isLong
+                          ? "bg-emerald-500/30 text-emerald-200"
+                          : "bg-rose-500/30 text-rose-200"
+                      }`}
+                    >
+                      {pos.side}
+                    </div>
+                    <div className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/90">
+                      {pos.leverage}x
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-white/50">
+                    {now - pos.openSinceMs < 15 * 60 * 1000 && (
+                      <span
+                        className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
+                        aria-hidden
+                      />
+                    )}
+                    {fmtAge(pos.openSinceMs, now)}
+                  </div>
+                </div>
+
+                {/* Price info */}
+                <div className="mt-1.5 grid grid-cols-4 gap-x-2 text-[11px]">
+                  <div>
+                    <span className="text-white/40">Entry </span>
+                    <span className="font-semibold">{fmtPrice(pos.entryMark)}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40">Now </span>
+                    <span className="font-semibold">{fmtPrice(pos.currentMark)}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40">PnL </span>
+                    <span className={`font-semibold ${pnlColor(pos.livePaperPnlPct)}`}>
+                      {pos.livePaperPnlPct >= 0 ? "+" : ""}
+                      {(pos.livePaperPnlPct * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-white/40">Stake </span>
+                    <span className="font-semibold">${pos.stakeUsd.toFixed(0)}</span>
+                  </div>
+                </div>
+
+                {/* Per-position stake buttons */}
+                <div className="mt-2 flex gap-1.5">
+                  {STAKES.map((s) => {
+                    const key = `${pos.positionId}-${s}`;
+                    const thisIsBusy = busyKey === key;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={busyKey !== null}
+                        onClick={() =>
+                          onStake(pos.positionId, pos.asset, pos.side, pos.leverage, s)
+                        }
+                        className={`flex-1 rounded-lg py-2.5 text-sm font-extrabold transition active:scale-95 disabled:opacity-40 ${
+                          isLong
+                            ? "bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/40 hover:bg-emerald-500/45 hover:ring-emerald-400/60"
+                            : "bg-rose-500/30 text-rose-100 ring-1 ring-rose-400/40 hover:bg-rose-500/45 hover:ring-rose-400/60"
+                        }`}
+                      >
+                        {thisIsBusy ? "…" : `$${s}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 

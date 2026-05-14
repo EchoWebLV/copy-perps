@@ -7,6 +7,8 @@ import { computeLivePaperPnlPct } from "@/lib/bots/paper";
 import type { BotSignal } from "@/lib/types";
 
 export async function buildBotSignals(): Promise<BotSignal[]> {
+  // Hide busted bots from the feed for now. Phase 3+ may surface them
+  // as a separate tab / dim them visually.
   const botRows = await db
     .select()
     .from(bots)
@@ -18,7 +20,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
   const stamp = new Date().toISOString();
 
   for (const bot of botRows) {
-    const [openRow] = await db
+    const openRows = await db
       .select()
       .from(paperPositions)
       .where(
@@ -26,8 +28,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
           eq(paperPositions.botId, bot.id),
           eq(paperPositions.status, "open"),
         ),
-      )
-      .limit(1);
+      );
 
     const closedRows = await db
       .select()
@@ -57,28 +58,39 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
       .filter((r) => r.exitTs && r.exitTs.getTime() >= since7d)
       .reduce((s, r) => s + (r.paperPnlUsd ?? 0), 0);
 
-    let currentPosition: BotSignal["payload"]["currentPosition"] = null;
-    if (openRow) {
+    const currentPositions = openRows.map((openRow) => {
       const currentMark = marks.get(openRow.asset) ?? openRow.entryMark;
-      currentPosition = {
+      const livePaperPnlPct = computeLivePaperPnlPct({
+        side: openRow.side as "long" | "short",
+        leverage: openRow.leverage,
+        entryMark: openRow.entryMark,
+        currentMark,
+      });
+      return {
+        positionId: openRow.id,
         asset: openRow.asset,
         side: openRow.side as "long" | "short",
         leverage: openRow.leverage,
         entryMark: openRow.entryMark,
         currentMark,
-        livePaperPnlPct: computeLivePaperPnlPct({
-          side: openRow.side as "long" | "short",
-          leverage: openRow.leverage,
-          entryMark: openRow.entryMark,
-          currentMark,
-        }),
+        stakeUsd: openRow.stakeUsd,
+        livePaperPnlPct,
+        livePaperPnlUsd: livePaperPnlPct * openRow.stakeUsd,
         openSinceMs: openRow.entryTs.getTime(),
       };
-    }
+    });
+
+    const lockedStake = currentPositions.reduce(
+      (s, p) => s + p.stakeUsd,
+      0,
+    );
+    const freeBalance = bot.balanceUsd - lockedStake;
+    const lifetimeReturnPct =
+      (bot.balanceUsd - bot.startingBalanceUsd) / bot.startingBalanceUsd;
 
     const heatScore = Math.round(
       500 +
-        (currentPosition ? 200 : 0) +
+        currentPositions.length * 50 +
         Math.max(-200, Math.min(200, paperPnl24h / 10)),
     );
 
@@ -92,7 +104,12 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         botId: bot.id,
         botName: bot.name,
         avatarEmoji: bot.avatarEmoji,
-        currentPosition,
+        balanceUsd: bot.balanceUsd,
+        startingBalanceUsd: bot.startingBalanceUsd,
+        lifetimeReturnPct,
+        freeBalanceUsd: freeBalance,
+        busted: bot.status === "busted",
+        currentPositions,
         stats: {
           totalTrades,
           winRate,
