@@ -247,6 +247,22 @@ export function BotCard({ signal }: Props) {
                   </div>
                 </div>
 
+                {/* Disagreement badges — other bots on the opposite side */}
+                {pos.disagreements.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+                    <span className="text-zinc-500">vs.</span>
+                    {pos.disagreements.map((d) => (
+                      <span
+                        key={d.botId}
+                        className="rounded-full border border-amber-700/60 bg-amber-900/30 px-2 py-0.5 text-amber-200"
+                        title={`${d.botName} disagrees with this trade`}
+                      >
+                        {d.avatarEmoji} {d.botName}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Per-position stake buttons */}
                 <div className="mt-2 flex gap-1.5">
                   {STAKES.map((s) => {

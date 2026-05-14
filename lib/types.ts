@@ -152,6 +152,11 @@ export interface BotSignal extends BaseSignal {
       livePaperPnlPct: number;
       livePaperPnlUsd: number;
       openSinceMs: number;
+      disagreements: Array<{
+        botId: string;
+        botName: string;
+        avatarEmoji: string;
+      }>;
     }>;
     stats: {
       totalTrades: number;

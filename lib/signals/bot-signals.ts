@@ -4,6 +4,7 @@ import { bots, paperPositions } from "@/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { getMarksSnapshot } from "@/lib/data/marks";
 import { computeLivePaperPnlPct } from "@/lib/bots/paper";
+import { getCrossBotSnapshot } from "@/lib/bots/cross-bot";
 import type { BotSignal } from "@/lib/types";
 
 export async function buildBotSignals(): Promise<BotSignal[]> {
@@ -15,7 +16,15 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
     .where(eq(bots.status, "paper"));
   if (botRows.length === 0) return [];
 
+  // Lookup table: botId → display info (built once for disagreement resolution)
+  const botLookup = new Map<string, { name: string; avatarEmoji: string }>();
+  for (const b of botRows) {
+    botLookup.set(b.id, { name: b.name, avatarEmoji: b.avatarEmoji });
+  }
+
   const marks = await getMarksSnapshot();
+  // Fetch the cross-bot snapshot once; used for disagreement computation per position.
+  const crossBot = await getCrossBotSnapshot();
   const signals: BotSignal[] = [];
   const stamp = new Date().toISOString();
 
@@ -66,6 +75,24 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         entryMark: openRow.entryMark,
         currentMark,
       });
+
+      // Find other bots holding the opposite side of this asset.
+      const opposite: "long" | "short" =
+        openRow.side === "long" ? "short" : "long";
+      const sameAsset = crossBot.botsByAsset.get(openRow.asset) ?? [];
+      const disagreements = sameAsset
+        .filter(
+          (entry) => entry.side === opposite && entry.botId !== bot.id,
+        )
+        .map((entry) => {
+          const meta = botLookup.get(entry.botId);
+          return {
+            botId: entry.botId,
+            botName: meta?.name ?? entry.botId,
+            avatarEmoji: meta?.avatarEmoji ?? "🤖",
+          };
+        });
+
       return {
         positionId: openRow.id,
         asset: openRow.asset,
@@ -77,6 +104,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         livePaperPnlPct,
         livePaperPnlUsd: livePaperPnlPct * openRow.stakeUsd,
         openSinceMs: openRow.entryTs.getTime(),
+        disagreements,
       };
     });
 
