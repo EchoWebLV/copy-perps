@@ -10,7 +10,7 @@ export type SignalType =
   | "prediction"
   | "whale"
   | "multiprediction"
-  | "phoenix_trader";
+  | "pacifica_trader";
 
 export interface BaseSignal {
   id: string;
@@ -83,29 +83,33 @@ export interface MultiPredictionSignal extends BaseSignal {
   imageUrl?: string | null;
 }
 
-export interface PhoenixTraderPosition {
-  market: string;            // e.g. "SOL", "BTC", "ETH"
+export interface PacificaTraderPosition {
+  market: string;            // "SOL", "BTC", "ETH", ...
   side: "long" | "short";
   leverage: number;
   notionalUsd: number;
   entryPrice: number;
-  unrealizedPnlPct: number;  // signed %, e.g. 12.4 or -8.1
-  positionPubkey: string;    // Phoenix position account address
+  unrealizedPnlPct: number;
+  pacificaPositionId: string;  // identifier returned by Pacifica positions API
 }
 
-export interface PhoenixTraderStats7d {
-  trades: number;
-  winRatePct: number;
-  pnlUsd: number;            // signed
-  avgHoldMinutes: number;
+export interface PacificaTraderStats {
+  equityUsdc: number;
+  openInterestUsdc: number;
+  pnl1dUsdc: number;
+  pnl7dUsdc: number;
+  pnl30dUsdc: number;
+  pnlAllTimeUsdc: number;
+  volume1dUsdc: number;
+  volume7dUsdc: number;
 }
 
-export interface PhoenixTraderSignal extends BaseSignal {
-  type: "phoenix_trader";
-  authority: string;          // base58 Solana pubkey of the trader
-  position: PhoenixTraderPosition | null;
-  stats7d: PhoenixTraderStats7d;
-  label?: string;             // optional display name from seed list
+export interface PacificaTraderSignal extends BaseSignal {
+  type: "pacifica_trader";
+  address: string;          // base58 Solana pubkey (user's main wallet on Pacifica)
+  username: string | null;  // Pacifica display name, if set
+  position: PacificaTraderPosition | null;
+  stats: PacificaTraderStats;
 }
 
 export type Signal =
@@ -113,6 +117,6 @@ export type Signal =
   | PredictionSignal
   | WhaleSignal
   | MultiPredictionSignal
-  | PhoenixTraderSignal;
+  | PacificaTraderSignal;
 
 export type StakeAmount = 5 | 10 | 20 | 50;

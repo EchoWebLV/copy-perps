@@ -17,7 +17,7 @@ async function main() {
             ? s.eventId
             : s.type === "whale"
               ? s.walletAddress
-              : s.authority;
+              : s.address;
 
     await db.insert(signals).values({
       id: s.id,
