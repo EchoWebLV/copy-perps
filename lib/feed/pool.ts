@@ -21,7 +21,8 @@ import {
   type JPMarket,
 } from "@/lib/jupiter-prediction/client";
 import { predictionHeatScore, predictionSignalChips } from "@/lib/signals/heat-prediction";
-import { legacyRailsEnabled } from "@/lib/features";
+import { legacyRailsEnabled, copyTradeEnabled } from "@/lib/features";
+import { buildBotSignals } from "@/lib/signals/bot-signals";
 
 // Pool sizes — these gate "infinity" before a reshuffle / repeat.
 const MEME_FETCH_LIMIT = 100;
@@ -383,19 +384,29 @@ const cachedPacificaTraders = unstable_cache(
 );
 
 export async function getFeedPool(): Promise<Signal[]> {
-  // Pacifica copy-trade rail is always on in Phase 1. Legacy rails
-  // (meme / prediction / whale) only fetch when FEATURE_LEGACY_RAILS=true.
-  const pacificaPromise = cachedPacificaTraders().catch((e) => {
-    console.error("[pool/pacifica]", e);
-    return [] as PacificaTraderSignal[];
+  // Bot signals are always included — fresh per request (no cache) so the
+  // live PnL / currentPosition stays up to date.
+  const botPromise = buildBotSignals().catch((e) => {
+    console.error("[pool/bots]", e);
+    return [] as import("@/lib/types").BotSignal[];
   });
 
+  // Pacifica copy-trade rail is gated behind FEATURE_COPY_TRADE. Legacy rails
+  // (meme / prediction / whale) only fetch when FEATURE_LEGACY_RAILS=true.
+  const pacificaPromise = copyTradeEnabled()
+    ? cachedPacificaTraders().catch((e) => {
+        console.error("[pool/pacifica]", e);
+        return [] as PacificaTraderSignal[];
+      })
+    : Promise.resolve([] as PacificaTraderSignal[]);
+
   if (!legacyRailsEnabled()) {
-    const traders = await pacificaPromise;
-    return [...traders].sort((a, b) => b.heatScore - a.heatScore);
+    const [bots, traders] = await Promise.all([botPromise, pacificaPromise]);
+    return [...bots, ...traders].sort((a, b) => b.heatScore - a.heatScore);
   }
 
-  const [traders, memes, predictions, whales] = await Promise.all([
+  const [bots, traders, memes, predictions, whales] = await Promise.all([
+    botPromise,
     pacificaPromise,
     cachedMemes().catch((e) => {
       console.error("[pool/meme]", e);
@@ -410,6 +421,6 @@ export async function getFeedPool(): Promise<Signal[]> {
       return [] as WhaleSignal[];
     }),
   ]);
-  const all: Signal[] = [...traders, ...memes, ...predictions, ...whales];
+  const all: Signal[] = [...bots, ...traders, ...memes, ...predictions, ...whales];
   return all.sort((a, b) => b.heatScore - a.heatScore);
 }
