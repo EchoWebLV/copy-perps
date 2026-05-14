@@ -16,6 +16,8 @@ const ROWS = [
       exitFavorablePct: 0.005,
       maxHoldMs: 90_000,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -31,6 +33,8 @@ const ROWS = [
       exitFavorablePct: 0.003,
       maxHoldMs: 60_000,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -46,6 +50,8 @@ const ROWS = [
       maxHoldMs: 4 * 60 * 60 * 1000,
       leverage: 20,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -61,6 +67,8 @@ const ROWS = [
       maxHoldMs: 2 * 60 * 60 * 1000,
       leverage: 20,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -78,6 +86,8 @@ const ROWS = [
       maxHoldMs: 30 * 60 * 1000,
       leverage: 25,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -95,6 +105,8 @@ const ROWS = [
       maxHoldMs: 4 * 60 * 60 * 1000,
       leverage: 25,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -113,6 +125,8 @@ const ROWS = [
       maxHoldMs: 30 * 60 * 1000,
       leverage: 20,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -131,6 +145,8 @@ const ROWS = [
       maxHoldMs: 20 * 60 * 1000,
       leverage: 20,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -151,6 +167,8 @@ const ROWS = [
       maxHoldMs: 15 * 60 * 1000,
       leverage: 30,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -171,6 +189,8 @@ const ROWS = [
       maxHoldMs: 10 * 60 * 1000,
       leverage: 30,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -189,6 +209,8 @@ const ROWS = [
       maxHoldMs: 48 * 60 * 60 * 1000,
       leverage: 10,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
   {
@@ -207,6 +229,8 @@ const ROWS = [
       maxHoldMs: 72 * 60 * 60 * 1000,
       leverage: 10,
     },
+    balanceUsd: 1000,
+    startingBalanceUsd: 1000,
     status: "paper",
   },
 ];
