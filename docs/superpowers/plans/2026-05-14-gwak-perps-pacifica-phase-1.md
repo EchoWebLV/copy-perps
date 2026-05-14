@@ -640,29 +640,23 @@ export async function getMarketBySymbol(
   return all.find((m) => m.symbol === symbol) ?? null;
 }
 
-// Returns the top leverage tier's max_leverage. Pacifica's actual
-// per-position max depends on notional; callers that need tier-aware
-// clamping should use clampLeverageForNotional below.
-export async function getTopLeverage(symbol: string): Promise<number> {
+// Pacifica exposes a flat max_leverage per market (e.g. BTC=50, smaller
+// alts are lower). No notional-tier table at this time, so we just
+// return the per-market cap.
+export async function getMaxLeverage(symbol: string): Promise<number> {
   const m = await getMarketBySymbol(symbol);
   if (!m) throw new Error(`Unknown Pacifica market: ${symbol}`);
-  return Math.max(...m.max_leverage_tiers.map((t) => t.max_leverage));
+  return m.max_leverage;
 }
 
-// Find the tier that bounds the given notional and return its max
-// leverage. Lets us clamp a leader's leverage to what's achievable
-// at the user's smaller stake.
+// Clamp the leader's leverage to what Pacifica permits on this market.
+// (Identical to getMaxLeverage today, but isolated as a helper so we
+// can add notional-tier logic later without changing call sites.)
 export async function clampLeverageForNotional(
   symbol: string,
-  notionalUsd: number,
+  _notionalUsd: number,
 ): Promise<number> {
-  const m = await getMarketBySymbol(symbol);
-  if (!m) throw new Error(`Unknown Pacifica market: ${symbol}`);
-  for (const tier of m.max_leverage_tiers) {
-    if (notionalUsd <= Number(tier.max_notional_usd)) return tier.max_leverage;
-  }
-  // Fall through to the smallest tier if larger than any.
-  return m.max_leverage_tiers[m.max_leverage_tiers.length - 1].max_leverage;
+  return getMaxLeverage(symbol);
 }
 ```
 

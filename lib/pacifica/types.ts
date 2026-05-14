@@ -5,14 +5,19 @@
 
 export interface PacificaMarketInfo {
   symbol: string;              // "SOL", "BTC", "ETH", ...
-  base_decimals: number;
-  quote_decimals: number;
+  base_asset: string;
   tick_size: string;           // decimal string
-  min_amount: string;
-  max_leverage_tiers: Array<{
-    max_leverage: number;
-    max_notional_usd: string;
-  }>;
+  min_tick: string;
+  max_tick: string;
+  lot_size: string;
+  max_leverage: number;        // flat per-market cap (e.g. 50 for BTC)
+  isolated_only: boolean;
+  min_order_size: string;
+  max_order_size: string;
+  funding_rate: string;
+  next_funding_rate: string;
+  created_at: number;
+  instrument_type: string;     // e.g. "perpetual"
 }
 
 export interface PacificaLeaderboardEntry {
