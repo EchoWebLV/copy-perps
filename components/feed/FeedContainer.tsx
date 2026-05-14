@@ -7,6 +7,7 @@ import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { CopyCard } from "./CopyCard";
+import { LiveTape } from "./LiveTape";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
@@ -220,6 +221,7 @@ export function FeedContainer({
       }}
     >
       <BalancePill />
+      <LiveTape />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}
