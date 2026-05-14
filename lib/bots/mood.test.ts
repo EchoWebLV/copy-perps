@@ -29,8 +29,6 @@ describe("computeMoodBadge", () => {
   it("returns BUSTED when bot.status is busted", () => {
     const badge = computeMoodBadge({
       botStatus: "busted",
-      balanceUsd: 0,
-      startingBalanceUsd: 1000,
       openPositions: [],
       recentClosedPnls: [],
     });
@@ -40,8 +38,6 @@ describe("computeMoodBadge", () => {
   it("returns ON_STREAK when last 3 closed pnls are all positive", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 1100,
-      startingBalanceUsd: 1000,
       openPositions: [],
       recentClosedPnls: [10, 20, 30],
     });
@@ -51,8 +47,6 @@ describe("computeMoodBadge", () => {
   it("returns WOUNDED when an open position is at <= -25% on stake", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 1000,
-      startingBalanceUsd: 1000,
       openPositions: [pos({ stakeUsd: 100 })],
       // Note: WOUNDED is decided by livePaperPnlPct in args (see API).
       livePnlPctByPositionId: { p1: -0.3 },
@@ -64,8 +58,6 @@ describe("computeMoodBadge", () => {
   it("returns LOADED when bot has an open position with non-negative live PnL", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 1000,
-      startingBalanceUsd: 1000,
       openPositions: [pos({ stakeUsd: 100 })],
       livePnlPctByPositionId: { p1: 0.02 },
       recentClosedPnls: [],
@@ -76,8 +68,6 @@ describe("computeMoodBadge", () => {
   it("returns DORMANT for an inactive bot with no open positions", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 950,
-      startingBalanceUsd: 1000,
       openPositions: [],
       recentClosedPnls: [],
     });
@@ -87,8 +77,6 @@ describe("computeMoodBadge", () => {
   it("returns HUNTING when hasNearSignal is true and bot has no positions", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 1000,
-      startingBalanceUsd: 1000,
       openPositions: [],
       recentClosedPnls: [],
       hasNearSignal: true,
@@ -99,8 +87,6 @@ describe("computeMoodBadge", () => {
   it("prefers WOUNDED over LOADED when one position is wounded and another is up", () => {
     const badge = computeMoodBadge({
       botStatus: "paper",
-      balanceUsd: 1000,
-      startingBalanceUsd: 1000,
       openPositions: [
         pos({ id: "a", stakeUsd: 100 }),
         pos({ id: "b", stakeUsd: 100 }),

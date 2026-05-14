@@ -17,8 +17,6 @@ export type MoodBadge =
 
 export interface MoodInput {
   botStatus: BotConfig["status"] | "busted";
-  balanceUsd: number;
-  startingBalanceUsd: number;
   openPositions: PaperPosition[];
   recentClosedPnls: number[]; // last N closed paper_pnl_usd values, newest first
   /** Map from positionId → live PnL fraction on stake. Used to detect WOUNDED. */
