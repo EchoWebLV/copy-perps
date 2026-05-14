@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { checkCronAuth } from "@/lib/auth/cron";
 import { refreshMemes } from "@/lib/signals/refresh-memes";
+import { legacyRailsEnabled } from "@/lib/features";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (!legacyRailsEnabled()) {
+    return NextResponse.json(
+      { error: "legacy rail disabled" },
+      { status: 410 },
+    );
+  }
+
   const authError = checkCronAuth(request);
   if (authError) return authError;
 

@@ -8,6 +8,7 @@ import {
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
+import { legacyRailsEnabled } from "@/lib/features";
 import { ensureUser } from "@/lib/users/ensure";
 import { getConnection } from "@/lib/solana/balance";
 import { createOrder } from "@/lib/jupiter-prediction/client";
@@ -55,6 +56,13 @@ const MAX_USDC = 1000;
 const PREDICTION_DEPOSIT_FLOOR = 5.5;
 
 export async function POST(request: Request) {
+  if (!legacyRailsEnabled()) {
+    return NextResponse.json(
+      { error: "legacy rail disabled" },
+      { status: 410 },
+    );
+  }
+
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

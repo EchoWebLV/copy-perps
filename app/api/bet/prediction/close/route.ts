@@ -4,6 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
+import { legacyRailsEnabled } from "@/lib/features";
 import { closePosition, getPosition } from "@/lib/jupiter-prediction/client";
 import {
   buildPredictionPrefundTx,
@@ -19,6 +20,13 @@ export const dynamic = "force-dynamic";
 export const preferredRegion = "fra1";
 
 export async function POST(request: Request) {
+  if (!legacyRailsEnabled()) {
+    return NextResponse.json(
+      { error: "legacy rail disabled" },
+      { status: 410 },
+    );
+  }
+
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

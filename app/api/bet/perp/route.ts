@@ -3,6 +3,7 @@ import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
+import { legacyRailsEnabled } from "@/lib/features";
 import { ensureUser } from "@/lib/users/ensure";
 import { flashSymbolFor } from "@/lib/flash-trade/client";
 import { buildOpenPerpTx, readPerpPosition } from "@/lib/flash-trade/perp";
@@ -32,6 +33,13 @@ const MIN_USDC = 5;
 const MAX_USDC = 1000;
 
 export async function POST(request: Request) {
+  if (!legacyRailsEnabled()) {
+    return NextResponse.json(
+      { error: "legacy rail disabled" },
+      { status: 410 },
+    );
+  }
+
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

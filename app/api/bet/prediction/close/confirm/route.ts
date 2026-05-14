@@ -3,11 +3,19 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
+import { legacyRailsEnabled } from "@/lib/features";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!legacyRailsEnabled()) {
+    return NextResponse.json(
+      { error: "legacy rail disabled" },
+      { status: 410 },
+    );
+  }
+
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
