@@ -1,4 +1,6 @@
-# gwak.gg Perps Pivot — Phase 1 Implementation Plan
+# gwak.gg Perps Pivot — Phase 1 Implementation Plan (Phoenix — SUPERSEDED)
+
+> **STATUS: Superseded by [2026-05-14-gwak-perps-pacifica-phase-1.md](2026-05-14-gwak-perps-pacifica-phase-1.md).** Live API probes after Tasks 1-3 shipped confirmed Phoenix Eternal has no public user base (all WS takers are internal market-maker accounts with no on-chain trader state) and a 25x leverage cap, both of which break the product target. The Pacifica plan replaces this one. Tasks 1-3 of this plan already shipped on `perps-ai-wallets`; the Pacifica plan repurposes them.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -155,15 +157,58 @@ export type Signal =
   | PhoenixTraderSignal;
 ```
 
-- [ ] **Step 2: Verify typecheck**
+- [ ] **Step 2: Fix the three TS fanout consumers**
+
+Adding a new `SignalType` member breaks three exhaustive consumers. Patch each:
+
+(a) **`components/feed/StakeButtons.tsx`** — add an entry to `RAIL_MIN` (locate the `const RAIL_MIN: Record<Signal["type"], number> = {` block):
+
+```ts
+const RAIL_MIN: Record<Signal["type"], number> = {
+  meme: 1,
+  prediction: 5,
+  multiprediction: 5,
+  whale: 5,
+  phoenix_trader: 5,
+};
+```
+
+(b) **`lib/feed/card-color.ts`** — add an entry to `FAMILIES` (locate the `const FAMILIES: Record<Signal["type"], Family> = {` block). Use a distinct hue (teal/cyan, not used by other rails):
+
+```ts
+const FAMILIES: Record<Signal["type"], Family> = {
+  meme:             { hueStart: 0,   hueRange: 50, saturation: 80, lightness: 13 },
+  prediction:       { hueStart: 200, hueRange: 40, saturation: 75, lightness: 12 },
+  multiprediction:  { hueStart: 200, hueRange: 40, saturation: 75, lightness: 12 },
+  whale:            { hueStart: 260, hueRange: 50, saturation: 70, lightness: 13 },
+  phoenix_trader:   { hueStart: 165, hueRange: 30, saturation: 70, lightness: 13 },
+};
+```
+
+(c) **`scripts/seed.ts`** — extend the `assetId` ternary chain to handle `phoenix_trader` (locate the `const assetId =` block):
+
+```ts
+const assetId =
+  s.type === "meme"
+    ? s.ticker
+    : s.type === "prediction"
+      ? s.id
+      : s.type === "multiprediction"
+        ? s.eventId
+        : s.type === "whale"
+          ? s.walletAddress
+          : s.authority;
+```
+
+- [ ] **Step 3: Verify typecheck**
 
 Run: `npm run typecheck`
-Expected: passes with 0 errors. The new union member is structurally compatible with `BaseSignal`.
+Expected: passes with 0 errors.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/types.ts
+git add lib/types.ts components/feed/StakeButtons.tsx lib/feed/card-color.ts scripts/seed.ts
 git commit -m "feat(types): add PhoenixTraderSignal to Signal union"
 ```
 

@@ -1,8 +1,10 @@
 # gwak.gg — Perps-Only Copy-Trading Pivot
 
 **Date:** 2026-05-14
-**Status:** Draft (awaiting review)
+**Status:** Superseded by [2026-05-14-gwak-perps-pacifica-design.md](2026-05-14-gwak-perps-pacifica-design.md)
 **Branch:** `perps-ai-wallets`
+
+> **Why superseded:** This spec targets Phoenix Eternal as the venue. After implementation began, live API probes confirmed Phoenix has no public user base (every WS taker we sampled had zero on-chain trader state — they are internal spline / market-maker accounts), no discovery surface, and a 25x leverage cap that misses the "fast pace 50x+" product target. The Pacifica spec is the active design; the product decisions in this doc (snapshot copy, mirror close, two rails, fee model, etc.) all carry over.
 
 ## Problem
 
