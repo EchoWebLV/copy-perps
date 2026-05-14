@@ -7,6 +7,7 @@ import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
 import { CopyCard } from "./CopyCard";
+import { BotCard } from "./BotCard";
 import { LiveTape } from "./LiveTape";
 import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 import {
@@ -42,6 +43,8 @@ function buildAllowedTypes(prefs: FeedPrefs): Set<SignalType> {
   const allowed = new Set<SignalType>();
   // Pacifica copy-trade rail is always on in Phase 1.
   allowed.add("pacifica_trader");
+  // Paper AI bots are always on in Phase 1 — no user pref toggle yet.
+  allowed.add("bot");
   if (prefs.meme) allowed.add("meme");
   if (prefs.prediction) {
     allowed.add("prediction");
@@ -284,6 +287,7 @@ function CardContent({
       {signal.type === "pacifica_trader" && (
         <CopyCard signal={signal} isActive={active} />
       )}
+      {signal.type === "bot" && <BotCard signal={signal} />}
     </div>
   );
 }
