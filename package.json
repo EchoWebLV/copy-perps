@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "seed:bots": "tsx --env-file=.env.local scripts/seed-bots.ts",
     "refresh:memes": "tsx --env-file=.env.local scripts/refresh-memes-local.ts",
     "refresh:predictions": "tsx --env-file=.env.local scripts/refresh-predictions-local.ts",
     "refresh:traders": "tsx --env-file=.env.local scripts/refresh-traders.ts",
