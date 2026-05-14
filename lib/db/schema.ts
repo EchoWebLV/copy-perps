@@ -142,6 +142,8 @@ export const bots = pgTable("bots", {
   strategyKey: text("strategy_key").notNull(),
   config: jsonb("config").notNull(),
   status: text("status").notNull().default("paper"), // 'paper' | 'backtest-fail' | 'live' | 'retired'
+  balanceUsd: doublePrecision("balance_usd").notNull().default(1000),
+  startingBalanceUsd: doublePrecision("starting_balance_usd").notNull().default(1000),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -157,6 +159,7 @@ export const paperPositions = pgTable(
     asset: text("asset").notNull(),
     side: text("side").notNull(), // 'long' | 'short'
     leverage: integer("leverage").notNull(),
+    stakeUsd: doublePrecision("stake_usd").notNull().default(0),
     entryMark: doublePrecision("entry_mark").notNull(),
     entryTs: timestamp("entry_ts", { withTimezone: true })
       .notNull()
