@@ -30,7 +30,7 @@ export interface PhoenixTraderState {
   authority: string;
   collateralUsdc: number;
   effectiveCollateralUsdc: number;
-  positions: PhoenixOpenPosition[];
+  positions: PhoenixOpenPosition[];  // always an array; may be empty even when hasActiveTrader is false
   hasActiveTrader: boolean;  // false if account was never opened on Phoenix
   slot: number;
 }
