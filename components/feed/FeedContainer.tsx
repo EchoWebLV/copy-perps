@@ -9,6 +9,11 @@ import { WhaleCard } from "./WhaleCard";
 import { CopyCard } from "./CopyCard";
 import { LiveTape } from "./LiveTape";
 import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
+import {
+  FeedFilterTabs,
+  applyFeedTab,
+  type FeedTab,
+} from "./FeedFilterTabs";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
@@ -74,11 +79,13 @@ export function FeedContainer({
   // whole app. Modal saves update the same context state, so the
   // feed re-filters instantly without a refetch.
   const { prefs } = usePreferences();
+  const [feedTab, setFeedTab] = useState<FeedTab>("hot");
   const visibleSignals = useMemo(() => {
     const allowed = buildAllowedTypes(prefs);
-    if (allowed.size === 4) return signals; // all rails on — skip filter
-    return signals.filter((s) => allowed.has(s.type));
-  }, [signals, prefs]);
+    const typeFiltered =
+      allowed.size === 4 ? signals : signals.filter((s) => allowed.has(s.type));
+    return applyFeedTab(typeFiltered, feedTab);
+  }, [signals, prefs, feedTab]);
 
   // Stable refs so the fetcher closure always sees the latest values
   // without having to be re-created. `allowed` lets loadMore detect
@@ -224,6 +231,7 @@ export function FeedContainer({
     >
       <BalancePill />
       <LiveTape />
+      <FeedFilterTabs active={feedTab} onChange={setFeedTab} />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}
