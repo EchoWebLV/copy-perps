@@ -8,6 +8,7 @@ import {
   doublePrecision,
   index,
   primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export interface FeedPrefs {
@@ -210,3 +211,50 @@ export const paperPositions = pgTable(
     ),
   }),
 );
+
+// Persistent log of bot-authored in-character thoughts that are NOT tied to
+// a trade event. Trade narrations stay on paper_positions.narration_open/close.
+// kind: 'near_trade' | 'banter' | 'market_react' | 'position_color' | 'mood_state'
+export const botThoughts = pgTable(
+  "bot_thoughts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    content: text("content").notNull(),
+    refMeta: jsonb("ref_meta"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    botTsIdx: index("bot_thoughts_bot_ts_idx").on(t.botId, t.createdAt),
+    tsIdx: index("bot_thoughts_ts_idx").on(t.createdAt),
+    botKindTsIdx: index("bot_thoughts_bot_kind_ts_idx").on(
+      t.botId,
+      t.kind,
+      t.createdAt,
+    ),
+  }),
+);
+
+// Singleton settings row controlling thought publication. PK is fixed to
+// 'singleton'; we upsert into that one row. Defaults match the design.
+export const thoughtSettings = pgTable("thought_settings", {
+  id: text("id").primaryKey().default("singleton"),
+  enableNearTrade: boolean("enable_near_trade").notNull().default(false),
+  enableBanter: boolean("enable_banter").notNull().default(false),
+  enableMarketReact: boolean("enable_market_react").notNull().default(false),
+  enablePositionColor: boolean("enable_position_color").notNull().default(false),
+  enableMoodBadges: boolean("enable_mood_badges").notNull().default(true),
+  cooldownNearTradeSec: integer("cooldown_near_trade_sec").notNull().default(300),
+  cooldownBanterSec: integer("cooldown_banter_sec").notNull().default(120),
+  cooldownMarketReactSec: integer("cooldown_market_react_sec").notNull().default(180),
+  cooldownPositionColorSec: integer("cooldown_position_color_sec").notNull().default(900),
+  maxThoughtsPerMinute: integer("max_thoughts_per_minute").notNull().default(8),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
