@@ -10,7 +10,8 @@ export type SignalType =
   | "prediction"
   | "whale"
   | "multiprediction"
-  | "pacifica_trader";
+  | "pacifica_trader"
+  | "bot";
 
 export interface BaseSignal {
   id: string;
@@ -129,11 +130,37 @@ export interface PacificaTraderSignal extends BaseSignal {
   stats: PacificaTraderStats;
 }
 
+export interface BotSignal extends BaseSignal {
+  type: "bot";
+  payload: {
+    botId: string;
+    botName: string;
+    avatarEmoji: string;
+    currentPosition: {
+      asset: string;
+      side: "long" | "short";
+      leverage: number;
+      entryMark: number;
+      currentMark: number;
+      livePaperPnlPct: number;
+      openSinceMs: number;
+    } | null;
+    stats: {
+      totalTrades: number;
+      winRate: number; // 0..1
+      paperPnl24hUsd: number;
+      paperPnl7dUsd: number;
+      paperPnlAllUsd: number;
+    };
+  };
+}
+
 export type Signal =
   | MemeSignal
   | PredictionSignal
   | WhaleSignal
   | MultiPredictionSignal
-  | PacificaTraderSignal;
+  | PacificaTraderSignal
+  | BotSignal;
 
 export type StakeAmount = 5 | 10 | 20 | 50;

@@ -24,6 +24,7 @@ const FAMILIES: Record<Signal["type"], Family> = {
   multiprediction:  { hueStart: 200, hueRange: 40, saturation: 75, lightness: 12 },
   whale:            { hueStart: 260, hueRange: 50, saturation: 70, lightness: 13 },
   pacifica_trader:  { hueStart: 165, hueRange: 30, saturation: 70, lightness: 13 },
+  bot:              { hueStart: 45,  hueRange: 30, saturation: 75, lightness: 12 },
 };
 
 export function cardGradient(signal: Signal | undefined): string {
