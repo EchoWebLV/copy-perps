@@ -5,3 +5,11 @@
 export function legacyRailsEnabled(): boolean {
   return process.env.FEATURE_LEGACY_RAILS === "true";
 }
+
+export function copyTradeEnabled(): boolean {
+  return process.env.FEATURE_COPY_TRADE === "true";
+}
+
+export function casinoModeEnabled(): boolean {
+  return process.env.FEATURE_CASINO_MODE === "true";
+}
