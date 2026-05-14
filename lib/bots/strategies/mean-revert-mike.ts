@@ -9,6 +9,7 @@ import type {
   Strategy,
 } from "../types";
 import { clampConviction } from "../types";
+import { getRegime, type Regime } from "../regime";
 
 const ALLOWED_MARKETS = ["SOL", "HYPE", "AVAX", "DOGE", "XRP"] as const;
 
@@ -20,6 +21,7 @@ interface MikeParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  regimesAllowed: Regime[];
 }
 
 function zScore(values: number[], current: number): number | null {
@@ -48,6 +50,13 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
         )
       ) {
         return null;
+      }
+      // Regime gate: skip if classifier says we're in a regime the strategy
+      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
+      // fire normally.
+      if (p.regimesAllowed.length > 0) {
+        const regime = await getRegime(ctx.asset);
+        if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
       }
       const candles = await getCandles(ctx.asset, p.timeframe, p.candleCount);
       if (candles.length < Math.floor(p.candleCount * 0.5)) return null;
@@ -85,6 +94,7 @@ export const MeanRevertMikeStrategy = createMeanRevertMikeStrategy({
   exitFavorablePct: 0.006,
   maxHoldMs: 30 * 60 * 1000,
   leverage: 25,
+  regimesAllowed: ["mean-reverting", "chop"],
 });
 
 export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
@@ -95,6 +105,7 @@ export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
   exitFavorablePct: 0.012,
   maxHoldMs: 4 * 60 * 60 * 1000,
   leverage: 25,
+  regimesAllowed: ["mean-reverting"],
 });
 
 export const MeanRevertMikeBot: BotConfig = {
@@ -111,6 +122,7 @@ export const MeanRevertMikeBot: BotConfig = {
     exitFavorablePct: 0.006,
     maxHoldMs: 30 * 60 * 1000,
     leverage: 25,
+    regimesAllowed: ["mean-reverting", "chop"],
   },
   status: "paper",
 };
@@ -129,6 +141,7 @@ export const MeanRevertMikePatientBot: BotConfig = {
     exitFavorablePct: 0.012,
     maxHoldMs: 4 * 60 * 60 * 1000,
     leverage: 25,
+    regimesAllowed: ["mean-reverting"],
   },
   status: "paper",
 };

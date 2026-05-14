@@ -5,9 +5,13 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/data/candles", () => ({
   getCandles: vi.fn(),
 }));
+vi.mock("../regime", () => ({
+  getRegime: vi.fn(),
+}));
 
 import { VolVectorStrategy, VolVectorHairTriggerStrategy } from "./vol-vector";
 import { getCandles } from "@/lib/data/candles";
+import { getRegime } from "../regime";
 import type { MarketContext, ExternalSignals, PaperPosition } from "../types";
 
 const emptySignals: ExternalSignals = { liquidations: [], funding: {} };
@@ -38,7 +42,13 @@ function trendingCandles(start: number, step: number, n: number, intervalMs: num
 }
 
 describe("VolVector.evaluateEntry", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: regime classifier returns null → fail-open, strategy fires
+    // based on its own triggers. Tests that need a specific regime override
+    // this per-test.
+    vi.mocked(getRegime).mockResolvedValue(null);
+  });
 
   it("returns null when current vol is at baseline", async () => {
     vi.mocked(getCandles).mockImplementation(async (_asset, tf) => {
@@ -81,10 +91,46 @@ describe("VolVector.evaluateEntry", () => {
     expect(decision).not.toBeNull();
     expect(decision!.side).toBe("short");
   });
+
+  it("returns null when regime classifier disagrees", async () => {
+    // Setup conditions that would normally trigger a long entry (vol spike trending up)
+    vi.mocked(getCandles).mockImplementation(async (_asset, tf) => {
+      if (tf === "1m") return trendingCandles(100, 0.3, 5, 60_000);
+      return constantCandles(100, 24, 60 * 60_000);
+    });
+    // Vol Vector only trades in vol-expanding; mean-reverting is not allowed
+    vi.mocked(getRegime).mockResolvedValue({
+      regime: "mean-reverting",
+      confidence: 0.9,
+      sampledAtMs: Date.now(),
+    });
+    const decision = await VolVectorStrategy.evaluateEntry(
+      { asset: "SOL", mark: 101.5 },
+      emptySignals,
+    );
+    expect(decision).toBeNull();
+  });
+
+  it("fires when regime classifier returns null (fail-open)", async () => {
+    // Setup conditions that would normally trigger a long entry (vol spike trending up)
+    vi.mocked(getCandles).mockImplementation(async (_asset, tf) => {
+      if (tf === "1m") return trendingCandles(100, 0.3, 5, 60_000);
+      return constantCandles(100, 24, 60 * 60_000);
+    });
+    vi.mocked(getRegime).mockResolvedValue(null);
+    const decision = await VolVectorStrategy.evaluateEntry(
+      { asset: "SOL", mark: 101.5 },
+      emptySignals,
+    );
+    expect(decision).not.toBeNull();
+  });
 });
 
 describe("VolVectorHairTrigger (variant)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getRegime).mockResolvedValue(null);
+  });
 
   it("fires at a lower vol multiplier than the headliner", async () => {
     vi.mocked(getCandles).mockImplementation(async (_asset, tf) => {

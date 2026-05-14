@@ -9,6 +9,7 @@ import type {
   Strategy,
 } from "../types";
 import { clampConviction } from "../types";
+import { getRegime, type Regime } from "../regime";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE"] as const;
 
@@ -21,6 +22,7 @@ interface MomoParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  regimesAllowed: Regime[];
 }
 
 export function createMomoMaxStrategy(p: MomoParams): Strategy {
@@ -38,6 +40,13 @@ export function createMomoMaxStrategy(p: MomoParams): Strategy {
         )
       ) {
         return null;
+      }
+      // Regime gate: skip if classifier says we're in a regime the strategy
+      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
+      // fire normally.
+      if (p.regimesAllowed.length > 0) {
+        const regime = await getRegime(ctx.asset);
+        if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
       }
       const candles = await getCandles(ctx.asset, p.timeframe, p.candleCount);
       if (candles.length < p.candleCount) return null;
@@ -86,6 +95,7 @@ export const MomoMaxStrategy = createMomoMaxStrategy({
   exitFavorablePct: 0.005,
   maxHoldMs: 30 * 60 * 1000,
   leverage: 20,
+  regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
 });
 
 export const MomoMaxAggressiveStrategy = createMomoMaxStrategy({
@@ -97,6 +107,7 @@ export const MomoMaxAggressiveStrategy = createMomoMaxStrategy({
   exitFavorablePct: 0.003,
   maxHoldMs: 20 * 60 * 1000,
   leverage: 20,
+  regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
 });
 
 export const MomoMaxBot: BotConfig = {
@@ -114,6 +125,7 @@ export const MomoMaxBot: BotConfig = {
     exitFavorablePct: 0.005,
     maxHoldMs: 30 * 60 * 1000,
     leverage: 20,
+    regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
   },
   status: "paper",
 };
@@ -133,6 +145,7 @@ export const MomoMaxAggressiveBot: BotConfig = {
     exitFavorablePct: 0.003,
     maxHoldMs: 20 * 60 * 1000,
     leverage: 20,
+    regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
   },
   status: "paper",
 };

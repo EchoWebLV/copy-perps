@@ -9,6 +9,7 @@ import type {
   Strategy,
 } from "../types";
 import { clampConviction } from "../types";
+import { getRegime, type Regime } from "../regime";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "AVAX"] as const;
 
@@ -23,6 +24,7 @@ interface VolParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  regimesAllowed: Regime[];
 }
 
 function realizedVol(candles: { close: number }[]): number {
@@ -56,6 +58,13 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
         )
       ) {
         return null;
+      }
+      // Regime gate: skip if classifier says we're in a regime the strategy
+      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
+      // fire normally.
+      if (p.regimesAllowed.length > 0) {
+        const regime = await getRegime(ctx.asset);
+        if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
       }
       const [recent, baseline] = await Promise.all([
         getCandles(ctx.asset, p.recentTimeframe, p.recentCount),
@@ -123,6 +132,7 @@ export const VolVectorStrategy = createVolVectorStrategy({
   exitFavorablePct: 0.006,
   maxHoldMs: 15 * 60 * 1000,
   leverage: 30,
+  regimesAllowed: ["vol-expanding"],
 });
 
 export const VolVectorHairTriggerStrategy = createVolVectorStrategy({
@@ -136,6 +146,7 @@ export const VolVectorHairTriggerStrategy = createVolVectorStrategy({
   exitFavorablePct: 0.004,
   maxHoldMs: 10 * 60 * 1000,
   leverage: 30,
+  regimesAllowed: ["vol-expanding", "chop"],
 });
 
 export const VolVectorBot: BotConfig = {
@@ -155,6 +166,7 @@ export const VolVectorBot: BotConfig = {
     exitFavorablePct: 0.006,
     maxHoldMs: 15 * 60 * 1000,
     leverage: 30,
+    regimesAllowed: ["vol-expanding"],
   },
   status: "paper",
 };
@@ -176,6 +188,7 @@ export const VolVectorHairTriggerBot: BotConfig = {
     exitFavorablePct: 0.004,
     maxHoldMs: 10 * 60 * 1000,
     leverage: 30,
+    regimesAllowed: ["vol-expanding", "chop"],
   },
   status: "paper",
 };

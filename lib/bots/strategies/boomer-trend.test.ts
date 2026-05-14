@@ -5,9 +5,13 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/data/candles", () => ({
   getCandles: vi.fn(),
 }));
+vi.mock("../regime", () => ({
+  getRegime: vi.fn(),
+}));
 
 import { BoomerTrendStrategy, BoomerTrendWideStrategy } from "./boomer-trend";
 import { getCandles } from "@/lib/data/candles";
+import { getRegime } from "../regime";
 import type { MarketContext, ExternalSignals, PaperPosition } from "../types";
 
 const emptySignals: ExternalSignals = { liquidations: [], funding: {} };
@@ -60,7 +64,13 @@ function bearCrossCandles() {
 }
 
 describe("BoomerTrend.evaluateEntry", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: regime classifier returns null → fail-open, strategy fires
+    // based on its own triggers. Tests that need a specific regime override
+    // this per-test.
+    vi.mocked(getRegime).mockResolvedValue(null);
+  });
 
   it("longs after a bullish EMA crossover", async () => {
     vi.mocked(getCandles).mockResolvedValue(bullCrossCandles());
@@ -108,6 +118,33 @@ describe("BoomerTrend.evaluateEntry", () => {
     );
     expect(decision).toBeNull();
   });
+
+  it("returns null when regime classifier disagrees", async () => {
+    // Setup conditions that would normally trigger a long entry
+    vi.mocked(getCandles).mockResolvedValue(bullCrossCandles());
+    // Boomer Trend only trades trending-up/trending-down; chop is not allowed
+    vi.mocked(getRegime).mockResolvedValue({
+      regime: "chop",
+      confidence: 0.9,
+      sampledAtMs: Date.now(),
+    });
+    const decision = await BoomerTrendStrategy.evaluateEntry(
+      { asset: "BTC", mark: 110 },
+      emptySignals,
+    );
+    expect(decision).toBeNull();
+  });
+
+  it("fires when regime classifier returns null (fail-open)", async () => {
+    // Setup conditions that would normally trigger a long entry
+    vi.mocked(getCandles).mockResolvedValue(bullCrossCandles());
+    vi.mocked(getRegime).mockResolvedValue(null);
+    const decision = await BoomerTrendStrategy.evaluateEntry(
+      { asset: "BTC", mark: 110 },
+      emptySignals,
+    );
+    expect(decision).not.toBeNull();
+  });
 });
 
 describe("BoomerTrend.evaluateExit", () => {
@@ -147,7 +184,10 @@ describe("BoomerTrend.evaluateExit", () => {
 });
 
 describe("BoomerTrendWide (variant)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getRegime).mockResolvedValue(null);
+  });
 
   it("uses wider EMA windows — should not crash on a strong bull cross", async () => {
     vi.mocked(getCandles).mockResolvedValue(bullCrossCandles());

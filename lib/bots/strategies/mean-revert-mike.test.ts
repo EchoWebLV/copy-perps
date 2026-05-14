@@ -5,9 +5,13 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/data/candles", () => ({
   getCandles: vi.fn(),
 }));
+vi.mock("../regime", () => ({
+  getRegime: vi.fn(),
+}));
 
 import { MeanRevertMikeStrategy, MeanRevertMikePatientStrategy } from "./mean-revert-mike";
 import { getCandles } from "@/lib/data/candles";
+import { getRegime } from "../regime";
 import type { MarketContext, ExternalSignals, PaperPosition } from "../types";
 
 const baseCtx: MarketContext = { asset: "SOL", mark: 100 };
@@ -27,6 +31,10 @@ function buildCandles(baselineCloses: number[], finalClose: number) {
 describe("MeanRevertMike.evaluateEntry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: regime classifier returns null → fail-open, strategy fires
+    // based on its own triggers. Tests that need a specific regime override
+    // this per-test.
+    vi.mocked(getRegime).mockResolvedValue(null);
   });
 
   it("returns null when candles fetch returns empty", async () => {
@@ -65,6 +73,35 @@ describe("MeanRevertMike.evaluateEntry", () => {
       emptySignals,
     );
     expect(decision).toBeNull();
+  });
+
+  it("returns null when regime classifier disagrees", async () => {
+    // Setup conditions that would normally trigger a short entry
+    const baseline = Array(29).fill(100);
+    vi.mocked(getCandles).mockResolvedValue(buildCandles(baseline, 110));
+    // Mean-Revert Mike doesn't trade in trending-up
+    vi.mocked(getRegime).mockResolvedValue({
+      regime: "trending-up",
+      confidence: 0.9,
+      sampledAtMs: Date.now(),
+    });
+    const decision = await MeanRevertMikeStrategy.evaluateEntry(
+      { asset: "SOL", mark: 110 },
+      emptySignals,
+    );
+    expect(decision).toBeNull();
+  });
+
+  it("fires when regime classifier returns null (fail-open)", async () => {
+    // Setup conditions that would normally trigger a short entry
+    const baseline = Array(29).fill(100);
+    vi.mocked(getCandles).mockResolvedValue(buildCandles(baseline, 110));
+    vi.mocked(getRegime).mockResolvedValue(null);
+    const decision = await MeanRevertMikeStrategy.evaluateEntry(
+      { asset: "SOL", mark: 110 },
+      emptySignals,
+    );
+    expect(decision).not.toBeNull();
   });
 });
 

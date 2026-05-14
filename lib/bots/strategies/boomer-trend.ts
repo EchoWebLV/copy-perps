@@ -9,6 +9,7 @@ import type {
   Strategy,
 } from "../types";
 import { clampConviction } from "../types";
+import { getRegime, type Regime } from "../regime";
 
 const ALLOWED_MARKETS = ["BTC", "ETH"] as const;
 
@@ -21,6 +22,7 @@ interface BoomerParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  regimesAllowed: Regime[];
 }
 
 function ema(values: number[], period: number): number[] {
@@ -49,6 +51,13 @@ export function createBoomerTrendStrategy(p: BoomerParams): Strategy {
         )
       ) {
         return null;
+      }
+      // Regime gate: skip if classifier says we're in a regime the strategy
+      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
+      // fire normally.
+      if (p.regimesAllowed.length > 0) {
+        const regime = await getRegime(ctx.asset);
+        if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
       }
       const candles = await getCandles(ctx.asset, p.timeframe, p.candleCount);
       if (candles.length < p.slowPeriod + 2) return null;
@@ -109,6 +118,7 @@ export const BoomerTrendStrategy = createBoomerTrendStrategy({
   exitFavorablePct: 0.03,
   maxHoldMs: 48 * 60 * 60 * 1000,
   leverage: 10,
+  regimesAllowed: ["trending-up", "trending-down"],
 });
 
 export const BoomerTrendWideStrategy = createBoomerTrendStrategy({
@@ -120,6 +130,7 @@ export const BoomerTrendWideStrategy = createBoomerTrendStrategy({
   exitFavorablePct: 0.05,
   maxHoldMs: 72 * 60 * 60 * 1000,
   leverage: 10,
+  regimesAllowed: ["trending-up", "trending-down", "mean-reverting"],
 });
 
 export const BoomerTrendBot: BotConfig = {
@@ -137,6 +148,7 @@ export const BoomerTrendBot: BotConfig = {
     exitFavorablePct: 0.03,
     maxHoldMs: 48 * 60 * 60 * 1000,
     leverage: 10,
+    regimesAllowed: ["trending-up", "trending-down"],
   },
   status: "paper",
 };
@@ -156,6 +168,7 @@ export const BoomerTrendWideBot: BotConfig = {
     exitFavorablePct: 0.05,
     maxHoldMs: 72 * 60 * 60 * 1000,
     leverage: 10,
+    regimesAllowed: ["trending-up", "trending-down", "mean-reverting"],
   },
   status: "paper",
 };
