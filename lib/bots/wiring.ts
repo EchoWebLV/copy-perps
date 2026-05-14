@@ -71,6 +71,15 @@ const HL_CANDLES: DataSource = {
   refreshHint: "30s cache keyed by (asset, timeframe, count).",
 };
 
+const REGIME_CLASSIFIER: DataSource = {
+  label: "Regime classifier (xAI)",
+  purpose:
+    "Per-asset market regime label (trending-up/down, mean-reverting, vol-expanding, chop). Strategies skip entries that don't match their declared regimes, fail-open when xAI is unavailable.",
+  endpoint: "xAI Grok (grok-4.20-non-reasoning) — see lib/bots/regime.ts",
+  file: "lib/bots/regime.ts",
+  refreshHint: "60s per-asset cache; null on xAI error (strategy fires normally).",
+};
+
 export const STRATEGY_FAMILIES: StrategyWiring[] = [
   {
     family: "liquidation-lizard",
@@ -128,7 +137,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Mean-Revert Mike",
     description:
       "Computes a z-score of price against the recent candle window. When price is too far from mean (|z| > threshold), fade in the opposite direction.",
-    dataSources: [HL_MARKS, HL_CANDLES],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
     strategyFile: "lib/bots/strategies/mean-revert-mike.ts",
     personaFile: "lib/bots/personas/mean-revert-mike.ts",
     testFile: "lib/bots/strategies/mean-revert-mike.test.ts",
@@ -139,6 +148,12 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
       { key: "exitFavorablePct", type: "number", purpose: "Favorable move to exit." },
       { key: "maxHoldMs", type: "ms", purpose: "Max hold ms." },
       { key: "leverage", type: "number", purpose: "Leverage multiplier." },
+      {
+        key: "regimesAllowed",
+        type: "string",
+        purpose:
+          "Comma-separated list of regime labels the strategy is allowed to fire in (e.g. 'mean-reverting,chop'). Empty array disables the regime gate.",
+      },
     ],
   },
   {
@@ -146,7 +161,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Momo Max",
     description:
       "Breakout chaser: enters when a candle's body exceeds a threshold AND volume spikes vs. recent average. Direction follows the candle.",
-    dataSources: [HL_MARKS, HL_CANDLES],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
     strategyFile: "lib/bots/strategies/momo-max.ts",
     personaFile: "lib/bots/personas/momo-max.ts",
     testFile: "lib/bots/strategies/momo-max.test.ts",
@@ -162,6 +177,12 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
       { key: "exitFavorablePct", type: "number", purpose: "Favorable move to exit." },
       { key: "maxHoldMs", type: "ms", purpose: "Max hold ms." },
       { key: "leverage", type: "number", purpose: "Leverage multiplier." },
+      {
+        key: "regimesAllowed",
+        type: "string",
+        purpose:
+          "Comma-separated list of regime labels the strategy is allowed to fire in (e.g. 'mean-reverting,chop'). Empty array disables the regime gate.",
+      },
     ],
   },
   {
@@ -169,7 +190,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Vol Vector",
     description:
       "Realized-vol spike detector. Compares recent (1m) realized vol to a longer baseline (1h); on a spike + directionally-consistent candles, enters that direction.",
-    dataSources: [HL_MARKS, HL_CANDLES],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
     strategyFile: "lib/bots/strategies/vol-vector.ts",
     personaFile: "lib/bots/personas/vol-vector.ts",
     testFile: "lib/bots/strategies/vol-vector.test.ts",
@@ -187,6 +208,12 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
       { key: "exitFavorablePct", type: "number", purpose: "Favorable move to exit." },
       { key: "maxHoldMs", type: "ms", purpose: "Max hold ms." },
       { key: "leverage", type: "number", purpose: "Leverage multiplier." },
+      {
+        key: "regimesAllowed",
+        type: "string",
+        purpose:
+          "Comma-separated list of regime labels the strategy is allowed to fire in (e.g. 'mean-reverting,chop'). Empty array disables the regime gate.",
+      },
     ],
   },
   {
@@ -194,7 +221,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Boomer Trend",
     description:
       "Slow trend follower on 4h candles. EMA(fast) crossing above EMA(slow) goes long; cross below goes short. Multi-day holds, low leverage.",
-    dataSources: [HL_MARKS, HL_CANDLES],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
     strategyFile: "lib/bots/strategies/boomer-trend.ts",
     personaFile: "lib/bots/personas/boomer-trend.ts",
     testFile: "lib/bots/strategies/boomer-trend.test.ts",
@@ -206,6 +233,12 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
       { key: "exitFavorablePct", type: "number", purpose: "Favorable move to exit." },
       { key: "maxHoldMs", type: "ms", purpose: "Max hold ms." },
       { key: "leverage", type: "number", purpose: "Leverage multiplier." },
+      {
+        key: "regimesAllowed",
+        type: "string",
+        purpose:
+          "Comma-separated list of regime labels the strategy is allowed to fire in (e.g. 'mean-reverting,chop'). Empty array disables the regime gate.",
+      },
     ],
   },
 ];
