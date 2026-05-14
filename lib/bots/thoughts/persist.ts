@@ -5,8 +5,16 @@
 
 import { db } from "@/lib/db";
 import { botThoughts } from "@/lib/db/schema";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import type { PersistedThought, ThoughtKind } from "./types";
+
+const VALID_KINDS: ReadonlySet<ThoughtKind> = new Set([
+  "near_trade",
+  "banter",
+  "market_react",
+  "position_color",
+  "mood_state",
+]);
 
 export async function insertThought(args: {
   botId: string;
@@ -44,6 +52,12 @@ export async function getLatestThoughtPerBot(): Promise<
   `);
   const map = new Map<string, PersistedThought>();
   for (const r of rows.rows) {
+    if (!VALID_KINDS.has(r.kind as ThoughtKind)) {
+      console.warn(
+        `[thoughts/persist] unknown kind in bot_thoughts row ${r.id}: "${r.kind}" — skipping`,
+      );
+      continue;
+    }
     map.set(r.bot_id, {
       id: r.id,
       botId: r.bot_id,
@@ -74,8 +88,8 @@ export async function getLastThoughtTimestamp(
 export async function getThoughtsInLastMinute(): Promise<number> {
   const cutoff = new Date(Date.now() - 60_000);
   const rows = await db
-    .select({ id: botThoughts.id })
+    .select({ n: count() })
     .from(botThoughts)
     .where(gt(botThoughts.createdAt, cutoff));
-  return rows.length;
+  return rows[0]?.n ?? 0;
 }
