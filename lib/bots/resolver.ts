@@ -11,10 +11,11 @@ import {
 } from "./paper";
 import type { ExternalSignals, MarketContext } from "./types";
 
-// Default notional used for paper-PnL computation. Real $ figure doesn't
-// matter for paper bookkeeping — leaderboard ranks by percent return — but
-// keeping a consistent number makes raw USD figures comparable across bots.
-const PAPER_NOTIONAL_PER_BOT_USD = 1_000;
+// Uniform paper "stake" all bots trade with. Notional = stake × leverage, so
+// high-leverage bots' paper PnL scales with their declared risk — critical
+// for cross-bot comparability on the leaderboard. Picking $100 keeps the
+// numbers readable (Lizard at 50x with a +0.5% move = $25 paper PnL).
+const PAPER_STAKE_PER_BOT_USD = 100;
 
 export async function tick(): Promise<{
   opened: number;
@@ -48,7 +49,7 @@ export async function tick(): Promise<{
           leverage: existing.leverage,
           entryMark: existing.entryMark,
           exitMark: mark,
-          notionalUsd: PAPER_NOTIONAL_PER_BOT_USD,
+          stakeUsd: PAPER_STAKE_PER_BOT_USD,
         });
         await closePaperPosition({
           positionId: existing.id,

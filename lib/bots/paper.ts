@@ -3,18 +3,21 @@ export interface PaperPnlArgs {
   leverage: number;
   entryMark: number;
   exitMark: number;
-  notionalUsd: number;
+  stakeUsd: number;
 }
 
 /**
- * Realized paper PnL in USD at exit. notionalUsd is the position size in
- * USD (== stake × leverage). Sign convention: positive = profit.
+ * Realized paper PnL in USD at exit. Pass the *stake* (margin) not notional —
+ * notional is computed inside as stake × leverage so high-leverage bots
+ * earn proportionally bigger absolute paper PnL per same price move, which
+ * is what the leaderboard ranking needs for cross-bot comparability.
+ * Sign convention: positive = profit.
  */
 export function computePaperPnlUsd(args: PaperPnlArgs): number {
-  const { side, entryMark, exitMark, notionalUsd } = args;
+  const { side, leverage, entryMark, exitMark, stakeUsd } = args;
   const moveFrac = (exitMark - entryMark) / entryMark;
   const directional = side === "long" ? moveFrac : -moveFrac;
-  return notionalUsd * directional;
+  return stakeUsd * leverage * directional;
 }
 
 export interface LivePaperPnlArgs {
