@@ -14,7 +14,9 @@ vi.mock("@/lib/db", () => ({
       }),
     }),
     insert: () => ({
-      values: insertMock,
+      values: (v: unknown) => ({
+        onConflictDoNothing: () => insertMock(v),
+      }),
     }),
     update: () => ({
       set: (patch: Record<string, unknown>) => ({
@@ -60,6 +62,25 @@ describe("getThoughtSettings", () => {
     expect(insertMock).toHaveBeenCalledTimes(1);
     expect(s.enableMoodBadges).toBe(true);
     expect(s.enableNearTrade).toBe(false);
+  });
+
+  it("survives a concurrent insert (onConflictDoNothing)", async () => {
+    // First caller's read returns empty; insert "wins" silently (onConflictDoNothing
+    // swallows the unique-violation from a concurrent writer); the re-read
+    // returns whatever row exists.
+    selectMock
+      .mockResolvedValueOnce([]) // first read: missing
+      .mockResolvedValueOnce([
+        {
+          id: "singleton",
+          enableNearTrade: false,
+          enableMoodBadges: true,
+        },
+      ]);
+    insertMock.mockResolvedValueOnce(undefined);
+    const s = await getThoughtSettings();
+    expect(s.enableMoodBadges).toBe(true);
+    expect(insertMock).toHaveBeenCalledTimes(1);
   });
 });
 

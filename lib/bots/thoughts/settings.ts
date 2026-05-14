@@ -21,7 +21,7 @@ export async function getThoughtSettings(): Promise<ThoughtSettings> {
   if (existing[0]) return existing[0];
 
   // First read — create the row using DB column defaults.
-  await db.insert(thoughtSettings).values({ id: SINGLETON_ID });
+  await db.insert(thoughtSettings).values({ id: SINGLETON_ID }).onConflictDoNothing();
   const after = await db
     .select()
     .from(thoughtSettings)
