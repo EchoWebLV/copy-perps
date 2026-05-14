@@ -95,6 +95,12 @@ const RESOLVER_CONSTANTS = [
     purpose:
       "Below this balance the bot is marked busted and stops trading.",
   },
+  {
+    name: "MAX_BOTS_SAME_SIDE",
+    value: "3",
+    purpose:
+      "Pileup cap. A 4th bot trying to open the same side on the same asset is skipped, forcing diversification across the roster.",
+  },
 ];
 
 export default async function BotDetailPage({ params }: PageParams) {

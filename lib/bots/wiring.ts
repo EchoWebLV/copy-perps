@@ -80,13 +80,22 @@ const REGIME_CLASSIFIER: DataSource = {
   refreshHint: "60s per-asset cache; null on xAI error (strategy fires normally).",
 };
 
+const CROSS_BOT_STATE: DataSource = {
+  label: "Cross-bot state",
+  purpose:
+    "Snapshot of all bots' currently-open positions, grouped by (asset, side). Used by the resolver to prevent more than MAX_BOTS_SAME_SIDE bots piling into the same trade, and by the feed UI to surface disagreement between bots holding opposite sides of the same asset.",
+  endpoint: "Internal DB read (paper_positions WHERE status='open')",
+  file: "lib/bots/cross-bot.ts",
+  refreshHint: "5s cache, refreshed each resolver tick and each feed-pool render.",
+};
+
 export const STRATEGY_FAMILIES: StrategyWiring[] = [
   {
     family: "liquidation-lizard",
     displayName: "Liquidation Lizard",
     description:
       "Fades large Hyperliquid liquidations: when a long gets force-closed, go long (and vice versa). Fast scalp out on a small favorable move or short timeout.",
-    dataSources: [HL_MARKS, HL_LIQUIDATIONS],
+    dataSources: [HL_MARKS, HL_LIQUIDATIONS, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/liquidation-lizard.ts",
     personaFile: "lib/bots/personas/liquidation-lizard.ts",
     testFile: "lib/bots/strategies/liquidation-lizard.test.ts",
@@ -111,7 +120,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Funding Phoebe",
     description:
       "Fades funding-rate extremes — positive funding (longs paying) → short; negative funding → long. Multi-hour hold for the funding cycle to swing back.",
-    dataSources: [HL_MARKS, MULTI_CEX_FUNDING],
+    dataSources: [HL_MARKS, MULTI_CEX_FUNDING, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/funding-phoebe.ts",
     personaFile: "lib/bots/personas/funding-phoebe.ts",
     testFile: "lib/bots/strategies/funding-phoebe.test.ts",
@@ -137,7 +146,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Mean-Revert Mike",
     description:
       "Computes a z-score of price against the recent candle window. When price is too far from mean (|z| > threshold), fade in the opposite direction.",
-    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/mean-revert-mike.ts",
     personaFile: "lib/bots/personas/mean-revert-mike.ts",
     testFile: "lib/bots/strategies/mean-revert-mike.test.ts",
@@ -161,7 +170,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Momo Max",
     description:
       "Breakout chaser: enters when a candle's body exceeds a threshold AND volume spikes vs. recent average. Direction follows the candle.",
-    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/momo-max.ts",
     personaFile: "lib/bots/personas/momo-max.ts",
     testFile: "lib/bots/strategies/momo-max.test.ts",
@@ -190,7 +199,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Vol Vector",
     description:
       "Realized-vol spike detector. Compares recent (1m) realized vol to a longer baseline (1h); on a spike + directionally-consistent candles, enters that direction.",
-    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/vol-vector.ts",
     personaFile: "lib/bots/personas/vol-vector.ts",
     testFile: "lib/bots/strategies/vol-vector.test.ts",
@@ -221,7 +230,7 @@ export const STRATEGY_FAMILIES: StrategyWiring[] = [
     displayName: "Boomer Trend",
     description:
       "Slow trend follower on 4h candles. EMA(fast) crossing above EMA(slow) goes long; cross below goes short. Multi-day holds, low leverage.",
-    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER],
+    dataSources: [HL_MARKS, HL_CANDLES, REGIME_CLASSIFIER, CROSS_BOT_STATE],
     strategyFile: "lib/bots/strategies/boomer-trend.ts",
     personaFile: "lib/bots/personas/boomer-trend.ts",
     testFile: "lib/bots/strategies/boomer-trend.test.ts",
