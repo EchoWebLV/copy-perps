@@ -10,7 +10,7 @@ export interface BotConfig {
   personaVoiceKey: string;
   strategyKey: string;
   config: Record<string, unknown>;
-  status: "paper" | "backtest-fail" | "live" | "retired";
+  status: "paper" | "backtest-fail" | "live" | "retired" | "busted";
 }
 
 export interface PaperPosition {

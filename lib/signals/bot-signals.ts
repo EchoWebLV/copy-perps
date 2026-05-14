@@ -5,6 +5,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { getMarksSnapshot } from "@/lib/data/marks";
 import { computeLivePaperPnlPct } from "@/lib/bots/paper";
 import { getCrossBotSnapshot } from "@/lib/bots/cross-bot";
+import { computeMoodBadge } from "@/lib/bots/mood";
+import type { BotConfig } from "@/lib/bots/types";
 import type { BotSignal } from "@/lib/types";
 
 export async function buildBotSignals(): Promise<BotSignal[]> {
@@ -25,6 +27,8 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
   const marks = await getMarksSnapshot();
   // Fetch the cross-bot snapshot once; used for disagreement computation per position.
   const crossBot = await getCrossBotSnapshot();
+  // TODO Task 5: replace with `await getThoughtSettings()` once it exists.
+  const enableMoodBadges = true;
   const signals: BotSignal[] = [];
   const stamp = new Date().toISOString();
 
@@ -140,6 +144,38 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         Math.max(-200, Math.min(200, paperPnl24h / 10)),
     );
 
+    const livePnlPctByPositionId: Record<string, number> = {};
+    for (const p of currentPositions) {
+      livePnlPctByPositionId[p.positionId] = p.livePaperPnlPct;
+    }
+    const recentClosedPnls = closedRows
+      .slice(0, 10)
+      .map((r) => r.paperPnlUsd ?? 0);
+    const mood = enableMoodBadges
+      ? computeMoodBadge({
+          botStatus: bot.status as BotConfig["status"],
+          openPositions: openRows.map((r) => ({
+            id: r.id,
+            botId: r.botId,
+            asset: r.asset,
+            side: r.side as "long" | "short",
+            leverage: r.leverage,
+            stakeUsd: r.stakeUsd,
+            entryMark: r.entryMark,
+            entryTs: r.entryTs,
+            exitMark: r.exitMark,
+            exitTs: r.exitTs,
+            paperPnlUsd: r.paperPnlUsd,
+            triggerMeta: (r.triggerMeta as Record<string, unknown> | null) ?? null,
+            narrationOpen: r.narrationOpen,
+            narrationClose: r.narrationClose,
+            status: r.status as "open" | "closed" | "expired",
+          })),
+          recentClosedPnls,
+          livePnlPctByPositionId,
+        })
+      : null;
+
     signals.push({
       type: "bot",
       id: `bot:${bot.id}`,
@@ -155,6 +191,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         startingBalanceUsd: bot.startingBalanceUsd,
         lifetimeReturnPct,
         freeBalanceUsd: freeBalance,
+        mood,
         busted: bot.status === "busted",
         currentPositions,
         stats: {
