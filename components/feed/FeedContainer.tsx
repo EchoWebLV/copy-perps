@@ -6,6 +6,7 @@ import { MemeCard } from "./MemeCard";
 import { PredictionCard } from "./PredictionCard";
 import { MultiPredictionCard } from "./MultiPredictionCard";
 import { WhaleCard } from "./WhaleCard";
+import { CopyCard } from "./CopyCard";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { cardGradient } from "@/lib/feed/card-color";
@@ -32,6 +33,8 @@ const BATCH_LIMIT = 20;
 
 function buildAllowedTypes(prefs: FeedPrefs): Set<SignalType> {
   const allowed = new Set<SignalType>();
+  // Pacifica copy-trade rail is always on in Phase 1.
+  allowed.add("pacifica_trader");
   if (prefs.meme) allowed.add("meme");
   if (prefs.prediction) {
     allowed.add("prediction");
@@ -265,6 +268,9 @@ function CardContent({
         <MultiPredictionCard signal={signal} flipNonce={flipNonce} />
       )}
       {signal.type === "whale" && <WhaleCard signal={signal} flipNonce={flipNonce} />}
+      {signal.type === "pacifica_trader" && (
+        <CopyCard signal={signal} isActive={active} />
+      )}
     </div>
   );
 }
