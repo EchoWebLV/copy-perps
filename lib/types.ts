@@ -5,7 +5,12 @@ export interface SignalChipData {
   level: SignalLevel;
 }
 
-export type SignalType = "meme" | "prediction" | "whale" | "multiprediction";
+export type SignalType =
+  | "meme"
+  | "prediction"
+  | "whale"
+  | "multiprediction"
+  | "phoenix_trader";
 
 export interface BaseSignal {
   id: string;
@@ -78,10 +83,36 @@ export interface MultiPredictionSignal extends BaseSignal {
   imageUrl?: string | null;
 }
 
+export interface PhoenixTraderPosition {
+  market: string;            // e.g. "SOL", "BTC", "ETH"
+  side: "long" | "short";
+  leverage: number;
+  notionalUsd: number;
+  entryPrice: number;
+  unrealizedPnlPct: number;  // signed %, e.g. 12.4 or -8.1
+  positionPubkey: string;    // Phoenix position account address
+}
+
+export interface PhoenixTraderStats7d {
+  trades: number;
+  winRatePct: number;
+  pnlUsd: number;            // signed
+  avgHoldMinutes: number;
+}
+
+export interface PhoenixTraderSignal extends BaseSignal {
+  type: "phoenix_trader";
+  authority: string;          // base58 Solana pubkey of the trader
+  position: PhoenixTraderPosition | null;
+  stats7d: PhoenixTraderStats7d;
+  label?: string;             // optional display name from seed list
+}
+
 export type Signal =
   | MemeSignal
   | PredictionSignal
   | WhaleSignal
-  | MultiPredictionSignal;
+  | MultiPredictionSignal
+  | PhoenixTraderSignal;
 
 export type StakeAmount = 5 | 10 | 20 | 50;
