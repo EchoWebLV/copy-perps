@@ -35,6 +35,48 @@ function fmtAge(ms: number, now: number): string {
   return `${d}d ago`;
 }
 
+const MOOD_BADGES: Record<
+  string,
+  { label: string; emoji: string; classes: string; pulse: boolean }
+> = {
+  HUNTING: {
+    label: "Hunting",
+    emoji: "🎯",
+    classes: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+    pulse: true,
+  },
+  LOADED: {
+    label: "Loaded",
+    emoji: "⚡",
+    classes: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+    pulse: false,
+  },
+  WOUNDED: {
+    label: "Wounded",
+    emoji: "💀",
+    classes: "bg-rose-500/15 text-rose-300 ring-rose-400/30",
+    pulse: false,
+  },
+  ON_STREAK: {
+    label: "On streak",
+    emoji: "🔥",
+    classes: "bg-amber-500/15 text-amber-200 ring-amber-400/30",
+    pulse: true,
+  },
+  DORMANT: {
+    label: "Watching",
+    emoji: "😴",
+    classes: "bg-white/5 text-white/50 ring-white/10",
+    pulse: false,
+  },
+  BUSTED: {
+    label: "Busted",
+    emoji: "🪦",
+    classes: "bg-black/40 text-white/40 ring-white/10",
+    pulse: false,
+  },
+};
+
 function fmtEvidenceValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "number") {
@@ -163,6 +205,14 @@ export function BotCard({ signal }: Props) {
               Paper AI bot
             </div>
             <div className="mt-0.5 text-xl font-bold">{p.botName}</div>
+            {p.mood && MOOD_BADGES[p.mood] && (
+              <span
+                className={`mt-1.5 mr-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ${MOOD_BADGES[p.mood].classes} ${MOOD_BADGES[p.mood].pulse ? "animate-pulse" : ""}`}
+                title={`${MOOD_BADGES[p.mood].label}: deterministic state`}
+              >
+                {MOOD_BADGES[p.mood].emoji} {MOOD_BADGES[p.mood].label}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setChatOpen(true)}
