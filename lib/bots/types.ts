@@ -32,6 +32,7 @@ export interface EntryDecision {
   asset: string;
   side: "long" | "short";
   leverage: number;
+  conviction: number; // 0..1, clamped to [0.3, 1.0] in practice
   triggerMeta: Record<string, unknown>;
 }
 
@@ -75,4 +76,18 @@ export interface SyncStrategy extends Strategy {
     ctx: MarketContext,
     signals: ExternalSignals,
   ): EntryDecision | null;
+}
+
+/**
+ * Clamp a raw "strength" measure to a conviction value in [floor, ceiling].
+ * Default range [0.3, 1.0] keeps every triggered trade meaningfully-sized
+ * (no $30 stakes at conviction 0.0) while still varying by signal strength.
+ */
+export function clampConviction(
+  raw: number,
+  floor: number = 0.3,
+  ceiling: number = 1.0,
+): number {
+  if (!Number.isFinite(raw)) return floor;
+  return Math.min(ceiling, Math.max(floor, raw));
 }

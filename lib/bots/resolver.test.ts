@@ -60,6 +60,7 @@ describe("resolver.tick", () => {
           asset: "SOL",
           side: "long",
           leverage: 10,
+          conviction: 0.5,
           triggerMeta: { reason: "test" },
         }) satisfies EntryDecision,
       evaluateExit: () => false,

@@ -7,6 +7,7 @@ import type {
   PaperPosition,
   SyncStrategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const ALLOWED_MARKETS = [
   "BTC",
@@ -49,10 +50,12 @@ export function createFundingPhoebeStrategy(p: PhoebeParams): SyncStrategy {
       // Positive funding = longs paying shorts → fade by shorting.
       // Negative funding = shorts paying longs → fade by longing.
       const side: "long" | "short" = funding > 0 ? "short" : "long";
+      const conviction = clampConviction(Math.abs(funding) / 0.0003); // |funding| / 30bps
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: {
           entryFunding: funding,
           fundingThreshold: p.fundingThreshold,

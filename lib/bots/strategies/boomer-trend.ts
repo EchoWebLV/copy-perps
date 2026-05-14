@@ -8,6 +8,7 @@ import type {
   PaperPosition,
   Strategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const ALLOWED_MARKETS = ["BTC", "ETH"] as const;
 
@@ -70,10 +71,15 @@ export function createBoomerTrendStrategy(p: BoomerParams): Strategy {
       }
       if (!crossedUp && !crossedDown) return null;
       const side: "long" | "short" = crossedUp ? "long" : "short";
+      const lastDiff = lastFast - lastSlow;
+      const lastClose = candles[candles.length - 1].close;
+      const crossStrength = Math.abs(lastDiff) / Math.max(lastClose, 1);
+      const conviction = clampConviction(crossStrength * 100); // typical lastDiff is 0..1% of price
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: {
           fastEma: lastFast,
           slowEma: lastSlow,

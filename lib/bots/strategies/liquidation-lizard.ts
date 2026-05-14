@@ -7,6 +7,7 @@ import type {
   PaperPosition,
   SyncStrategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const LIQUIDATION_STALE_MS = 60_000;
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
@@ -44,10 +45,12 @@ export function createLiquidationLizardStrategy(p: LizardParams): SyncStrategy {
       );
       if (!candidate) return null;
       const side: "long" | "short" = candidate.side;
+      const conviction = clampConviction(candidate.notionalUsd / 200_000);
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: {
           liquidationNotionalUsd: candidate.notionalUsd,
           liquidationSide: candidate.side,

@@ -8,6 +8,7 @@ import type {
   PaperPosition,
   Strategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const ALLOWED_MARKETS = ["SOL", "HYPE", "AVAX", "DOGE", "XRP"] as const;
 
@@ -55,10 +56,12 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
       if (z === null) return null;
       if (Math.abs(z) < p.zEntryThreshold) return null;
       const side: "long" | "short" = z > 0 ? "short" : "long";
+      const conviction = clampConviction((Math.abs(z) - 2.5) / 1.5);
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: { zScore: z, threshold: p.zEntryThreshold },
       };
     },

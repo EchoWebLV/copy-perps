@@ -8,6 +8,7 @@ import type {
   PaperPosition,
   Strategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE"] as const;
 
@@ -51,13 +52,16 @@ export function createMomoMaxStrategy(p: MomoParams): Strategy {
       const moveFrac = (last.close - last.open) / last.open;
       if (Math.abs(moveFrac) < p.breakoutPct) return null;
       const side: "long" | "short" = moveFrac > 0 ? "long" : "short";
+      const volRatio = last.volume / meanPriorVolume;
+      const conviction = clampConviction(volRatio / 3);
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: {
           breakoutPct: moveFrac,
-          volumeRatio: last.volume / meanPriorVolume,
+          volumeRatio: volRatio,
         },
       };
     },

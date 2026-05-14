@@ -8,6 +8,7 @@ import type {
   PaperPosition,
   Strategy,
 } from "../types";
+import { clampConviction } from "../types";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "AVAX"] as const;
 
@@ -83,14 +84,17 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
       if (upFrac < p.trendConsistencyMin && downFrac < p.trendConsistencyMin)
         return null;
       const side: "long" | "short" = upFrac > downFrac ? "long" : "short";
+      const ratio = baseVol === 0 ? 3 : recentVol / baseVol;
+      const conviction = clampConviction(ratio / 3);
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
+        conviction,
         triggerMeta: {
           recentVol,
           baseVol,
-          ratio: recentVol / baseVol,
+          ratio,
           upFrac,
           downFrac,
         },
