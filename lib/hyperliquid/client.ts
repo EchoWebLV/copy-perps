@@ -106,3 +106,102 @@ export async function getUserFillsByTime(
   }
   return (await r.json()) as HLFill[];
 }
+
+// ---------------------------------------------------------------------------
+// Liquidation buffer — Phase 1 REST polling
+// ---------------------------------------------------------------------------
+//
+// PROBE FINDINGS (2026-05-14):
+//   - HL REST has NO global liquidation stream. Types "liquidations",
+//     "allLiquidations", "recentLiquidations" all return 422.
+//   - "recentTrades" (requires `coin` param) returns the last ~10 trades per
+//     coin with fields [coin, side, px, sz, time, hash, tid, users] — NO
+//     `liquidation` field. The `liquidation` sub-object only appears in the
+//     WebSocket "trades" channel, not REST.
+//   - Zero-hash trades in recentTrades are NOT a reliable liquidation proxy
+//     (HL uses zero-hash for internal matching, not only liquidations).
+//   - "userFillsByTime" per-user fills DO use dir="Liquidated Long" /
+//     "Liquidated Short" for the liquidated account. This is the only REST
+//     signal available.
+//
+// APPROACH: poll each curated whale wallet's userFillsByTime every 5 s and
+// collect fills where dir starts with "Liquidated". Because these are curated
+// directional traders (not HFT/MM), a liquidation fill for them is a
+// meaningful signal for Liquidation Lizard.
+//
+// Phase 2: upgrade to WS subscription to the "trades" channel for a true
+// global liquidation stream once the resolver runs in a long-lived process.
+//
+import type { LiquidationEvent } from "@/lib/bots/types";
+import { CURATED_WHALES } from "@/lib/hyperliquid/whales";
+
+let _buffer: LiquidationEvent[] = [];
+let _lastFetchMs = 0;
+const POLL_INTERVAL_MS = 5_000;
+const BUFFER_RETENTION_MS = 120_000;
+
+/**
+ * Returns recent Hyperliquid liquidations (last ~2 minutes) for Liquidation
+ * Lizard's strategy. Polls each curated whale wallet via REST every 5 s,
+ * collecting fills where dir is "Liquidated Long" or "Liquidated Short".
+ *
+ * Phase 1 uses REST polling because Vercel serverless cannot hold a
+ * persistent WS. Phase 2 should upgrade to WS subscription on the "trades"
+ * channel once the resolver runs in a long-lived process — that channel
+ * includes a `liquidation` sub-object for all market liquidations, not just
+ * curated whales.
+ *
+ * If no curated whale was liquidated in the last 2 minutes the buffer is
+ * empty and Liquidation Lizard will sit idle — that's acceptable for Phase 1.
+ */
+export async function getRecentLiquidations(): Promise<LiquidationEvent[]> {
+  const now = Date.now();
+  if (now - _lastFetchMs <= POLL_INTERVAL_MS) {
+    return _buffer.slice();
+  }
+  _lastFetchMs = now;
+
+  const startTime = now - BUFFER_RETENTION_MS;
+  const seen = new Set(_buffer.map((e) => `${e.asset}:${e.ts}`));
+
+  await Promise.allSettled(
+    CURATED_WHALES.map(async ({ address }) => {
+      try {
+        const r = await fetch(BASE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "userFillsByTime", user: address, startTime }),
+          cache: "no-store",
+        });
+        if (!r.ok) {
+          console.error(`[HL] userFillsByTime ${address} → ${r.status}`);
+          return;
+        }
+        const fills = (await r.json()) as HLFill[];
+        for (const f of fills) {
+          if (!f.dir || !f.dir.startsWith("Liquidated")) continue;
+          const key = `${f.coin}:${f.time}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          // "Liquidated Long" → a long was force-closed → side is "long"
+          // "Liquidated Short" → a short was force-closed → side is "short"
+          const side: "long" | "short" = f.dir === "Liquidated Long" ? "long" : "short";
+          const notionalUsd = Number(f.px) * Number(f.sz);
+          _buffer.push({
+            asset: f.coin,
+            side,
+            notionalUsd,
+            ts: f.time,
+            source: "hyperliquid",
+          });
+        }
+      } catch (err) {
+        console.error(`[HL] fetch error for ${address}:`, err);
+      }
+    }),
+  );
+
+  // Drop entries older than the retention window
+  _buffer = _buffer.filter((e) => e.ts >= now - BUFFER_RETENTION_MS);
+  return _buffer.slice();
+}
