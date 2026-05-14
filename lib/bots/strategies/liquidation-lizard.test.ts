@@ -1,6 +1,6 @@
 // lib/bots/strategies/liquidation-lizard.test.ts
 import { describe, it, expect } from "vitest";
-import { LiquidationLizardStrategy } from "./liquidation-lizard";
+import { LiquidationLizardStrategy, LiquidationLizardJrStrategy } from "./liquidation-lizard";
 import type { MarketContext, ExternalSignals, PaperPosition } from "../types";
 
 const baseCtx: MarketContext = { asset: "SOL", mark: 100 };
@@ -123,6 +123,75 @@ describe("LiquidationLizard.evaluateExit", () => {
       LiquidationLizardStrategy.evaluateExit(
         { asset: "SOL", mark: 100 },
         oldPos,
+      ),
+    ).toBe(true);
+  });
+});
+
+// Append after the existing tests
+describe("LiquidationLizardJr (Jr variant)", () => {
+  const baseCtx: MarketContext = { asset: "SOL", mark: 100 };
+
+  it("fires on smaller wicks (>= $15k) that the regular Lizard ignores", () => {
+    const signals: ExternalSignals = {
+      liquidations: [
+        {
+          asset: "SOL",
+          side: "long",
+          notionalUsd: 20_000,
+          ts: Date.now(),
+          source: "hyperliquid",
+        },
+      ],
+      funding: {},
+    };
+    expect(LiquidationLizardStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
+    expect(LiquidationLizardJrStrategy.evaluateEntry(baseCtx, signals)).not.toBeNull();
+  });
+
+  it("still ignores liquidations below the Jr threshold ($15k)", () => {
+    const signals: ExternalSignals = {
+      liquidations: [
+        {
+          asset: "SOL",
+          side: "long",
+          notionalUsd: 10_000,
+          ts: Date.now(),
+          source: "hyperliquid",
+        },
+      ],
+      funding: {},
+    };
+    expect(LiquidationLizardJrStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
+  });
+
+  it("exits at a tighter favorable move (0.3%)", () => {
+    const openPos: PaperPosition = {
+      id: "p1",
+      botId: "liquidation-lizard-jr",
+      asset: "SOL",
+      side: "long",
+      leverage: 50,
+      entryMark: 100,
+      entryTs: new Date(),
+      exitMark: null,
+      exitTs: null,
+      paperPnlUsd: null,
+      triggerMeta: null,
+      narrationOpen: null,
+      narrationClose: null,
+      status: "open",
+    };
+    expect(
+      LiquidationLizardStrategy.evaluateExit(
+        { asset: "SOL", mark: 100.4 },
+        openPos,
+      ),
+    ).toBe(false);
+    expect(
+      LiquidationLizardJrStrategy.evaluateExit(
+        { asset: "SOL", mark: 100.4 },
+        openPos,
       ),
     ).toBe(true);
   });

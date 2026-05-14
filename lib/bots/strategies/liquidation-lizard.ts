@@ -8,57 +8,79 @@ import type {
   Strategy,
 } from "../types";
 
-const MIN_LIQ_NOTIONAL_USD = 50_000;
 const LIQUIDATION_STALE_MS = 60_000;
-const EXIT_FAVORABLE_PCT = 0.005; // +0.5%
-const MAX_HOLD_MS = 90_000;
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
-const LEVERAGE = 50;
 
-export const LiquidationLizardStrategy: Strategy = {
+interface LizardParams {
+  id: string;
+  minLiqNotionalUsd: number;
+  exitFavorablePct: number;
+  maxHoldMs: number;
+  leverage: number;
+}
+
+export function createLiquidationLizardStrategy(p: LizardParams): Strategy {
+  return {
+    id: p.id,
+    markets: ALLOWED_MARKETS,
+
+    evaluateEntry(
+      ctx: MarketContext,
+      signals: ExternalSignals,
+    ): EntryDecision | null {
+      if (
+        !ALLOWED_MARKETS.includes(
+          ctx.asset as (typeof ALLOWED_MARKETS)[number],
+        )
+      ) {
+        return null;
+      }
+      const now = Date.now();
+      const candidate = signals.liquidations.find(
+        (l) =>
+          l.asset === ctx.asset &&
+          l.notionalUsd >= p.minLiqNotionalUsd &&
+          now - l.ts <= LIQUIDATION_STALE_MS,
+      );
+      if (!candidate) return null;
+      const side: "long" | "short" = candidate.side;
+      return {
+        asset: ctx.asset,
+        side,
+        leverage: p.leverage,
+        triggerMeta: {
+          liquidationNotionalUsd: candidate.notionalUsd,
+          liquidationSide: candidate.side,
+          liquidationTs: candidate.ts,
+        },
+      };
+    },
+
+    evaluateExit(ctx: MarketContext, position: PaperPosition): boolean {
+      const heldMs = Date.now() - position.entryTs.getTime();
+      if (heldMs >= p.maxHoldMs) return true;
+      const moveFrac = (ctx.mark - position.entryMark) / position.entryMark;
+      const favorable = position.side === "long" ? moveFrac : -moveFrac;
+      return favorable >= p.exitFavorablePct;
+    },
+  };
+}
+
+export const LiquidationLizardStrategy = createLiquidationLizardStrategy({
   id: "liquidation-lizard",
-  markets: ALLOWED_MARKETS,
+  minLiqNotionalUsd: 50_000,
+  exitFavorablePct: 0.005,
+  maxHoldMs: 90_000,
+  leverage: 50,
+});
 
-  evaluateEntry(
-    ctx: MarketContext,
-    signals: ExternalSignals,
-  ): EntryDecision | null {
-    if (!ALLOWED_MARKETS.includes(ctx.asset as (typeof ALLOWED_MARKETS)[number])) {
-      return null;
-    }
-    const now = Date.now();
-    const candidate = signals.liquidations.find(
-      (l) =>
-        l.asset === ctx.asset &&
-        l.notionalUsd >= MIN_LIQ_NOTIONAL_USD &&
-        now - l.ts <= LIQUIDATION_STALE_MS,
-    );
-    if (!candidate) return null;
-    // Fade: if a long was liquidated (forced sell), the wick goes down — we
-    // go long. If a short was liquidated (forced buy), we go short.
-    const side: "long" | "short" =
-      candidate.side === "long" ? "long" : "short";
-    return {
-      asset: ctx.asset,
-      side,
-      leverage: LEVERAGE,
-      triggerMeta: {
-        liquidationNotionalUsd: candidate.notionalUsd,
-        liquidationSide: candidate.side,
-        liquidationTs: candidate.ts,
-      },
-    };
-  },
-
-  evaluateExit(ctx: MarketContext, position: PaperPosition): boolean {
-    const heldMs = Date.now() - position.entryTs.getTime();
-    if (heldMs >= MAX_HOLD_MS) return true;
-    const moveFrac = (ctx.mark - position.entryMark) / position.entryMark;
-    const favorable =
-      position.side === "long" ? moveFrac : -moveFrac;
-    return favorable >= EXIT_FAVORABLE_PCT;
-  },
-};
+export const LiquidationLizardJrStrategy = createLiquidationLizardStrategy({
+  id: "liquidation-lizard-jr",
+  minLiqNotionalUsd: 15_000,
+  exitFavorablePct: 0.003,
+  maxHoldMs: 60_000,
+  leverage: 50,
+});
 
 export const LiquidationLizardBot: BotConfig = {
   id: "liquidation-lizard",
@@ -68,11 +90,26 @@ export const LiquidationLizardBot: BotConfig = {
   personaVoiceKey: "liquidation-lizard",
   strategyKey: "liquidation-lizard",
   config: {
-    minLiqNotionalUsd: MIN_LIQ_NOTIONAL_USD,
-    leverage: LEVERAGE,
-    exitFavorablePct: EXIT_FAVORABLE_PCT,
-    maxHoldMs: MAX_HOLD_MS,
+    minLiqNotionalUsd: 50_000,
+    leverage: 50,
+    exitFavorablePct: 0.005,
+    maxHoldMs: 90_000,
   },
   status: "paper",
 };
 
+export const LiquidationLizardJrBot: BotConfig = {
+  id: "liquidation-lizard-jr",
+  parentId: "liquidation-lizard",
+  name: "Liquidation Lizard Jr.",
+  avatarEmoji: "🦎",
+  personaVoiceKey: "liquidation-lizard",
+  strategyKey: "liquidation-lizard-jr",
+  config: {
+    minLiqNotionalUsd: 15_000,
+    leverage: 50,
+    exitFavorablePct: 0.003,
+    maxHoldMs: 60_000,
+  },
+  status: "paper",
+};
