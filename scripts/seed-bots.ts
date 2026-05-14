@@ -46,6 +46,7 @@ const ROWS = [
     strategyKey: "funding-phoebe",
     config: {
       fundingThreshold: 0.0001,
+      minVenueAgreement: 3,
       exitFavorablePct: 0.008,
       maxHoldMs: 4 * 60 * 60 * 1000,
       leverage: 20,
@@ -63,6 +64,7 @@ const ROWS = [
     strategyKey: "funding-phoebe-lite",
     config: {
       fundingThreshold: 0.00005,
+      minVenueAgreement: 2,
       exitFavorablePct: 0.005,
       maxHoldMs: 2 * 60 * 60 * 1000,
       leverage: 20,

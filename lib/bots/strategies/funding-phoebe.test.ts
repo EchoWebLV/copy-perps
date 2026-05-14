@@ -14,7 +14,14 @@ describe("FundingPhoebe.evaluateEntry", () => {
   it("returns null when funding is below threshold", () => {
     const signals: ExternalSignals = {
       liquidations: [],
-      funding: { BTC: 0.00005 },
+      funding: {
+        BTC: {
+          avgRate: 0.00005,
+          venuesAgreed: 4,
+          venuesQueried: 4,
+          perVenue: { binance: 0.00005, bybit: 0.00005, okx: 0.00005, dydx: 0.00005 },
+        },
+      },
     };
     expect(FundingPhoebeStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
   });
@@ -22,7 +29,14 @@ describe("FundingPhoebe.evaluateEntry", () => {
   it("shorts when funding is positive above the headliner threshold (10 bps)", () => {
     const signals: ExternalSignals = {
       liquidations: [],
-      funding: { BTC: 0.0002 },
+      funding: {
+        BTC: {
+          avgRate: 0.0002,
+          venuesAgreed: 4,
+          venuesQueried: 4,
+          perVenue: { binance: 0.0002, bybit: 0.00019, okx: 0.00021, dydx: 0.0002 },
+        },
+      },
     };
     const decision = FundingPhoebeStrategy.evaluateEntry(baseCtx, signals);
     expect(decision).not.toBeNull();
@@ -33,7 +47,14 @@ describe("FundingPhoebe.evaluateEntry", () => {
   it("longs when funding is negative below the headliner threshold", () => {
     const signals: ExternalSignals = {
       liquidations: [],
-      funding: { BTC: -0.0002 },
+      funding: {
+        BTC: {
+          avgRate: -0.0002,
+          venuesAgreed: 4,
+          venuesQueried: 4,
+          perVenue: { binance: -0.0002, bybit: -0.00019, okx: -0.00021, dydx: -0.0002 },
+        },
+      },
     };
     const decision = FundingPhoebeStrategy.evaluateEntry(baseCtx, signals);
     expect(decision).not.toBeNull();
@@ -43,9 +64,33 @@ describe("FundingPhoebe.evaluateEntry", () => {
   it("returns null when asset has no funding data", () => {
     const signals: ExternalSignals = {
       liquidations: [],
-      funding: { ETH: 0.0005 },
+      funding: {
+        ETH: {
+          avgRate: 0.0005,
+          venuesAgreed: 4,
+          venuesQueried: 4,
+          perVenue: { binance: 0.0005, bybit: 0.0005, okx: 0.0005, dydx: 0.0005 },
+        },
+      },
     };
     expect(FundingPhoebeStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
+  });
+
+  it("does not fire when only 1 venue agrees (below minVenueAgreement)", () => {
+    const signals: ExternalSignals = {
+      liquidations: [],
+      funding: {
+        BTC: {
+          avgRate: 0.0002,
+          venuesAgreed: 1, // only Binance — headliner needs 3
+          venuesQueried: 4,
+          perVenue: { binance: 0.0002, bybit: -0.00005, okx: -0.00008, dydx: -0.00003 },
+        },
+      },
+    };
+    expect(FundingPhoebeStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
+    // Lite variant (minVenueAgreement: 2) ALSO doesn't fire on 1 venue:
+    expect(FundingPhoebeLiteStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
   });
 });
 
@@ -53,7 +98,14 @@ describe("FundingPhoebeLite (variant)", () => {
   it("fires at a lower threshold than the headliner (5 bps vs 10 bps)", () => {
     const signals: ExternalSignals = {
       liquidations: [],
-      funding: { BTC: 0.00007 },
+      funding: {
+        BTC: {
+          avgRate: 0.00007,
+          venuesAgreed: 3,
+          venuesQueried: 4,
+          perVenue: { binance: 0.00007, bybit: 0.00008, okx: 0.00006, dydx: -0.00001 },
+        },
+      },
     };
     expect(FundingPhoebeStrategy.evaluateEntry(baseCtx, signals)).toBeNull();
     const decision = FundingPhoebeLiteStrategy.evaluateEntry(baseCtx, signals);
@@ -75,7 +127,7 @@ describe("FundingPhoebe.evaluateExit", () => {
     exitMark: null,
     exitTs: null,
     paperPnlUsd: null,
-    triggerMeta: { entryFunding: 0.0002 },
+    triggerMeta: { avgRate: 0.0002 },
     narrationOpen: null,
     narrationClose: null,
     status: "open",

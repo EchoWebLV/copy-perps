@@ -23,6 +23,7 @@ const ALLOWED_MARKETS = [
 interface PhoebeParams {
   id: string;
   fundingThreshold: number;
+  minVenueAgreement: number;
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
@@ -44,21 +45,24 @@ export function createFundingPhoebeStrategy(p: PhoebeParams): SyncStrategy {
       ) {
         return null;
       }
-      const funding = signals.funding[ctx.asset];
-      if (funding === undefined) return null;
-      if (Math.abs(funding) < p.fundingThreshold) return null;
+      const signal = signals.funding[ctx.asset];
+      if (!signal) return null;
+      if (Math.abs(signal.avgRate) < p.fundingThreshold) return null;
+      if (signal.venuesAgreed < p.minVenueAgreement) return null;
       // Positive funding = longs paying shorts → fade by shorting.
       // Negative funding = shorts paying longs → fade by longing.
-      const side: "long" | "short" = funding > 0 ? "short" : "long";
-      const conviction = clampConviction(Math.abs(funding) / 0.0003); // |funding| / 30bps
+      const side: "long" | "short" = signal.avgRate > 0 ? "short" : "long";
+      const conviction = clampConviction(Math.abs(signal.avgRate) / 0.0003);
       return {
         asset: ctx.asset,
         side,
         leverage: p.leverage,
         conviction,
         triggerMeta: {
-          entryFunding: funding,
-          fundingThreshold: p.fundingThreshold,
+          avgRate: signal.avgRate,
+          venuesAgreed: signal.venuesAgreed,
+          venuesQueried: signal.venuesQueried,
+          perVenue: signal.perVenue,
         },
       };
     },
@@ -77,6 +81,7 @@ export function createFundingPhoebeStrategy(p: PhoebeParams): SyncStrategy {
 export const FundingPhoebeStrategy = createFundingPhoebeStrategy({
   id: "funding-phoebe",
   fundingThreshold: 0.0001,
+  minVenueAgreement: 3,
   exitFavorablePct: 0.008,
   maxHoldMs: 4 * 60 * 60 * 1000,
   leverage: 20,
@@ -85,6 +90,7 @@ export const FundingPhoebeStrategy = createFundingPhoebeStrategy({
 export const FundingPhoebeLiteStrategy = createFundingPhoebeStrategy({
   id: "funding-phoebe-lite",
   fundingThreshold: 0.00005,
+  minVenueAgreement: 2,
   exitFavorablePct: 0.005,
   maxHoldMs: 2 * 60 * 60 * 1000,
   leverage: 20,
@@ -99,6 +105,7 @@ export const FundingPhoebeBot: BotConfig = {
   strategyKey: "funding-phoebe",
   config: {
     fundingThreshold: 0.0001,
+    minVenueAgreement: 3,
     exitFavorablePct: 0.008,
     maxHoldMs: 4 * 60 * 60 * 1000,
     leverage: 20,
@@ -115,6 +122,7 @@ export const FundingPhoebeLiteBot: BotConfig = {
   strategyKey: "funding-phoebe-lite",
   config: {
     fundingThreshold: 0.00005,
+    minVenueAgreement: 2,
     exitFavorablePct: 0.005,
     maxHoldMs: 2 * 60 * 60 * 1000,
     leverage: 20,

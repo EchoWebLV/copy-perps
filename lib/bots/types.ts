@@ -1,4 +1,6 @@
 // lib/bots/types.ts
+import type { FundingSignal } from "@/lib/data/cex-funding";
+export type { FundingSignal };
 
 export interface BotConfig {
   id: string;
@@ -48,8 +50,8 @@ export interface LiquidationEvent {
 export interface ExternalSignals {
   // Recent liquidation events (e.g. last 60s, rolling buffer)
   liquidations: LiquidationEvent[];
-  // Per-asset funding rate from primary venue (Binance in Phase 1)
-  funding: Record<string, number>;
+  // Per-asset funding signal aggregated across all venues (Binance, Bybit, OKX, dYdX)
+  funding: Record<string, FundingSignal>;
 }
 
 export interface MarketContext {
