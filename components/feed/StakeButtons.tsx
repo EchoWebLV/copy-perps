@@ -55,6 +55,7 @@ const RAIL_MIN: Record<Signal["type"], number> = {
   prediction: 5,
   multiprediction: 5,
   whale: 5,
+  phoenix_trader: 5,
 };
 const RAIL_MAX = 1000;
 
