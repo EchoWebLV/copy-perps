@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
+import { getPositions } from "@/lib/pacifica/client";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -54,5 +55,47 @@ export async function GET(request: Request) {
     userBets.map((bet) => enrichBet(bet, user.solanaPubkey)),
   );
 
-  return NextResponse.json({ positions });
+  // --- Pacifica copy bets ---
+  const copyBets = userBets.filter((b) => b.type === "copy");
+  let userPositions = null;
+  if (copyBets.length > 0 && user.solanaPubkey) {
+    try {
+      userPositions = await getPositions(user.solanaPubkey);
+    } catch (err) {
+      console.warn("[portfolio] pacifica positions fetch failed:", err);
+    }
+  }
+  const copyRows = copyBets
+    .filter((b) => b.status === "confirmed")
+    .map((b) => {
+      const meta = b.meta as {
+        leaderMarket: string;
+        leaderSide: "long" | "short";
+        leverage: number;
+        leaderAddress: string;
+        leaderClosedAt?: string;
+      };
+      const livePos = userPositions?.find(
+        (p) =>
+          p.symbol === meta.leaderMarket &&
+          ((meta.leaderSide === "long" && p.side === "bid") ||
+            (meta.leaderSide === "short" && p.side === "ask")),
+      );
+      void livePos; // referenced for future PnL; intentionally unused now
+      return {
+        betId: b.id,
+        market: meta.leaderMarket,
+        side: meta.leaderSide,
+        leverage: meta.leverage,
+        stakeUsdc: b.amountUsdc,
+        leaderAddress: meta.leaderAddress,
+        leaderUsername: null,
+        // Pacifica's /positions does not expose unrealized PnL%; null in
+        // Phase 1 (computed via WS mark in Phase 2).
+        unrealizedPnlPct: null,
+        leaderClosedAt: meta.leaderClosedAt ?? null,
+      };
+    });
+
+  return NextResponse.json({ positions, copyRows });
 }

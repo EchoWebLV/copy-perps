@@ -20,6 +20,7 @@ import {
   EmptyWatchlist,
 } from "@/components/watchlist/WatchlistRow";
 import { WatchlistModal } from "@/components/watchlist/WatchlistModal";
+import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 import type { Signal } from "@/lib/types";
 
 export default function PortfolioPage() {
@@ -28,6 +29,7 @@ export default function PortfolioPage() {
   const { totalUsd: walletUsd, sol: walletSol, refresh: refreshBalance } =
     useWalletBalance(wallet?.address);
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
+  const [copyRows, setCopyRows] = useState<CopyRowData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"open" | "closed" | "watchlist">("open");
@@ -52,6 +54,7 @@ export default function PortfolioPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         setPositions(data.positions);
+        setCopyRows((data.copyRows as CopyRowData[]) ?? []);
         void refreshBalance();
       } catch (e) {
         if (!silent) {
@@ -340,6 +343,18 @@ export default function PortfolioPage() {
                       onShared={load}
                     />
                   ))}
+                  {tab === "open" && copyRows.length > 0 && (
+                    <section className="space-y-2 mt-4">
+                      <h2 className="text-lg font-semibold text-white/80">Copies</h2>
+                      {copyRows.map((row) => (
+                        <CopyRow
+                          key={row.betId}
+                          row={row}
+                          onClosed={() => void load()}
+                        />
+                      ))}
+                    </section>
+                  )}
                 </>
               )}
               {tab === "watchlist" && (
