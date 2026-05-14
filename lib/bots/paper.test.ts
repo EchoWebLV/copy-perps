@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// paper.ts appends DB helpers which import @/lib/db — mock it so pure math
+// tests don't need a DATABASE_URL.
+vi.mock("@/lib/db", () => ({ db: {} }));
+
 import { computePaperPnlUsd, computeLivePaperPnlPct } from "./paper";
 
 describe("computePaperPnlUsd", () => {
