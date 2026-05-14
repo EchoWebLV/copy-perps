@@ -2,16 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/refresh-memes",
+      "path": "/api/cron/refresh-traders",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/mirror-close",
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/refresh-predictions",
-      "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/cron/refresh-whales",
-      "schedule": "*/2 * * * *"
+      "path": "/api/cron/expire-stale-copies",
+      "schedule": "0 * * * *"
     }
   ]
 }
