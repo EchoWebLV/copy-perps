@@ -146,3 +146,34 @@ export const bots = pgTable("bots", {
     .notNull()
     .defaultNow(),
 });
+
+export const paperPositions = pgTable(
+  "paper_positions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    asset: text("asset").notNull(),
+    side: text("side").notNull(), // 'long' | 'short'
+    leverage: integer("leverage").notNull(),
+    entryMark: doublePrecision("entry_mark").notNull(),
+    entryTs: timestamp("entry_ts", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    exitMark: doublePrecision("exit_mark"),
+    exitTs: timestamp("exit_ts", { withTimezone: true }),
+    paperPnlUsd: doublePrecision("paper_pnl_usd"),
+    triggerMeta: jsonb("trigger_meta"),
+    narrationOpen: text("narration_open"),
+    narrationClose: text("narration_close"),
+    status: text("status").notNull().default("open"), // 'open' | 'closed' | 'expired'
+  },
+  (t) => ({
+    botOpenIdx: index("paper_positions_bot_open_idx").on(t.botId, t.status),
+    statusTsIdx: index("paper_positions_status_ts_idx").on(
+      t.status,
+      t.entryTs,
+    ),
+  }),
+);
