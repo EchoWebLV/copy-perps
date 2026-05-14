@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/expire-stale-copies",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/bots-resolver",
+      "schedule": "* * * * *"
     }
   ]
 }
