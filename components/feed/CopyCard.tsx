@@ -229,7 +229,7 @@ export function CopyCard({ signal, isActive }: Props) {
 
   return (
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[60px] pb-24 text-white"
+      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[116px] pb-24 text-white"
       data-card-type="pacifica_trader"
     >
       <div
@@ -376,20 +376,20 @@ function PositionRow({
   }
 
   return (
-    <div className="rounded-2xl bg-white/[0.04] p-3 ring-1 ring-white/5">
+    <div className="rounded-2xl bg-neutral-900/60 p-3 ring-1 ring-white/10 backdrop-blur-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="text-lg font-black tracking-tight">{pos.market}</div>
           <div
             className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${
               isLong
-                ? "bg-emerald-500/20 text-emerald-300"
-                : "bg-rose-500/20 text-rose-300"
+                ? "bg-emerald-500/30 text-emerald-200"
+                : "bg-rose-500/30 text-rose-200"
             }`}
           >
             {pos.side}
           </div>
-          <div className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/80">
+          <div className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/90">
             {lev}
           </div>
         </div>
@@ -436,12 +436,12 @@ function PositionRow({
             <button
               key={s}
               type="button"
-              disabled={busyKey !== null || !isActive}
+              disabled={busyKey !== null}
               onClick={() => onTap(positionIdx, s)}
-              className={`flex-1 rounded-lg py-2 text-xs font-bold transition disabled:opacity-30 ${
+              className={`flex-1 rounded-lg py-2.5 text-sm font-extrabold transition active:scale-95 disabled:opacity-40 ${
                 isLong
-                  ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                  : "bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                  ? "bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/40 hover:bg-emerald-500/45 hover:ring-emerald-400/60"
+                  : "bg-rose-500/30 text-rose-100 ring-1 ring-rose-400/40 hover:bg-rose-500/45 hover:ring-rose-400/60"
               }`}
             >
               {isBusy ? "…" : `$${s}`}

@@ -27,8 +27,8 @@ export function LiveTape() {
   if (fills.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-12 z-20 px-3">
-      <div className="no-scrollbar flex gap-1.5 overflow-x-hidden">
+    <div className="pointer-events-none absolute inset-x-0 top-[44px] z-20 px-3">
+      <div className="no-scrollbar flex justify-center gap-1.5 overflow-x-hidden">
         {fills.map((f) => (
           <FillChip key={f.id} fill={f} now={now} />
         ))}

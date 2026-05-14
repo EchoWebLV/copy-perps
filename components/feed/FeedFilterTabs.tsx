@@ -18,17 +18,17 @@ interface Props {
 
 export function FeedFilterTabs({ active, onChange }: Props) {
   return (
-    <div className="pointer-events-auto absolute inset-x-0 top-[68px] z-20 px-3">
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+    <div className="pointer-events-auto absolute inset-x-0 top-[76px] z-20 px-3">
+      <div className="no-scrollbar flex justify-center gap-1.5 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => onChange(t.id)}
-            className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-bold transition ${
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${
               active === t.id
-                ? "border-white/40 bg-white/15 text-white"
-                : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.08]"
+                ? "border-white/40 bg-white/20 text-white shadow-[0_0_18px_rgba(255,255,255,0.1)]"
+                : "border-white/10 bg-white/[0.06] text-white/70 hover:bg-white/[0.1]"
             }`}
           >
             {t.label}
