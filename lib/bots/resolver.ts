@@ -11,12 +11,14 @@ import {
   markBotBusted,
   computePaperPnlUsd,
 } from "./paper";
+import { getCrossBotSnapshot } from "./cross-bot";
 import type { ExternalSignals, MarketContext } from "./types";
 
 const MAX_CONCURRENT_POSITIONS = 4;
 const MAX_STAKE_PCT = 0.5;
 const MIN_STAKE_USD = 10;
 const BUST_THRESHOLD_USD = 10;
+const MAX_BOTS_SAME_SIDE = 3;
 
 /**
  * One resolver tick. For each paper bot:
@@ -34,10 +36,11 @@ export async function tick(): Promise<{
   closed: number;
   busted: number;
 }> {
-  const [marks, liquidations, funding] = await Promise.all([
+  const [marks, liquidations, funding, crossBot] = await Promise.all([
     getMarksSnapshot(),
     getRecentLiquidations(),
     getFundingRates(),
+    getCrossBotSnapshot(),
   ]);
   const signals: ExternalSignals = { liquidations, funding };
 
@@ -103,6 +106,12 @@ export async function tick(): Promise<{
       const decision = await strategy.evaluateEntry(ctx, signals);
       if (!decision) continue;
 
+      // Pileup prevention: skip if ≥MAX_BOTS_SAME_SIDE bots already hold this
+      // (asset, side). Forces diversification across the roster.
+      const sideKey = `${decision.asset}|${decision.side}`;
+      const sameSideCount = crossBot.positionsByAssetSide.get(sideKey) ?? 0;
+      if (sameSideCount >= MAX_BOTS_SAME_SIDE) continue;
+
       const targetStake = balance * MAX_STAKE_PCT * decision.conviction;
       const stake = Math.min(targetStake, freeBalance);
       if (stake < MIN_STAKE_USD) continue;
@@ -118,6 +127,13 @@ export async function tick(): Promise<{
       slots -= 1;
       freeBalance -= stake;
       openAssets.add(decision.asset);
+      // Increment local snapshot so the next iteration sees this bot's new
+      // position when checking pileup (in case this bot also tries the same
+      // asset+side via another market entry — unlikely but consistent).
+      crossBot.positionsByAssetSide.set(
+        sideKey,
+        (crossBot.positionsByAssetSide.get(sideKey) ?? 0) + 1,
+      );
     }
   }
 

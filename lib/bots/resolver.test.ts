@@ -33,6 +33,12 @@ vi.mock("./paper", async () => {
     markBotBusted: vi.fn(),
   };
 });
+vi.mock("./cross-bot", () => ({
+  getCrossBotSnapshot: vi.fn(async () => ({
+    positionsByAssetSide: new Map<string, number>(),
+    botsByAsset: new Map(),
+  })),
+}));
 
 import { tick } from "./resolver";
 import { listBots, getStrategy } from "./index";
@@ -43,6 +49,7 @@ import {
   getBotBalance,
   markBotBusted,
 } from "./paper";
+import { getCrossBotSnapshot } from "./cross-bot";
 
 describe("resolver.tick", () => {
   beforeEach(() => {
@@ -207,5 +214,52 @@ describe("resolver.tick", () => {
     expect(closePaperPosition).toHaveBeenCalledTimes(1);
     expect(markBotBusted).toHaveBeenCalledWith("test-bot");
     expect(result.busted).toBe(1);
+  });
+
+  it("skips entry when MAX_BOTS_SAME_SIDE is already reached", async () => {
+    const bot: BotConfig = {
+      id: "test-bot",
+      parentId: null,
+      name: "Test",
+      avatarEmoji: "🧪",
+      personaVoiceKey: "test",
+      strategyKey: "test",
+      config: {},
+      status: "paper",
+    };
+    const strategy: Strategy = {
+      id: "test",
+      markets: ["SOL"],
+      evaluateEntry: () => ({
+        asset: "SOL",
+        side: "long",
+        leverage: 10,
+        conviction: 0.5,
+        triggerMeta: {},
+      }),
+      evaluateExit: () => false,
+    };
+    vi.mocked(listBots).mockReturnValue([bot]);
+    vi.mocked(getStrategy).mockReturnValue(strategy);
+    vi.mocked(fetchOpenPositionsForBot).mockResolvedValue([]);
+    vi.mocked(getBotBalance).mockResolvedValue(1000);
+    vi.mocked(getCrossBotSnapshot).mockResolvedValue({
+      positionsByAssetSide: new Map([["SOL|long", 3]]), // already 3 bots long SOL
+      botsByAsset: new Map([
+        [
+          "SOL",
+          [
+            { botId: "a", side: "long" },
+            { botId: "b", side: "long" },
+            { botId: "c", side: "long" },
+          ],
+        ],
+      ]),
+    });
+
+    await tick();
+
+    // Strategy fired, but pileup gate blocked the open.
+    expect(openPaperPosition).not.toHaveBeenCalled();
   });
 });
