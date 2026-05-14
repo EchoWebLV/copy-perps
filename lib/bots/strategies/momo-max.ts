@@ -94,7 +94,7 @@ export const MomoMaxStrategy = createMomoMaxStrategy({
   volumeMultiplier: 1.5,
   exitFavorablePct: 0.005,
   maxHoldMs: 30 * 60 * 1000,
-  leverage: 20,
+  leverage: 30,
   regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
 });
 
@@ -106,7 +106,7 @@ export const MomoMaxAggressiveStrategy = createMomoMaxStrategy({
   volumeMultiplier: 1.3,
   exitFavorablePct: 0.003,
   maxHoldMs: 20 * 60 * 1000,
-  leverage: 20,
+  leverage: 50,
   regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
 });
 
@@ -124,7 +124,7 @@ export const MomoMaxBot: BotConfig = {
     volumeMultiplier: 1.5,
     exitFavorablePct: 0.005,
     maxHoldMs: 30 * 60 * 1000,
-    leverage: 20,
+    leverage: 30,
     regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
   },
   status: "paper",
@@ -144,7 +144,7 @@ export const MomoMaxAggressiveBot: BotConfig = {
     volumeMultiplier: 1.3,
     exitFavorablePct: 0.003,
     maxHoldMs: 20 * 60 * 1000,
-    leverage: 20,
+    leverage: 50,
     regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
   },
   status: "paper",

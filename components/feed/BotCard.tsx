@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { MessageCircle } from "lucide-react";
 import type { BotSignal, StakeAmount } from "@/lib/types";
+import { BotChatSheet } from "./BotChatSheet";
 
 const STAKES: StakeAmount[] = [5, 10, 20, 50];
 
@@ -33,11 +35,39 @@ function fmtAge(ms: number, now: number): string {
   return `${d}d ago`;
 }
 
+function fmtEvidenceValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "number") {
+    if (Math.abs(v) > 0 && Math.abs(v) < 0.001) return v.toExponential(2);
+    if (Math.abs(v) < 1) return v.toFixed(4);
+    if (Math.abs(v) < 1000) return v.toFixed(2);
+    return v.toFixed(0);
+  }
+  if (typeof v === "string" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return "[obj]";
+  }
+}
+
 export function BotCard({ signal }: Props) {
   const { getAccessToken } = usePrivy();
   // busyKey = `${positionId}-${stakeAmt}` while a stake is in-flight
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // Per-position evidence expansion state
+  const [openEvidence, setOpenEvidence] = useState<Set<string>>(new Set());
+  const [chatOpen, setChatOpen] = useState(false);
+
+  function toggleEvidence(positionId: string) {
+    setOpenEvidence((prev) => {
+      const next = new Set(prev);
+      if (next.has(positionId)) next.delete(positionId);
+      else next.add(positionId);
+      return next;
+    });
+  }
 
   const p = signal.payload;
   const positions = p.currentPositions;
@@ -98,11 +128,20 @@ export function BotCard({ signal }: Props) {
     }
   }
 
-  const now = Date.now();
+  // `now` starts at 0 (server + initial client render match → no hydration
+  // mismatch). After mount, we set to wall-clock and tick once a minute so
+  // "Xm ago" stays fresh without breaking SSR. Until mounted, fmtAge
+  // returns "just now" for everything — acceptable for a single frame.
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[116px] pb-24 text-white"
+      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[76px] pb-24 text-white"
       data-card-type="bot"
     >
       {/* Ambient glow */}
@@ -124,6 +163,14 @@ export function BotCard({ signal }: Props) {
               Paper AI bot
             </div>
             <div className="mt-0.5 text-xl font-bold">{p.botName}</div>
+            <button
+              type="button"
+              onClick={() => setChatOpen(true)}
+              className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 ring-1 ring-white/10 transition hover:bg-white/15 hover:text-white"
+            >
+              <MessageCircle size={11} strokeWidth={2.4} />
+              Chat
+            </button>
           </div>
         </div>
         <div className="text-right">
@@ -137,6 +184,11 @@ export function BotCard({ signal }: Props) {
             {lifetimePct >= 0 ? "+" : ""}
             {(lifetimePct * 100).toFixed(1)}%
           </div>
+          {positions.length > 0 && (
+            <div className="mt-0.5 text-[10px] font-medium text-white/50">
+              {positions.length} open
+            </div>
+          )}
         </div>
       </div>
 
@@ -147,7 +199,11 @@ export function BotCard({ signal }: Props) {
             Win rate
           </div>
           <div className="text-sm font-bold">
-            {(p.stats.winRate * 100).toFixed(0)}%
+            {p.stats.winRate === null ? (
+              <span className="text-white/40">—</span>
+            ) : (
+              `${(p.stats.winRate * 100).toFixed(0)}%`
+            )}
           </div>
         </div>
         <div className="flex-1 rounded-lg px-2 py-1.5 text-center">
@@ -247,6 +303,35 @@ export function BotCard({ signal }: Props) {
                   </div>
                 </div>
 
+                {/* Evidence chip — collapsible raw trigger data */}
+                {pos.triggerMeta &&
+                  Object.keys(pos.triggerMeta).length > 0 && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleEvidence(pos.positionId)}
+                        className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60 ring-1 ring-white/10 transition hover:bg-white/10"
+                      >
+                        {openEvidence.has(pos.positionId) ? "▾" : "▸"} evidence
+                      </button>
+                      {openEvidence.has(pos.positionId) && (
+                        <div className="mt-1.5 space-y-0.5 rounded-lg bg-black/30 px-2 py-1.5 text-[10px] ring-1 ring-white/5">
+                          {Object.entries(pos.triggerMeta).map(([k, v]) => (
+                            <div
+                              key={k}
+                              className="flex items-baseline justify-between gap-2"
+                            >
+                              <span className="text-white/40">{k}</span>
+                              <span className="truncate text-right font-mono text-white/80">
+                                {fmtEvidenceValue(v)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 {/* Disagreement badges — other bots on the opposite side */}
                 {pos.disagreements.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
@@ -297,6 +382,20 @@ export function BotCard({ signal }: Props) {
         <div className="relative mt-2 text-center text-xs text-white/70">
           {status}
         </div>
+      )}
+
+      {chatOpen && (
+        <BotChatSheet
+          botId={p.botId}
+          botName={p.botName}
+          avatarEmoji={p.avatarEmoji}
+          openingThoughts={positions.map((pos) => ({
+            asset: pos.asset,
+            side: pos.side,
+            narration: pos.narrationOpen,
+          }))}
+          onClose={() => setChatOpen(false)}
+        />
       )}
     </div>
   );

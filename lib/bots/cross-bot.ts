@@ -10,14 +10,25 @@
 // the resolver loop.
 
 import { db } from "@/lib/db";
-import { paperPositions } from "@/lib/db/schema";
+import { bots, paperPositions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { familyOf } from "./wiring";
 
 export interface CrossBotSnapshot {
   /** key: `${asset}|${side}` → count of bots holding that exact side on that asset */
   positionsByAssetSide: Map<string, number>;
-  /** asset → array of (botId, side) entries; useful for disagreement queries */
-  botsByAsset: Map<string, Array<{ botId: string; side: "long" | "short" }>>;
+  /** asset → array of (botId, side, family) entries; useful for disagreement queries */
+  botsByAsset: Map<
+    string,
+    Array<{ botId: string; side: "long" | "short"; family: string | null }>
+  >;
+  /**
+   * key: `${family}|${asset}|${side}` → true if any bot in that family is
+   * already holding that exact side on that asset. Resolver uses this to skip
+   * duplicate entries from sibling variants (Phoebe + Phoebe Lite both
+   * shorting AVAX is the same trade twice).
+   */
+  familyHoldings: Set<string>;
 }
 
 const TTL_MS = 5_000;
@@ -31,19 +42,35 @@ export async function getCrossBotSnapshot(): Promise<CrossBotSnapshot> {
     .from(paperPositions)
     .where(eq(paperPositions.status, "open"));
 
+  // Pull bot rows so we can resolve each position's strategyKey → family.
+  // One query rather than per-row lookups; the roster is small (~12).
+  const botRows = await db.select().from(bots);
+  const strategyByBot = new Map(botRows.map((b) => [b.id, b.strategyKey]));
+
   const positionsByAssetSide = new Map<string, number>();
-  const botsByAsset = new Map<string, Array<{ botId: string; side: "long" | "short" }>>();
+  const botsByAsset = new Map<
+    string,
+    Array<{ botId: string; side: "long" | "short"; family: string | null }>
+  >();
+  const familyHoldings = new Set<string>();
 
   for (const r of rows) {
     const side = r.side as "long" | "short";
     const key = `${r.asset}|${side}`;
     positionsByAssetSide.set(key, (positionsByAssetSide.get(key) ?? 0) + 1);
+    const strategyKey = strategyByBot.get(r.botId) ?? null;
+    const family = strategyKey ? familyOf(strategyKey) : null;
     const list = botsByAsset.get(r.asset) ?? [];
-    list.push({ botId: r.botId, side });
+    list.push({ botId: r.botId, side, family });
     botsByAsset.set(r.asset, list);
+    if (family) familyHoldings.add(`${family}|${r.asset}|${side}`);
   }
 
-  const snap: CrossBotSnapshot = { positionsByAssetSide, botsByAsset };
+  const snap: CrossBotSnapshot = {
+    positionsByAssetSide,
+    botsByAsset,
+    familyHoldings,
+  };
   _cache = { snap, expiresAt: Date.now() + TTL_MS };
   return snap;
 }

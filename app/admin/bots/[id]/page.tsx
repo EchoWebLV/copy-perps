@@ -378,6 +378,8 @@ function PositionTable({
                   leverage: p.leverage,
                   entryMark: p.entryMark,
                   currentMark: ref,
+                  asset: p.asset,
+                  stakeUsd: p.stakeUsd,
                 });
                 const usd = pct * p.stakeUsd;
                 pnlDisplay = (

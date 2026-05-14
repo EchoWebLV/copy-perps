@@ -12,6 +12,19 @@ import {
   computePaperPnlUsd,
 } from "./paper";
 import { getCrossBotSnapshot } from "./cross-bot";
+import {
+  narrateOpenSafe,
+  narrateCloseSafe,
+  narrateOpenFallback,
+  narrateCloseFallback,
+} from "./narrator";
+import { familyOf } from "./wiring";
+import {
+  applyEntrySlippage,
+  applyExitSlippage,
+  slippageBpsFor,
+  TAKER_FEE_BPS,
+} from "./fees";
 import type { ExternalSignals, MarketContext } from "./types";
 
 const MAX_CONCURRENT_POSITIONS = 4;
@@ -19,6 +32,19 @@ const MAX_STAKE_PCT = 0.5;
 const MIN_STAKE_USD = 10;
 const BUST_THRESHOLD_USD = 10;
 const MAX_BOTS_SAME_SIDE = 3;
+// Default cap on stake-PnL drawdown before the resolver forces an exit,
+// regardless of what the strategy thinks. -0.5 = "this position lost 50% of
+// the original stake, get out." Per-bot override via bot.config.stopLossPct.
+const DEFAULT_STOP_LOSS_PCT = 0.5;
+
+function readStopLossPct(config: Record<string, unknown> | null | undefined): number {
+  const raw = config?.stopLossPct;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+    return DEFAULT_STOP_LOSS_PCT;
+  }
+  // Clamp to a sane range. 5% would chop every position; >100% means never.
+  return Math.min(Math.max(raw, 0.05), 1.0);
+}
 
 /**
  * One resolver tick. For each paper bot:
@@ -53,26 +79,53 @@ export async function tick(): Promise<{
     const strategy = getStrategy(bot.strategyKey);
     if (!strategy) continue;
 
+    const stopLossPct = readStopLossPct(
+      bot.config as Record<string, unknown> | null | undefined,
+    );
+
     // Phase 1: evaluate exits on all open positions for this bot.
     const openPositions = await fetchOpenPositionsForBot(bot.id);
     for (const pos of openPositions) {
       const mark = marks.get(pos.asset);
       if (mark == null) continue;
       const ctx: MarketContext = { asset: pos.asset, mark };
-      if (strategy.evaluateExit(ctx, pos)) {
-        const pnl = computePaperPnlUsd({
-          side: pos.side,
-          leverage: pos.leverage,
-          entryMark: pos.entryMark,
-          exitMark: mark,
-          stakeUsd: pos.stakeUsd,
-        });
+      // Stop-loss runs BEFORE the strategy. A signal-driven strategy (funding,
+      // mean-revert) might want to ride a deep drawdown waiting for its
+      // setup to resolve — but the bankroll can't take an unlimited bleed.
+      // PnL pct here is on STAKE, not on price: pnl_usd / stake_usd.
+      // We close at the slipped fill — never the mid — so realized PnL
+      // reflects what an actual market order would print.
+      const exitFill = applyExitSlippage(mark, pos.side, pos.asset);
+      const pnl = computePaperPnlUsd({
+        side: pos.side,
+        leverage: pos.leverage,
+        entryMark: pos.entryMark,
+        exitMark: exitFill,
+        stakeUsd: pos.stakeUsd,
+      });
+      const stakePnlPct = pos.stakeUsd > 0 ? pnl / pos.stakeUsd : 0;
+      const stoppedOut = stakePnlPct <= -stopLossPct;
+      if (stoppedOut || strategy.evaluateExit(ctx, pos)) {
+        const closeNarration =
+          (await narrateCloseSafe({
+            personaKey: bot.personaVoiceKey,
+            asset: pos.asset,
+            side: pos.side,
+            entryMark: pos.entryMark,
+            exitMark: mark,
+            paperPnlUsd: pnl,
+          })) ??
+          narrateCloseFallback({
+            asset: pos.asset,
+            side: pos.side,
+            paperPnlUsd: pnl,
+          });
         await closePaperPosition({
           positionId: pos.id,
           botId: bot.id,
-          exitMark: mark,
+          exitMark: exitFill,
           paperPnlUsd: pnl,
-          narration: null,
+          narration: closeNarration,
         });
         closed += 1;
       }
@@ -112,16 +165,55 @@ export async function tick(): Promise<{
       const sameSideCount = crossBot.positionsByAssetSide.get(sideKey) ?? 0;
       if (sameSideCount >= MAX_BOTS_SAME_SIDE) continue;
 
+      // Family dedupe: variants share strategy logic with their parent, so
+      // letting Phoebe and Phoebe-Lite both short AVAX is one signal counted
+      // twice. Allow only one open position per (family, asset, side).
+      const myFamily = familyOf(bot.strategyKey);
+      if (myFamily) {
+        const familyKey = `${myFamily}|${decision.asset}|${decision.side}`;
+        if (crossBot.familyHoldings.has(familyKey)) continue;
+      }
+
       const targetStake = balance * MAX_STAKE_PCT * decision.conviction;
       const stake = Math.min(targetStake, freeBalance);
       if (stake < MIN_STAKE_USD) continue;
 
+      const midMark = marks.get(decision.asset) ?? mark;
+      const entryMark = applyEntrySlippage(midMark, decision.side, decision.asset);
+      const slipBps = slippageBpsFor(decision.asset);
+      // Annotate the position's trigger meta with the cost stamps so the
+      // evidence chip on the card can surface "you paid X bps slip + Y bps
+      // fees" without us needing extra columns.
+      const decisionWithCosts = {
+        ...decision,
+        triggerMeta: {
+          ...decision.triggerMeta,
+          entrySlipBps: slipBps,
+          takerFeeBps: TAKER_FEE_BPS,
+          midAtEntry: midMark,
+        },
+      };
+      const openNarration =
+        (await narrateOpenSafe({
+          personaKey: bot.personaVoiceKey,
+          asset: decision.asset,
+          side: decision.side,
+          leverage: decision.leverage,
+          entryMark,
+          trigger: decision.triggerMeta,
+        })) ??
+        narrateOpenFallback({
+          asset: decision.asset,
+          side: decision.side,
+          leverage: decision.leverage,
+          entryMark,
+        });
       await openPaperPosition({
         botId: bot.id,
-        decision,
-        entryMark: marks.get(decision.asset) ?? mark,
+        decision: decisionWithCosts,
+        entryMark,
         stakeUsd: stake,
-        narration: null,
+        narration: openNarration,
       });
       opened += 1;
       slots -= 1;
@@ -134,6 +226,11 @@ export async function tick(): Promise<{
         sideKey,
         (crossBot.positionsByAssetSide.get(sideKey) ?? 0) + 1,
       );
+      if (myFamily) {
+        crossBot.familyHoldings.add(
+          `${myFamily}|${decision.asset}|${decision.side}`,
+        );
+      }
     }
   }
 

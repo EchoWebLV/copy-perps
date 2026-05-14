@@ -74,6 +74,8 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         leverage: openRow.leverage,
         entryMark: openRow.entryMark,
         currentMark,
+        asset: openRow.asset,
+        stakeUsd: openRow.stakeUsd,
       });
 
       // Find other bots holding the opposite side of this asset.
@@ -104,6 +106,9 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         livePaperPnlPct,
         livePaperPnlUsd: livePaperPnlPct * openRow.stakeUsd,
         openSinceMs: openRow.entryTs.getTime(),
+        narrationOpen: openRow.narrationOpen,
+        triggerMeta:
+          (openRow.triggerMeta as Record<string, unknown> | null) ?? null,
         disagreements,
       };
     });
@@ -112,9 +117,22 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
       (s, p) => s + p.stakeUsd,
       0,
     );
+    const unrealizedUsd = currentPositions.reduce(
+      (s, p) => s + p.livePaperPnlUsd,
+      0,
+    );
+    // Equity = cash + unrealized PnL. This is the headline "what is this bot
+    // actually worth right now" number. Cash alone hides losses on still-open
+    // positions and makes the leaderboard misleading.
+    const equityUsd = bot.balanceUsd + unrealizedUsd;
     const freeBalance = bot.balanceUsd - lockedStake;
     const lifetimeReturnPct =
-      (bot.balanceUsd - bot.startingBalanceUsd) / bot.startingBalanceUsd;
+      (equityUsd - bot.startingBalanceUsd) / bot.startingBalanceUsd;
+    // Win rate is noisy below a handful of trades; null tells the UI to hide
+    // it rather than show "0%" off a single losing trade.
+    const WIN_RATE_MIN_TRADES = 5;
+    const winRateOrNull =
+      totalTrades >= WIN_RATE_MIN_TRADES ? winRate : null;
 
     const heatScore = Math.round(
       500 +
@@ -132,7 +150,8 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         botId: bot.id,
         botName: bot.name,
         avatarEmoji: bot.avatarEmoji,
-        balanceUsd: bot.balanceUsd,
+        balanceUsd: equityUsd,
+        cashUsd: bot.balanceUsd,
         startingBalanceUsd: bot.startingBalanceUsd,
         lifetimeReturnPct,
         freeBalanceUsd: freeBalance,
@@ -140,7 +159,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         currentPositions,
         stats: {
           totalTrades,
-          winRate,
+          winRate: winRateOrNull,
           paperPnl24hUsd: paperPnl24h,
           paperPnl7dUsd: paperPnl7d,
           paperPnlAllUsd: paperPnlAll,

@@ -149,6 +149,36 @@ export const bots = pgTable("bots", {
     .defaultNow(),
 });
 
+// One row per message in a per-user, per-bot conversation. The bot's
+// auto-narration on opens/closes lives on paper_positions and stays public
+// (shown on cards + the Chatter feed). Anything in this table is the
+// private back-and-forth between a single user and a single bot.
+export const botChats = pgTable(
+  "bot_chats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'user' | 'assistant'
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    userBotIdx: index("bot_chats_user_bot_idx").on(
+      t.userId,
+      t.botId,
+      t.createdAt,
+    ),
+    userTsIdx: index("bot_chats_user_ts_idx").on(t.userId, t.createdAt),
+  }),
+);
+
 export const paperPositions = pgTable(
   "paper_positions",
   {

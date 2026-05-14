@@ -131,7 +131,7 @@ export const VolVectorStrategy = createVolVectorStrategy({
   trendConsistencyMin: 0.6,
   exitFavorablePct: 0.006,
   maxHoldMs: 15 * 60 * 1000,
-  leverage: 30,
+  leverage: 20,
   regimesAllowed: ["vol-expanding"],
 });
 
@@ -145,7 +145,7 @@ export const VolVectorHairTriggerStrategy = createVolVectorStrategy({
   trendConsistencyMin: 0.5,
   exitFavorablePct: 0.004,
   maxHoldMs: 10 * 60 * 1000,
-  leverage: 30,
+  leverage: 40,
   regimesAllowed: ["vol-expanding", "chop"],
 });
 
@@ -165,7 +165,7 @@ export const VolVectorBot: BotConfig = {
     trendConsistencyMin: 0.6,
     exitFavorablePct: 0.006,
     maxHoldMs: 15 * 60 * 1000,
-    leverage: 30,
+    leverage: 20,
     regimesAllowed: ["vol-expanding"],
   },
   status: "paper",
@@ -187,7 +187,7 @@ export const VolVectorHairTriggerBot: BotConfig = {
     trendConsistencyMin: 0.5,
     exitFavorablePct: 0.004,
     maxHoldMs: 10 * 60 * 1000,
-    leverage: 30,
+    leverage: 40,
     regimesAllowed: ["vol-expanding", "chop"],
   },
   status: "paper",

@@ -136,9 +136,13 @@ export interface BotSignal extends BaseSignal {
     botId: string;
     botName: string;
     avatarEmoji: string;
+    // Equity: cash + unrealized PnL across open positions. This is the
+    // headline "what this bot is worth" number — what the BANKROLL chip
+    // shows. Cash-only is exposed separately as cashUsd.
     balanceUsd: number;
+    cashUsd: number;
     startingBalanceUsd: number;
-    lifetimeReturnPct: number; // (balance − starting) / starting
+    lifetimeReturnPct: number; // (equity − starting) / starting
     freeBalanceUsd: number;
     busted: boolean;
     currentPositions: Array<{
@@ -152,6 +156,8 @@ export interface BotSignal extends BaseSignal {
       livePaperPnlPct: number;
       livePaperPnlUsd: number;
       openSinceMs: number;
+      narrationOpen: string | null;
+      triggerMeta: Record<string, unknown> | null;
       disagreements: Array<{
         botId: string;
         botName: string;
@@ -160,7 +166,9 @@ export interface BotSignal extends BaseSignal {
     }>;
     stats: {
       totalTrades: number;
-      winRate: number;
+      // null when totalTrades is below the noise floor (N<5).
+      // UI renders "—" or a sample-size hint instead of a misleading "0%".
+      winRate: number | null;
       paperPnl24hUsd: number;
       paperPnl7dUsd: number;
       paperPnlAllUsd: number;

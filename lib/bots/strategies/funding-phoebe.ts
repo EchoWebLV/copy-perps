@@ -93,7 +93,7 @@ export const FundingPhoebeLiteStrategy = createFundingPhoebeStrategy({
   minVenueAgreement: 2,
   exitFavorablePct: 0.005,
   maxHoldMs: 2 * 60 * 60 * 1000,
-  leverage: 20,
+  leverage: 8,
 });
 
 export const FundingPhoebeBot: BotConfig = {
@@ -125,7 +125,7 @@ export const FundingPhoebeLiteBot: BotConfig = {
     minVenueAgreement: 2,
     exitFavorablePct: 0.005,
     maxHoldMs: 2 * 60 * 60 * 1000,
-    leverage: 20,
+    leverage: 8,
   },
   status: "paper",
 };

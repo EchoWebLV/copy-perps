@@ -8,7 +8,7 @@ import { MOMO_MAX_PERSONA } from "./personas/momo-max";
 import { VOL_VECTOR_PERSONA } from "./personas/vol-vector";
 import { BOOMER_TREND_PERSONA } from "./personas/boomer-trend";
 
-const PERSONAS = {
+export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
   "funding-phoebe": FUNDING_PHOEBE_PERSONA,
   "mean-revert-mike": MEAN_REVERT_MIKE_PERSONA,
@@ -84,4 +84,86 @@ export async function narrateClose(args: NarrateCloseArgs): Promise<string> {
     maxOutputTokens: 80,
   });
   return text.trim();
+}
+
+function isKnownPersona(key: string): key is PersonaKey {
+  return key in PERSONAS;
+}
+
+// Deterministic fallbacks used when xAI is unreachable. The whole point of
+// the Chatter feed is the bot's voice — but a flat templated string still
+// beats silence. These fire only when narrateOpenSafe / narrateCloseSafe
+// return null (timeout, persona miss, API failure).
+export function narrateOpenFallback(args: {
+  asset: string;
+  side: "long" | "short";
+  leverage: number;
+  entryMark: number;
+}): string {
+  const verb = args.side === "long" ? "Opening long" : "Shorting";
+  return `${verb} ${args.asset} ${args.leverage}x at ${args.entryMark.toFixed(args.entryMark >= 100 ? 2 : 4)}.`;
+}
+
+export function narrateCloseFallback(args: {
+  asset: string;
+  side: "long" | "short";
+  paperPnlUsd: number;
+}): string {
+  const winning = args.paperPnlUsd >= 0;
+  const sign = winning ? "+" : "-";
+  const amt = Math.abs(args.paperPnlUsd).toFixed(2);
+  if (winning) {
+    return `Closed ${args.side} ${args.asset} for ${sign}$${amt}. Cycle complete.`;
+  }
+  return `Cut ${args.side} ${args.asset} at ${sign}$${amt}. Moving on.`;
+}
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return await Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`narrator timeout ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
+// Safe wrappers used by the resolver. Never throw, never block the tick
+// indefinitely. Return null on timeout / unknown persona / xAI failure
+// so the position still lands; the UI handles missing narration.
+export async function narrateOpenSafe(
+  args: Omit<NarrateOpenArgs, "personaKey"> & { personaKey: string },
+  timeoutMs = 15000,
+): Promise<string | null> {
+  if (!isKnownPersona(args.personaKey)) return null;
+  try {
+    return await withTimeout(
+      narrateOpen({ ...args, personaKey: args.personaKey }),
+      timeoutMs,
+    );
+  } catch (err) {
+    console.warn(
+      `[narrator] open failed for ${args.personaKey}/${args.asset}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+export async function narrateCloseSafe(
+  args: Omit<NarrateCloseArgs, "personaKey"> & { personaKey: string },
+  timeoutMs = 15000,
+): Promise<string | null> {
+  if (!isKnownPersona(args.personaKey)) return null;
+  try {
+    return await withTimeout(
+      narrateClose({ ...args, personaKey: args.personaKey }),
+      timeoutMs,
+    );
+  } catch (err) {
+    console.warn(
+      `[narrator] close failed for ${args.personaKey}/${args.asset}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 }

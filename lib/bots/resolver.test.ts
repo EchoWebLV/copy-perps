@@ -37,6 +37,7 @@ vi.mock("./cross-bot", () => ({
   getCrossBotSnapshot: vi.fn(async () => ({
     positionsByAssetSide: new Map<string, number>(),
     botsByAsset: new Map(),
+    familyHoldings: new Set<string>(),
   })),
 }));
 
@@ -249,12 +250,13 @@ describe("resolver.tick", () => {
         [
           "SOL",
           [
-            { botId: "a", side: "long" },
-            { botId: "b", side: "long" },
-            { botId: "c", side: "long" },
+            { botId: "a", side: "long", family: null },
+            { botId: "b", side: "long", family: null },
+            { botId: "c", side: "long", family: null },
           ],
         ],
       ]),
+      familyHoldings: new Set<string>(),
     });
 
     await tick();

@@ -229,7 +229,7 @@ export function CopyCard({ signal, isActive }: Props) {
 
   return (
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[116px] pb-24 text-white"
+      className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[76px] pb-24 text-white"
       data-card-type="pacifica_trader"
     >
       <div

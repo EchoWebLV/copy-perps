@@ -82,7 +82,7 @@ export const LiquidationLizardJrStrategy = createLiquidationLizardStrategy({
   minLiqNotionalUsd: 15_000,
   exitFavorablePct: 0.003,
   maxHoldMs: 60_000,
-  leverage: 50,
+  leverage: 15,
 });
 
 export const LiquidationLizardBot: BotConfig = {
@@ -110,7 +110,7 @@ export const LiquidationLizardJrBot: BotConfig = {
   strategyKey: "liquidation-lizard-jr",
   config: {
     minLiqNotionalUsd: 15_000,
-    leverage: 50,
+    leverage: 15,
     exitFavorablePct: 0.003,
     maxHoldMs: 60_000,
   },

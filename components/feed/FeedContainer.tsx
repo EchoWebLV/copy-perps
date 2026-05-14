@@ -234,7 +234,6 @@ export function FeedContainer({
     >
       <BalancePill />
       <LiveTape />
-      <FeedFilterTabs active={feedTab} onChange={setFeedTab} />
       <div
         className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
         style={{ scrollSnapStop: "always" }}

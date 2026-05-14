@@ -129,7 +129,7 @@ export const BoomerTrendWideStrategy = createBoomerTrendStrategy({
   slowPeriod: 36,
   exitFavorablePct: 0.05,
   maxHoldMs: 72 * 60 * 60 * 1000,
-  leverage: 10,
+  leverage: 5,
   regimesAllowed: ["trending-up", "trending-down", "mean-reverting"],
 });
 
@@ -167,7 +167,7 @@ export const BoomerTrendWideBot: BotConfig = {
     slowPeriod: 36,
     exitFavorablePct: 0.05,
     maxHoldMs: 72 * 60 * 60 * 1000,
-    leverage: 10,
+    leverage: 5,
     regimesAllowed: ["trending-up", "trending-down", "mean-reverting"],
   },
   status: "paper",

@@ -104,7 +104,7 @@ export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
   zEntryThreshold: 3.0,
   exitFavorablePct: 0.012,
   maxHoldMs: 4 * 60 * 60 * 1000,
-  leverage: 25,
+  leverage: 5,
   regimesAllowed: ["mean-reverting"],
 });
 
@@ -140,7 +140,7 @@ export const MeanRevertMikePatientBot: BotConfig = {
     zEntryThreshold: 3.0,
     exitFavorablePct: 0.012,
     maxHoldMs: 4 * 60 * 60 * 1000,
-    leverage: 25,
+    leverage: 5,
     regimesAllowed: ["mean-reverting"],
   },
   status: "paper",
