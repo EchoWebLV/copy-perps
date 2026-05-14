@@ -27,6 +27,14 @@ const POSITION_FETCH_TOP_N = 150;
 const POSITIONS_PER_CARD = 3;
 const HISTORY_FETCH_LIMIT = 100;
 
+// Position ordering: lead each card with the highest-leverage isolated
+// play. Cross-margin positions sit at lev=0 in our shape and naturally
+// sink to the bottom. We don't filter cross entirely — top-volume
+// Pacifica skews cross, so excluding them would gut the feed — but
+// every card's primary position is the most degen one available.
+// Traders with ZERO open positions are dropped (already happens via
+// the allPositions.length === 0 check below).
+
 // Convert a Pacifica /positions row into our user-facing trader-position
 // shape. notionalUsd = |amount × entry_price|. Leverage is implied
 // (notional / margin) for isolated; 0 for cross (margin="0") since
@@ -167,15 +175,21 @@ export async function refreshTraders(): Promise<{
           stats.winStreak,
         );
 
-        // Order by notional desc, keep top POSITIONS_PER_CARD.
-        const sortedPositions = [...rawPositions].sort(
-          (a, b) =>
-            Math.abs(Number(b.amount) * Number(b.entry_price)) -
-            Math.abs(Number(a.amount) * Number(a.entry_price)),
-        );
-        const traderPositions: PacificaTraderPosition[] = sortedPositions
-          .slice(0, POSITIONS_PER_CARD)
-          .map(toTraderPosition);
+        // Build position list. Skip trader entirely if they have no
+        // open positions. Within the card, sort leverage desc (so the
+        // 50x trade leads), then notional desc as the tiebreaker.
+        // Cross-margin positions (lev=0 in our shape) naturally sink
+        // to the bottom of the stack.
+        const allPositions = rawPositions.map(toTraderPosition);
+        if (allPositions.length === 0) {
+          continue;
+        }
+        const traderPositions: PacificaTraderPosition[] = [...allPositions]
+          .sort(
+            (a, b) =>
+              b.leverage - a.leverage || b.notionalUsd - a.notionalUsd,
+          )
+          .slice(0, POSITIONS_PER_CARD);
 
         const partial: Omit<PacificaTraderSignal, "chips"> = {
           id: `${SIGNAL_TYPE}:${entry.address}`,
