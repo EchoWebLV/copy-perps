@@ -101,11 +101,16 @@ export type SignalType =
 export interface PacificaTraderPosition {
   market: string;            // "SOL", "BTC", "ETH", ...
   side: "long" | "short";
+  // Leverage is implied by (notional/margin) for isolated positions;
+  // we approximate to the market's max_leverage cap for cross.
   leverage: number;
   notionalUsd: number;
   entryPrice: number;
-  unrealizedPnlPct: number;
-  pacificaPositionId: string;  // identifier returned by Pacifica positions API
+  liquidationPrice: number;
+  // Pacifica's /positions does not surface unrealized PnL%; null in
+  // Phase 1, computed later via WS mark price.
+  // Identify positions by (account, market, side) — no per-position id.
+  unrealizedPnlPct: number | null;
 }
 
 export interface PacificaTraderStats {
@@ -1221,16 +1226,26 @@ export async function refreshTraders(): Promise<{
         const positions = await getPositions(entry.address);
         const heatScore = pacificaTraderHeatScore(entry, positions);
         const first = pickFirstPosition(positions);
+        // Approximate leverage: Pacifica doesn't return per-position
+        // leverage. For isolated, leverage = notional/margin. For cross
+        // (margin="0"), we conservatively use the market max as a
+        // display heuristic — the order route clamps to actual cap at
+        // tap time.
         const sigPos = first
-          ? {
-              market: first.symbol,
-              side: (first.side === "bid" ? "long" : "short") as "long" | "short",
-              leverage: first.leverage,
-              notionalUsd: Math.abs(Number(first.amount) * Number(first.entry_price)),
-              entryPrice: Number(first.entry_price),
-              unrealizedPnlPct: Number(first.unrealized_pnl_percent),
-              pacificaPositionId: first.id,
-            }
+          ? (() => {
+              const notional = Math.abs(Number(first.amount) * Number(first.entry_price));
+              const margin = Number(first.margin);
+              const approxLev = margin > 0 ? notional / margin : 0;
+              return {
+                market: first.symbol,
+                side: (first.side === "bid" ? "long" : "short") as "long" | "short",
+                leverage: approxLev > 0 ? Math.round(approxLev) : 0,
+                notionalUsd: notional,
+                entryPrice: Number(first.entry_price),
+                liquidationPrice: Number(first.liquidation_price),
+                unrealizedPnlPct: null,
+              };
+            })()
           : null;
 
         const partial: Omit<PacificaTraderSignal, "chips"> = {
@@ -1868,9 +1883,7 @@ export async function POST(request: Request) {
         leaderSide: body.side,
         leverage: effectiveLeverage,
         pacificaOrderId: fill.order_id,
-        pacificaPositionId: leaderPos.id,
         leaderEntryPriceAtTap: Number(leaderPos.entry_price),
-        leaderUnrealizedPnlPctAtTap: Number(leaderPos.unrealized_pnl_percent),
       },
     })
     .returning();
@@ -2031,7 +2044,6 @@ interface BetMeta {
   leaderMarket: string;
   leaderSide: "long" | "short";
   leverage: number;
-  pacificaPositionId: string;
 }
 
 function decryptSeed(enc: string): Uint8Array {
@@ -2106,12 +2118,14 @@ export async function runMirrorCloseSweep(): Promise<MirrorResult> {
 
     for (const row of followers) {
       const meta = row.meta as BetMeta;
+      // Pacifica positions have no per-position id; identify by
+      // (account, market, side). If the leader still has any matching
+      // position in the same direction, treat it as the same trade.
       const stillOpen = leaderPositions.find(
         (p) =>
           p.symbol === meta.leaderMarket &&
           ((meta.leaderSide === "long" && p.side === "bid") ||
-            (meta.leaderSide === "short" && p.side === "ask")) &&
-          p.id === meta.pacificaPositionId,
+            (meta.leaderSide === "short" && p.side === "ask")),
       );
       if (stillOpen) continue;
 

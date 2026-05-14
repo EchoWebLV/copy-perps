@@ -54,7 +54,7 @@ export async function getPositions(account: string): Promise<PacificaPosition[]>
 }
 
 export async function getAccountInfo(account: string): Promise<PacificaAccountInfo> {
-  return getEnvelope<PacificaAccountInfo>(`/account/info?account=${account}`);
+  return getEnvelope<PacificaAccountInfo>(`/account?account=${account}`);
 }
 
 // Generic signed POST. Caller provides the already-signed message

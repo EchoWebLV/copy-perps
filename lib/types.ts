@@ -86,11 +86,16 @@ export interface MultiPredictionSignal extends BaseSignal {
 export interface PacificaTraderPosition {
   market: string;            // "SOL", "BTC", "ETH", ...
   side: "long" | "short";
+  // Leverage is implied by (notional/margin) for isolated positions;
+  // for cross we approximate to the market's max_leverage cap.
   leverage: number;
   notionalUsd: number;
   entryPrice: number;
-  unrealizedPnlPct: number;
-  pacificaPositionId: string;  // identifier returned by Pacifica positions API
+  liquidationPrice: number;
+  // Pacifica's /positions endpoint does not surface unrealized PnL.
+  // Null in Phase 1 (compute via WS mark price in Phase 2 if needed).
+  // Identify positions by (account, market, side) — no per-position id.
+  unrealizedPnlPct: number | null;
 }
 
 export interface PacificaTraderStats {

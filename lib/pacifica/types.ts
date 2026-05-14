@@ -36,29 +36,42 @@ export interface PacificaLeaderboardEntry {
 }
 
 export interface PacificaPosition {
-  id: string;                  // Pacifica position identifier
   symbol: string;
   side: "bid" | "ask";         // bid = long, ask = short
   amount: string;
   entry_price: string;
-  margin: string | null;       // present only for isolated positions
-  leverage: number;
-  funding: string;
+  margin: string;              // "0" for cross-margin positions
+  funding: string;             // accumulated funding payments (signed decimal)
   isolated: boolean;
-  unrealized_pnl: string;
-  unrealized_pnl_percent: string;
+  liquidation_price: string;   // can be negative when far from liquidation
   created_at: number;
   updated_at: number;
+  // Note: Pacifica does NOT surface per-position `id`, `leverage`, or
+  // computed unrealized PnL via this endpoint. Identify positions by
+  // (account, symbol, side). Leverage is account-level (cross) or
+  // implied by margin/notional (isolated).
 }
 
 export interface PacificaAccountInfo {
-  address: string;
-  username: string | null;
-  equity: string;
-  available_balance: string;
-  margin_used: string;
-  positions: PacificaPosition[];
-  fee_tier: string;
+  balance: string;
+  fee_level: number;
+  maker_fee: string;
+  taker_fee: string;
+  account_equity: string;
+  cross_account_equity: string;
+  spot_market_value: string;
+  spot_collateral: string;
+  available_to_spend: string;
+  available_to_withdraw: string;
+  pending_balance: string;
+  pending_interest: string;
+  total_margin_used: string;
+  cross_mmr: string;
+  positions_count: number;
+  orders_count: number;
+  stop_orders_count: number;
+  spot_balances: unknown[];
+  updated_at: number;
 }
 
 export interface PacificaOrderFill {
