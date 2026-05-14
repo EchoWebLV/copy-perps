@@ -13,6 +13,7 @@
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "refresh:memes": "tsx --env-file=.env.local scripts/refresh-memes-local.ts",
     "refresh:predictions": "tsx --env-file=.env.local scripts/refresh-predictions-local.ts",
+    "refresh:traders": "tsx --env-file=.env.local scripts/refresh-traders.ts",
     "refresh:whales": "tsx --env-file=.env.local scripts/refresh-whales-local.ts",
     "export:mock": "node scripts/export-mock.mjs",
     "refuel:gas": "node --env-file=.env.local scripts/refuel-gas-wallet.mjs"
