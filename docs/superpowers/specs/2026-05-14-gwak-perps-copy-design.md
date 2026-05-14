@@ -223,7 +223,7 @@ User enters at the live mark when their tx lands, not at the leader's entry pric
 ### `bets` table
 
 - New `type` enum value: `'copy'`. Existing values (`meme`, `prediction`, `perp`) remain for legacy rail rows but get no new writes in v1.
-- **Drop column `platformFee`** (no longer collected per-bet; Phoenix referral kickback is settled out-of-band, not per-tx).
+- **`feeUsdc` column** stops being populated on new bets (no per-tx platform fee; Phoenix referral kickback is settled out-of-band, not per-tx). Column is retained on the table for legacy bet history; no DDL migration.
 - `meta` JSONB shape for `type: 'copy'`:
 
 ```ts
@@ -381,4 +381,4 @@ The pivot touches roughly:
 - **Adds:** ~18 new files under `lib/phoenix/`, `lib/ai-bots/`, `lib/bets/copy.ts`, `lib/bets/mirror-close.ts`, and 4 new API route files.
 - **Removes:** ~15 files under `lib/jupiter*`, `lib/flash-trade/`, `lib/hyperliquid/`, `lib/drift/`, `lib/dexscreener/`, `lib/usd/`, `lib/signals/refresh-{memes,predictions,whales}.ts`, `lib/signals/heat-{meme,prediction,whale}.ts`.
 - **Flagged for 2 weeks then removed:** ~8 directories under `app/api/bet/{meme,prediction,perp}/` + corresponding card components.
-- **Schema:** `signals` and `bets` keep their tables (new `type` values, `bets.platformFee` column dropped); two new tables (`phoenix_traders`, `ai_bot_notes`).
+- **Schema:** `signals` and `bets` keep their tables (new `type` values; `bets.feeUsdc` retained but unset on new copy bets); two new tables added later (`phoenix_traders` in Phase 3, `ai_bot_notes` in Phase 2).
