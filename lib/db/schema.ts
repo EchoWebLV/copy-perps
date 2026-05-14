@@ -116,3 +116,19 @@ export const waitlist = pgTable("waitlist", {
   email: text("email").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const agentWallets = pgTable("agent_wallets", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Pacifica account = user's main Privy Solana wallet pubkey.
+  mainPubkey: text("main_pubkey").notNull(),
+  // Agent wallet pubkey we registered to the main account via
+  // POST /api/v1/agent/bind.
+  agentPubkey: text("agent_pubkey").notNull().unique(),
+  // Encrypted Ed25519 seed (32 bytes), AES-256-GCM with the master key
+  // in AGENT_WALLET_ENCRYPTION_KEY. Format:
+  // base64(iv || ciphertext || authTag).
+  agentSecretEnc: text("agent_secret_enc").notNull(),
+  boundAt: timestamp("bound_at", { withTimezone: true }).notNull().defaultNow(),
+});
