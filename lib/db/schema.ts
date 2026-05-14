@@ -132,3 +132,17 @@ export const agentWallets = pgTable("agent_wallets", {
   agentSecretEnc: text("agent_secret_enc").notNull(),
   boundAt: timestamp("bound_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const bots = pgTable("bots", {
+  id: text("id").primaryKey(), // e.g. "liquidation-lizard"
+  parentId: text("parent_id"), // null for headliners; parent slug for variants
+  name: text("name").notNull(),
+  avatarEmoji: text("avatar_emoji").notNull(),
+  personaVoiceKey: text("persona_voice_key").notNull(),
+  strategyKey: text("strategy_key").notNull(),
+  config: jsonb("config").notNull(),
+  status: text("status").notNull().default("paper"), // 'paper' | 'backtest-fail' | 'live' | 'retired'
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
