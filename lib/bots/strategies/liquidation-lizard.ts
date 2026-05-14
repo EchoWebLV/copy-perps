@@ -1,5 +1,4 @@
 // lib/bots/strategies/liquidation-lizard.ts
-import { registerBot } from "../index";
 import type {
   BotConfig,
   EntryDecision,
@@ -61,7 +60,7 @@ export const LiquidationLizardStrategy: Strategy = {
   },
 };
 
-const LiquidationLizardBot: BotConfig = {
+export const LiquidationLizardBot: BotConfig = {
   id: "liquidation-lizard",
   parentId: null,
   name: "Liquidation Lizard",
@@ -77,4 +76,3 @@ const LiquidationLizardBot: BotConfig = {
   status: "paper",
 };
 
-registerBot(LiquidationLizardBot, LiquidationLizardStrategy);

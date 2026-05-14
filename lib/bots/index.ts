@@ -1,5 +1,9 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
+import {
+  LiquidationLizardStrategy,
+  LiquidationLizardBot,
+} from "./strategies/liquidation-lizard";
 
 // In-memory registry of all bots known to the system. Database `bots` rows
 // are the source of truth for status/parameters; this map provides the
@@ -27,6 +31,5 @@ export function listBots(): BotConfig[] {
   return Array.from(BOTS.values());
 }
 
-// Bot strategy implementations register themselves on import. Phase 1 ships
-// Liquidation Lizard only; Phase 2 adds the rest.
-import "./strategies/liquidation-lizard";
+// Register all bots at module load. Phase 2 will add more strategies here.
+registerBot(LiquidationLizardBot, LiquidationLizardStrategy);
