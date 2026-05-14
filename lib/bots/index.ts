@@ -81,6 +81,49 @@ export function resolveStrategyForBot(bot: BotConfig): Strategy | null {
   return built;
 }
 
+/**
+ * Adds a bot config to the in-memory registry at runtime. Used by the admin
+ * clone flow: after a new bot row is persisted to the DB, calling this lets
+ * the resolver's `listBots()` see it on the next tick (in dev, where the
+ * Next process is long-lived). Idempotent — no-ops if the id is already
+ * registered, returns the existing strategy in that case.
+ *
+ * Returns null when the strategyKey doesn't map to a known factory family
+ * (caller should reject the request before persisting).
+ */
+export function registerBotDynamic(config: BotConfig): Strategy | null {
+  const existing = BOTS.get(config.id);
+  if (existing) return STRATEGIES.get(existing.strategyKey) ?? null;
+  const strategy = buildStrategyFromBot({
+    strategyKey: config.strategyKey,
+    config: config.config,
+  });
+  if (!strategy) return null;
+  BOTS.set(config.id, config);
+  // A variant clone reuses the parent family's logic but gets its own
+  // strategy instance keyed on the variant's strategyKey, so each bot's
+  // config knobs apply independently.
+  STRATEGIES.set(config.strategyKey, strategy);
+  return strategy;
+}
+
+/**
+ * Overwrites both the BOTS and STRATEGIES entries for a bot. Used by the
+ * admin edit flow so config changes take effect on the next tick without
+ * a dev-server restart. Returns null if the strategyKey has no known
+ * factory family (caller should reject the request).
+ */
+export function reregisterBotDynamic(config: BotConfig): Strategy | null {
+  const strategy = buildStrategyFromBot({
+    strategyKey: config.strategyKey,
+    config: config.config,
+  });
+  if (!strategy) return null;
+  BOTS.set(config.id, config);
+  STRATEGIES.set(config.strategyKey, strategy);
+  return strategy;
+}
+
 // Register all 12 bots at module load. Order is informational; the registry
 // is keyed on bot.id.
 registerBot(LiquidationLizardBot, LiquidationLizardStrategy);
