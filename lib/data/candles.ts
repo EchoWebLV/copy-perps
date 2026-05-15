@@ -1,6 +1,29 @@
 // lib/data/candles.ts
 
 const HL_INFO_URL = "https://api.hyperliquid.xyz/info";
+const PAC_BASE = "https://api.pacifica.fi/api/v1";
+
+// Symbols Hyperliquid doesn't list but Pacifica does. When a strategy
+// asks for candles on one of these, we hit Pacifica's /kline instead.
+const PACIFICA_ONLY = new Set([
+  "XAU",
+  "XAG",
+  "SP500",
+  "EURUSD",
+  "USDJPY",
+  "NVDA",
+  "TSLA",
+  "GOOGL",
+  "PLTR",
+  "HOOD",
+  "CL",
+  "NATGAS",
+  "COPPER",
+  "PLATINUM",
+  "PAXG",
+  "URNM",
+  "CRCL",
+]);
 
 export type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
@@ -74,38 +97,15 @@ export async function getCandles(
 
   const fetchCount = Math.max(count, FETCH_BUFFER);
   const startTime = now - (fetchCount + 1) * INTERVAL_MS[timeframe];
+  const usePacifica = PACIFICA_ONLY.has(asset);
 
   const inflight = (async () => {
     try {
-      const res = await fetch(HL_INFO_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          type: "candleSnapshot",
-          req: {
-            coin: asset,
-            interval: timeframe,
-            startTime,
-            endTime: now,
-          },
-        }),
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        console.error("[candles] fetch failed:", res.status);
-        return cached?.candles ?? [];
-      }
-      const raw = (await res.json()) as HLCandle[];
-      if (!Array.isArray(raw)) return cached?.candles ?? [];
+      const raw: Candle[] = usePacifica
+        ? await fetchPacificaCandles(asset, timeframe, startTime, now)
+        : await fetchHlCandles(asset, timeframe, startTime, now);
+      if (raw.length === 0) return cached?.candles ?? [];
       const parsed: Candle[] = raw
-        .map((c) => ({
-          ts: c.t,
-          open: Number(c.o),
-          high: Number(c.h),
-          low: Number(c.l),
-          close: Number(c.c),
-          volume: Number(c.v),
-        }))
         .filter(
           (c) =>
             Number.isFinite(c.open) &&
@@ -140,4 +140,77 @@ export async function getCandles(
 
   const candles = await inflight;
   return candles.slice(-count);
+}
+
+// ── Source-specific fetchers ───────────────────────────────────────
+
+async function fetchHlCandles(
+  asset: string,
+  timeframe: Timeframe,
+  startTime: number,
+  endTime: number,
+): Promise<Candle[]> {
+  const res = await fetch(HL_INFO_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "candleSnapshot",
+      req: { coin: asset, interval: timeframe, startTime, endTime },
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    console.error("[candles/hl] fetch failed:", res.status, asset);
+    return [];
+  }
+  const raw = (await res.json()) as HLCandle[];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((c) => ({
+    ts: c.t,
+    open: Number(c.o),
+    high: Number(c.h),
+    low: Number(c.l),
+    close: Number(c.c),
+    volume: Number(c.v),
+  }));
+}
+
+interface PacificaKline {
+  t: number; // open time ms
+  T: number; // close time ms
+  s: string;
+  i: string;
+  o: string;
+  c: string;
+  h: string;
+  l: string;
+  v: string;
+  n: number;
+}
+
+async function fetchPacificaCandles(
+  asset: string,
+  timeframe: Timeframe,
+  startTime: number,
+  endTime: number,
+): Promise<Candle[]> {
+  const url = `${PAC_BASE}/kline?symbol=${asset}&interval=${timeframe}&start_time=${startTime}&end_time=${endTime}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    console.error("[candles/pacifica] fetch failed:", res.status, asset);
+    return [];
+  }
+  const body = (await res.json()) as {
+    success: boolean;
+    data?: PacificaKline[];
+  };
+  if (!body.success || !Array.isArray(body.data)) return [];
+  return body.data.map((c) => ({
+    ts: c.t,
+    open: Number(c.o),
+    high: Number(c.h),
+    low: Number(c.l),
+    close: Number(c.c),
+    volume: Number(c.v),
+  }));
 }

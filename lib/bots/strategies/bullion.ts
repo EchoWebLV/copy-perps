@@ -1,29 +1,41 @@
 // lib/bots/strategies/bullion.ts
 //
-// Bullion — gold (XAU) long-only max-leverage scalper. Always wants
-// to be long XAU. Tight take-profit, slightly wider stop, 80% of
-// bankroll committed per trade. The "gold bull who only knows up"
-// archetype.
+// Bullion — was the "always-long max-leverage gold scalper" archetype
+// (terrible R:R, ~70% breakeven win rate, expected bust).
+//
+// Rewired 2026-05-15 to use a documented edge instead: 4h mean
+// reversion on XAU. Fade 2σ stretches, hold up to 12h, TP 0.8%, SL
+// 1.2%. ~50% breakeven win rate, real EV. Same bot id and persona —
+// the voice just becomes "patient fader" rather than "eternal bull."
 
-import { buildScalperBot } from "./scalper";
+import type { BotConfig } from "../types";
+import { GoldMeanRevertStrategy } from "./gold-mean-revert";
 
-const built = buildScalperBot({
+export const BullionStrategy = GoldMeanRevertStrategy;
+
+export const BullionBot: BotConfig = {
   id: "bullion",
+  parentId: null,
   name: "Bullion",
   avatarEmoji: "🪙",
   personaVoiceKey: "bullion",
-  asset: "XAU",
-  side: "long",
-  // Pacifica caps XAU at ~5-10x typically; clampLeverageForNotional
-  // will down-clamp if our 10 is too rich. Either way the resolver
-  // applies the actual per-market max at order build time.
-  maxLeverage: 10,
-  stakePctOverride: 0.8,
-  tpPricePct: 0.004, // 0.4% favorable price move = ~3-4% on stake at 8-10x
-  slPricePct: 0.007, // 0.7% adverse = ~5-7% on stake
-  maxHoldMs: 60 * 60 * 1000,
-  cooldownAfterCloseMs: 5 * 60 * 1000,
-});
-
-export const BullionStrategy = built.strategy;
-export const BullionBot = built.bot;
+  // strategyKey stays "bullion" — the registry maps it to
+  // GoldMeanRevertStrategy via lib/bots/index.ts.
+  strategyKey: "bullion",
+  config: {
+    strategy: "gold-mean-revert",
+    asset: "XAU",
+    timeframe: "4h",
+    candleCount: 24,
+    zEntryThreshold: 2.0,
+    tpPricePct: 0.008,
+    slPricePct: 0.012,
+    maxHoldMs: 12 * 60 * 60 * 1000,
+    cooldownAfterCloseMs: 60 * 60 * 1000,
+    stakePctOverride: 0.5,
+    minLeverage: 4,
+    maxLeverage: 8,
+    stopLossPct: 0.9,
+  },
+  status: "paper",
+};

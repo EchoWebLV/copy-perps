@@ -135,10 +135,15 @@ function formatTriggerSummary(
     const px = Number(trigger.whaleEntryPx ?? 0);
     return `A tracked whale just opened a ${side} on ${asset} with $${(notional / 1e6).toFixed(2)} million size at $${px.toFixed(2)}. You opened beside them.`;
   }
-  if (personaKey === "bullion" || personaKey === "atlas") {
+  if (personaKey === "bullion") {
+    const pctFromMean = Number(trigger.pctFromMean ?? 0) * 100;
+    const direction = pctFromMean >= 0 ? "above" : "below";
     const lev = Number(trigger.dynamicLeverage ?? 0);
-    const tpPct = Number(trigger.tpPricePct ?? 0) * 100;
-    return `You opened another ${side} on ${asset} at ${lev}× leverage, scalping for a ${tpPct.toFixed(1)}% move.`;
+    return `Gold is sitting ${Math.abs(pctFromMean).toFixed(2)}% ${direction} its 4-hour average — fading the stretch with a ${side} at ${lev}× leverage.`;
+  }
+  if (personaKey === "atlas") {
+    const lev = Number(trigger.dynamicLeverage ?? 0);
+    return `Opened long SP500 at ${lev}× leverage — the overnight session is open, planning to close around the 9:30 ET bell.`;
   }
   if (
     personaKey === "whale" ||
