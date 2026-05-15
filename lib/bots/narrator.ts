@@ -15,6 +15,7 @@ import { CONTRARIAN_PERSONA } from "./personas/contrarian";
 import { WHALE_SHADOW_PERSONA } from "./personas/whale-shadow";
 import { GROK_TRADER_PERSONA } from "./personas/grok-trader";
 import { CLAUDE_TRADER_PERSONA } from "./personas/claude-trader";
+import { PULSE_PERSONA } from "./personas/pulse";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -31,6 +32,7 @@ export const PERSONAS = {
   "whale-shadow": WHALE_SHADOW_PERSONA,
   "grok-trader": GROK_TRADER_PERSONA,
   "claude-trader": CLAUDE_TRADER_PERSONA,
+  "pulse": PULSE_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -122,6 +124,15 @@ function formatTriggerSummary(
     const notional = Number(trigger.whaleNotionalUsd ?? 0);
     const px = Number(trigger.whaleEntryPx ?? 0);
     return `A tracked whale just opened a ${side} on ${asset} with $${(notional / 1e6).toFixed(2)} million size at $${px.toFixed(2)}. You opened beside them.`;
+  }
+  if (personaKey === "pulse") {
+    const handle = String(trigger.pulseHandle ?? "");
+    const tweet = String(trigger.pulseTweet ?? "");
+    const lev = Number(trigger.dynamicLeverage ?? 0);
+    if (handle && tweet) {
+      return `@${handle} on X just posted: "${tweet}". You took ${side} on ${asset} at ${lev}x off that pulse.`;
+    }
+    return `Strong directional X chatter on ${asset}; you took ${side} at ${lev}x.`;
   }
   if (personaKey === "grok-trader" || personaKey === "claude-trader") {
     const reasoning = String(trigger.llmReasoning ?? "");

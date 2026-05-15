@@ -114,6 +114,19 @@ const TARGET_BOTS = {
       maxLeverage: 15,
     },
   },
+  pulse: {
+    name: "Pulse",
+    avatarEmoji: "📡",
+    personaVoiceKey: "pulse",
+    strategyKey: "pulse",
+    config: {
+      evalCooldownMs: 60 * 60 * 1000,
+      maxHoldMs: 2 * 60 * 60 * 1000,
+      exitAdverseStopPct: 0.012,
+      minLeverage: 3,
+      maxLeverage: 8,
+    },
+  },
 } as const;
 
 const TARGET_IDS = Object.keys(TARGET_BOTS);

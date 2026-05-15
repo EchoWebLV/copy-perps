@@ -20,6 +20,7 @@ import {
   ClaudeTraderStrategy,
   ClaudeTraderBot,
 } from "./strategies/llm-trader";
+import { PulseStrategy, PulseBot } from "./strategies/pulse";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -108,3 +109,4 @@ registerBot(ContrarianBot, ContrarianStrategy); // Contrarian (fades roster cons
 registerBot(WhaleShadowBot, WhaleShadowStrategy); // Shadow (copies tracked whales)
 registerBot(GrokTraderBot, GrokTraderStrategy); // Grok (xAI LLM trader)
 registerBot(ClaudeTraderBot, ClaudeTraderStrategy); // Claude (Anthropic LLM trader)
+registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
