@@ -65,6 +65,43 @@ interface LlmDecision {
 // every 60-second resolver tick.
 const _lastEvalAt = new Map<string, number>();
 const _lastDecisionExitTarget = new Map<string, number>();
+// When the LLM picks an asset the resolver hasn't iterated to yet on the
+// current tick, stash the decision keyed by bot id so the matching
+// iteration can replay it. Expires fast so a stale pick from an earlier
+// tick can't accidentally trade.
+const _pendingDecisions = new Map<
+  string,
+  { decision: LlmDecision; expiresAt: number }
+>();
+
+function buildEntryFromDecision(
+  p: LlmTraderParams,
+  decision: LlmDecision,
+): EntryDecision {
+  const clampedLev = Math.max(
+    p.minLeverage,
+    Math.min(p.maxLeverage, Math.round(decision.leverage)),
+  );
+  const conviction = clampConviction(
+    (clampedLev - p.minLeverage) / Math.max(1, p.maxLeverage - p.minLeverage),
+  );
+  _lastDecisionExitTarget.set(p.id, decision.takeProfitPct);
+  return {
+    asset: decision.asset,
+    side: decision.side as "long" | "short",
+    leverage: clampedLev,
+    conviction,
+    triggerMeta: {
+      llmProvider: p.provider,
+      llmModel: p.modelId,
+      llmReasoning: decision.reasoning,
+      llmTakeProfitPct: decision.takeProfitPct,
+      llmHoldMinutes: decision.holdMinutes,
+      conviction,
+      dynamicLeverage: clampedLev,
+    },
+  };
+}
 
 async function callLlm(
   provider: LlmProvider,
@@ -242,20 +279,30 @@ export function createLlmTraderStrategy(p: LlmTraderParams): Strategy {
       ) {
         return null;
       }
-      // The LLM picks the asset itself, so we only invoke once per
-      // (bot, tick-window) — bound to the first market we see. The
-      // cache is keyed by bot id; same answer used across markets in
-      // one tick.
-      const cacheKey = p.id;
       const now = Date.now();
-      const lastAt = _lastEvalAt.get(cacheKey) ?? 0;
-      if (now - lastAt < p.evalCooldownMs) return null;
-      _lastEvalAt.set(cacheKey, now);
 
-      // Only the first market in the loop runs the actual LLM call;
-      // subsequent ones get null because we just stamped the cooldown.
-      // To make the LLM choose its own asset, we ignore ctx.asset and
-      // re-emit the decision for whatever asset the model picked.
+      // Replay: if a prior iteration in this tick called the LLM and
+      // got a pick for THIS asset, consume the pending decision now.
+      const pending = _pendingDecisions.get(p.id);
+      if (pending && pending.expiresAt > now) {
+        if (pending.decision.asset === ctx.asset) {
+          _pendingDecisions.delete(p.id);
+          return buildEntryFromDecision(p, pending.decision);
+        }
+        // Pending for a different asset — keep it alive for the matching
+        // iteration later in this same resolver tick.
+        return null;
+      }
+      if (pending) {
+        _pendingDecisions.delete(p.id);
+      }
+
+      // Cooldown check: only invoke the LLM at most once per
+      // p.evalCooldownMs window per bot.
+      const lastAt = _lastEvalAt.get(p.id) ?? 0;
+      if (now - lastAt < p.evalCooldownMs) return null;
+      _lastEvalAt.set(p.id, now);
+
       const marketBrief = await buildMarketBrief();
       const signalsBrief = buildSignalsBrief(signals);
       const prompt = PROMPT_TEMPLATE(p.id, marketBrief, signalsBrief);
@@ -276,40 +323,18 @@ export function createLlmTraderStrategy(p: LlmTraderParams): Strategy {
       ) {
         return null;
       }
-      // Reject if this entry is for a different asset than ctx — the
-      // resolver will pick it up on its next market iteration in the same
-      // tick (we cleared the cooldown only once above).
-      if (decision.asset !== ctx.asset) return null;
 
-      const clampedLev = Math.max(
-        p.minLeverage,
-        Math.min(p.maxLeverage, Math.round(decision.leverage)),
-      );
-      // Convict-by-leverage: the LLM has already encoded conviction in
-      // its leverage pick. Bigger lev → bigger stake at the resolver's
-      // sizing step.
-      const conviction = clampConviction(
-        (clampedLev - p.minLeverage) / Math.max(1, p.maxLeverage - p.minLeverage),
-      );
-
-      // Store this bot's per-trade take-profit; evaluateExit reads it.
-      _lastDecisionExitTarget.set(p.id, decision.takeProfitPct);
-
-      return {
-        asset: decision.asset,
-        side: decision.side,
-        leverage: clampedLev,
-        conviction,
-        triggerMeta: {
-          llmProvider: p.provider,
-          llmModel: p.modelId,
-          llmReasoning: decision.reasoning,
-          llmTakeProfitPct: decision.takeProfitPct,
-          llmHoldMinutes: decision.holdMinutes,
-          conviction,
-          dynamicLeverage: clampedLev,
-        },
-      };
+      // If the LLM picked the asset we're on right now, return immediately.
+      // Otherwise stash for the matching iteration later in this tick.
+      if (decision.asset === ctx.asset) {
+        return buildEntryFromDecision(p, decision);
+      }
+      _pendingDecisions.set(p.id, {
+        decision,
+        // 90s expiry covers the worst-case tick duration + small slack.
+        expiresAt: now + 90_000,
+      });
+      return null;
     },
 
     evaluateExit(ctx: MarketContext, position: PaperPosition): boolean {
