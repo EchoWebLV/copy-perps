@@ -22,7 +22,6 @@ import {
   FONT_DISPLAY,
   StoryAvatar,
   Headline,
-  PnlPill,
   Stamp,
 } from "@/components/v2/ui";
 
@@ -491,16 +490,17 @@ function PositionCard({
             LIVE P/L
           </div>
           <div className="mt-1 flex items-baseline gap-2">
-            <PnlPill pnlUsd={pos.livePaperPnlUsd} size={20} />
             <span
-              className="text-[14px] font-black tabular-nums"
+              className="tabular-nums font-black"
               style={{
                 color: profit ? GREEN : RED,
                 fontFamily: "system-ui, sans-serif",
+                fontSize: "28px",
+                lineHeight: 1,
               }}
             >
               {profit ? "+" : ""}
-              {(pos.livePaperPnlPct * 100).toFixed(1)}%
+              {(pos.livePaperPnlPct * 100).toFixed(2)}%
             </span>
           </div>
         </div>

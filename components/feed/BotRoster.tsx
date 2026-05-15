@@ -355,7 +355,7 @@ function BotRow({
                   asset={pos.asset}
                   side={pos.side}
                   leverage={pos.leverage}
-                  livePaperPnlUsd={pos.livePaperPnlUsd}
+                  livePaperPnlPct={pos.livePaperPnlPct}
                 />
               ))}
             </div>
@@ -430,15 +430,19 @@ function PositionChip({
   asset,
   side,
   leverage,
-  livePaperPnlUsd,
+  livePaperPnlPct,
 }: {
   asset: string;
   side: "long" | "short";
   leverage: number;
-  livePaperPnlUsd: number;
+  livePaperPnlPct: number;
 }) {
   const isLong = side === "long";
-  const profit = livePaperPnlUsd >= 0;
+  const profit = livePaperPnlPct >= 0;
+  // Show percent so users don't confuse the bot's stake-denominated
+  // dollar PnL with their own bankroll. % is also exactly the return
+  // a tailer would see at the same leverage.
+  const pctText = `${profit ? "+" : "-"}${Math.abs(livePaperPnlPct * 100).toFixed(1)}%`;
   return (
     <span
       className="inline-flex items-baseline gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider tabular-nums"
@@ -454,7 +458,7 @@ function PositionChip({
       {asset}
       <span style={{ color: DIM, fontSize: "10px" }}>×{leverage}</span>
       <span style={{ color: profit ? GREEN : RED, fontSize: "10px" }}>
-        {profit ? "+" : "-"}${Math.abs(livePaperPnlUsd).toFixed(0)}
+        {pctText}
       </span>
     </span>
   );
