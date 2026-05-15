@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { MessageCircle, Zap } from "lucide-react";
 import type { BotSignal } from "@/lib/types";
 import type { MoodBadge } from "@/lib/bots/mood";
@@ -9,6 +8,7 @@ import { BotChatSheet } from "./BotChatSheet";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
+import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   BG,
   PANEL,
@@ -69,6 +69,7 @@ interface Props {
 export function BotRoster({ initialBots }: Props) {
   const [bots, setBots] = useState<BotSignal[]>(initialBots);
   const [chatBotId, setChatBotId] = useState<string | null>(null);
+  const [tailSource, setTailSource] = useState<TailSource | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -149,6 +150,7 @@ export function BotRoster({ initialBots }: Props) {
             bot={bot}
             rank={idx + 1}
             onChat={() => setChatBotId(bot.payload.botId)}
+            onTail={(source) => setTailSource(source)}
           />
         ))}
       </div>
@@ -167,6 +169,12 @@ export function BotRoster({ initialBots }: Props) {
           onClose={() => setChatBotId(null)}
         />
       )}
+
+      <TailModal
+        open={!!tailSource}
+        source={tailSource}
+        onClose={() => setTailSource(null)}
+      />
     </div>
   );
 }
@@ -175,10 +183,12 @@ function BotRow({
   bot,
   rank,
   onChat,
+  onTail,
 }: {
   bot: BotSignal;
   rank: number;
   onChat: () => void;
+  onTail: (source: TailSource) => void;
 }) {
   const p = bot.payload;
   const meta = BOT_META[p.botId] ?? { tagline: "Strategy", style: "—" };
@@ -356,11 +366,27 @@ function BotRow({
           </div>
         )}
 
-        {/* Stake CTA — opens the positions feed */}
+        {/* Tail CTA — opens the modal to pick amount + sign */}
         {livePositions.length > 0 && (
-          <Link
-            href={`/live?bot=${p.botId}`}
-            className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+          <button
+            type="button"
+            onClick={() => {
+              const pos = livePositions[0];
+              if (!pos) return;
+              onTail({
+                kind: "bot",
+                botId: p.botId,
+                botName: p.botName,
+                avatarEmoji: p.avatarEmoji,
+                avatarImageUrl: p.avatarImageUrl,
+                asset: pos.asset,
+                side: pos.side,
+                leverage: pos.leverage,
+                entryMark: pos.entryMark,
+                positionId: pos.positionId,
+              });
+            }}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97]"
             style={{
               background: ACCENT,
               color: BG,
@@ -369,7 +395,7 @@ function BotRow({
           >
             <Zap size={12} strokeWidth={3} fill={BG} />
             TAIL {p.botName.toUpperCase()}
-          </Link>
+          </button>
         )}
       </div>
     </div>

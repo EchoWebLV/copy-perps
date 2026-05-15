@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePrivy } from "@privy-io/react-auth";
-import { ArrowLeft, ArrowUp, MessageCircle } from "lucide-react";
-import type { BotSignal, StakeAmount } from "@/lib/types";
+import { ArrowLeft, ArrowUp, MessageCircle, Zap } from "lucide-react";
+import type { BotSignal } from "@/lib/types";
 import { BotChatSheet } from "./BotChatSheet";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
+import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   BG,
   PANEL,
@@ -26,7 +26,6 @@ import {
   Stamp,
 } from "@/components/v2/ui";
 
-const STAKES: StakeAmount[] = [5, 10, 20, 50];
 // Bot list polling: 4s, fast enough that opens/closes from the resolver
 // tick appear within a single React paint of when they hit the DB.
 // Live PnL on each card refreshes on every Pacifica WS mark tick.
@@ -100,6 +99,7 @@ function flatten(bots: BotSignal[], filter: string | null): FlatPosition[] {
 export function LiveFeed({ initialBots, botFilter }: Props) {
   const [bots, setBots] = useState<BotSignal[]>(initialBots);
   const [chatBotId, setChatBotId] = useState<string | null>(null);
+  const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [newCount, setNewCount] = useState(0);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -307,6 +307,20 @@ export function LiveFeed({ initialBots, botFilter }: Props) {
                 slideIndex={i}
                 total={positions.length}
                 onChat={() => setChatBotId(pos.bot.botId)}
+                onTail={() =>
+                  setTailSource({
+                    kind: "bot",
+                    botId: pos.bot.botId,
+                    botName: pos.bot.botName,
+                    avatarEmoji: pos.bot.avatarEmoji,
+                    avatarImageUrl: pos.bot.avatarImageUrl,
+                    asset: pos.asset,
+                    side: pos.side,
+                    leverage: pos.leverage,
+                    entryMark: pos.entryMark,
+                    positionId: pos.positionId,
+                  })
+                }
               />
             </div>
           ))}
@@ -327,6 +341,12 @@ export function LiveFeed({ initialBots, botFilter }: Props) {
           onClose={() => setChatBotId(null)}
         />
       )}
+
+      <TailModal
+        open={!!tailSource}
+        source={tailSource}
+        onClose={() => setTailSource(null)}
+      />
     </div>
   );
 }
@@ -364,15 +384,14 @@ function PositionCard({
   slideIndex,
   total,
   onChat,
+  onTail,
 }: {
   pos: FlatPosition;
   slideIndex: number;
   total: number;
   onChat: () => void;
+  onTail: () => void;
 }) {
-  const { getAccessToken } = usePrivy();
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -385,50 +404,8 @@ function PositionCard({
   const profit = pos.livePaperPnlUsd >= 0;
   const fresh = now > 0 && now - pos.openSinceMs < 15 * 60 * 1000;
 
-  async function onStake(amount: StakeAmount) {
-    const key = `${pos.positionId}-${amount}`;
-    if (busyKey) return;
-    setBusyKey(key);
-    setStatus("PLACING ORDER…");
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("not authed");
-      const resp = await fetch("/api/bet/bot", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          botId: pos.bot.botId,
-          market: pos.asset,
-          side: pos.side,
-          leverage: pos.leverage,
-          stakeUsdc: amount,
-          signalId: `bot:${pos.bot.botId}`,
-        }),
-      });
-      if (!resp.ok) {
-        const e = (await resp.json().catch(() => ({}))) as { error?: string };
-        throw new Error(e.error ?? `HTTP ${resp.status}`);
-      }
-      const data = (await resp.json()) as {
-        fill?: { avgFillPrice?: string | number };
-      };
-      const price = data.fill?.avgFillPrice;
-      setStatus(
-        price
-          ? `OPENED ${pos.asset} ${pos.side.toUpperCase()} @ $${Number(price).toFixed(4)}`
-          : `OPENED ${pos.asset} ${pos.side.toUpperCase()}`,
-      );
-    } catch (err) {
-      console.error("[stake] failed:", err);
-      setStatus(`FAILED: ${String(err).slice(0, 80)}`);
-    } finally {
-      setBusyKey(null);
-      setTimeout(() => setStatus(null), 5000);
-    }
-  }
+  // Staking is handled by TailModal — opened via onTail() from the
+  // TAIL CTA at the bottom of this card.
 
   return (
     <div
@@ -608,44 +585,23 @@ function PositionCard({
 
       <div className="flex-1" />
 
-      {/* Stake buttons */}
+      {/* Tail CTA — opens the modal */}
       <div className="mt-3">
-        <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-          TAIL {pos.bot.botName.toUpperCase()}
-        </div>
-        <div className="mt-2 flex gap-2">
-          {STAKES.map((s) => {
-            const key = `${pos.positionId}-${s}`;
-            const thisIsBusy = busyKey === key;
-            return (
-              <button
-                key={s}
-                type="button"
-                disabled={busyKey !== null}
-                onClick={() => onStake(s)}
-                className="flex-1 rounded-2xl py-3 font-black tracking-wide transition active:scale-[0.97] disabled:opacity-40"
-                style={{
-                  background: ACCENT,
-                  color: BG,
-                  fontSize: "15px",
-                  boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
-                }}
-              >
-                {thisIsBusy ? "…" : `$${s}`}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {status && (
-        <div
-          className="mt-2 text-center text-[10px] font-black uppercase tracking-widest"
-          style={{ color: DIM }}
+        <button
+          type="button"
+          onClick={onTail}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 font-black tracking-wide transition active:scale-[0.97]"
+          style={{
+            background: ACCENT,
+            color: BG,
+            fontSize: "15px",
+            boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+          }}
         >
-          {status}
-        </div>
-      )}
+          <Zap size={14} strokeWidth={3} fill={BG} />
+          TAIL {pos.bot.botName.toUpperCase()}
+        </button>
+      </div>
     </div>
   );
 }
