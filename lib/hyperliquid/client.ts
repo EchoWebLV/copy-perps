@@ -132,7 +132,7 @@ export async function getUserFillsByTime(
 // Phase 2: upgrade to WS subscription to the "trades" channel for a true
 // global liquidation stream once the resolver runs in a long-lived process.
 //
-import type { LiquidationEvent } from "@/lib/bots/types";
+import type { LiquidationEvent, WhaleOpenEvent } from "@/lib/bots/types";
 import { CURATED_WHALES } from "@/lib/hyperliquid/whales";
 
 let _buffer: LiquidationEvent[] = [];
@@ -204,4 +204,79 @@ export async function getRecentLiquidations(): Promise<LiquidationEvent[]> {
   // Drop entries older than the retention window
   _buffer = _buffer.filter((e) => e.ts >= now - BUFFER_RETENTION_MS);
   return _buffer.slice();
+}
+
+// ---------------------------------------------------------------------------
+// Whale-opens buffer — same source as liquidations, different filter
+// ---------------------------------------------------------------------------
+//
+// Polls each curated whale wallet's userFillsByTime and collects fills where
+// dir is "Open Long" or "Open Short" (excluding closes, flips, and liqs).
+// Buffer retention is wider (5 min) than the liq buffer (2 min) so a slow
+// resolver tick still catches a 30s-old whale entry. Used by Whale Shadow:
+// when a tracked wallet opens a position ≥ $500k notional, the bot mirrors
+// the direction.
+//
+// Why curated, not market-wide: HL has no public REST stream of all opens,
+// and the curated list filters out HFT/MM bots so a "whale opened" is a
+// real directional signal, not algo noise.
+
+let _openBuffer: WhaleOpenEvent[] = [];
+let _openLastFetchMs = 0;
+const OPEN_POLL_INTERVAL_MS = 5_000;
+const OPEN_BUFFER_RETENTION_MS = 5 * 60 * 1000;
+
+export async function getRecentWhaleOpens(): Promise<WhaleOpenEvent[]> {
+  const now = Date.now();
+  if (now - _openLastFetchMs <= OPEN_POLL_INTERVAL_MS) {
+    return _openBuffer.slice();
+  }
+  _openLastFetchMs = now;
+
+  const startTime = now - OPEN_BUFFER_RETENTION_MS;
+  const seen = new Set(
+    _openBuffer.map((e) => `${e.whaleAddress}:${e.asset}:${e.ts}`),
+  );
+
+  await Promise.allSettled(
+    CURATED_WHALES.map(async ({ address }) => {
+      try {
+        const r = await fetch(BASE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "userFillsByTime", user: address, startTime }),
+          cache: "no-store",
+        });
+        if (!r.ok) return;
+        const fills = (await r.json()) as HLFill[];
+        for (const f of fills) {
+          if (f.dir !== "Open Long" && f.dir !== "Open Short") continue;
+          const key = `${address}:${f.coin}:${f.time}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const side: "long" | "short" =
+            f.dir === "Open Long" ? "long" : "short";
+          const px = Number(f.px);
+          const sz = Number(f.sz);
+          if (!Number.isFinite(px) || !Number.isFinite(sz) || sz <= 0) continue;
+          _openBuffer.push({
+            asset: f.coin,
+            side,
+            notionalUsd: px * sz,
+            px,
+            ts: f.time,
+            whaleAddress: address,
+            source: "hyperliquid",
+          });
+        }
+      } catch {
+        // swallow — one whale failing shouldn't poison the buffer
+      }
+    }),
+  );
+
+  _openBuffer = _openBuffer.filter(
+    (e) => e.ts >= now - OPEN_BUFFER_RETENTION_MS,
+  );
+  return _openBuffer.slice();
 }

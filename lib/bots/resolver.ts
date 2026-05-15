@@ -1,7 +1,10 @@
 // lib/bots/resolver.ts
 import { listBots, getStrategy } from "./index";
 import { getMarksSnapshot } from "@/lib/data/marks";
-import { getRecentLiquidations } from "@/lib/hyperliquid/client";
+import {
+  getRecentLiquidations,
+  getRecentWhaleOpens,
+} from "@/lib/hyperliquid/client";
 import { getFundingRates } from "@/lib/data/cex-funding";
 import {
   openPaperPosition,
@@ -69,13 +72,19 @@ export async function tick(): Promise<{
   closed: number;
   busted: number;
 }> {
-  const [marks, liquidations, funding, crossBot] = await Promise.all([
+  const [marks, liquidations, funding, crossBot, whaleOpens] = await Promise.all([
     getMarksSnapshot(),
     getRecentLiquidations(),
     getFundingRates(),
     getCrossBotSnapshot(),
+    getRecentWhaleOpens(),
   ]);
-  const signals: ExternalSignals = { liquidations, funding };
+  const signals: ExternalSignals = {
+    liquidations,
+    funding,
+    whaleOpens,
+    crossBot: { positionsByAssetSide: crossBot.positionsByAssetSide },
+  };
 
   let opened = 0;
   let closed = 0;

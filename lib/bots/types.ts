@@ -47,11 +47,36 @@ export interface LiquidationEvent {
   source: "hyperliquid";
 }
 
+export interface WhaleOpenEvent {
+  asset: string;
+  side: "long" | "short";
+  notionalUsd: number;
+  px: number;
+  ts: number;
+  whaleAddress: string;
+  source: "hyperliquid";
+}
+
+/** Lightweight cross-bot snapshot passed into strategies that want to
+ *  react to roster-wide positioning (e.g. Contrarian fades the consensus).
+ *  Just the (asset|side) count map — strategies don't need the full
+ *  CrossBotSnapshot. */
+export interface CrossBotPositioning {
+  /** key: `${asset}|long` or `${asset}|short` → count of bots holding that side */
+  positionsByAssetSide: Map<string, number>;
+}
+
 export interface ExternalSignals {
-  // Recent liquidation events (e.g. last 60s, rolling buffer)
+  // Recent liquidation events (last ~2 min rolling buffer)
   liquidations: LiquidationEvent[];
   // Per-asset funding signal aggregated across all venues (Binance, Bybit, OKX, dYdX)
   funding: Record<string, FundingSignal>;
+  // Recent whale entries (last ~5 min rolling buffer) from curated HL wallets.
+  // Optional so legacy tests/fixtures don't need updating; resolver always populates it.
+  whaleOpens?: WhaleOpenEvent[];
+  // Snapshot of other paper-bots' open positions — Contrarian fades consensus.
+  // Optional for the same reason; resolver always populates it.
+  crossBot?: CrossBotPositioning;
 }
 
 export interface MarketContext {

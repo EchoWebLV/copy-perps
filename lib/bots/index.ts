@@ -19,6 +19,22 @@ import {
   AntiFadeStrategy,
   AntiFadeBot,
 } from "./strategies/anti-bots";
+import { VultureStrategy, VultureBot } from "./strategies/vulture";
+import {
+  FundingSniperStrategy,
+  FundingSniperBot,
+} from "./strategies/funding-sniper";
+import { ContrarianStrategy, ContrarianBot } from "./strategies/contrarian";
+import {
+  WhaleShadowStrategy,
+  WhaleShadowBot,
+} from "./strategies/whale-shadow";
+import {
+  GrokTraderStrategy,
+  GrokTraderBot,
+  ClaudeTraderStrategy,
+  ClaudeTraderBot,
+} from "./strategies/llm-trader";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -105,3 +121,9 @@ registerBot(MeanRevertMikeBot, MeanRevertMikeStrategy); // Fade
 registerBot(VolVectorHairTriggerBot, VolVectorHairTriggerStrategy); // Bolt
 registerBot(AntiSurgeBot, AntiSurgeStrategy); // Anti-Surge (mirror of Surge)
 registerBot(AntiFadeBot, AntiFadeStrategy); // Anti-Fade (mirror of Fade)
+registerBot(VultureBot, VultureStrategy); // Vulture (liquidation cascades)
+registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extremes)
+registerBot(ContrarianBot, ContrarianStrategy); // Contrarian (fades roster consensus)
+registerBot(WhaleShadowBot, WhaleShadowStrategy); // Shadow (copies tracked whales)
+registerBot(GrokTraderBot, GrokTraderStrategy); // Grok (xAI LLM trader)
+registerBot(ClaudeTraderBot, ClaudeTraderStrategy); // Claude (Anthropic LLM trader)

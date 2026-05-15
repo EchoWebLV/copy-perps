@@ -9,6 +9,12 @@ import { VOL_VECTOR_PERSONA } from "./personas/vol-vector";
 import { BOOMER_TREND_PERSONA } from "./personas/boomer-trend";
 import { ANTI_SURGE_PERSONA } from "./personas/anti-surge";
 import { ANTI_FADE_PERSONA } from "./personas/anti-fade";
+import { VULTURE_PERSONA } from "./personas/vulture";
+import { FUNDING_SNIPER_PERSONA } from "./personas/funding-sniper";
+import { CONTRARIAN_PERSONA } from "./personas/contrarian";
+import { WHALE_SHADOW_PERSONA } from "./personas/whale-shadow";
+import { GROK_TRADER_PERSONA } from "./personas/grok-trader";
+import { CLAUDE_TRADER_PERSONA } from "./personas/claude-trader";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -19,6 +25,12 @@ export const PERSONAS = {
   "boomer-trend": BOOMER_TREND_PERSONA,
   "anti-surge": ANTI_SURGE_PERSONA,
   "anti-fade": ANTI_FADE_PERSONA,
+  "vulture": VULTURE_PERSONA,
+  "funding-sniper": FUNDING_SNIPER_PERSONA,
+  "contrarian": CONTRARIAN_PERSONA,
+  "whale-shadow": WHALE_SHADOW_PERSONA,
+  "grok-trader": GROK_TRADER_PERSONA,
+  "claude-trader": CLAUDE_TRADER_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -88,6 +100,36 @@ function formatTriggerSummary(
     const fadeAction =
       trigger.flippedFromSide === "short" ? "shorting" : "longing";
     return `Fade is ${fadeAction} ${asset} because it's ${Math.abs(pctFromMean * 100).toFixed(2)}% ${direction} its 20-minute average. You're riding the move instead — opened a ${side}.`;
+  }
+  if (personaKey === "vulture") {
+    const cascade = Number(trigger.cascadeNotionalUsd ?? 0);
+    const liqSide = trigger.liquidatedSide === "long" ? "longs" : "shorts";
+    return `Just over the last minute, ${liqSide} on ${asset} got liquidated for $${(cascade / 1e6).toFixed(0)} million. You stepped in on the ${side} side at the bottom of the wick.`;
+  }
+  if (personaKey === "funding-sniper") {
+    const annualizedPct = Number(trigger.annualizedPct ?? 0);
+    const ratePerCycle = Number(trigger.fundingRate ?? 0);
+    const cycleSide = ratePerCycle > 0 ? "longs" : "shorts";
+    return `${asset} funding hit ${(Math.abs(ratePerCycle) * 100).toFixed(2)}% every 8 hours — ${cycleSide} are paying ${annualizedPct.toFixed(0)}% annualized to hold the trade. You took the other side ${side}.`;
+  }
+  if (personaKey === "contrarian") {
+    const longs = Number(trigger.longCount ?? 0);
+    const shorts = Number(trigger.shortCount ?? 0);
+    const consensusSide = trigger.consensusSide === "long" ? "long" : "short";
+    return `${longs} bots are long ${asset}, ${shorts} are short. The table is stacked ${consensusSide}, so you took the other side ${side}.`;
+  }
+  if (personaKey === "whale-shadow") {
+    const notional = Number(trigger.whaleNotionalUsd ?? 0);
+    const px = Number(trigger.whaleEntryPx ?? 0);
+    return `A tracked whale just opened a ${side} on ${asset} with $${(notional / 1e6).toFixed(2)} million size at $${px.toFixed(2)}. You opened beside them.`;
+  }
+  if (personaKey === "grok-trader" || personaKey === "claude-trader") {
+    const reasoning = String(trigger.llmReasoning ?? "");
+    const lev = Number(trigger.dynamicLeverage ?? 0);
+    if (reasoning) {
+      return `Your own reasoning: "${reasoning}". You opened a ${side} on ${asset} with ${lev}× leverage.`;
+    }
+    return `You opened a ${side} on ${asset} with ${lev}× leverage based on your reasoning.`;
   }
   return `Opened ${side} on ${asset}.`;
 }

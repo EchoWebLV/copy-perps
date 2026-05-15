@@ -110,6 +110,61 @@ const BOTS: PersonaSpec[] = [
       "Stockier wider version of a vintage brass-and-mahogany robot: same art-deco family but broader rounded skull, fuller cheek plates, a single oversized glass-dial eye in the middle of the forehead, calm dignified. Heavy and committed." +
       STYLE,
   },
+  // ── Anti-Surge / Anti-Fade (mirror bots) ────────────────────────────
+  {
+    key: "anti-surge",
+    prompt:
+      "Mirror-inverse of an aggressive red-orange hype robot: same silhouette but cool-tone slate-blue chrome instead of red, glowing icy-blue lens eyes, mouth closed in a smug knowing smirk, polished mirror-finish cheek plates reflecting fractured red highlights from offscreen, calm fading-the-chase energy." +
+      STYLE,
+  },
+  {
+    key: "anti-fade",
+    prompt:
+      "Mirror-inverse of a weathered bronze contrarian robot: same monocle-ringed silhouette but polished electric-green and matte black chrome instead of bronze, mouth set in an open grin, single glowing emerald monocle eye, scrappy trend-riding youthful energy, slight forward lean." +
+      STYLE,
+  },
+  // ── Vulture ─────────────────────────────────────────────────────────
+  {
+    key: "vulture",
+    prompt:
+      "Scavenger raptor robot. Bald gunmetal-grey angular skull with hunched neck plating, glowing blood-red lens eyes deep in sockets, hooked metallic beak slightly open with serrated edges, fan of carbon-fibre feathers around the collar, calm patient predatory expression. Picking-the-bones energy." +
+      STYLE,
+  },
+  // ── Funding Sniper ──────────────────────────────────────────────────
+  {
+    key: "funding-sniper",
+    prompt:
+      "Marksman robot. Sleek matte forest-green tactical head, single oversized cyclopean scope-lens eye glowing thin laser-red, hexagonal mesh cheek plates, communications antenna folded along the side, deeply still calm expression, faint crosshair reticle glow inside the lens. Quiet, patient, lethal." +
+      STYLE,
+  },
+  // ── Contrarian ──────────────────────────────────────────────────────
+  {
+    key: "contrarian",
+    prompt:
+      "Outsider robot. Asymmetrical split head, left half polished black chrome with a glowing white lens eye, right half polished white chrome with a glowing black lens eye, a dryly amused half-smirk built into the mouth plate. Confident standoffish vibe, takes-the-other-side energy." +
+      STYLE,
+  },
+  // ── Whale Shadow ────────────────────────────────────────────────────
+  {
+    key: "whale-shadow",
+    prompt:
+      "Stealth follower robot. Deep-ocean navy chrome head with a smooth whale-like dome forehead, large glowing teal cyclopean eye-lens with bioluminescent ripple patterns, no mouth — a subtle speaker grille slit, two streamlined antenna-fins along the temples like a whale's flukes. Quiet humble shadow-the-whale energy." +
+      STYLE,
+  },
+  // ── Grok (xAI LLM bot) ──────────────────────────────────────────────
+  {
+    key: "grok-trader",
+    prompt:
+      "AI-reasoning robot. Polished black-and-silver brushed-metal head with subtle iridescent oil-slick rainbow reflections, two glowing electric-violet lens eyes asymmetric in size, slim antenna with a single glowing pixel-cube on top, slightly cocky smirk built into the mouth plate, the letter X subtly embossed on one temple. Intellectually arrogant chaotic-good vibe." +
+      STYLE,
+  },
+  // ── Claude (Anthropic LLM bot) ──────────────────────────────────────
+  {
+    key: "claude-trader",
+    prompt:
+      "AI-reasoning robot. Smooth warm cream-white ceramic head with soft golden trim along every seam, two large gentle amber lens eyes set wide and slightly low, no visible mouth — a calm closed face plate where one would be, a single warm-gold halo ring floating just above the head. Thoughtful careful brand-new energy, measured posture." +
+      STYLE,
+  },
 ];
 
 interface OpenAiImageResponse {

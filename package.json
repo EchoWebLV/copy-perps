@@ -22,6 +22,7 @@
     "refuel:gas": "node --env-file=.env.local scripts/refuel-gas-wallet.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.77",
     "@ai-sdk/xai": "^3.0.88",
     "@coral-xyz/anchor": "^0.32.1",
     "@drift-labs/sdk": "^2.156.0",
