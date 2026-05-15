@@ -24,7 +24,7 @@ const MODEL_FALLBACK_CHAIN = [
 ] as const;
 
 const STYLE =
-  " 3D rendered robot bust, profile-picture composition, head only, perfectly centered, pure solid #000000 black background, dramatic studio rim lighting, vivid color accents, ultra-detailed metallic shading, cinematic, sharp focus, no text, no logos, no watermarks, no scenery.";
+  " Hand-painted illustrated robot character bust in the style of Machinarium by Amanita Design — head and shoulders, profile-picture composition, perfectly centered on a solid #0a0a0a near-black background. Aged rusty copper and brass plating with visible rivets, bolts, weathered patina and verdigris, exposed bundles of copper wire and tarnished tubing, riveted metal panels with peeling old paint. Big round expressive light-bulb eyes that glow warmly. Charmingly wonky asymmetric proportions, faint hand-drawn ink outlines, watercolor texture, painterly brush strokes, soft warm shadows. Melancholic-but-lovable adventure-game character energy. No text, no logos, no watermarks, no scenery.";
 
 interface PersonaSpec {
   key: string;
@@ -38,35 +38,35 @@ const BOTS: PersonaSpec[] = [
   // it represents (a whale, a satellite, a sniper, a wave-rider),
   // not a generic humanoid robot in different colors.
 
-  // Whale — mirrors a real Hyperliquid whale. Robot whale.
+  // Whale — mirrors a real Hyperliquid whale. Mechanical whale character.
   {
     key: "whale",
     prompt:
-      "Robotic mechanical whale head, viewed three-quarters facing camera. Massive smooth cobalt-blue and brushed-titanium chrome plating shaped exactly like a humpback whale's head — rounded dome forehead, long curved lower jaw, two pectoral fin elements visible at the base of the neck, a chrome blowhole on top with faint steam exhaust. A single huge glowing aqua-cyan cyclopean eye-lens with concentric ripple-rings on the side of the head. Calm, gentle, mighty presence. Filling the frame head-only." +
+      "A charmingly wonky mechanical whale-headed robot character, three-quarter view, head and shoulders. The head is shaped like a humpback whale — rounded forehead, long curved lower jaw, made of riveted patchwork copper and weathered brass plates with deep-blue oxidation streaks suggesting the sea, a small dented chrome blowhole on top puffing a wisp of steam, copper-wire baleen tendrils hanging from the jaw, two tiny bent-brass pectoral-fin elements riveted at the collar. One enormous round single light-bulb eye on the side of the head glowing warm amber, a tiny ship-porthole window on the temple. Gentle giant melancholic expression." +
       STYLE,
   },
 
-  // Native — mirrors a top Pacifica wallet. Solana cyber-ronin.
+  // Native — mirrors a top Pacifica wallet. Steampunk samurai ronin.
   {
     key: "native",
     prompt:
-      "Solana-native cyber-ronin robot head, three-quarter view. Sleek obsidian and chrome face plate with vivid Solana-gradient (electric-purple flowing into hot-magenta flowing into neon-mint) energy streaks pulsing along every seam, sharp samurai-style cheek guards, a single horizontal slit-eye glowing magenta, a low chrome topknot antenna swept back, two small gradient flag-fins along the temples. Calm warrior-pride home-team energy. Filling the frame head-only." +
+      "A charmingly wonky steampunk-samurai robot character, three-quarter view, head and shoulders. Aged bronze and copper kabuto-style helmet with rivets, weathered verdigris-green oxidation streaks running along the seams, riveted samurai cheek-guard plates flaring out, a small brass topknot antenna sweeping back with a tiny glowing amber bulb at its tip, two small bronze flag-fins on the temples. One horizontal slit-eye visor glowing warm orange across the face, faint ink lines on the armor. Calm warrior-pride expression." +
       STYLE,
   },
 
-  // Sniper — fades cross-CEX funding extremes. Tactical sniper robot.
+  // Sniper — fades cross-CEX funding extremes. Steampunk marksman.
   {
     key: "funding-sniper",
     prompt:
-      "Tactical sniper robot head, three-quarter view. Matte forest-green and gunmetal plating with hexagonal mesh cheek guards, a massive oversized cyclopean rifle-scope eye-lens dominating the face — glass front with thin laser-red crosshair reticle inside, scope mounting rails on top, twin range-finding antenna-spikes folded back along the crown, a small comms patch on one temple, faint ghillie-strand carbon fibers along the neck collar. Quiet, patient, lethal stillness. Filling the frame head-only." +
+      "A charmingly wonky steampunk marksman robot character, three-quarter view, head and shoulders. Aged olive-bronze and copper plating with weathered rivets, hexagonal hammered-metal cheek guards, a giant oversized brass spyglass / monocle telescope tube replacing the face — multiple telescoping segments with rivet bands, an amber glass front lens with a thin glowing crosshair etched inside, twin brass range-finder antenna-spikes folded back across the crown, a small leather comms patch on one temple, frayed copper ghillie-strand wires draped over the shoulder collar. Quiet patient stillness." +
       STYLE,
   },
 
-  // Pulse — Grok 4.3 + X live search. Communications satellite robot.
+  // Pulse — Grok 4.3 + X live search. Steampunk satellite robot.
   {
     key: "pulse",
     prompt:
-      "Communications-satellite robot head, three-quarter view. Polished midnight-blue chrome dome-skull shaped like a comms satellite — a single large dish-antenna face replacing a normal face, with a glowing electric-cyan emitter dot at the center, twin gold-foil solar-panel wings flaring out from the temples like ears, three smaller whip-antennas of varying lengths rising from the crown each tipped with a tiny blinking white pulse light, faint waveform engraving on the throat collar. Always-listening always-broadcasting energy. Filling the frame head-only." +
+      "A charmingly wonky steampunk satellite-headed robot character, three-quarter view, head and shoulders. The face is a large dented copper-and-brass dish antenna replacing where eyes and mouth would be — a riveted bowl shape with a single glowing warm-amber emitter bulb at the dish center, twin hammered-brass solar-panel wings flaring out from the temples like ears with patches of verdigris-green oxidation, three thin brass whip-antennas of varying lengths rising from the crown each tipped with a tiny glowing copper bulb, faint sound-wave ripples etched into the collar plate. Always-listening eccentric eavesdropper energy." +
       STYLE,
   },
 
