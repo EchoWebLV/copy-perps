@@ -20,9 +20,42 @@
 // the same data the technical bots have and see if context-awareness
 // alone produces an equity curve.
 
-import { generateText } from "ai";
+import { readFileSync } from "node:fs";
+import { generateObject } from "ai";
 import { xai } from "@ai-sdk/xai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { z } from "zod";
+
+// Read a single env var from .env.local at module-load time. Used as a
+// fallback when the running Node process started before the var was
+// added to .env.local (the dev server only reads .env files at boot).
+function readFromEnvLocal(name: string): string | undefined {
+  try {
+    const txt = readFileSync(".env.local", "utf-8");
+    const m = txt.match(new RegExp("^" + name + "=(.+)$", "m"));
+    const v = m?.[1].trim();
+    if (!v) return undefined;
+    return v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
+  } catch {
+    return undefined;
+  }
+}
+
+const ANTHROPIC_KEY =
+  (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.length > 0
+    ? process.env.ANTHROPIC_API_KEY
+    : undefined) ?? readFromEnvLocal("ANTHROPIC_API_KEY");
+
+// @ai-sdk/anthropic v3.0.77 has a bug where the default provider posts to
+// https://api.anthropic.com/messages (missing the /v1/ segment), which 404s
+// against the real API. Pin the baseURL explicitly so calls land at
+// /v1/messages, and pass the key explicitly because v3.0.77 doesn't fall
+// back to ANTHROPIC_API_KEY when other options are passed. Drop both
+// workarounds once we move to v4.
+const anthropic = createAnthropic({
+  baseURL: "https://api.anthropic.com/v1",
+  apiKey: ANTHROPIC_KEY,
+});
 import { getCandles } from "@/lib/data/candles";
 import type {
   BotConfig,
@@ -52,14 +85,16 @@ interface LlmTraderParams {
   maxLeverage: number;
 }
 
-interface LlmDecision {
-  asset: string;
-  side: "long" | "short" | "skip";
-  leverage: number;
-  takeProfitPct: number;
-  holdMinutes: number;
-  reasoning: string;
-}
+const decisionSchema = z.object({
+  asset: z.enum(["BTC", "ETH", "SOL"]),
+  side: z.enum(["long", "short", "skip"]),
+  leverage: z.number().int().min(1).max(20),
+  takeProfitPct: z.number().min(0).max(0.05),
+  holdMinutes: z.number().int().min(1).max(360),
+  reasoning: z.string().max(280),
+});
+
+type LlmDecision = z.infer<typeof decisionSchema>;
 
 // Module-scoped per-strategy cooldown so a bot doesn't burn an LLM call
 // every 60-second resolver tick.
@@ -103,53 +138,35 @@ function buildEntryFromDecision(
   };
 }
 
-async function callLlm(
+async function callLlmDecision(
   provider: LlmProvider,
   modelId: string,
   prompt: string,
-): Promise<string> {
-  if (provider === "xai") {
-    const r = await generateText({
-      model: xai(modelId),
+): Promise<LlmDecision | null> {
+  // generateObject uses the provider's native tool/JSON-schema mode so
+  // we always get a typed, validated object back — no fragile string
+  // parsing of the model's prose.
+  try {
+    if (provider === "xai") {
+      const r = await generateObject({
+        model: xai(modelId),
+        schema: decisionSchema,
+        prompt,
+        maxOutputTokens: 400,
+      });
+      return r.object;
+    }
+    const r = await generateObject({
+      model: anthropic(modelId),
+      schema: decisionSchema,
       prompt,
       maxOutputTokens: 400,
-      temperature: 0.4,
     });
-    return r.text.trim();
-  }
-  const r = await generateText({
-    model: anthropic(modelId),
-    prompt,
-    maxOutputTokens: 400,
-    temperature: 0.4,
-  });
-  return r.text.trim();
-}
-
-// Parse the model's response. We expect a JSON object on the last line
-// of the response. The reasoning before it is free text.
-function parseDecision(raw: string): LlmDecision | null {
-  // Look for the last JSON-looking line.
-  const jsonMatch = raw.match(/\{[\s\S]*\}\s*$/);
-  if (!jsonMatch) return null;
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (parsed && typeof parsed === "object") {
-      const side = String(parsed.side ?? "").toLowerCase();
-      if (side !== "long" && side !== "short" && side !== "skip") return null;
-      return {
-        asset: String(parsed.asset ?? "").toUpperCase(),
-        side: side as "long" | "short" | "skip",
-        leverage: Number(parsed.leverage ?? 0),
-        takeProfitPct: Number(parsed.takeProfitPct ?? 0.01),
-        holdMinutes: Number(parsed.holdMinutes ?? 60),
-        reasoning: String(parsed.reasoning ?? ""),
-      };
-    }
-  } catch {
+    return r.object;
+  } catch (err) {
+    console.warn(`[llm-trader] ${provider}/${modelId} generateObject failed:`, err);
     return null;
   }
-  return null;
 }
 
 async function buildMarketBrief(): Promise<string> {
@@ -250,18 +267,15 @@ ${marketBrief}
 External signals:
 ${signalsBrief}
 
-Decide whether to OPEN a new position right now. You can pick ONE asset (BTC/ETH/SOL) or skip. Be selective — trading often is the death of edge.
+Decide whether to OPEN a new position right now. Return a structured decision: pick ONE asset (BTC/ETH/SOL) and side (long/short), or set side="skip" if nothing is worth taking.
 
 Constraints:
-- Leverage between 3 and 15. Higher conviction = higher leverage, but be honest.
-- Take-profit between 0.4% and 2% (price move on the asset, not on stake).
-- Hold time between 30 and 240 minutes.
-- Skip if no clear setup exists. Most ticks should be skip.
+- leverage: integer 3-15. Higher conviction = higher leverage.
+- takeProfitPct: 0.004-0.02 (0.4% to 2% price move on the asset).
+- holdMinutes: 30-240.
+- reasoning: one short sentence (max 280 chars) citing a specific price level, regime, or signal — NOT trading jargon ("z-score", "bps") but plain English ("BTC just broke $112k", "funding cooling", "Shadow followed a whale long").
 
-Respond with a short paragraph of reasoning, then ON THE LAST LINE a single JSON object with this exact shape:
-{"asset":"BTC|ETH|SOL","side":"long|short|skip","leverage":<int>,"takeProfitPct":<float, e.g. 0.008 for 0.8%>,"holdMinutes":<int>,"reasoning":"<one short sentence>"}
-
-If skipping, still emit JSON with side="skip" and the other fields at 0.`;
+Be selective but not paralyzed — if you see a clean setup (clear direction, recent confirmation, alignment with funding or whales), take the trade. Skipping every tick is just as bad as overtrading.`;
 
 export function createLlmTraderStrategy(p: LlmTraderParams): Strategy {
   return {
@@ -307,22 +321,12 @@ export function createLlmTraderStrategy(p: LlmTraderParams): Strategy {
       const signalsBrief = buildSignalsBrief(signals);
       const prompt = PROMPT_TEMPLATE(p.id, marketBrief, signalsBrief);
 
-      let raw: string;
-      try {
-        raw = await callLlm(p.provider, p.modelId, prompt);
-      } catch (err) {
-        console.warn(`[${p.id}] LLM call failed:`, err);
-        return null;
-      }
-      const decision = parseDecision(raw);
+      const decision = await callLlmDecision(p.provider, p.modelId, prompt);
+      console.log(
+        `[${p.id}] decision:`,
+        decision ? JSON.stringify(decision) : "null",
+      );
       if (!decision || decision.side === "skip") return null;
-      if (
-        !ALLOWED_MARKETS.includes(
-          decision.asset as (typeof ALLOWED_MARKETS)[number],
-        )
-      ) {
-        return null;
-      }
 
       // If the LLM picked the asset we're on right now, return immediately.
       // Otherwise stash for the matching iteration later in this tick.
