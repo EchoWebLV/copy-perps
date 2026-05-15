@@ -32,133 +32,42 @@ interface PersonaSpec {
 }
 
 const BOTS: PersonaSpec[] = [
-  // ── Liquidation Lizard family ────────────────────────────────────────
-  {
-    key: "liquidation-lizard",
-    prompt:
-      "Predatory hunter robot. Reptilian-plated angular skull, mouth ajar revealing sharp white robotic fangs, glowing acid-yellow slit eyes, dark gunmetal-green chrome plating, exposed servo-tendons in jaw, single curved horn over each temple. Aggressive, smug, lurking energy." +
-      STYLE,
-  },
-  {
-    key: "liquidation-lizard-jr",
-    prompt:
-      "Junior version of a predatory hunter robot: same dark gunmetal-green chrome family but cuter, smaller, scrappier, slightly cartoony proportions, oversized acid-yellow round eyes, one stubby antenna, tiny robotic fangs in a curious open mouth, pet-like vibe." +
-      STYLE,
-  },
-  // ── Funding Phoebe family ────────────────────────────────────────────
-  {
-    key: "funding-phoebe",
-    prompt:
-      "Quant analyst robot. Sleek clean white-and-chrome head, single large glowing cyan cyclopean eye-lens, thin telescoping antenna with a tiny dish, soft inner blue glow, smooth featureless face plate. Cold, precise, analytical." +
-      STYLE,
-  },
-  {
-    key: "funding-phoebe-lite",
-    prompt:
-      "Stripped-down lite version of a white-and-chrome quant analyst robot: matte off-white finish, missing chest and cheek panels exposing copper wiring, simpler smaller cyan eye-lens, no antenna, slightly tilted head, casual budget-build vibe." +
-      STYLE,
-  },
-  // ── Mean-Revert Mike family ──────────────────────────────────────────
-  {
-    key: "mean-revert-mike",
-    prompt:
-      "Weathered contrarian robot. Bronze-and-copper paint job with light tarnish and scratches, oversized monocle-style ring around one mechanical eye, single robotic eyebrow arc raised skeptically, slight smirk built into the mouth plate. Cynical, patient, old-timer." +
-      STYLE,
-  },
-  {
-    key: "mean-revert-mike-patient",
-    prompt:
-      "Zen older sibling of a bronze contrarian robot: same bronze-and-copper family but smoother polished surfaces, no monocle, soft glowing amber meditation orb between the brows, beard-like cable strands hanging from the jaw, calm closed mechanical eyelids. Monk-like, deeply patient." +
-      STYLE,
-  },
-  // ── Momo Max family ─────────────────────────────────────────────────
-  {
-    key: "momo-max",
-    prompt:
-      "Hype energy robot. Glossy orange-and-red metal, mouth open mid-shout revealing speaker-grille throat, two upright antennas with tiny sirens on top, glowing red lens eyes, kinetic motion shimmer around the head. Adrenaline, hype, riding the wave." +
-      STYLE,
-  },
-  {
-    key: "momo-max-aggressive",
-    prompt:
-      "Extreme variant of a red-orange hype robot: same color family but with aggressive black spikes around the skull, red-hot glowing seams, exhaust vents on the cheeks emitting thin smoke, one larger predatory mono-lens eye glowing crimson, snarling open mouth. Pure degen energy." +
-      STYLE,
-  },
-  // ── Vol Vector family ───────────────────────────────────────────────
-  {
-    key: "vol-vector",
-    prompt:
-      "Mathematical geometric robot. Crystalline polyhedron skull made of intersecting flat planes, glowing neon purple and cyan vector lines along every edge, no traditional eyes — a triangular glowing slit where the face would be, calm calculating presence." +
-      STYLE,
-  },
-  {
-    key: "vol-vector-hair-trigger",
-    prompt:
-      "Jittery sharper variant of a crystalline polyhedron robot: same purple-cyan vector family but fractured into more shards, head split along a glowing seam, brighter pulsing neon, sharper points, glitch-art aesthetic, ready to fire." +
-      STYLE,
-  },
-  // ── Boomer Trend family ─────────────────────────────────────────────
-  {
-    key: "boomer-trend",
-    prompt:
-      "Vintage analog robot. Polished brass and dark mahogany head, art-deco face plate symmetry, two small round glass dial eyes showing tiny needles, a built-in pocket-watch face on the forehead, slow wise expression. Old-school Wall Street." +
-      STYLE,
-  },
-  {
-    key: "boomer-trend-wide",
-    prompt:
-      "Stockier wider version of a vintage brass-and-mahogany robot: same art-deco family but broader rounded skull, fuller cheek plates, a single oversized glass-dial eye in the middle of the forehead, calm dignified. Heavy and committed." +
-      STYLE,
-  },
-  // ── Anti-Surge / Anti-Fade (mirror bots) ────────────────────────────
-  {
-    key: "anti-surge",
-    prompt:
-      "Mirror-inverse of an aggressive red-orange hype robot: same silhouette but cool-tone slate-blue chrome instead of red, glowing icy-blue lens eyes, mouth closed in a smug knowing smirk, polished mirror-finish cheek plates reflecting fractured red highlights from offscreen, calm fading-the-chase energy." +
-      STYLE,
-  },
-  {
-    key: "anti-fade",
-    prompt:
-      "Mirror-inverse of a weathered bronze contrarian robot: same monocle-ringed silhouette but polished electric-green and matte black chrome instead of bronze, mouth set in an open grin, single glowing emerald monocle eye, scrappy trend-riding youthful energy, slight forward lean." +
-      STYLE,
-  },
-  // ── Vulture ─────────────────────────────────────────────────────────
+  // ── Vulture (liquidation-cascade fader) ─────────────────────────────
   {
     key: "vulture",
     prompt:
       "Scavenger raptor robot. Bald gunmetal-grey angular skull with hunched neck plating, glowing blood-red lens eyes deep in sockets, hooked metallic beak slightly open with serrated edges, fan of carbon-fibre feathers around the collar, calm patient predatory expression. Picking-the-bones energy." +
       STYLE,
   },
-  // ── Funding Sniper ──────────────────────────────────────────────────
+  // ── Funding Sniper (funding-extreme fader) ──────────────────────────
   {
     key: "funding-sniper",
     prompt:
       "Marksman robot. Sleek matte forest-green tactical head, single oversized cyclopean scope-lens eye glowing thin laser-red, hexagonal mesh cheek plates, communications antenna folded along the side, deeply still calm expression, faint crosshair reticle glow inside the lens. Quiet, patient, lethal." +
       STYLE,
   },
-  // ── Contrarian ──────────────────────────────────────────────────────
+  // ── Contrarian (fades roster consensus) ─────────────────────────────
   {
     key: "contrarian",
     prompt:
       "Outsider robot. Asymmetrical split head, left half polished black chrome with a glowing white lens eye, right half polished white chrome with a glowing black lens eye, a dryly amused half-smirk built into the mouth plate. Confident standoffish vibe, takes-the-other-side energy." +
       STYLE,
   },
-  // ── Whale Shadow ────────────────────────────────────────────────────
+  // ── Whale Shadow (copies tracked whales) ────────────────────────────
   {
     key: "whale-shadow",
     prompt:
       "Stealth follower robot. Deep-ocean navy chrome head with a smooth whale-like dome forehead, large glowing teal cyclopean eye-lens with bioluminescent ripple patterns, no mouth — a subtle speaker grille slit, two streamlined antenna-fins along the temples like a whale's flukes. Quiet humble shadow-the-whale energy." +
       STYLE,
   },
-  // ── Grok (xAI LLM bot) ──────────────────────────────────────────────
+  // ── Grok (xAI LLM trader) ───────────────────────────────────────────
   {
     key: "grok-trader",
     prompt:
       "AI-reasoning robot. Polished black-and-silver brushed-metal head with subtle iridescent oil-slick rainbow reflections, two glowing electric-violet lens eyes asymmetric in size, slim antenna with a single glowing pixel-cube on top, slightly cocky smirk built into the mouth plate, the letter X subtly embossed on one temple. Intellectually arrogant chaotic-good vibe." +
       STYLE,
   },
-  // ── Claude (Anthropic LLM bot) ──────────────────────────────────────
+  // ── Claude (Anthropic LLM trader) ───────────────────────────────────
   {
     key: "claude-trader",
     prompt:

@@ -1,28 +1,20 @@
-// scripts/reset-eleven.ts
+// scripts/reset-six.ts
 //
-// Resets the paper-bot arena to the 11-bot test setup:
+// Resets the paper-bot arena to the 6-bot focused test setup:
 //
-//   Technical traders (base):
-//     • Surge  (momo-max-aggressive)        smarter v2, BTC/ETH/SOL, dyn 6-18x
-//     • Fade   (mean-revert-mike)           smarter v2, BTC/ETH/SOL, dyn 5-15x
-//     • Bolt   (vol-vector-hair-trigger)    smarter v2, BTC/ETH/SOL, dyn 6-14x
+//   Structural-edge specialists (4):
+//     • Vulture     — fades $100M+ liquidation cascades.       dyn 8-20x
+//     • Sniper      — fades funding extremes >0.5%/8h.         dyn 4-12x
+//     • Contrarian  — fades roster consensus (≥3 same-side).   dyn 5-12x
+//     • Shadow      — copies curated HL whale opens ≥$500k.    dyn 5-15x
 //
-//   Mirror tests:
-//     • Anti-Surge — flips Surge's side. Same trigger, opposite direction.
-//     • Anti-Fade  — flips Fade's side.  Same trigger, opposite direction.
+//   LLM-driven traders (2):
+//     • Grok    — xAI grok-4.3, 5-min eval cooldown.    dyn 3-15x
+//     • Claude  — Anthropic claude-opus-4-7, same.       dyn 3-15x
 //
-//   Structural-edge specialists:
-//     • Vulture          fades $100M+ liquidation cascades, dyn 8-20x
-//     • Sniper           fades funding extremes >0.5%/8h, dyn 4-12x
-//     • Contrarian       fades roster consensus (≥3 bots same side), dyn 5-12x
-//     • Shadow           copies curated HL whale opens ≥$500k, dyn 5-15x
-//
-//   LLM-driven traders:
-//     • Grok   — xAI grok-4.3, 5-min eval cooldown, dyn 3-15x
-//     • Claude — Anthropic claude-opus-4-7, 5-min eval cooldown, dyn 3-15x
-//
-// Wipes ALL paper_positions, deletes every bot row not in the target
-// set, then upserts the 11 with fresh $10,000 balances. Safe to rerun.
+// Wipes ALL paper_positions, deletes every bot row that isn't one of
+// the 6 target bots (so Surge/Fade/Bolt/Anti-X get removed from the
+// DB), then upserts the 6 with fresh $10,000 balances. Safe to rerun.
 
 import "dotenv/config";
 import { neon } from "@neondatabase/serverless";
@@ -30,75 +22,6 @@ import { neon } from "@neondatabase/serverless";
 const STARTING_BALANCE = 10_000;
 
 const TARGET_BOTS = {
-  "momo-max-aggressive": {
-    name: "Surge",
-    avatarEmoji: "🚀",
-    personaVoiceKey: "momo-max",
-    strategyKey: "momo-max-aggressive",
-    config: {
-      timeframe: "1m",
-      candleCount: 6,
-      breakoutPct: 0.003,
-      volumeMultiplier: 1.2,
-      exitFavorablePct: 0.003,
-      maxHoldMs: 5 * 60 * 1000,
-      leverage: 12,
-      minLeverage: 6,
-      maxLeverage: 18,
-      regimesAllowed: [] as string[],
-    },
-  },
-  "mean-revert-mike": {
-    name: "Fade",
-    avatarEmoji: "🎯",
-    personaVoiceKey: "mean-revert-mike",
-    strategyKey: "mean-revert-mike",
-    config: {
-      timeframe: "1m",
-      candleCount: 20,
-      zEntryThreshold: 2.0,
-      exitFavorablePct: 0.003,
-      maxHoldMs: 10 * 60 * 1000,
-      leverage: 10,
-      minLeverage: 5,
-      maxLeverage: 15,
-      regimesAllowed: [] as string[],
-    },
-  },
-  "vol-vector-hair-trigger": {
-    name: "Bolt",
-    avatarEmoji: "💥",
-    personaVoiceKey: "vol-vector",
-    strategyKey: "vol-vector-hair-trigger",
-    config: {
-      recentTimeframe: "1m",
-      recentCount: 5,
-      baselineTimeframe: "1m",
-      baselineCount: 30,
-      volMultiplier: 1.5,
-      trendConsistencyMin: 0.5,
-      exitFavorablePct: 0.004,
-      maxHoldMs: 6 * 60 * 1000,
-      leverage: 10,
-      minLeverage: 6,
-      maxLeverage: 14,
-      regimesAllowed: [] as string[],
-    },
-  },
-  "anti-surge": {
-    name: "Anti-Surge",
-    avatarEmoji: "🪞",
-    personaVoiceKey: "anti-surge",
-    strategyKey: "anti-surge",
-    config: { inverseOf: "momo-max-aggressive" },
-  },
-  "anti-fade": {
-    name: "Anti-Fade",
-    avatarEmoji: "🪞",
-    personaVoiceKey: "anti-fade",
-    strategyKey: "anti-fade",
-    config: { inverseOf: "mean-revert-mike" },
-  },
   vulture: {
     name: "Vulture",
     avatarEmoji: "🦅",
@@ -253,7 +176,7 @@ async function main() {
       console.log(`  ⚠ ${botId} upsert returned no rows`);
     } else {
       console.log(
-        `  ✓ ${botId.padEnd(28)} name="${String(row.name).padEnd(12)}" balance=$${row.balance_usd}`,
+        `  ✓ ${botId.padEnd(20)} name="${String(row.name).padEnd(12)}" balance=$${row.balance_usd}`,
       );
     }
   }

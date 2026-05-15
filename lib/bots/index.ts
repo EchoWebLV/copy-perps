@@ -1,24 +1,9 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
-import {
-  MeanRevertMikeStrategy,
-  MeanRevertMikeBot,
-} from "./strategies/mean-revert-mike";
-import {
-  MomoMaxAggressiveStrategy,
-  MomoMaxAggressiveBot,
-} from "./strategies/momo-max";
-import {
-  VolVectorHairTriggerStrategy,
-  VolVectorHairTriggerBot,
-} from "./strategies/vol-vector";
-import {
-  AntiSurgeStrategy,
-  AntiSurgeBot,
-  AntiFadeStrategy,
-  AntiFadeBot,
-} from "./strategies/anti-bots";
+// Dormant bot families (Surge/Fade/Bolt/Anti-Surge/Anti-Fade) still live
+// in strategies/ + personas/ but aren't imported here — the registry
+// only loads what's actively trading.
 import { VultureStrategy, VultureBot } from "./strategies/vulture";
 import {
   FundingSniperStrategy,
@@ -112,15 +97,11 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// ── Alpha-arena roster: 3 aggressive bots, all candle-driven, no rare
-// external-signal dependencies. The other 9 bot families still live in
-// strategies/ as code (admin can clone them back if needed) but aren't
-// registered at module load.
-registerBot(MomoMaxAggressiveBot, MomoMaxAggressiveStrategy); // Surge
-registerBot(MeanRevertMikeBot, MeanRevertMikeStrategy); // Fade
-registerBot(VolVectorHairTriggerBot, VolVectorHairTriggerStrategy); // Bolt
-registerBot(AntiSurgeBot, AntiSurgeStrategy); // Anti-Surge (mirror of Surge)
-registerBot(AntiFadeBot, AntiFadeStrategy); // Anti-Fade (mirror of Fade)
+// ── Active arena roster: 4 structural-edge specialists + 2 LLM traders.
+// Surge / Fade / Bolt / Anti-Surge / Anti-Fade live in strategies/ + personas/
+// as code in case we want to revive them, but they're not registered at
+// module load. The remaining 9 legacy bot families (boomer-trend, etc.)
+// are likewise dormant — admin can clone any of them back if needed.
 registerBot(VultureBot, VultureStrategy); // Vulture (liquidation cascades)
 registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extremes)
 registerBot(ContrarianBot, ContrarianStrategy); // Contrarian (fades roster consensus)
