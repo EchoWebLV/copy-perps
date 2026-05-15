@@ -4,6 +4,7 @@ import { bots, paperPositions } from "@/lib/db/schema";
 import { sql, eq, desc } from "drizzle-orm";
 import { getStrategyWiring } from "@/lib/bots/wiring";
 import { syncDbBotsToRegistry } from "@/lib/admin/sync";
+import { avatarImageForBot } from "@/lib/bots/avatars";
 
 interface BotRow {
   id: string;
@@ -139,9 +140,19 @@ export default async function AdminBotsPage() {
                       href={`/admin/bots/${b.id}`}
                       className="flex items-center gap-3"
                     >
-                      <span className="text-2xl leading-none">
-                        {b.avatarEmoji}
-                      </span>
+                      {avatarImageForBot(b.id) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={avatarImageForBot(b.id) as string}
+                          alt=""
+                          className="h-8 w-8 rounded-full object-cover ring-1 ring-zinc-800"
+                          draggable={false}
+                        />
+                      ) : (
+                        <span className="text-2xl leading-none">
+                          {b.avatarEmoji}
+                        </span>
+                      )}
                       <div>
                         <div className="font-medium text-white">{b.name}</div>
                         <div className="font-mono text-xs text-zinc-500">

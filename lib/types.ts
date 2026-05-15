@@ -136,6 +136,9 @@ export interface BotSignal extends BaseSignal {
     botId: string;
     botName: string;
     avatarEmoji: string;
+    // Generated robot portrait URL when available; null falls back to the
+    // emoji. See lib/bots/avatars.ts.
+    avatarImageUrl: string | null;
     // Equity: cash + unrealized PnL across open positions. This is the
     // headline "what this bot is worth" number — what the BANKROLL chip
     // shows. Cash-only is exposed separately as cashUsd.
@@ -165,6 +168,7 @@ export interface BotSignal extends BaseSignal {
         botId: string;
         botName: string;
         avatarEmoji: string;
+        avatarImageUrl: string | null;
       }>;
     }>;
     stats: {

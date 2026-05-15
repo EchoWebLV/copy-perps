@@ -7,6 +7,7 @@ import { getStrategyWiring } from "@/lib/bots/wiring";
 import { getMarksSnapshot } from "@/lib/data/marks";
 import { computeLivePaperPnlPct } from "@/lib/bots/paper";
 import { BotEditForm, type BotEditValues } from "@/components/admin/BotEditForm";
+import { avatarImageForBot } from "@/lib/bots/avatars";
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +138,17 @@ export default async function BotDetailPage({ params }: PageParams) {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-6">
         <div className="flex items-center gap-4">
-          <span className="text-5xl leading-none">{bot.avatarEmoji}</span>
+          {avatarImageForBot(bot.id) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarImageForBot(bot.id) as string}
+              alt=""
+              className="h-16 w-16 rounded-full object-cover ring-1 ring-zinc-800"
+              draggable={false}
+            />
+          ) : (
+            <span className="text-5xl leading-none">{bot.avatarEmoji}</span>
+          )}
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold tracking-tight">

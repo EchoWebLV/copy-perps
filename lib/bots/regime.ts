@@ -34,7 +34,7 @@ const VALID_REGIMES = new Set<Regime>([
   "chop",
 ]);
 
-const MODEL_ID = "grok-4.20-non-reasoning";
+const MODEL_ID = "grok-4.3";
 const TTL_MS = 60_000;
 const _cache = new Map<string, { snapshot: RegimeSnapshot; expiresAt: number }>();
 

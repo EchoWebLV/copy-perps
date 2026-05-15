@@ -10,8 +10,9 @@ import type {
 } from "../types";
 import { clampConviction } from "../types";
 import { getRegime, type Regime } from "../regime";
+import { leverageFromConviction } from "../leverage";
 
-const ALLOWED_MARKETS = ["SOL", "HYPE", "AVAX", "DOGE", "XRP"] as const;
+const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
 
 interface MikeParams {
   id: string;
@@ -21,6 +22,8 @@ interface MikeParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  minLeverage?: number;
+  maxLeverage?: number;
   regimesAllowed: Regime[];
 }
 
@@ -51,9 +54,6 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
       ) {
         return null;
       }
-      // Regime gate: skip if classifier says we're in a regime the strategy
-      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
-      // fire normally.
       if (p.regimesAllowed.length > 0) {
         const regime = await getRegime(ctx.asset);
         if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
@@ -65,13 +65,31 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
       if (z === null) return null;
       if (Math.abs(z) < p.zEntryThreshold) return null;
       const side: "long" | "short" = z > 0 ? "short" : "long";
-      const conviction = clampConviction((Math.abs(z) - 2.5) / 1.5);
+      // Conviction scales how far past the threshold we are. At
+      // threshold = 0.0 conviction (clamped to 0.3 floor); 1.5σ past it
+      // = 1.0 conviction. Bigger stretch = juicier mean-revert bet =
+      // bigger leverage.
+      const overshoot = Math.abs(z) - p.zEntryThreshold;
+      const conviction = clampConviction(overshoot / 1.5);
+      const leverage = leverageFromConviction(p, conviction);
+      // Plain-English number for narrations: percentage deviation from
+      // the rolling mean. The narrator quotes this instead of z-score
+      // so the thesis reads like English, not a stats lecture.
+      const meanPrice = closes.reduce((s, v) => s + v, 0) / closes.length;
+      const pctFromMean = meanPrice > 0 ? (ctx.mark - meanPrice) / meanPrice : 0;
       return {
         asset: ctx.asset,
         side,
-        leverage: p.leverage,
+        leverage,
         conviction,
-        triggerMeta: { zScore: z, threshold: p.zEntryThreshold },
+        triggerMeta: {
+          zScore: z,
+          threshold: p.zEntryThreshold,
+          pctFromMean,
+          meanPrice,
+          conviction,
+          dynamicLeverage: leverage,
+        },
       };
     },
 
@@ -86,15 +104,21 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
   };
 }
 
+// Fade — alpha-arena bot. Smarter v2: BTC/ETH/SOL only, z-threshold
+// raised 1.2 → 2.0 (fades real stretches, not noise), dynamic leverage
+// 5-15x scaled by overshoot. Tighter triggers cut trade frequency ~half
+// so fewer mean-revert-eats-trend disasters.
 export const MeanRevertMikeStrategy = createMeanRevertMikeStrategy({
   id: "mean-revert-mike",
   timeframe: "1m",
-  candleCount: 30,
-  zEntryThreshold: 2.5,
-  exitFavorablePct: 0.006,
-  maxHoldMs: 30 * 60 * 1000,
-  leverage: 25,
-  regimesAllowed: ["mean-reverting", "chop"],
+  candleCount: 20,
+  zEntryThreshold: 2.0,
+  exitFavorablePct: 0.003,
+  maxHoldMs: 10 * 60 * 1000,
+  leverage: 10,
+  minLeverage: 5,
+  maxLeverage: 15,
+  regimesAllowed: [],
 });
 
 export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
@@ -111,18 +135,20 @@ export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
 export const MeanRevertMikeBot: BotConfig = {
   id: "mean-revert-mike",
   parentId: null,
-  name: "Mean-Revert Mike",
+  name: "Fade",
   avatarEmoji: "🎯",
   personaVoiceKey: "mean-revert-mike",
   strategyKey: "mean-revert-mike",
   config: {
     timeframe: "1m",
-    candleCount: 30,
-    zEntryThreshold: 2.5,
-    exitFavorablePct: 0.006,
-    maxHoldMs: 30 * 60 * 1000,
-    leverage: 25,
-    regimesAllowed: ["mean-reverting", "chop"],
+    candleCount: 20,
+    zEntryThreshold: 2.0,
+    exitFavorablePct: 0.003,
+    maxHoldMs: 10 * 60 * 1000,
+    leverage: 10,
+    minLeverage: 5,
+    maxLeverage: 15,
+    regimesAllowed: [],
   },
   status: "paper",
 };

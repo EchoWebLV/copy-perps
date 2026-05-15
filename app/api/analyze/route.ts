@@ -7,10 +7,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Direct xAI provider (uses XAI_API_KEY from env). Model is the latest
-// non-reasoning variant — output-focused, low-latency, no chain-of-thought.
-// Swap to "grok-4.20-reasoning" if you want it to think out loud.
-const MODEL_ID = "grok-4.20-non-reasoning";
+// Direct xAI provider (uses XAI_API_KEY from env). Grok 4.3 is the
+// current flagship — fast, capable, 1M context. The 4.20 family was
+// retired on 2026-05-15.
+const MODEL_ID = "grok-4.3";
 
 const SYSTEM = `You are a sharp, no-fluff crypto/markets analyst writing for a degen trader on a TikTok-style mobile app. Be direct, specific, and conversational. No corporate language, no hedging-by-default disclaimers. 3-4 short paragraphs max. Use specific numbers from the data given. Call out what's bullish, what's bearish, and what would change your mind. Never give financial advice — give signal.`;
 

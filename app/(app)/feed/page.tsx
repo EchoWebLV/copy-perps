@@ -1,31 +1,23 @@
-import { FeedContainer } from "@/components/feed/FeedContainer";
+import { BotRoster } from "@/components/feed/BotRoster";
 import { BottomNav } from "@/components/shell/BottomNav";
-import { getFeedPool } from "@/lib/feed/pool";
-import { interleaveByRail, randomSeed } from "@/lib/feed/shuffle";
+import { buildBotSignals } from "@/lib/signals/bot-signals";
 
 export const dynamic = "force-dynamic";
 
-const INITIAL_BATCH = 20;
-
-// Feed is public — anyone can scroll and read. Action buttons (stake,
-// bookmark, "ask Gwak") prompt login on tap when the user isn't signed
-// in. UserEnsure runs at the (app)/layout level so it still syncs the
-// user row on the first authed visit, regardless of which page they
-// land on.
+// /feed is now the alpha-arena ROSTER — a birdeye view of every paper
+// bot. The TikTok-style per-position feed lives on /live, opened
+// via the elevated ⚡ button in the bottom nav.
 export default async function FeedPage() {
-  const seed = randomSeed();
-  const pool = await getFeedPool();
-  const shuffled = interleaveByRail(pool, seed);
-  const initial = shuffled.slice(0, INITIAL_BATCH);
+  const bots = await buildBotSignals();
+  // Highest equity first — that's the scoreboard order. Same sort as
+  // /api/bots/roster so the initial paint matches the first poll.
+  const sorted = [...bots].sort(
+    (a, b) => b.payload.balanceUsd - a.payload.balanceUsd,
+  );
 
   return (
     <>
-      <FeedContainer
-        initialSignals={initial}
-        initialSeed={seed.toString()}
-        initialCursor={INITIAL_BATCH}
-        initialTotal={shuffled.length}
-      />
+      <BotRoster initialBots={sorted} />
       <BottomNav />
     </>
   );

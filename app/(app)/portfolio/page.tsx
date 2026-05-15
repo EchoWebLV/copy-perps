@@ -5,6 +5,21 @@ import { usePrivy } from "@privy-io/react-auth";
 import { LogOut, RefreshCw } from "lucide-react";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
+  BG,
+  FG,
+  ACCENT,
+  GREEN,
+  RED,
+  DIM,
+  FAINT,
+  PANEL,
+  PANEL_2,
+  FONT_DISPLAY,
+  Headline,
+  BigNum,
+  Stamp,
+} from "@/components/v2/ui";
+import {
   PositionRow,
   type PortfolioPosition,
 } from "@/components/portfolio/PositionRow";
@@ -150,14 +165,26 @@ export default function PortfolioPage() {
         : [];
 
   return (
-    <main className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12">
-      <div className="flex flex-none items-center justify-between">
-        <h1 className="text-2xl font-black">Portfolio</h1>
+    <main
+      className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12"
+      style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
+    >
+      <div className="flex flex-none items-baseline justify-between">
+        <div>
+          <Headline size={30}>{`"PORTFOLIO"`}</Headline>
+          <p
+            className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
+            style={{ color: DIM }}
+          >
+            YOUR TAIL TRADES
+          </p>
+        </div>
         {authenticated && (
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg bg-white/10 p-2 text-neutral-300 transition active:scale-95 disabled:opacity-50"
+            className="rounded-xl p-2 transition active:scale-95 disabled:opacity-50"
+            style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
             aria-label="Refresh"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -171,138 +198,173 @@ export default function PortfolioPage() {
 
       {ready && !authenticated && (
         <div className="mt-12 text-center">
-          <p className="text-neutral-400">Log in to see your positions.</p>
+          <Headline size={26}>{`"LOG IN"`}</Headline>
+          <p
+            className="mt-2 text-[11px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            TO SEE YOUR POSITIONS
+          </p>
           <button
             onClick={login}
-            className="mt-6 rounded-2xl bg-white px-6 py-3 text-sm font-bold text-black"
+            className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
+            style={{
+              background: ACCENT,
+              color: BG,
+              boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+            }}
           >
-            Log in
+            LOG IN
           </button>
         </div>
       )}
 
       {ready && authenticated && (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="mt-4 flex-none rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
-              Net worth
-            </div>
-            <div className="mt-1 text-3xl font-extrabold">
-              ${totalNetWorth.toFixed(2)}
+          <div
+            className="mt-4 flex-none p-4"
+            style={{
+              background: PANEL,
+              borderRadius: 18,
+              border: `1px solid ${FAINT}`,
+            }}
+          >
+            <Stamp label="NET WORTH · LIVE" />
+            <div className="mt-1">
+              <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
-                  Available
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div
+                className="p-3"
+                style={{ background: PANEL_2, borderRadius: 14 }}
+              >
+                <div
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  AVAILABLE
                 </div>
-                <div className="mt-0.5 text-base font-bold">
-                  {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
+                <div className="mt-0.5">
+                  <BigNum size={18}>
+                    {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
+                  </BigNum>
                 </div>
                 {walletSol != null && (
-                  <div className="text-[10px] text-neutral-500">
+                  <div
+                    className="text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
                     + {walletSol.toFixed(4)} SOL
                   </div>
                 )}
               </div>
-              <div className="rounded-xl bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
-                  In positions
+              <div
+                className="p-3"
+                style={{ background: PANEL_2, borderRadius: 14 }}
+              >
+                <div
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  IN POSITIONS
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-2">
-                  <span className="text-base font-bold">
-                    ${positionsValue.toFixed(2)}
-                  </span>
+                  <BigNum size={18}>${positionsValue.toFixed(2)}</BigNum>
                   {totalCost > 0 && (
                     <span
-                      className={`text-[11px] font-semibold ${
-                        positionsPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
-                      }`}
+                      className="text-[11px] font-black tracking-widest"
+                      style={{ color: positionsPnl >= 0 ? GREEN : RED }}
                     >
                       {positionsPnl >= 0 ? "+" : ""}
                       {positionsPnlPct.toFixed(1)}%
                     </span>
                   )}
                 </div>
-                <div className="text-[10px] text-neutral-500">
-                  cost ${totalCost.toFixed(2)}
+                <div
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  COST ${totalCost.toFixed(2)}
                 </div>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
+            <div
+              className="mt-3 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest"
+              style={{ color: DIM }}
+            >
               <div className="flex items-center gap-2">
                 <span className="font-mono">
                   {truncateAddress(wallet?.address)}
                 </span>
                 <span>·</span>
                 <span>
-                  {openPositions.length} open · {closedPositions.length} closed
+                  {openPositions.length} OPEN · {closedPositions.length} CLOSED
                 </span>
               </div>
               <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
             </div>
           </div>
 
-          <div className="mt-4 flex flex-none gap-1 rounded-full bg-white/5 p-1">
-            <button
-              onClick={() => setTab("open")}
-              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
-                tab === "open"
-                  ? "bg-white text-black"
-                  : "text-neutral-400 active:scale-95"
-              }`}
-            >
-              Open · {openPositions.length}
-            </button>
-            <button
-              onClick={() => setTab("closed")}
-              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
-                tab === "closed"
-                  ? "bg-white text-black"
-                  : "text-neutral-400 active:scale-95"
-              }`}
-            >
-              Closed · {closedPositions.length}
-            </button>
-            <button
-              onClick={() => setTab("watchlist")}
-              className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
-                tab === "watchlist"
-                  ? "bg-white text-black"
-                  : "text-neutral-400 active:scale-95"
-              }`}
-            >
-              Watchlist · {watchlistItems.length}
-            </button>
+          <div
+            className="mt-4 flex flex-none gap-1 rounded-2xl p-1"
+            style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
+          >
+            {(
+              [
+                ["open", "Open", openPositions.length],
+                ["closed", "Closed", closedPositions.length],
+                ["watchlist", "Watchlist", watchlistItems.length],
+              ] as const
+            ).map(([key, label, count]) => {
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className="flex-1 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                  style={{
+                    background: active ? ACCENT : "transparent",
+                    color: active ? BG : FG,
+                    opacity: active ? 1 : 0.55,
+                  }}
+                >
+                  {label} · {count}
+                </button>
+              );
+            })}
           </div>
 
           {tab === "closed" && closedPositions.length > 0 && (
-            <div className="mt-3 flex-none rounded-xl bg-white/[0.04] px-3 py-2.5">
-              <div className="text-[10px] tracking-wider text-neutral-500 uppercase">
-                Realized PnL
-              </div>
+            <div
+              className="mt-3 flex-none p-3"
+              style={{
+                background: PANEL,
+                borderRadius: 14,
+                border: `1px solid ${FAINT}`,
+              }}
+            >
+              <Stamp label="REALIZED P/L" />
               <div className="mt-0.5 flex items-baseline gap-2">
-                <span
-                  className={`text-base font-bold ${
-                    realizedPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
-                  }`}
-                >
+                <BigNum size={20} color={realizedPnl >= 0 ? GREEN : RED}>
                   {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
-                </span>
+                </BigNum>
                 {closedCost > 0 && (
                   <span
-                    className={`text-[11px] font-semibold ${
-                      realizedPnl >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"
-                    }`}
+                    className="text-[11px] font-black tracking-widest"
+                    style={{ color: realizedPnl >= 0 ? GREEN : RED }}
                   >
                     {realizedPnlPct >= 0 ? "+" : ""}
                     {realizedPnlPct.toFixed(1)}%
                   </span>
                 )}
               </div>
-              <div className="text-[10px] text-neutral-500">
-                cost ${closedCost.toFixed(2)}
+              <div
+                className="text-[10px] font-black uppercase tracking-widest"
+                style={{ color: DIM }}
+              >
+                COST ${closedCost.toFixed(2)}
               </div>
             </div>
           )}
@@ -312,26 +374,35 @@ export default function PortfolioPage() {
               {tab !== "watchlist" && (
                 <>
                   {error && (
-                    <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+                    <div
+                      className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
+                      style={{ background: `${RED}20`, color: RED, border: `1px solid ${RED}40` }}
+                    >
                       {error}
                     </div>
                   )}
                   {positions === null && !error && (
-                    <div className="py-12 text-center text-sm text-neutral-500">
-                      Loading positions…
+                    <div
+                      className="py-12 text-center text-[11px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      LOADING POSITIONS…
                     </div>
                   )}
                   {positions && visiblePositions.length === 0 && (
                     <div className="py-12 text-center">
-                      <p className="text-sm text-neutral-400">
+                      <Headline size={22}>
                         {tab === "open"
-                          ? "No open positions."
-                          : "No closed positions yet."}
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-600">
+                          ? `"NO OPEN POSITIONS"`
+                          : `"NO CLOSED YET"`}
+                      </Headline>
+                      <p
+                        className="mt-2 text-[10px] font-black uppercase tracking-widest"
+                        style={{ color: DIM }}
+                      >
                         {tab === "open"
-                          ? "Tap a meme card in the feed to open one."
-                          : "Closed bets show up here."}
+                          ? "TAP A BOT IN THE FEED TO TAIL ONE."
+                          : "CLOSED BETS SHOW UP HERE."}
                       </p>
                     </div>
                   )}
@@ -344,8 +415,8 @@ export default function PortfolioPage() {
                     />
                   ))}
                   {tab === "open" && copyRows.length > 0 && (
-                    <section className="space-y-2 mt-4">
-                      <h2 className="text-lg font-semibold text-white/80">Copies</h2>
+                    <section className="mt-4 space-y-2">
+                      <Stamp label="COPIES" value={`${copyRows.length}`} />
                       {copyRows.map((row) => (
                         <CopyRow
                           key={row.betId}
@@ -374,7 +445,8 @@ export default function PortfolioPage() {
               )}
               <button
                 onClick={logout}
-                className="mt-6 flex items-center justify-center gap-2 self-center text-xs text-neutral-500 transition hover:text-neutral-300"
+                className="mt-6 flex items-center justify-center gap-2 self-center text-[10px] font-black uppercase tracking-widest transition hover:opacity-100"
+                style={{ color: DIM }}
               >
                 <LogOut size={12} /> Log out
               </button>

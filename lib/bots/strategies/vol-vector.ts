@@ -10,8 +10,9 @@ import type {
 } from "../types";
 import { clampConviction } from "../types";
 import { getRegime, type Regime } from "../regime";
+import { leverageFromConviction } from "../leverage";
 
-const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "AVAX"] as const;
+const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
 
 interface VolParams {
   id: string;
@@ -24,6 +25,8 @@ interface VolParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  minLeverage?: number;
+  maxLeverage?: number;
   regimesAllowed: Regime[];
 }
 
@@ -59,9 +62,6 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
       ) {
         return null;
       }
-      // Regime gate: skip if classifier says we're in a regime the strategy
-      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
-      // fire normally.
       if (p.regimesAllowed.length > 0) {
         const regime = await getRegime(ctx.asset);
         if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
@@ -73,8 +73,6 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
       if (recent.length < 2 || baseline.length < 2) return null;
       const recentVol = realizedVol(recent);
       const baseVol = realizedVol(baseline);
-      // If baseVol is zero but recentVol is non-zero, the spike ratio is infinite —
-      // treat that as exceeding any threshold. If both are zero, no spike.
       if (baseVol === 0) {
         if (recentVol === 0) return null;
       } else if (recentVol / baseVol < p.volMultiplier) {
@@ -94,11 +92,18 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
         return null;
       const side: "long" | "short" = upFrac > downFrac ? "long" : "short";
       const ratio = baseVol === 0 ? 3 : recentVol / baseVol;
-      const conviction = clampConviction(ratio / 3);
+      // Conviction is the geometric mean of "how much vol popped" and
+      // "how directionally clean the recent bars are." A noisy 5x pop
+      // with 51/49 splits gets a weaker lev than a clean 2x pop with
+      // 80% one-direction bars.
+      const volScore = Math.min(1, (ratio - 1) / 2);
+      const directionScore = Math.max(upFrac, downFrac);
+      const conviction = clampConviction((volScore + directionScore) / 2);
+      const leverage = leverageFromConviction(p, conviction);
       return {
         asset: ctx.asset,
         side,
-        leverage: p.leverage,
+        leverage,
         conviction,
         triggerMeta: {
           recentVol,
@@ -106,6 +111,8 @@ export function createVolVectorStrategy(p: VolParams): Strategy {
           ratio,
           upFrac,
           downFrac,
+          conviction,
+          dynamicLeverage: leverage,
         },
       };
     },
@@ -135,18 +142,23 @@ export const VolVectorStrategy = createVolVectorStrategy({
   regimesAllowed: ["vol-expanding"],
 });
 
+// Bolt — alpha-arena bot. Smarter v2: BTC/ETH/SOL only, vol multiplier
+// raised 1.05 → 1.5 (real vol pops only), trendConsistency raised 0.3 →
+// 0.5 (directional bias must be visible). Dynamic leverage 6-14x.
 export const VolVectorHairTriggerStrategy = createVolVectorStrategy({
   id: "vol-vector-hair-trigger",
   recentTimeframe: "1m",
   recentCount: 5,
-  baselineTimeframe: "1h",
-  baselineCount: 24,
-  volMultiplier: 1.2,
+  baselineTimeframe: "1m",
+  baselineCount: 30,
+  volMultiplier: 1.5,
   trendConsistencyMin: 0.5,
   exitFavorablePct: 0.004,
-  maxHoldMs: 10 * 60 * 1000,
-  leverage: 40,
-  regimesAllowed: ["vol-expanding", "chop"],
+  maxHoldMs: 6 * 60 * 1000,
+  leverage: 10,
+  minLeverage: 6,
+  maxLeverage: 14,
+  regimesAllowed: [],
 });
 
 export const VolVectorBot: BotConfig = {
@@ -173,22 +185,24 @@ export const VolVectorBot: BotConfig = {
 
 export const VolVectorHairTriggerBot: BotConfig = {
   id: "vol-vector-hair-trigger",
-  parentId: "vol-vector",
-  name: "Vol Vector Hair-Trigger",
+  parentId: null,
+  name: "Bolt",
   avatarEmoji: "💥",
   personaVoiceKey: "vol-vector",
   strategyKey: "vol-vector-hair-trigger",
   config: {
     recentTimeframe: "1m",
     recentCount: 5,
-    baselineTimeframe: "1h",
-    baselineCount: 24,
-    volMultiplier: 1.2,
+    baselineTimeframe: "1m",
+    baselineCount: 30,
+    volMultiplier: 1.5,
     trendConsistencyMin: 0.5,
     exitFavorablePct: 0.004,
-    maxHoldMs: 10 * 60 * 1000,
-    leverage: 40,
-    regimesAllowed: ["vol-expanding", "chop"],
+    maxHoldMs: 6 * 60 * 1000,
+    leverage: 10,
+    minLeverage: 6,
+    maxLeverage: 14,
+    regimesAllowed: [],
   },
   status: "paper",
 };

@@ -75,7 +75,7 @@ const REGIME_CLASSIFIER: DataSource = {
   label: "Regime classifier (xAI)",
   purpose:
     "Per-asset market regime label (trending-up/down, mean-reverting, vol-expanding, chop). Strategies skip entries that don't match their declared regimes, fail-open when xAI is unavailable.",
-  endpoint: "xAI Grok (grok-4.20-non-reasoning) — see lib/bots/regime.ts",
+  endpoint: "xAI Grok (grok-4.3) — see lib/bots/regime.ts",
   file: "lib/bots/regime.ts",
   refreshHint: "60s per-asset cache; null on xAI error (strategy fires normally).",
 };

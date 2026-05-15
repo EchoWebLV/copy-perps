@@ -1,65 +1,16 @@
-import { applyExitSlippage, roundTripFeesUsd } from "./fees";
+// Pure PnL math lives in ./pnl.ts now — kept as re-exports here so any
+// existing server-side imports keep working. Client components must
+// import from ./pnl directly to avoid pulling the db init below.
+export {
+  computePaperPnlUsd,
+  computeLivePaperPnlPct,
+  type PaperPnlArgs,
+  type LivePaperPnlArgs,
+} from "./pnl";
 
-export interface PaperPnlArgs {
-  side: "long" | "short";
-  leverage: number;
-  entryMark: number; // already includes entry slippage (resolver writes the fill)
-  exitMark: number; // already includes exit slippage (resolver writes the fill)
-  stakeUsd: number;
-}
-
-/**
- * Realized paper PnL in USD at exit, net of round-trip taker fees.
- * Pass the *stake* (margin) not notional — notional is computed inside
- * as stake × leverage so high-leverage bots earn proportionally bigger
- * absolute paper PnL per same price move, which is what the leaderboard
- * ranking needs for cross-bot comparability.
- *
- * Both entryMark and exitMark must already include their respective
- * slippage; the resolver writes the slipped fill prices. Fees are deducted
- * here so a single source of truth handles them.
- *
- * Sign convention: positive = profit.
- */
-export function computePaperPnlUsd(args: PaperPnlArgs): number {
-  const { side, leverage, entryMark, exitMark, stakeUsd } = args;
-  const moveFrac = (exitMark - entryMark) / entryMark;
-  const directional = side === "long" ? moveFrac : -moveFrac;
-  const gross = stakeUsd * leverage * directional;
-  const fees = roundTripFeesUsd(stakeUsd, leverage);
-  return gross - fees;
-}
-
-export interface LivePaperPnlArgs {
-  side: "long" | "short";
-  leverage: number;
-  entryMark: number; // already-slipped entry fill
-  currentMark: number; // mid; we apply hypothetical exit slippage here
-  asset: string;
-  stakeUsd: number;
-}
-
-/**
- * Unrealized paper PnL as a fraction of stake — "what would I net if I
- * closed right now". Applies hypothetical exit slippage + the full
- * round-trip fee, so the displayed number matches what realization
- * would actually pay out. Honest by construction.
- */
-export function computeLivePaperPnlPct(args: LivePaperPnlArgs): number {
-  const { side, leverage, entryMark, currentMark, asset, stakeUsd } = args;
-  if (stakeUsd <= 0) return 0;
-  const exitFill = applyExitSlippage(currentMark, side, asset);
-  const moveFrac = (exitFill - entryMark) / entryMark;
-  const directional = side === "long" ? moveFrac : -moveFrac;
-  const grossUsd = stakeUsd * leverage * directional;
-  const feeUsd = roundTripFeesUsd(stakeUsd, leverage);
-  return (grossUsd - feeUsd) / stakeUsd;
-}
-
-// lib/bots/paper.ts (append)
 import { db } from "@/lib/db";
 import { bots, paperPositions } from "@/lib/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { PaperPosition, EntryDecision } from "./types";
 
 function rowToPosition(row: typeof paperPositions.$inferSelect): PaperPosition {
@@ -182,4 +133,41 @@ export async function getBotBalance(botId: string): Promise<number> {
 /** Marks a bot as busted (balance <= 0 / blown up). */
 export async function markBotBusted(botId: string): Promise<void> {
   await db.update(bots).set({ status: "busted" }).where(eq(bots.id, botId));
+}
+
+/**
+ * Returns true if the bot's most recent N closed positions all lost
+ * money AND the most-recent close happened within `windowMs`. Used as a
+ * tilt-prevention gate: after a fast losing streak the strategy is
+ * almost certainly fighting the current regime, so the resolver pauses
+ * its entries until either time passes or a green close comes in.
+ *
+ * The window is anchored to the latest close, not "now minus window" —
+ * a bot that closed two losers 30s apart at 11:00 stays in cooldown
+ * even if you check at 11:04, because the streak is fresh in the bot's
+ * recent trade tape. A green close (any positive PnL within the last
+ * N) clears the streak naturally.
+ */
+export async function isInLossCooldown(args: {
+  botId: string;
+  lossStreakLength: number;
+  windowMs: number;
+}): Promise<boolean> {
+  const rows = await db
+    .select({ pnl: paperPositions.paperPnlUsd, exitTs: paperPositions.exitTs })
+    .from(paperPositions)
+    .where(
+      and(
+        eq(paperPositions.botId, args.botId),
+        eq(paperPositions.status, "closed"),
+      ),
+    )
+    .orderBy(desc(paperPositions.exitTs))
+    .limit(args.lossStreakLength);
+  if (rows.length < args.lossStreakLength) return false;
+  const latestExit = rows[0].exitTs;
+  if (!latestExit) return false;
+  const ageMs = Date.now() - new Date(latestExit).getTime();
+  if (ageMs > args.windowMs) return false;
+  return rows.every((r) => (r.pnl ?? 0) < 0);
 }

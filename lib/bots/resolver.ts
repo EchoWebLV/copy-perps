@@ -8,6 +8,7 @@ import {
   closePaperPosition,
   fetchOpenPositionsForBot,
   getBotBalance,
+  isInLossCooldown,
   markBotBusted,
   computePaperPnlUsd,
 } from "./paper";
@@ -27,11 +28,17 @@ import {
 } from "./fees";
 import type { ExternalSignals, MarketContext } from "./types";
 
-const MAX_CONCURRENT_POSITIONS = 4;
-const MAX_STAKE_PCT = 0.5;
+const MAX_CONCURRENT_POSITIONS = 8;
+const MAX_STAKE_PCT = 0.2;
 const MIN_STAKE_USD = 10;
 const BUST_THRESHOLD_USD = 10;
 const MAX_BOTS_SAME_SIDE = 3;
+// Tilt guard: two consecutive losses within 5 minutes parks new entries
+// until either a green close lands or the window expires. Stops the
+// strategy from doubling-down inside an actively-chopping regime that's
+// eating its trigger.
+const LOSS_STREAK_LENGTH = 2;
+const LOSS_COOLDOWN_WINDOW_MS = 5 * 60 * 1000;
 // Default cap on stake-PnL drawdown before the resolver forces an exit,
 // regardless of what the strategy thinks. -0.5 = "this position lost 50% of
 // the original stake, get out." Per-bot override via bot.config.stopLossPct.
@@ -147,6 +154,16 @@ export async function tick(): Promise<{
     const openAssets = new Set(remaining.map((p) => p.asset));
 
     if (slots <= 0 || freeBalance < MIN_STAKE_USD) continue;
+
+    // Tilt guard: pause new entries if the bot is on a fresh 2-loss
+    // streak. Exits and stop-losses on existing positions still run
+    // (already happened above in Phase 1).
+    const onTilt = await isInLossCooldown({
+      botId: bot.id,
+      lossStreakLength: LOSS_STREAK_LENGTH,
+      windowMs: LOSS_COOLDOWN_WINDOW_MS,
+    });
+    if (onTilt) continue;
 
     // Phase 4: scan markets for entries.
     for (const asset of strategy.markets) {

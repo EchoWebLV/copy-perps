@@ -7,6 +7,7 @@ import { computeLivePaperPnlPct } from "@/lib/bots/paper";
 import { getCrossBotSnapshot } from "@/lib/bots/cross-bot";
 import { computeMoodBadge } from "@/lib/bots/mood";
 import { getThoughtSettings } from "@/lib/bots/thoughts/settings";
+import { avatarImageForBot } from "@/lib/bots/avatars";
 import type { BotConfig } from "@/lib/bots/types";
 import type { BotSignal } from "@/lib/types";
 
@@ -20,9 +21,16 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
   if (botRows.length === 0) return [];
 
   // Lookup table: botId → display info (built once for disagreement resolution)
-  const botLookup = new Map<string, { name: string; avatarEmoji: string }>();
+  const botLookup = new Map<
+    string,
+    { name: string; avatarEmoji: string; avatarImageUrl: string | null }
+  >();
   for (const b of botRows) {
-    botLookup.set(b.id, { name: b.name, avatarEmoji: b.avatarEmoji });
+    botLookup.set(b.id, {
+      name: b.name,
+      avatarEmoji: b.avatarEmoji,
+      avatarImageUrl: avatarImageForBot(b.id),
+    });
   }
 
   const marks = await getMarksSnapshot();
@@ -96,6 +104,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
             botId: entry.botId,
             botName: meta?.name ?? entry.botId,
             avatarEmoji: meta?.avatarEmoji ?? "🤖",
+            avatarImageUrl: meta?.avatarImageUrl ?? null,
           };
         });
 
@@ -170,6 +179,7 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
         botId: bot.id,
         botName: bot.name,
         avatarEmoji: bot.avatarEmoji,
+        avatarImageUrl: avatarImageForBot(bot.id),
         balanceUsd: equityUsd,
         cashUsd: bot.balanceUsd,
         startingBalanceUsd: bot.startingBalanceUsd,

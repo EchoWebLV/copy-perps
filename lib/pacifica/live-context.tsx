@@ -185,3 +185,11 @@ export function useLiveFills(): LiveFill[] {
 export function useLiveMark(symbol: string): number | undefined {
   return useContext(LiveContext).marks[symbol];
 }
+
+/** All currently-known live marks, keyed by symbol. Use this when a
+ *  component needs marks for an arbitrary set of positions (e.g. live
+ *  PnL across a bot's whole position list) without violating the rules
+ *  of hooks by calling useLiveMark inside a map. */
+export function useLiveMarks(): Record<string, number> {
+  return useContext(LiveContext).marks;
+}

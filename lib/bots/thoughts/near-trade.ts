@@ -13,7 +13,7 @@ import { xai } from "@ai-sdk/xai";
 import type { ExternalSignals } from "../types";
 import type { ThoughtCandidate } from "./types";
 
-const MODEL_ID = "grok-4.20-non-reasoning";
+const MODEL_ID = "grok-4.3";
 const NEAR_LOW = 0.7;
 const NEAR_HIGH = 0.99;
 const LIQUIDATION_FRESH_MS = 60_000;

@@ -12,7 +12,7 @@ import { generateText } from "ai";
 import { xai } from "@ai-sdk/xai";
 import { PERSONAS } from "./narrator";
 
-const MODEL_ID = "grok-4.20-non-reasoning";
+const MODEL_ID = "grok-4.3";
 const MAX_OUTPUT_TOKENS = 250;
 const CHAT_TIMEOUT_MS = 8_000;
 

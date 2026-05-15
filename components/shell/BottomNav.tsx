@@ -2,40 +2,111 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Settings, PieChart, Radio } from "lucide-react";
+import { Flame, Settings, PieChart, Radio, Zap } from "lucide-react";
+import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
-// /leaderboard exists but is not exposed in the nav yet — pre-launch
-// hide while we polish the shared-card flow. Re-add the Trophy entry
-// here when ready.
-const tabs = [
+// Snap-style: dark bg, dim icons, yellow underline on active. Center
+// "LIVE" CTA elevates above the bar like the camera button in Snapchat.
+const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Feed" },
   { href: "/chatter", icon: Radio, label: "Chatter" },
-  { href: "/portfolio", icon: PieChart, label: "Portfolio" },
+];
+const RIGHT_TABS = [
+  { href: "/portfolio", icon: PieChart, label: "Folio" },
   { href: "/deposit", icon: Settings, label: "Settings" },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
 
+  function isActive(href: string): boolean {
+    if (!pathname) return false;
+    if (pathname === href) return true;
+    if (href === "/feed" && pathname.startsWith("/feed")) return true;
+    if (href === "/live" && pathname.startsWith("/live")) return true;
+    return false;
+  }
+
+  const liveActive = isActive("/live");
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 bg-black/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-md items-stretch justify-around pb-[env(safe-area-inset-bottom)]">
-        {tabs.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || (href === "/feed" && pathname?.startsWith("/feed"));
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-semibold uppercase tracking-wider transition ${
-                active ? "text-white" : "text-neutral-500"
-              }`}
-            >
-              <Icon size={20} strokeWidth={active ? 2.5 : 2} />
-              {label}
-            </Link>
-          );
-        })}
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-30 border-t-2"
+      style={{
+        background: BG,
+        borderColor: FAINT,
+        fontFamily: FONT_DISPLAY,
+      }}
+    >
+      <div className="relative mx-auto flex max-w-md items-stretch justify-around pb-[env(safe-area-inset-bottom)]">
+        {LEFT_TABS.map((t) => (
+          <NavTab key={t.href} {...t} active={isActive(t.href)} />
+        ))}
+
+        {/* Elevated center LIVE shortcut → per-position feed */}
+        <Link
+          href="/live"
+          className="relative flex flex-1 items-center justify-center"
+          aria-label="Live positions"
+        >
+          <span
+            className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-full"
+            style={{
+              background: ACCENT,
+              color: BG,
+              boxShadow: liveActive
+                ? `0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
+                : `0 8px 24px ${ACCENT}55, inset 0 -3px 0 rgba(0,0,0,0.18)`,
+              transform: liveActive ? "scale(1.05)" : "scale(1)",
+              transition: "transform 200ms, box-shadow 200ms",
+            }}
+          >
+            <Zap size={26} strokeWidth={3} fill={BG} />
+          </span>
+          <span
+            className="pt-6 text-[10px] font-black uppercase tracking-widest"
+            style={{ color: FG, opacity: liveActive ? 1 : 0.55 }}
+          >
+            Live
+          </span>
+        </Link>
+
+        {RIGHT_TABS.map((t) => (
+          <NavTab key={t.href} {...t} active={isActive(t.href)} />
+        ))}
       </div>
     </nav>
+  );
+}
+
+function NavTab({
+  href,
+  icon: Icon,
+  label,
+  active,
+}: {
+  href: string;
+  icon: typeof Flame;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className="relative flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-black uppercase tracking-widest"
+      style={{
+        color: FG,
+        opacity: active ? 1 : 0.4,
+      }}
+    >
+      <Icon size={20} strokeWidth={active ? 2.8 : 2.2} />
+      <span>{label}</span>
+      {active && (
+        <span
+          className="absolute bottom-0 left-1/2 h-1 w-8 -translate-x-1/2 rounded-t-full"
+          style={{ background: ACCENT }}
+        />
+      )}
+    </Link>
   );
 }

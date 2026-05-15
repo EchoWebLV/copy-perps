@@ -11,6 +11,7 @@
 import { db } from "@/lib/db";
 import { bots, paperPositions } from "@/lib/db/schema";
 import { desc, eq, isNotNull, or } from "drizzle-orm";
+import { avatarImageForBot } from "@/lib/bots/avatars";
 
 export type ChatterKind = "open" | "close";
 
@@ -22,6 +23,7 @@ export interface ChatterEvent {
   botId: string;
   botName: string;
   avatarEmoji: string;
+  avatarImageUrl: string | null;
   asset: string;
   side: "long" | "short";
   leverage: number;
@@ -76,6 +78,7 @@ export async function getChatterEvents(
       botId: r.botId,
       botName: r.botName,
       avatarEmoji: r.avatarEmoji,
+      avatarImageUrl: avatarImageForBot(r.botId),
       asset: r.asset,
       side: r.side as "long" | "short",
       leverage: r.leverage,

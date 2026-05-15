@@ -10,8 +10,9 @@ import type {
 } from "../types";
 import { clampConviction } from "../types";
 import { getRegime, type Regime } from "../regime";
+import { leverageFromConviction } from "../leverage";
 
-const ALLOWED_MARKETS = ["BTC", "ETH", "SOL", "HYPE"] as const;
+const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
 
 interface MomoParams {
   id: string;
@@ -22,6 +23,8 @@ interface MomoParams {
   exitFavorablePct: number;
   maxHoldMs: number;
   leverage: number;
+  minLeverage?: number;
+  maxLeverage?: number;
   regimesAllowed: Regime[];
 }
 
@@ -41,9 +44,6 @@ export function createMomoMaxStrategy(p: MomoParams): Strategy {
       ) {
         return null;
       }
-      // Regime gate: skip if classifier says we're in a regime the strategy
-      // doesn't trade in. Fail-OPEN — null regime means classifier had no read,
-      // fire normally.
       if (p.regimesAllowed.length > 0) {
         const regime = await getRegime(ctx.asset);
         if (regime && !p.regimesAllowed.includes(regime.regime)) return null;
@@ -62,15 +62,23 @@ export function createMomoMaxStrategy(p: MomoParams): Strategy {
       if (Math.abs(moveFrac) < p.breakoutPct) return null;
       const side: "long" | "short" = moveFrac > 0 ? "long" : "short";
       const volRatio = last.volume / meanPriorVolume;
-      const conviction = clampConviction(volRatio / 3);
+      // Conviction blends two signal-strength axes: how big the breakout
+      // is relative to the trigger threshold, and how loud the volume is
+      // relative to baseline. Both contribute equally.
+      const breakoutScore = Math.min(1, Math.abs(moveFrac) / (p.breakoutPct * 2));
+      const volumeScore = Math.min(1, (volRatio - 1) / 2);
+      const conviction = clampConviction((breakoutScore + volumeScore) / 2);
+      const leverage = leverageFromConviction(p, conviction);
       return {
         asset: ctx.asset,
         side,
-        leverage: p.leverage,
+        leverage,
         conviction,
         triggerMeta: {
           breakoutPct: moveFrac,
           volumeRatio: volRatio,
+          conviction,
+          dynamicLeverage: leverage,
         },
       };
     },
@@ -98,16 +106,22 @@ export const MomoMaxStrategy = createMomoMaxStrategy({
   regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
 });
 
+// Surge — alpha-arena bot. Smarter v2: BTC/ETH/SOL only (no thin-alt
+// slippage tax), stricter triggers (0.3% breakout on 1.2x volume), and
+// dynamic leverage 6-18x scaled by signal strength. Round-trip friction
+// at 6x on BTC is ~0.9% of stake → marginal trades stop bleeding fees.
 export const MomoMaxAggressiveStrategy = createMomoMaxStrategy({
   id: "momo-max-aggressive",
-  timeframe: "5m",
-  candleCount: 12,
-  breakoutPct: 0.005,
-  volumeMultiplier: 1.3,
+  timeframe: "1m",
+  candleCount: 6,
+  breakoutPct: 0.003,
+  volumeMultiplier: 1.2,
   exitFavorablePct: 0.003,
-  maxHoldMs: 20 * 60 * 1000,
-  leverage: 50,
-  regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
+  maxHoldMs: 5 * 60 * 1000,
+  leverage: 12,
+  minLeverage: 6,
+  maxLeverage: 18,
+  regimesAllowed: [],
 });
 
 export const MomoMaxBot: BotConfig = {
@@ -132,20 +146,22 @@ export const MomoMaxBot: BotConfig = {
 
 export const MomoMaxAggressiveBot: BotConfig = {
   id: "momo-max-aggressive",
-  parentId: "momo-max",
-  name: "Momo Max Aggressive",
+  parentId: null,
+  name: "Surge",
   avatarEmoji: "🚀",
   personaVoiceKey: "momo-max",
   strategyKey: "momo-max-aggressive",
   config: {
-    timeframe: "5m",
-    candleCount: 12,
-    breakoutPct: 0.005,
-    volumeMultiplier: 1.3,
+    timeframe: "1m",
+    candleCount: 6,
+    breakoutPct: 0.003,
+    volumeMultiplier: 1.2,
     exitFavorablePct: 0.003,
-    maxHoldMs: 20 * 60 * 1000,
-    leverage: 50,
-    regimesAllowed: ["trending-up", "trending-down", "vol-expanding", "chop"],
+    maxHoldMs: 5 * 60 * 1000,
+    leverage: 12,
+    minLeverage: 6,
+    maxLeverage: 18,
+    regimesAllowed: [],
   },
   status: "paper",
 };

@@ -3,13 +3,26 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useFundWallet } from "@privy-io/react-auth/solana";
 import { useState } from "react";
-import { Copy, Check, LogOut, CreditCard } from "lucide-react";
+import { Copy, Check, LogOut, CreditCard, Zap } from "lucide-react";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { RAILS } from "@/lib/feed/rails";
 import type { FeedPrefs } from "@/lib/feed/preferences";
 import { ev } from "@/lib/analytics";
+import {
+  BG,
+  FG,
+  ACCENT,
+  GREEN,
+  DIM,
+  FAINT,
+  PANEL,
+  PANEL_2,
+  FONT_DISPLAY,
+  Headline,
+  Stamp,
+} from "@/components/v2/ui";
 
 const DEFAULT_FUND_AMOUNT_USD = "25";
 
@@ -34,18 +47,10 @@ export default function DepositPage() {
   };
 
   const buyWithCard = async () => {
-    console.log("[deposit] buyWithCard clicked", {
-      address: wallet?.address,
-      funding,
-    });
-    if (!wallet?.address || funding) {
-      console.warn("[deposit] click ignored — no wallet or already funding");
-      return;
-    }
+    if (!wallet?.address || funding) return;
     ev.fundWithCardClicked();
     setFunding(true);
     try {
-      console.log("[deposit] calling fundWallet…");
       await fundWallet({
         address: wallet.address,
         options: {
@@ -55,7 +60,6 @@ export default function DepositPage() {
           card: { preferredProvider: "moonpay" },
         },
       });
-      console.log("[deposit] fundWallet resolved");
       ev.fundWithCardCompleted();
     } catch (err) {
       console.error("[deposit] fundWallet error:", err);
@@ -68,95 +72,171 @@ export default function DepositPage() {
   };
 
   return (
-    <main className="flex min-h-full flex-col items-center px-6 pt-16 pb-28 text-center">
-      <h1 className="text-3xl font-bold">Deposit</h1>
+    <main
+      className="flex min-h-screen w-full flex-col px-5 pt-12 pb-32"
+      style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
+    >
+      <div>
+        <Headline size={30}>{`"SETTINGS"`}</Headline>
+        <p
+          className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
+          style={{ color: DIM }}
+        >
+          DEPOSIT · WALLET · FEED
+        </p>
+      </div>
 
-      {!ready && <p className="mt-3 text-sm text-neutral-500">Loading…</p>}
+      {!ready && (
+        <p
+          className="mt-6 text-[11px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          LOADING…
+        </p>
+      )}
 
       {ready && !authenticated && (
-        <>
-          <p className="mt-3 max-w-sm text-neutral-400">
-            Log in to fund your wallet.
+        <div className="mt-12 text-center">
+          <Headline size={26}>{`"LOG IN"`}</Headline>
+          <p
+            className="mt-2 text-[11px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            TO FUND YOUR WALLET
           </p>
           <button
             onClick={() => {
               ev.loginClicked("deposit");
               login();
             }}
-            className="mt-8 rounded-2xl bg-white px-8 py-4 text-base font-bold text-black transition active:scale-[0.97]"
+            className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
+            style={{
+              background: ACCENT,
+              color: BG,
+              boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+            }}
           >
-            Log in
+            LOG IN
           </button>
-        </>
+        </div>
       )}
 
       {ready && authenticated && (
         <>
-          <p className="mt-3 max-w-sm text-neutral-400">
-            Fund with a card, or send USDC (Solana) directly.
-          </p>
-
-          <button
-            onClick={buyWithCard}
-            disabled={!wallet?.address || funding}
-            className="mt-8 flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl bg-green-500 px-6 py-4 text-base font-bold text-black transition active:scale-[0.97] disabled:opacity-40"
-          >
-            <CreditCard size={18} />
-            {funding ? "Opening…" : "Buy USDC with card"}
-          </button>
-
-          <div className="mt-6 w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 text-left">
-            <div className="text-[11px] tracking-wider text-neutral-500 uppercase">
-              Or send USDC (Solana) to
-            </div>
-            <div className="mt-2 break-all font-mono text-sm text-neutral-200">
-              {wallet?.address ?? "Generating wallet…"}
-            </div>
+          {/* Buy with card — primary CTA */}
+          <div className="mt-5">
+            <Stamp label="DEPOSIT" />
             <button
-              onClick={copy}
-              disabled={!wallet?.address}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-3 text-sm font-semibold text-white transition active:scale-[0.97] disabled:opacity-40"
+              onClick={buyWithCard}
+              disabled={!wallet?.address || funding}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-[14px] font-black uppercase tracking-widest active:scale-[0.97] disabled:opacity-40"
+              style={{
+                background: ACCENT,
+                color: BG,
+                boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+              }}
             >
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? "Copied" : "Copy address"}
+              {funding ? (
+                <>
+                  <Zap size={16} strokeWidth={3} fill={BG} />
+                  OPENING…
+                </>
+              ) : (
+                <>
+                  <CreditCard size={16} strokeWidth={2.8} />
+                  BUY USDC WITH CARD
+                </>
+              )}
             </button>
           </div>
 
-          <div className="mt-6 w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-5 text-left">
-            <div className="text-[11px] tracking-wider text-neutral-500 uppercase">
-              Feed
+          {/* Deposit address card */}
+          <div className="mt-5">
+            <Stamp label="OR SEND USDC (SOLANA)" />
+            <div
+              className="mt-2 p-4"
+              style={{
+                background: PANEL,
+                borderRadius: 18,
+                border: `1px solid ${FAINT}`,
+              }}
+            >
+              <div
+                className="mt-1 break-all font-mono text-[12px]"
+                style={{ color: FG, opacity: 0.85 }}
+              >
+                {wallet?.address ?? "GENERATING WALLET…"}
+              </div>
+              <button
+                onClick={copy}
+                disabled={!wallet?.address}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
+                style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+              >
+                {copied ? (
+                  <>
+                    <Check size={14} strokeWidth={3} style={{ color: GREEN }} />
+                    <span style={{ color: GREEN }}>COPIED</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} strokeWidth={2.8} />
+                    COPY ADDRESS
+                  </>
+                )}
+              </button>
             </div>
-            <div className="mt-3 divide-y divide-white/5">
+          </div>
+
+          {/* Feed prefs */}
+          <div className="mt-6">
+            <Stamp label="FEED" />
+            <div
+              className="mt-2 overflow-hidden"
+              style={{
+                background: PANEL,
+                borderRadius: 18,
+                border: `1px solid ${FAINT}`,
+              }}
+            >
               {RAILS.map(({ key, label, description, stripe }) => {
                 const enabled = prefs[key];
                 return (
                   <button
                     key={key}
                     onClick={() => togglePref(key)}
-                    className="flex w-full items-center gap-3 py-3 text-left"
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition active:opacity-70"
+                    style={{ borderBottom: `1px solid ${FAINT}` }}
                   >
-                    <div
+                    <span
                       className="h-2 w-2 shrink-0 rounded-full"
                       style={{ background: stripe }}
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-semibold text-white">
+                      <div className="text-[13px] font-black uppercase tracking-widest">
                         {label}
                       </div>
-                      <div className="text-[11px] text-neutral-500">
+                      <div
+                        className="text-[10px] font-black uppercase tracking-widest"
+                        style={{ color: DIM }}
+                      >
                         {description}
                       </div>
                     </div>
                     <div
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition ${
-                        enabled
-                          ? "border-emerald-500 bg-emerald-500"
-                          : "border-white/25 bg-transparent"
-                      }`}
+                      className="relative h-6 w-10 shrink-0 rounded-full transition"
+                      style={{
+                        background: enabled ? ACCENT : PANEL_2,
+                        border: `1px solid ${FAINT}`,
+                      }}
                     >
-                      {enabled && (
-                        <Check size={12} className="text-black" strokeWidth={3} />
-                      )}
+                      <span
+                        className="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+                        style={{
+                          left: enabled ? "calc(100% - 22px)" : "2px",
+                          background: enabled ? BG : FG,
+                        }}
+                      />
                     </div>
                   </button>
                 );
@@ -164,12 +244,28 @@ export default function DepositPage() {
             </div>
           </div>
 
+          {/* Log out */}
           <button
             onClick={logout}
-            className="mt-8 flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-300"
+            className="mx-auto mt-8 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-100"
+            style={{ color: DIM }}
           >
-            <LogOut size={12} /> Log out
+            <LogOut size={12} /> LOG OUT
           </button>
+
+          {/* Factory stamp */}
+          <div
+            className="mt-6 p-3 text-[9px] font-black uppercase tracking-[0.24em]"
+            style={{
+              color: DIM,
+              border: `1px solid ${FAINT}`,
+              borderRadius: 14,
+            }}
+          >
+            MADE IN GWAK / 2026
+            <br />
+            SERIES 01 OF 12 · v0.1.4-paper
+          </div>
         </>
       )}
 

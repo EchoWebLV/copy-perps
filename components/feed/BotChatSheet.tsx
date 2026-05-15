@@ -14,6 +14,7 @@ interface Props {
   botId: string;
   botName: string;
   avatarEmoji: string;
+  avatarImageUrl?: string | null;
   // Latest open narrations from the bot's current positions — shown as a
   // sticky "what the bot is thinking" block above the chat history.
   openingThoughts: Array<{ asset: string; side: "long" | "short"; narration: string | null }>;
@@ -24,6 +25,7 @@ export function BotChatSheet({
   botId,
   botName,
   avatarEmoji,
+  avatarImageUrl,
   openingThoughts,
   onClose,
 }: Props) {
@@ -131,7 +133,17 @@ export function BotChatSheet({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3">
           <div className="flex items-center gap-3">
-            <span className="text-3xl leading-none">{avatarEmoji}</span>
+            {avatarImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarImageUrl}
+                alt=""
+                className="h-10 w-10 rounded-full object-cover ring-1 ring-white/15"
+                draggable={false}
+              />
+            ) : (
+              <span className="text-3xl leading-none">{avatarEmoji}</span>
+            )}
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50">
                 Chat with

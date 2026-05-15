@@ -2,41 +2,23 @@
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
 import {
-  LiquidationLizardStrategy,
-  LiquidationLizardJrStrategy,
-  LiquidationLizardBot,
-  LiquidationLizardJrBot,
-} from "./strategies/liquidation-lizard";
-import {
-  FundingPhoebeStrategy,
-  FundingPhoebeLiteStrategy,
-  FundingPhoebeBot,
-  FundingPhoebeLiteBot,
-} from "./strategies/funding-phoebe";
-import {
   MeanRevertMikeStrategy,
-  MeanRevertMikePatientStrategy,
   MeanRevertMikeBot,
-  MeanRevertMikePatientBot,
 } from "./strategies/mean-revert-mike";
 import {
-  MomoMaxStrategy,
   MomoMaxAggressiveStrategy,
-  MomoMaxBot,
   MomoMaxAggressiveBot,
 } from "./strategies/momo-max";
 import {
-  VolVectorStrategy,
   VolVectorHairTriggerStrategy,
-  VolVectorBot,
   VolVectorHairTriggerBot,
 } from "./strategies/vol-vector";
 import {
-  BoomerTrendStrategy,
-  BoomerTrendWideStrategy,
-  BoomerTrendBot,
-  BoomerTrendWideBot,
-} from "./strategies/boomer-trend";
+  AntiSurgeStrategy,
+  AntiSurgeBot,
+  AntiFadeStrategy,
+  AntiFadeBot,
+} from "./strategies/anti-bots";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -83,13 +65,7 @@ export function resolveStrategyForBot(bot: BotConfig): Strategy | null {
 
 /**
  * Adds a bot config to the in-memory registry at runtime. Used by the admin
- * clone flow: after a new bot row is persisted to the DB, calling this lets
- * the resolver's `listBots()` see it on the next tick (in dev, where the
- * Next process is long-lived). Idempotent — no-ops if the id is already
- * registered, returns the existing strategy in that case.
- *
- * Returns null when the strategyKey doesn't map to a known factory family
- * (caller should reject the request before persisting).
+ * clone flow.
  */
 export function registerBotDynamic(config: BotConfig): Strategy | null {
   const existing = BOTS.get(config.id);
@@ -100,9 +76,6 @@ export function registerBotDynamic(config: BotConfig): Strategy | null {
   });
   if (!strategy) return null;
   BOTS.set(config.id, config);
-  // A variant clone reuses the parent family's logic but gets its own
-  // strategy instance keyed on the variant's strategyKey, so each bot's
-  // config knobs apply independently.
   STRATEGIES.set(config.strategyKey, strategy);
   return strategy;
 }
@@ -110,8 +83,7 @@ export function registerBotDynamic(config: BotConfig): Strategy | null {
 /**
  * Overwrites both the BOTS and STRATEGIES entries for a bot. Used by the
  * admin edit flow so config changes take effect on the next tick without
- * a dev-server restart. Returns null if the strategyKey has no known
- * factory family (caller should reject the request).
+ * a dev-server restart.
  */
 export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   const strategy = buildStrategyFromBot({
@@ -124,17 +96,12 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// Register all 12 bots at module load. Order is informational; the registry
-// is keyed on bot.id.
-registerBot(LiquidationLizardBot, LiquidationLizardStrategy);
-registerBot(LiquidationLizardJrBot, LiquidationLizardJrStrategy);
-registerBot(FundingPhoebeBot, FundingPhoebeStrategy);
-registerBot(FundingPhoebeLiteBot, FundingPhoebeLiteStrategy);
-registerBot(MeanRevertMikeBot, MeanRevertMikeStrategy);
-registerBot(MeanRevertMikePatientBot, MeanRevertMikePatientStrategy);
-registerBot(MomoMaxBot, MomoMaxStrategy);
-registerBot(MomoMaxAggressiveBot, MomoMaxAggressiveStrategy);
-registerBot(VolVectorBot, VolVectorStrategy);
-registerBot(VolVectorHairTriggerBot, VolVectorHairTriggerStrategy);
-registerBot(BoomerTrendBot, BoomerTrendStrategy);
-registerBot(BoomerTrendWideBot, BoomerTrendWideStrategy);
+// ── Alpha-arena roster: 3 aggressive bots, all candle-driven, no rare
+// external-signal dependencies. The other 9 bot families still live in
+// strategies/ as code (admin can clone them back if needed) but aren't
+// registered at module load.
+registerBot(MomoMaxAggressiveBot, MomoMaxAggressiveStrategy); // Surge
+registerBot(MeanRevertMikeBot, MeanRevertMikeStrategy); // Fade
+registerBot(VolVectorHairTriggerBot, VolVectorHairTriggerStrategy); // Bolt
+registerBot(AntiSurgeBot, AntiSurgeStrategy); // Anti-Surge (mirror of Surge)
+registerBot(AntiFadeBot, AntiFadeStrategy); // Anti-Fade (mirror of Fade)

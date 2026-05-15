@@ -249,6 +249,7 @@ export function FeedContainer({
           >
             <CardContent
               signal={signal}
+              slideIndex={i}
               active={i === activeIdx}
               flipNonce={i === flipTargetIdx ? flipNonce : 0}
             />
@@ -262,10 +263,12 @@ export function FeedContainer({
 
 function CardContent({
   signal,
+  slideIndex,
   active,
   flipNonce,
 }: {
   signal: Signal;
+  slideIndex: number;
   active: boolean;
   flipNonce: number;
 }) {
@@ -286,7 +289,9 @@ function CardContent({
       {signal.type === "pacifica_trader" && (
         <CopyCard signal={signal} isActive={active} />
       )}
-      {signal.type === "bot" && <BotCard signal={signal} />}
+      {signal.type === "bot" && (
+        <BotCard signal={signal} slideIndex={slideIndex} />
+      )}
     </div>
   );
 }
