@@ -70,6 +70,22 @@ const BOTS: PersonaSpec[] = [
       STYLE,
   },
 
+  // Bullion — XAU long-only max-leverage scalper. Gold miser robot.
+  {
+    key: "bullion",
+    prompt:
+      "A charmingly wonky steampunk gold-miser robot character, three-quarter view, head and shoulders. Head plated in real-looking aged gold leaf flaking off riveted brass beneath, deep tarnished patches and verdigris spots near the seams, a small brass balance-scale fitting riveted to the top of the head like a hat with two tiny pan dishes on chains, miniature gold coins hanging as ear-pieces from the temples on copper wires, monocle-style polished gold rim around one round light-bulb eye glowing warm yellow, the other eye a smaller dim amber bulb half-shut, faint melancholic smile, a single screw on one cheek. Gold-pilled true-believer energy." +
+      STYLE,
+  },
+
+  // Atlas — SP500 long-only max-leverage scalper. Eternal-bull statue robot.
+  {
+    key: "atlas",
+    prompt:
+      "A charmingly wonky steampunk classical-statue robot character, three-quarter view, head and shoulders. Head and shoulders styled like a weathered bronze Roman bust — tarnished verdigris-green oxidation streaks running down the face, riveted bronze plating where the skin would be, a small crown of laurel leaves cast in brass on the head, a tiny dented brass globe orb riveted to one shoulder like the world being carried, a thin paper-tape ribbon of stock-ticker numbers wrapped around the neck collar. Two round light-bulb eyes glowing soft warm orange, a faint stoic determined expression. Eternal-bull market-historian energy." +
+      STYLE,
+  },
+
   // ── Dormant bot families below are kept for revival; the active
   //    roster above is what the v4 build uses.
 
@@ -112,7 +128,14 @@ const BOTS: PersonaSpec[] = [
 
 // Restrict CLI runs to a subset by passing keys: `tsx ... -- whale pulse`
 const FILTER = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-const ACTIVE_KEYS = new Set(["whale", "native", "funding-sniper", "pulse"]);
+const ACTIVE_KEYS = new Set([
+  "whale",
+  "native",
+  "funding-sniper",
+  "pulse",
+  "bullion",
+  "atlas",
+]);
 
 interface OpenAiImageResponse {
   data?: Array<{ b64_json?: string; url?: string }>;

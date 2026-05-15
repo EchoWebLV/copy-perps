@@ -1,20 +1,17 @@
 // scripts/reset-six.ts
 //
-// Resets the paper-bot arena to the 6-bot focused test setup:
+// Resets the paper-bot arena to the v4 6-bot test setup:
 //
-//   Structural-edge specialists (4):
-//     • Vulture     — fades $100M+ liquidation cascades.       dyn 8-20x
-//     • Sniper      — fades funding extremes >0.5%/8h.         dyn 4-12x
-//     • Contrarian  — fades roster consensus (≥3 same-side).   dyn 5-12x
-//     • Shadow      — copies curated HL whale opens ≥$500k.    dyn 5-15x
+//   • WHALE   — mirrors top Hyperliquid wallet 0xb83de0…6e36
+//   • NATIVE  — mirrors top Pacifica wallet 4u3L6r3n…CmZB
+//   • SNIPER  — fades cross-CEX funding extremes (>0.5% per 8h)
+//   • PULSE   — X (Twitter) trend catcher via Grok 4.3 + x_search
+//   • BULLION — XAU long-only max-leverage scalper (80% bankroll)
+//   • ATLAS   — SP500 long-only max-leverage scalper (80% bankroll)
 //
-//   LLM-driven traders (2):
-//     • Grok    — xAI grok-4.3, 5-min eval cooldown.    dyn 3-15x
-//     • Claude  — Anthropic claude-opus-4-7, same.       dyn 3-15x
-//
-// Wipes ALL paper_positions, deletes every bot row that isn't one of
-// the 6 target bots (so Surge/Fade/Bolt/Anti-X get removed from the
-// DB), then upserts the 6 with fresh $10,000 balances. Safe to rerun.
+// Wipes ALL paper_positions, deletes any bot row not in this
+// roster, then upserts the 6 with fresh $10,000 balances. Safe to
+// rerun (idempotent).
 
 import "dotenv/config";
 import { neon } from "@neondatabase/serverless";
@@ -22,19 +19,28 @@ import { neon } from "@neondatabase/serverless";
 const STARTING_BALANCE = 10_000;
 
 const TARGET_BOTS = {
-  vulture: {
-    name: "Vulture",
-    avatarEmoji: "🦅",
-    personaVoiceKey: "vulture",
-    strategyKey: "vulture",
+  whale: {
+    name: "Whale",
+    avatarEmoji: "🐋",
+    personaVoiceKey: "whale",
+    strategyKey: "whale",
     config: {
-      cascadeWindowMs: 60 * 1000,
-      minCascadeNotionalUsd: 100_000_000,
-      exitFavorablePct: 0.008,
-      maxHoldMs: 60 * 60 * 1000,
-      leverage: 12,
-      minLeverage: 8,
-      maxLeverage: 20,
+      sourceKind: "hl-wallet",
+      sourceAddress: "0xb83de012dba672c76a7dbbbf3e459cb59d7d6e36",
+      maxLeverage: 15,
+      maxHoldMs: 24 * 60 * 60 * 1000,
+    },
+  },
+  native: {
+    name: "Native",
+    avatarEmoji: "🌊",
+    personaVoiceKey: "native",
+    strategyKey: "native",
+    config: {
+      sourceKind: "pacifica-wallet",
+      sourceAddress: "4u3L6r3nyL9XfZ93gMeXb4eddUGAXAMK8Cqkj1pvCmZB",
+      maxLeverage: 12,
+      maxHoldMs: 24 * 60 * 60 * 1000,
     },
   },
   "funding-sniper": {
@@ -52,68 +58,6 @@ const TARGET_BOTS = {
       maxLeverage: 12,
     },
   },
-  contrarian: {
-    name: "Contrarian",
-    avatarEmoji: "🪞",
-    personaVoiceKey: "contrarian",
-    strategyKey: "contrarian",
-    config: {
-      minConsensusCount: 3,
-      exitFavorablePct: 0.005,
-      maxHoldMs: 60 * 60 * 1000,
-      leverage: 8,
-      minLeverage: 5,
-      maxLeverage: 12,
-    },
-  },
-  "whale-shadow": {
-    name: "Shadow",
-    avatarEmoji: "🐋",
-    personaVoiceKey: "whale-shadow",
-    strategyKey: "whale-shadow",
-    config: {
-      minNotionalUsd: 500_000,
-      freshnessMs: 4 * 60 * 1000,
-      exitFavorablePct: 0.012,
-      exitAdverseStopPct: 0.008,
-      maxHoldMs: 4 * 60 * 60 * 1000,
-      leverage: 10,
-      minLeverage: 5,
-      maxLeverage: 15,
-    },
-  },
-  "grok-trader": {
-    name: "Grok",
-    avatarEmoji: "🤖",
-    personaVoiceKey: "grok-trader",
-    strategyKey: "grok-trader",
-    config: {
-      provider: "xai",
-      modelId: "grok-4.3",
-      evalCooldownMs: 5 * 60 * 1000,
-      maxHoldMs: 4 * 60 * 60 * 1000,
-      exitAdverseStopPct: 0.012,
-      defaultLeverage: 8,
-      minLeverage: 3,
-      maxLeverage: 15,
-    },
-  },
-  "claude-trader": {
-    name: "Claude",
-    avatarEmoji: "🧠",
-    personaVoiceKey: "claude-trader",
-    strategyKey: "claude-trader",
-    config: {
-      provider: "anthropic",
-      modelId: "claude-opus-4-7",
-      evalCooldownMs: 5 * 60 * 1000,
-      maxHoldMs: 4 * 60 * 60 * 1000,
-      exitAdverseStopPct: 0.012,
-      defaultLeverage: 8,
-      minLeverage: 3,
-      maxLeverage: 15,
-    },
-  },
   pulse: {
     name: "Pulse",
     avatarEmoji: "📡",
@@ -125,6 +69,40 @@ const TARGET_BOTS = {
       exitAdverseStopPct: 0.012,
       minLeverage: 3,
       maxLeverage: 8,
+    },
+  },
+  bullion: {
+    name: "Bullion",
+    avatarEmoji: "🪙",
+    personaVoiceKey: "bullion",
+    strategyKey: "bullion",
+    config: {
+      asset: "XAU",
+      side: "long",
+      maxLeverage: 10,
+      stakePctOverride: 0.8,
+      tpPricePct: 0.004,
+      slPricePct: 0.007,
+      maxHoldMs: 60 * 60 * 1000,
+      cooldownAfterCloseMs: 5 * 60 * 1000,
+      stopLossPct: 0.9,
+    },
+  },
+  atlas: {
+    name: "Atlas",
+    avatarEmoji: "📈",
+    personaVoiceKey: "atlas",
+    strategyKey: "atlas",
+    config: {
+      asset: "SP500",
+      side: "long",
+      maxLeverage: 10,
+      stakePctOverride: 0.8,
+      tpPricePct: 0.003,
+      slPricePct: 0.005,
+      maxHoldMs: 60 * 60 * 1000,
+      cooldownAfterCloseMs: 5 * 60 * 1000,
+      stopLossPct: 0.9,
     },
   },
 } as const;
@@ -189,7 +167,7 @@ async function main() {
       console.log(`  ⚠ ${botId} upsert returned no rows`);
     } else {
       console.log(
-        `  ✓ ${botId.padEnd(20)} name="${String(row.name).padEnd(12)}" balance=$${row.balance_usd}`,
+        `  ✓ ${botId.padEnd(18)} name="${String(row.name).padEnd(10)}" balance=$${row.balance_usd}`,
       );
     }
   }
@@ -200,12 +178,8 @@ async function main() {
   console.log("\nAFTER:");
   console.table(after);
 
-  const remainingPositions = (await sql`
-    SELECT COUNT(*) AS n FROM paper_positions
-  `) as Array<{ n: number }>;
-  console.log(`Remaining open positions: ${remainingPositions[0].n}`);
   console.log(
-    `\nTest start: ${new Date().toISOString()} — let the resolver run for 24h.`,
+    `\nTest start: ${new Date().toISOString()} — let the resolver run.`,
   );
 }
 

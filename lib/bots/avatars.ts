@@ -14,6 +14,8 @@ const BOT_IMAGES: Record<string, string> = {
   native: "/bots/native.png",
   "funding-sniper": "/bots/funding-sniper.png",
   pulse: "/bots/pulse.png",
+  bullion: "/bots/bullion.png",
+  atlas: "/bots/atlas.png",
 
   // ── Dormant arena-era bots (kept for revival) ─────────────────
   vulture: "/bots/vulture.png",

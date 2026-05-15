@@ -47,6 +47,21 @@ const LOSS_COOLDOWN_WINDOW_MS = 5 * 60 * 1000;
 // the original stake, get out." Per-bot override via bot.config.stopLossPct.
 const DEFAULT_STOP_LOSS_PCT = 0.5;
 
+/** Per-bot override for the resolver's global MAX_STAKE_PCT. Lets a
+ *  high-conviction scalper bot run at e.g. 80% of bankroll per trade
+ *  while normal bots stick to 20%. Clamped to [0.05, 0.95] so a
+ *  misconfigured bot can't try to stake 100% and trip a downstream
+ *  zero-free-balance check. */
+function readStakePctOverride(
+  config: Record<string, unknown> | null | undefined,
+): number | null {
+  const raw = config?.stakePctOverride;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+    return null;
+  }
+  return Math.min(0.95, Math.max(0.05, raw));
+}
+
 function readStopLossPct(config: Record<string, unknown> | null | undefined): number {
   const raw = config?.stopLossPct;
   if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
@@ -200,7 +215,15 @@ export async function tick(): Promise<{
         if (crossBot.familyHoldings.has(familyKey)) continue;
       }
 
-      const targetStake = balance * MAX_STAKE_PCT * decision.conviction;
+      // Honor bot.config.stakePctOverride when set (e.g. 0.8 for the
+      // scalpers); otherwise fall back to the global cap × conviction.
+      const stakePctOverride = readStakePctOverride(
+        bot.config as Record<string, unknown> | null | undefined,
+      );
+      const targetStake =
+        stakePctOverride != null
+          ? balance * stakePctOverride
+          : balance * MAX_STAKE_PCT * decision.conviction;
       const stake = Math.min(targetStake, freeBalance);
       if (stake < MIN_STAKE_USD) continue;
 
