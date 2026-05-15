@@ -19,6 +19,7 @@ import {
 import { PulseStrategy, PulseBot } from "./strategies/pulse";
 import { BullionStrategy, BullionBot } from "./strategies/bullion";
 import { AtlasStrategy, AtlasBot } from "./strategies/atlas";
+import { KrakenStrategy, KrakenBot } from "./strategies/kraken";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -103,3 +104,4 @@ registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extreme
 registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
 registerBot(BullionBot, BullionStrategy); // Bullion (XAU long-only max-leverage scalper)
 registerBot(AtlasBot, AtlasStrategy); // Atlas (SP500 long-only max-leverage scalper)
+registerBot(KrakenBot, KrakenStrategy); // Kraken (high-leverage HL whale mirror)

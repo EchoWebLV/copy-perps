@@ -1,5 +1,21 @@
 // scripts/reset-six.ts
 //
+// ⚠️ DESTRUCTIVE — DO NOT RUN TO ADD A NEW BOT ⚠️
+//
+// This script deletes EVERY row from paper_positions and resets
+// every bots.balance_usd back to the starting balance. Running it
+// in the middle of a live experiment destroys all accumulated PnL.
+// There is no recovery — Neon free-tier doesn't give point-in-time
+// restore.
+//
+// To add a new bot to the roster while preserving existing state,
+// use `scripts/add-bots.ts` instead.
+//
+// Only run this when the user has explicitly asked to wipe positions
+// or "start fresh" in the current session.
+//
+// ──────────────────────────────────────────────────────────────────
+//
 // Resets the paper-bot arena to the v4 6-bot test setup:
 //
 //   • WHALE   — mirrors top Hyperliquid wallet 0xb83de0…6e36

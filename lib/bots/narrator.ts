@@ -20,6 +20,7 @@ import { WHALE_PERSONA } from "./personas/whale";
 import { NATIVE_PERSONA } from "./personas/native";
 import { BULLION_PERSONA } from "./personas/bullion";
 import { ATLAS_PERSONA } from "./personas/atlas";
+import { KRAKEN_PERSONA } from "./personas/kraken";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -41,6 +42,7 @@ export const PERSONAS = {
   "native": NATIVE_PERSONA,
   "bullion": BULLION_PERSONA,
   "atlas": ATLAS_PERSONA,
+  "kraken": KRAKEN_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -138,7 +140,11 @@ function formatTriggerSummary(
     const tpPct = Number(trigger.tpPricePct ?? 0) * 100;
     return `You opened another ${side} on ${asset} at ${lev}× leverage, scalping for a ${tpPct.toFixed(1)}% move.`;
   }
-  if (personaKey === "whale" || personaKey === "native") {
+  if (
+    personaKey === "whale" ||
+    personaKey === "native" ||
+    personaKey === "kraken"
+  ) {
     const srcName = String(trigger.sourceDisplayName ?? "the source");
     const px = Number(trigger.sourceEntryPx ?? 0);
     const sizeM = Number(trigger.sourceNotionalUsd ?? 0) / 1e6;

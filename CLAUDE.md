@@ -2,6 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## NEVER WIPE THE PAPER-BOT EXPERIMENT
+
+**Hard rule. No exceptions. No "but I thought it would be fine."**
+
+The `scripts/reset-*.ts` files (`reset-six.ts`, any future `reset-N.ts`) **DELETE EVERY row from `paper_positions` and reset every `bots.balance_usd` back to the starting balance**. Running one of these in the middle of a live experiment destroys real PnL the user is watching — there is **no recovery** (Neon free-tier doesn't give point-in-time restore).
+
+**When the user asks for ANY of these, the answer is `scripts/add-bots.ts`, never a reset script:**
+- "add a bot" / "add another bot" / "let's make a 4th/5th/6th/Nth bot"
+- "spin up a Kraken / Bullion / Atlas / etc."
+- "wire it up and seed it"
+- "go ahead and do it" (after agreeing on a new bot)
+- Any phrasing whose semantics are "I want a NEW bot to start trading"
+
+`scripts/add-bots.ts` is the non-destructive path: it INSERTs new bot rows by id, SKIPs anything already in the DB, and **never touches `paper_positions`** or existing balances. Existing bots keep their open positions, closed history, and accumulated PnL.
+
+**The only time a `reset-*.ts` script is allowed to run is:**
+1. The user has explicitly typed something like "wipe everything" / "reset all positions" / "start fresh" **in the current turn**, AND
+2. You've shown them the `BEFORE:` row count (open positions + bot count) **before** invoking the script.
+
+If you are uncertain whether the user wants a reset vs. a non-destructive add, **default to add-bots.ts and ask**. The cost of asking is one round trip; the cost of an unwanted reset is the entire experiment.
+
+When shipping a new bot, the seed flow is always:
+1. Add the bot to the `ADD_BOTS` map in `scripts/add-bots.ts`.
+2. Run `npx tsx --env-file=.env.local scripts/add-bots.ts <bot-id>` (or with no arg to add every new entry).
+3. Confirm via the script's `Current roster:` table.
+
 ## Product
 
 Fast Bet (now branded **gwak.gg**) is a TikTok-style vertical-scroll feed that aggregates three rails of degen attention onto a single screen with one-tap stakes ($5 / $10 / $20 / $50):

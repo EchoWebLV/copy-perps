@@ -86,6 +86,14 @@ const BOTS: PersonaSpec[] = [
       STYLE,
   },
 
+  // Kraken — high-leverage HL whale mirror. Sea-monster robot.
+  {
+    key: "kraken",
+    prompt:
+      "A charmingly wonky steampunk kraken-headed robot character, three-quarter view, head and shoulders. The head is shaped like a giant mechanical octopus / kraken — bulbous riveted copper skull with deep oxidized blue-green patches, eight thin brass mechanical tentacles unfurling from the base of the head and around the shoulders like a beard of cables ending in tiny copper suction cups, one enormous round glass-domed light-bulb eye on the side of the head glowing deep menacing amber (the bigger, more dangerous cousin of Whale), faint barnacle textures and rust pits across the plating, a tiny brass crown of pointed horns. Monster-from-the-depths apex-predator energy." +
+      STYLE,
+  },
+
   // ── Dormant bot families below are kept for revival; the active
   //    roster above is what the v4 build uses.
 
@@ -135,6 +143,7 @@ const ACTIVE_KEYS = new Set([
   "pulse",
   "bullion",
   "atlas",
+  "kraken",
 ]);
 
 interface OpenAiImageResponse {

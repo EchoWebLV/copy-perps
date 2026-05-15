@@ -16,6 +16,7 @@ const BOT_IMAGES: Record<string, string> = {
   pulse: "/bots/pulse.png",
   bullion: "/bots/bullion.png",
   atlas: "/bots/atlas.png",
+  kraken: "/bots/kraken.png",
 
   // ── Dormant arena-era bots (kept for revival) ─────────────────
   vulture: "/bots/vulture.png",
