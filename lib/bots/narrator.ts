@@ -16,6 +16,8 @@ import { WHALE_SHADOW_PERSONA } from "./personas/whale-shadow";
 import { GROK_TRADER_PERSONA } from "./personas/grok-trader";
 import { CLAUDE_TRADER_PERSONA } from "./personas/claude-trader";
 import { PULSE_PERSONA } from "./personas/pulse";
+import { WHALE_PERSONA } from "./personas/whale";
+import { NATIVE_PERSONA } from "./personas/native";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -33,6 +35,8 @@ export const PERSONAS = {
   "grok-trader": GROK_TRADER_PERSONA,
   "claude-trader": CLAUDE_TRADER_PERSONA,
   "pulse": PULSE_PERSONA,
+  "whale": WHALE_PERSONA,
+  "native": NATIVE_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -124,6 +128,13 @@ function formatTriggerSummary(
     const notional = Number(trigger.whaleNotionalUsd ?? 0);
     const px = Number(trigger.whaleEntryPx ?? 0);
     return `A tracked whale just opened a ${side} on ${asset} with $${(notional / 1e6).toFixed(2)} million size at $${px.toFixed(2)}. You opened beside them.`;
+  }
+  if (personaKey === "whale" || personaKey === "native") {
+    const srcName = String(trigger.sourceDisplayName ?? "the source");
+    const px = Number(trigger.sourceEntryPx ?? 0);
+    const sizeM = Number(trigger.sourceNotionalUsd ?? 0) / 1e6;
+    const sizeText = sizeM >= 0.1 ? `$${sizeM.toFixed(2)}M` : `$${(sizeM * 1000).toFixed(0)}k`;
+    return `${srcName} just opened a ${side} on ${asset} sized at ${sizeText} around $${px}. You mirrored beside them.`;
   }
   if (personaKey === "pulse") {
     const handle = String(trigger.pulseHandle ?? "");
@@ -247,7 +258,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 // so the position still lands; the UI handles missing narration.
 export async function narrateOpenSafe(
   args: Omit<NarrateOpenArgs, "personaKey"> & { personaKey: string },
-  timeoutMs = 15000,
+  timeoutMs = 30000,
 ): Promise<string | null> {
   if (!isKnownPersona(args.personaKey)) return null;
   try {
@@ -266,7 +277,7 @@ export async function narrateOpenSafe(
 
 export async function narrateCloseSafe(
   args: Omit<NarrateCloseArgs, "personaKey"> & { personaKey: string },
-  timeoutMs = 15000,
+  timeoutMs = 30000,
 ): Promise<string | null> {
   if (!isKnownPersona(args.personaKey)) return null;
   try {

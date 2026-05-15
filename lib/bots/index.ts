@@ -1,25 +1,21 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
-// Dormant bot families (Surge/Fade/Bolt/Anti-Surge/Anti-Fade) still live
-// in strategies/ + personas/ but aren't imported here — the registry
-// only loads what's actively trading.
-import { VultureStrategy, VultureBot } from "./strategies/vulture";
+// Active v4 roster: 4 bots, each wrapping a real-world signal source.
+// - WHALE: mirrors a top Hyperliquid wallet (source-mirror)
+// - NATIVE: mirrors a top Pacifica wallet (source-mirror)
+// - SNIPER: fades cross-CEX funding extremes (structural)
+// - PULSE: X (Twitter) trend catcher via Grok 4.3 (LLM)
+//
+// All older bots (Surge/Fade/Bolt/Anti-X, Vulture, Contrarian, Shadow,
+// Grok, Claude) remain in the codebase as dormant strategy/persona
+// files in case we want to revive any.
+import { WhaleStrategy, WhaleBot } from "./strategies/whale";
+import { NativeStrategy, NativeBot } from "./strategies/native";
 import {
   FundingSniperStrategy,
   FundingSniperBot,
 } from "./strategies/funding-sniper";
-import { ContrarianStrategy, ContrarianBot } from "./strategies/contrarian";
-import {
-  WhaleShadowStrategy,
-  WhaleShadowBot,
-} from "./strategies/whale-shadow";
-import {
-  GrokTraderStrategy,
-  GrokTraderBot,
-  ClaudeTraderStrategy,
-  ClaudeTraderBot,
-} from "./strategies/llm-trader";
 import { PulseStrategy, PulseBot } from "./strategies/pulse";
 
 const BOTS = new Map<string, BotConfig>();
@@ -98,15 +94,8 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// ── Active arena roster: 4 structural-edge specialists + 2 LLM traders.
-// Surge / Fade / Bolt / Anti-Surge / Anti-Fade live in strategies/ + personas/
-// as code in case we want to revive them, but they're not registered at
-// module load. The remaining 9 legacy bot families (boomer-trend, etc.)
-// are likewise dormant — admin can clone any of them back if needed.
-registerBot(VultureBot, VultureStrategy); // Vulture (liquidation cascades)
+// v4 roster — 4 bots, each wrapping a real-world signal source.
+registerBot(WhaleBot, WhaleStrategy); // Whale (HL wallet mirror)
+registerBot(NativeBot, NativeStrategy); // Native (Pacifica wallet mirror)
 registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extremes)
-registerBot(ContrarianBot, ContrarianStrategy); // Contrarian (fades roster consensus)
-registerBot(WhaleShadowBot, WhaleShadowStrategy); // Shadow (copies tracked whales)
-registerBot(GrokTraderBot, GrokTraderStrategy); // Grok (xAI LLM trader)
-registerBot(ClaudeTraderBot, ClaudeTraderStrategy); // Claude (Anthropic LLM trader)
 registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
