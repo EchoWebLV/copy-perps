@@ -32,42 +32,76 @@ interface PersonaSpec {
 }
 
 const BOTS: PersonaSpec[] = [
-  // ── Vulture (liquidation-cascade fader) ─────────────────────────────
+  // ── v4 active roster ────────────────────────────────────────────────
+  //
+  // Each avatar is concept-driven: the robot is shaped LIKE the thing
+  // it represents (a whale, a satellite, a sniper, a wave-rider),
+  // not a generic humanoid robot in different colors.
+
+  // Whale — mirrors a real Hyperliquid whale. Robot whale.
+  {
+    key: "whale",
+    prompt:
+      "Robotic mechanical whale head, viewed three-quarters facing camera. Massive smooth cobalt-blue and brushed-titanium chrome plating shaped exactly like a humpback whale's head — rounded dome forehead, long curved lower jaw, two pectoral fin elements visible at the base of the neck, a chrome blowhole on top with faint steam exhaust. A single huge glowing aqua-cyan cyclopean eye-lens with concentric ripple-rings on the side of the head. Calm, gentle, mighty presence. Filling the frame head-only." +
+      STYLE,
+  },
+
+  // Native — mirrors a top Pacifica wallet. Solana cyber-ronin.
+  {
+    key: "native",
+    prompt:
+      "Solana-native cyber-ronin robot head, three-quarter view. Sleek obsidian and chrome face plate with vivid Solana-gradient (electric-purple flowing into hot-magenta flowing into neon-mint) energy streaks pulsing along every seam, sharp samurai-style cheek guards, a single horizontal slit-eye glowing magenta, a low chrome topknot antenna swept back, two small gradient flag-fins along the temples. Calm warrior-pride home-team energy. Filling the frame head-only." +
+      STYLE,
+  },
+
+  // Sniper — fades cross-CEX funding extremes. Tactical sniper robot.
+  {
+    key: "funding-sniper",
+    prompt:
+      "Tactical sniper robot head, three-quarter view. Matte forest-green and gunmetal plating with hexagonal mesh cheek guards, a massive oversized cyclopean rifle-scope eye-lens dominating the face — glass front with thin laser-red crosshair reticle inside, scope mounting rails on top, twin range-finding antenna-spikes folded back along the crown, a small comms patch on one temple, faint ghillie-strand carbon fibers along the neck collar. Quiet, patient, lethal stillness. Filling the frame head-only." +
+      STYLE,
+  },
+
+  // Pulse — Grok 4.3 + X live search. Communications satellite robot.
+  {
+    key: "pulse",
+    prompt:
+      "Communications-satellite robot head, three-quarter view. Polished midnight-blue chrome dome-skull shaped like a comms satellite — a single large dish-antenna face replacing a normal face, with a glowing electric-cyan emitter dot at the center, twin gold-foil solar-panel wings flaring out from the temples like ears, three smaller whip-antennas of varying lengths rising from the crown each tipped with a tiny blinking white pulse light, faint waveform engraving on the throat collar. Always-listening always-broadcasting energy. Filling the frame head-only." +
+      STYLE,
+  },
+
+  // ── Dormant bot families below are kept for revival; the active
+  //    roster above is what the v4 build uses.
+
+  // Vulture (dormant — liquidation-cascade fader)
   {
     key: "vulture",
     prompt:
       "Scavenger raptor robot. Bald gunmetal-grey angular skull with hunched neck plating, glowing blood-red lens eyes deep in sockets, hooked metallic beak slightly open with serrated edges, fan of carbon-fibre feathers around the collar, calm patient predatory expression. Picking-the-bones energy." +
       STYLE,
   },
-  // ── Funding Sniper (funding-extreme fader) ──────────────────────────
-  {
-    key: "funding-sniper",
-    prompt:
-      "Marksman robot. Sleek matte forest-green tactical head, single oversized cyclopean scope-lens eye glowing thin laser-red, hexagonal mesh cheek plates, communications antenna folded along the side, deeply still calm expression, faint crosshair reticle glow inside the lens. Quiet, patient, lethal." +
-      STYLE,
-  },
-  // ── Contrarian (fades roster consensus) ─────────────────────────────
+  // Contrarian (dormant — fades roster consensus)
   {
     key: "contrarian",
     prompt:
       "Outsider robot. Asymmetrical split head, left half polished black chrome with a glowing white lens eye, right half polished white chrome with a glowing black lens eye, a dryly amused half-smirk built into the mouth plate. Confident standoffish vibe, takes-the-other-side energy." +
       STYLE,
   },
-  // ── Whale Shadow (copies tracked whales) ────────────────────────────
+  // Whale Shadow (dormant — older whale tracker)
   {
     key: "whale-shadow",
     prompt:
       "Stealth follower robot. Deep-ocean navy chrome head with a smooth whale-like dome forehead, large glowing teal cyclopean eye-lens with bioluminescent ripple patterns, no mouth — a subtle speaker grille slit, two streamlined antenna-fins along the temples like a whale's flukes. Quiet humble shadow-the-whale energy." +
       STYLE,
   },
-  // ── Grok (xAI LLM trader) ───────────────────────────────────────────
+  // Grok-trader (dormant — autonomous xAI LLM trader, replaced by Pulse)
   {
     key: "grok-trader",
     prompt:
       "AI-reasoning robot. Polished black-and-silver brushed-metal head with subtle iridescent oil-slick rainbow reflections, two glowing electric-violet lens eyes asymmetric in size, slim antenna with a single glowing pixel-cube on top, slightly cocky smirk built into the mouth plate, the letter X subtly embossed on one temple. Intellectually arrogant chaotic-good vibe." +
       STYLE,
   },
-  // ── Claude (Anthropic LLM trader) ───────────────────────────────────
+  // Claude-trader (dormant — autonomous Anthropic LLM trader)
   {
     key: "claude-trader",
     prompt:
@@ -75,6 +109,10 @@ const BOTS: PersonaSpec[] = [
       STYLE,
   },
 ];
+
+// Restrict CLI runs to a subset by passing keys: `tsx ... -- whale pulse`
+const FILTER = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const ACTIVE_KEYS = new Set(["whale", "native", "funding-sniper", "pulse"]);
 
 interface OpenAiImageResponse {
   data?: Array<{ b64_json?: string; url?: string }>;
@@ -155,7 +193,17 @@ async function generate(
 
 async function main() {
   let workingModel: string | null = null;
-  for (const p of BOTS) {
+  // Default: only regenerate the 4 active v4 bots. Pass explicit keys
+  // on the CLI to regenerate any specific subset (including dormant
+  // ones) — e.g. `tsx scripts/generate-bot-avatars.ts vulture grok-trader`.
+  const target = FILTER.length > 0 ? new Set(FILTER) : ACTIVE_KEYS;
+  const toRun = BOTS.filter((b) => target.has(b.key));
+  if (toRun.length === 0) {
+    console.error(`No bots matched. Active set: ${[...ACTIVE_KEYS].join(", ")}`);
+    process.exit(1);
+  }
+  console.log(`Generating ${toRun.length} avatar(s): ${toRun.map((b) => b.key).join(", ")}`);
+  for (const p of toRun) {
     const got = await generate(p, workingModel);
     if (got) workingModel = got;
   }
