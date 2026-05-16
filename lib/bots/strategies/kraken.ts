@@ -29,7 +29,7 @@ const built = buildMirrorBot({
   avatarEmoji: "🦑",
   personaVoiceKey: "kraken",
   source: KRAKEN_SOURCE,
-  maxLeverage: 40,
+  maxLeverage: 80,
   maxHoldMs: 24 * 60 * 60 * 1000,
 });
 

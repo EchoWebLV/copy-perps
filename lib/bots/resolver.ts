@@ -32,7 +32,13 @@ import {
 import type { ExternalSignals, MarketContext } from "./types";
 
 const MAX_CONCURRENT_POSITIONS = 8;
-const MAX_STAKE_PCT = 0.2;
+// Position sizing: stake scales from 25% of bankroll on a weak signal
+// to 50% on a max-conviction one. Conviction is clamped to
+// [CONVICTION_FLOOR, 1.0] upstream (clampConviction), and that band is
+// mapped linearly onto [MIN_STAKE_PCT, MAX_STAKE_PCT].
+const MIN_STAKE_PCT = 0.25;
+const MAX_STAKE_PCT = 0.5;
+const CONVICTION_FLOOR = 0.3; // mirrors clampConviction's default floor
 const MIN_STAKE_USD = 10;
 const BUST_THRESHOLD_USD = 10;
 const MAX_BOTS_SAME_SIDE = 3;
@@ -71,6 +77,16 @@ function readStopLossPct(config: Record<string, unknown> | null | undefined): nu
   return Math.min(Math.max(raw, 0.05), 1.0);
 }
 
+/** Map a strategy's conviction onto a stake fraction of bankroll:
+ *  conviction CONVICTION_FLOOR → MIN_STAKE_PCT, conviction 1.0 →
+ *  MAX_STAKE_PCT, linear in between. Out-of-band convictions clamp. */
+function stakePctFromConviction(conviction: number): number {
+  const span = 1 - CONVICTION_FLOOR;
+  const t = span > 0 ? (conviction - CONVICTION_FLOOR) / span : 1;
+  const clamped = Math.min(1, Math.max(0, t));
+  return MIN_STAKE_PCT + clamped * (MAX_STAKE_PCT - MIN_STAKE_PCT);
+}
+
 /**
  * One resolver tick. For each paper bot:
  *  1. Evaluate exit on every currently-open position; close any whose
@@ -79,7 +95,7 @@ function readStopLossPct(config: Record<string, unknown> | null | undefined): nu
  *  2. Recheck balance — if below the bust threshold, mark busted.
  *  3. Compute freeBalance = balance − sum(stake of remaining open positions).
  *  4. For each allowed market, ask evaluateEntry. If a decision comes back,
- *     size the new position at min(balance × MAX_STAKE_PCT × conviction,
+ *     size the new position at min(balance × stakePct(conviction),
  *     freeBalance), capped at MAX_CONCURRENT_POSITIONS per bot.
  */
 export async function tick(): Promise<{
@@ -215,15 +231,15 @@ export async function tick(): Promise<{
         if (crossBot.familyHoldings.has(familyKey)) continue;
       }
 
-      // Honor bot.config.stakePctOverride when set (e.g. 0.8 for the
-      // scalpers); otherwise fall back to the global cap × conviction.
+      // Honor bot.config.stakePctOverride when set; otherwise size by
+      // conviction — 25%-50% of bankroll (see stakePctFromConviction).
       const stakePctOverride = readStakePctOverride(
         bot.config as Record<string, unknown> | null | undefined,
       );
       const targetStake =
         stakePctOverride != null
           ? balance * stakePctOverride
-          : balance * MAX_STAKE_PCT * decision.conviction;
+          : balance * stakePctFromConviction(decision.conviction);
       const stake = Math.min(targetStake, freeBalance);
       if (stake < MIN_STAKE_USD) continue;
 

@@ -108,9 +108,9 @@ export const FundingSniperStrategy = createFundingSniperStrategy({
   minVenueAgreement: 3,
   exitFavorablePct: 0.005,
   maxHoldMs: 4 * 60 * 60 * 1000,
-  leverage: 8,
-  minLeverage: 4,
-  maxLeverage: 12,
+  leverage: 16,
+  minLeverage: 8,
+  maxLeverage: 24,
 });
 
 export const FundingSniperBot: BotConfig = {
@@ -125,9 +125,9 @@ export const FundingSniperBot: BotConfig = {
     minVenueAgreement: 3,
     exitFavorablePct: 0.005,
     maxHoldMs: 4 * 60 * 60 * 1000,
-    leverage: 8,
-    minLeverage: 4,
-    maxLeverage: 12,
+    leverage: 16,
+    minLeverage: 8,
+    maxLeverage: 24,
   },
   status: "paper",
 };

@@ -17,35 +17,20 @@
 import "dotenv/config";
 import { neon } from "@neondatabase/serverless";
 
+// 2026-05-16 patch: doubled leverage across the roster + dropped the
+// stakePctOverride on Bullion/Atlas so every bot now sizes via the
+// resolver's new 25%-50%-by-conviction rule. Keeps the DB `config`
+// JSONB in sync with the strategy-file BotConfig objects (the resolver
+// reads code, not DB, but the roster API + admin clone path read DB).
+// null deletes the key.
 const UPDATES: Record<string, Record<string, unknown>> = {
-  bullion: {
-    strategy: "gold-mean-revert",
-    timeframe: "4h",
-    candleCount: 24,
-    zEntryThreshold: 2.0,
-    tpPricePct: 0.008,
-    slPricePct: 0.012,
-    maxHoldMs: 12 * 60 * 60 * 1000,
-    cooldownAfterCloseMs: 60 * 60 * 1000,
-    stakePctOverride: 0.5,
-    minLeverage: 4,
-    maxLeverage: 8,
-    // Remove the old scalper-specific fields so the row matches the
-    // new strategy's shape. Setting to null deletes via the JSONB
-    // patch logic below.
-    tpPricePctOld: null,
-    slPricePctOld: null,
-  },
-  atlas: {
-    strategy: "overnight-sp500",
-    entryHourEt: 16.0,
-    exitHourEt: 9.5,
-    leverage: 5,
-    hardStopPct: 0.015,
-    maxHoldMs: 18 * 60 * 60 * 1000,
-    cooldownAfterCloseMs: 4 * 60 * 60 * 1000,
-    stakePctOverride: 0.5,
-  },
+  whale: { maxLeverage: 30 },
+  native: { maxLeverage: 24 },
+  kraken: { maxLeverage: 80 },
+  "funding-sniper": { leverage: 16, minLeverage: 8, maxLeverage: 24 },
+  bullion: { minLeverage: 8, maxLeverage: 16, stakePctOverride: null },
+  atlas: { leverage: 10, stakePctOverride: null },
+  pulse: { minLeverage: 6, maxLeverage: 16 },
 };
 
 async function main() {

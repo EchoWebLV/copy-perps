@@ -27,7 +27,7 @@ const ENTRY_HOUR_ET = 16.0; // 16:00 ET = NYSE cash close
 const EXIT_HOUR_ET = 9.5; // 09:30 ET = NYSE cash open
 const HARD_STOP_PCT = 0.015; // 1.5% adverse on PRICE — kills bad nights early
 const MAX_HOLD_MS = 18 * 60 * 60 * 1000;
-const FIXED_LEVERAGE = 5;
+const FIXED_LEVERAGE = 10;
 const COOLDOWN_AFTER_CLOSE_MS = 4 * 60 * 60 * 1000; // 4h cooldown — avoids
                                                     // immediate re-entry if
                                                     // we stop out, and only

@@ -7,7 +7,7 @@
 // Bessembinder overnight-drift trade. Long SP500 from 16:00 ET (cash
 // close) to 09:30 ET (cash open) on weekdays. ~95% of long-term SPX
 // return historically comes from overnight; intraday is near-zero.
-// One trade per session, 5x lev, 50% stake. Same bot id and persona —
+// One trade per session, 10x lev. Same bot id and persona —
 // the voice stays "eternal bull" but now grounded in a real cycle.
 
 import type { BotConfig } from "../types";
@@ -29,11 +29,10 @@ export const AtlasBot: BotConfig = {
     asset: "SP500",
     entryHourEt: 16.0,
     exitHourEt: 9.5,
-    leverage: 5,
+    leverage: 10,
     hardStopPct: 0.015,
     maxHoldMs: 18 * 60 * 60 * 1000,
     cooldownAfterCloseMs: 4 * 60 * 60 * 1000,
-    stakePctOverride: 0.5,
     stopLossPct: 0.9,
   },
   status: "paper",

@@ -27,7 +27,7 @@ const built = buildMirrorBot({
   avatarEmoji: "🐋",
   personaVoiceKey: "whale",
   source: WHALE_SOURCE,
-  maxLeverage: 15,
+  maxLeverage: 30,
   // 24h hold cap — most HL whale positions resolve within a day.
   maxHoldMs: 24 * 60 * 60 * 1000,
 });

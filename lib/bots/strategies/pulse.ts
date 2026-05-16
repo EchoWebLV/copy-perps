@@ -62,7 +62,7 @@ Your job each tick:
 When you act:
 - asset: pick ONE of BTC, ETH, SOL.
 - side: long if bullish pulse, short if bearish pulse, skip if no clear pulse.
-- leverage: integer 3-8. Lower if signal is moderate, higher if signal is loud + multiple confirming tweets.
+- leverage: integer 6-16. Lower if signal is moderate, higher if signal is loud + multiple confirming tweets.
 - takeProfitPct: 0.005-0.015 (0.5% to 1.5%). Catalysts move fast; take profit fast.
 - holdMinutes: 30-120. News-driven moves are short-lived.
 - reasoning: ONE sentence quoting a specific tweet (with @handle) that drove the decision. Plain English. No "z-score" or "bps".
@@ -212,8 +212,8 @@ export const PulseStrategy = createPulseStrategy({
   evalCooldownMs: 60 * 60 * 1000, // 60 min — 24 evals/day, ~8 fires
   maxHoldMs: 2 * 60 * 60 * 1000, // 2h max hold
   exitAdverseStopPct: 0.012,
-  minLeverage: 3,
-  maxLeverage: 8,
+  minLeverage: 6,
+  maxLeverage: 16,
 });
 
 export const PulseBot: BotConfig = {
@@ -227,8 +227,8 @@ export const PulseBot: BotConfig = {
     evalCooldownMs: 60 * 60 * 1000,
     maxHoldMs: 2 * 60 * 60 * 1000,
     exitAdverseStopPct: 0.012,
-    minLeverage: 3,
-    maxLeverage: 8,
+    minLeverage: 6,
+    maxLeverage: 16,
   },
   status: "paper",
 };

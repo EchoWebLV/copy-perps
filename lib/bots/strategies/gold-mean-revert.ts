@@ -73,13 +73,13 @@ export const GoldMeanRevertStrategy: Strategy = {
     const side: "long" | "short" = z < 0 ? "long" : "short";
     // Conviction scales with overshoot past the entry threshold. At
     // z = 2.0 (just qualifying) conviction is 0.4; at z = 3.5
-    // (extreme) conviction is 1.0. Maps onto leverage 4-8x in
+    // (extreme) conviction is 1.0. Maps onto leverage 8-16x in
     // buildEntry below.
     const overshoot = Math.abs(z) - Z_ENTRY;
     const conviction = clampConviction(0.4 + Math.min(1, overshoot / 1.5) * 0.6);
     const leverage = Math.max(
-      4,
-      Math.min(8, Math.round(4 + conviction * 4)),
+      8,
+      Math.min(16, Math.round(8 + conviction * 8)),
     );
 
     const meanPrice = closes.reduce((s, v) => s + v, 0) / closes.length;

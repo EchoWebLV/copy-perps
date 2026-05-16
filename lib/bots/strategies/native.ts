@@ -16,7 +16,7 @@ const NATIVE_ADDRESS = "4u3L6r3nyL9XfZ93gMeXb4eddUGAXAMK8Cqkj1pvCmZB";
 const NATIVE_SOURCE = createPacificaWalletSource({
   address: NATIVE_ADDRESS,
   displayName: "Pacifica 4u3L6…CmZB",
-  defaultLeverage: 5,
+  defaultLeverage: 10,
 });
 
 const built = buildMirrorBot({
@@ -25,7 +25,7 @@ const built = buildMirrorBot({
   avatarEmoji: "🌊",
   personaVoiceKey: "native",
   source: NATIVE_SOURCE,
-  maxLeverage: 12,
+  maxLeverage: 24,
   maxHoldMs: 24 * 60 * 60 * 1000,
 });
 
