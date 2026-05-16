@@ -31,6 +31,15 @@ import { clampConviction } from "../types";
 import type { Source, SourcePosition } from "@/lib/sources/types";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
+// Freshness gate. We only mirror a source position while the current
+// mark is still within this fraction of the price the source actually
+// entered at. Past it, the source opened the position before we were
+// watching (it has held it a while, or we just cold-started after a
+// server boot / arena reset and are seeing its existing book) —
+// entering now would enter at a price the source never got and that
+// nobody tailing us could reproduce. 0.5% ≈ one tick of normal
+// BTC/ETH/SOL drift, so genuinely fresh opens still pass.
+const MAX_ENTRY_DRIFT = 0.005;
 // Per-tick cache of the source's positions, keyed by source id.
 // Tick cadence is ~60s; cache for 30s so Phase 1 and Phase 2 in the
 // same tick share a single API read.
@@ -105,6 +114,16 @@ export function createSourceMirrorStrategy(
       }
       const match = findMatch(positions, ctx.asset);
       if (!match) return null;
+
+      // Freshness gate: only mirror while the mark is still near the
+      // source's actual entry. A large gap means the source opened
+      // this long before we saw it (stale book on cold start, or a
+      // position held for hours) — mirroring now would book a price
+      // the source never got. Skip; wait for its next fresh move.
+      if (match.entryPx > 0) {
+        const drift = Math.abs(ctx.mark - match.entryPx) / match.entryPx;
+        if (drift > MAX_ENTRY_DRIFT) return null;
+      }
 
       // Cap leverage at the strategy's max — even if the source is
       // running 50x we'll mirror at most maxLeverage.
