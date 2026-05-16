@@ -1,82 +1,54 @@
 // lib/data/marks.ts
 
-const HL_INFO_URL = "https://api.hyperliquid.xyz/info";
 const PAC_BASE = "https://api.pacifica.fi/api/v1";
 
-// Symbols that Hyperliquid doesn't list (gold, S&P, FX, single stocks)
-// but Pacifica does. The resolver still needs server-side marks for
-// these so scalper-style bots trading them can size trades and
-// evaluate exits. We pull the most recent trade price from Pacifica's
-// /trades endpoint for each. Add more here as new scalpers come on.
-const PACIFICA_ONLY_SYMBOLS = ["XAU", "SP500", "XAG", "EURUSD", "USDJPY"] as const;
+// Every symbol any bot trades. ALL marks come from Pacifica — the
+// arena's native exchange: the bots' source whales, their candles, and
+// their execution model are all Pacifica too. BTC/ETH/SOL used to come
+// from Hyperliquid's `allMids`, but HL rate-limited (429) the poll load
+// hard even with caching + retries. Pacifica sourcing is consistent
+// and 429-free, and a Pacifica BTC mark is the right price to value a
+// mirror of a Pacifica whale's BTC position anyway.
+const MARK_SYMBOLS = ["BTC", "ETH", "SOL", "XAU", "SP500"] as const;
 
-// Snapshot cache TTL. Bumped to 15s (from 5s): the feed roster polls
-// getMarksSnapshot every ~4s and the resolver ticks call it too, so a
-// 5s cache missed constantly and hammered Hyperliquid's allMids ~12x/
-// min — enough to trip HL's 429. At 15s it's ~4 fetches/min, shared by
-// every caller. The live UI price ticking runs off the Pacifica WS, so
-// a slightly staler server-side snapshot costs the resolver nothing.
+// Snapshot cache TTL. The feed roster polls getMarksSnapshot every ~4s
+// and the resolver ticks call it too; a 15s cache collapses all of
+// that onto ~4 refreshes/min. The live UI price ticking runs off the
+// Pacifica WS, so a slightly staler server snapshot costs nothing.
 const TTL_MS = 15_000;
 
 let _cache: { marks: Map<string, number>; expiresAt: number } | null = null;
-// Last successful HL allMids result. If a refetch 429s or errors, we
-// fall back to this so BTC/ETH/SOL marks never blank out mid-tick —
-// the old code would cache a majors-less snapshot and starve the
-// whale-bundle bots for a full TTL window.
-let _lastHlMarks: Map<string, number> | null = null;
+// Last good value per symbol. If one symbol's fetch misses on a
+// refresh, we carry its previous mark so it never blanks mid-tick.
+const _lastMarks = new Map<string, number>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchPacificaMark(symbol: string): Promise<number | null> {
-  try {
-    const r = await fetch(`${PAC_BASE}/trades?symbol=${symbol}&limit=1`, {
-      cache: "no-store",
-    });
-    if (!r.ok) return null;
-    const d = (await r.json()) as {
-      success: boolean;
-      data?: Array<{ price?: string | number }>;
-    };
-    if (!d.success || !Array.isArray(d.data) || d.data.length === 0) return null;
-    const px = Number(d.data[0].price);
-    return Number.isFinite(px) && px > 0 ? px : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Fetch Hyperliquid `allMids` (crypto majors + the 200+ HL perps).
- * Retries on 429 with a short backoff — HL rate-limits this endpoint
- * under poll load. Returns null if every attempt fails, in which case
- * the caller falls back to the last good snapshot.
+ * Last-trade price for one Pacifica symbol via /trades. Retries on 429
+ * with a short backoff. Returns null if every attempt fails.
  */
-async function fetchHlMids(): Promise<Map<string, number> | null> {
+async function fetchPacificaMark(symbol: string): Promise<number | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(HL_INFO_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "allMids" }),
+      const r = await fetch(`${PAC_BASE}/trades?symbol=${symbol}&limit=1`, {
         cache: "no-store",
       });
-      if (res.ok) {
-        const data = (await res.json()) as Record<string, string>;
-        const m = new Map<string, number>();
-        for (const [symbol, priceStr] of Object.entries(data)) {
-          const price = Number(priceStr);
-          if (Number.isFinite(price) && price > 0) m.set(symbol, price);
-        }
-        return m;
-      }
-      if (res.status === 429 && attempt < 2) {
-        await sleep(600 * (attempt + 1)); // 600ms, then 1200ms
+      if (r.status === 429 && attempt < 2) {
+        await sleep(500 * (attempt + 1)); // 500ms, then 1000ms
         continue;
       }
-      console.error("[marks] HL allMids failed:", res.status);
-      return null;
-    } catch (err) {
-      console.error("[marks] HL fetch error:", err);
+      if (!r.ok) return null;
+      const d = (await r.json()) as {
+        success: boolean;
+        data?: Array<{ price?: string | number }>;
+      };
+      if (!d.success || !Array.isArray(d.data) || d.data.length === 0) {
+        return null;
+      }
+      const px = Number(d.data[0].price);
+      return Number.isFinite(px) && px > 0 ? px : null;
+    } catch {
       return null;
     }
   }
@@ -84,32 +56,23 @@ async function fetchHlMids(): Promise<Map<string, number> | null> {
 }
 
 /**
- * Returns a map of symbol → mark. Crypto symbols come from
- * Hyperliquid's `allMids`; non-crypto / Pacifica-only symbols (XAU,
- * SP500, FX) are topped up from Pacifica's /trades. Cached for TTL_MS.
- * On an HL failure the last good HL marks are reused, so a transient
- * 429 never leaves the resolver blind on BTC/ETH/SOL.
+ * Returns a map of symbol → mark for every symbol the bots trade, all
+ * sourced from Pacifica. Cached for TTL_MS. A symbol whose fetch fails
+ * carries its last good value, so a transient miss never leaves the
+ * resolver blind on that market.
  */
 export async function getMarksSnapshot(): Promise<Map<string, number>> {
   if (_cache && _cache.expiresAt > Date.now()) return _cache.marks;
 
-  const fresh = await fetchHlMids();
-  if (fresh && fresh.size > 0) _lastHlMarks = fresh;
-  // Fresh HL marks if we got them, else the last good ones (stale but
-  // present), else empty.
-  const hl =
-    (fresh && fresh.size > 0 ? fresh : _lastHlMarks) ??
-    new Map<string, number>();
-
-  const marks = new Map<string, number>(hl);
-
-  // Pacifica-only marks for non-crypto symbols. Pulled in parallel so
-  // the extra REST calls don't add latency. Each is tolerated to fail
-  // without poisoning the snapshot.
+  const marks = new Map<string, number>();
   await Promise.all(
-    PACIFICA_ONLY_SYMBOLS.map(async (sym) => {
+    MARK_SYMBOLS.map(async (sym) => {
       const px = await fetchPacificaMark(sym);
-      if (px != null) marks.set(sym, px);
+      const value = px ?? _lastMarks.get(sym);
+      if (value != null) {
+        marks.set(sym, value);
+        if (px != null) _lastMarks.set(sym, px);
+      }
     }),
   );
 
