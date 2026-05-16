@@ -1,17 +1,20 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
-// Active v4 roster: 4 bots, each wrapping a real-world signal source.
-// - WHALE: mirrors a top Hyperliquid wallet (source-mirror)
-// - NATIVE: mirrors a top Pacifica wallet (source-mirror)
-// - SNIPER: fades cross-CEX funding extremes (structural)
-// - PULSE: X (Twitter) trend catcher via Grok 4.3 (LLM)
+// Active roster: 5 bots, each wrapping a real-world signal source.
+// - WHALE:   bundles 3 super-active whales (HL + Pacifica) behind one
+//            composite source — see strategies/whale.ts
+// - SNIPER:  fades cross-CEX funding extremes (structural)
+// - PULSE:   X (Twitter) trend catcher via Grok 4.3 (LLM)
+// - BULLION: 4h gold mean-reversion (algorithmic)
+// - ATLAS:   overnight SP500 drift (algorithmic)
 //
-// All older bots (Surge/Fade/Bolt/Anti-X, Vulture, Contrarian, Shadow,
-// Grok, Claude) remain in the codebase as dormant strategy/persona
-// files in case we want to revive any.
+// NATIVE and KRAKEN are no longer standalone bots — their wallets are
+// now two of the three whales inside the WHALE bundle. Their strategy
+// and persona files stay in the codebase, dormant. All older bots
+// (Vulture, Contrarian, Shadow, Grok, Claude, etc.) likewise remain
+// as dormant files in case we want to revive any.
 import { WhaleStrategy, WhaleBot } from "./strategies/whale";
-import { NativeStrategy, NativeBot } from "./strategies/native";
 import {
   FundingSniperStrategy,
   FundingSniperBot,
@@ -19,7 +22,6 @@ import {
 import { PulseStrategy, PulseBot } from "./strategies/pulse";
 import { BullionStrategy, BullionBot } from "./strategies/bullion";
 import { AtlasStrategy, AtlasBot } from "./strategies/atlas";
-import { KrakenStrategy, KrakenBot } from "./strategies/kraken";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -97,11 +99,10 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// v4 roster — 4 bots, each wrapping a real-world signal source.
-registerBot(WhaleBot, WhaleStrategy); // Whale (HL wallet mirror)
-registerBot(NativeBot, NativeStrategy); // Native (Pacifica wallet mirror)
+// Active roster — 5 bots. Native + Kraken are retired as standalone
+// bots; their wallets live on inside the WHALE bundle.
+registerBot(WhaleBot, WhaleStrategy); // Whale (3-whale bundle — HL + Pacifica)
 registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extremes)
 registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
-registerBot(BullionBot, BullionStrategy); // Bullion (XAU long-only max-leverage scalper)
-registerBot(AtlasBot, AtlasStrategy); // Atlas (SP500 long-only max-leverage scalper)
-registerBot(KrakenBot, KrakenStrategy); // Kraken (high-leverage HL whale mirror)
+registerBot(BullionBot, BullionStrategy); // Bullion (4h gold mean-reversion)
+registerBot(AtlasBot, AtlasStrategy); // Atlas (overnight SP500 drift)
