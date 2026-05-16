@@ -24,7 +24,6 @@ import {
   StoryAvatar,
   Headline,
   BigNum,
-  Stamp,
 } from "@/components/v2/ui";
 
 // Bot list is refetched every 4s — fast enough that an open/close on
@@ -124,11 +123,7 @@ export function BotRoster({ initialBots }: Props) {
 
       {/* Header */}
       <div className="px-5 pt-[72px] pb-3">
-        <div className="flex items-baseline justify-between">
-          <Stamp label="OPERATORS" value={`${String(bots.length).padStart(2, "0")} LIVE`} />
-          <Stamp label="MODE" value="ALPHA-ARENA" />
-        </div>
-        <div className="mt-2 flex items-end justify-between">
+        <div className="flex items-end justify-between">
           <Headline size={42}>{`"ROSTER"`}</Headline>
           <div
             className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
