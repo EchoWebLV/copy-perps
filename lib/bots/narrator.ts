@@ -21,6 +21,9 @@ import { NATIVE_PERSONA } from "./personas/native";
 import { BULLION_PERSONA } from "./personas/bullion";
 import { ATLAS_PERSONA } from "./personas/atlas";
 import { KRAKEN_PERSONA } from "./personas/kraken";
+import { ORCA_PERSONA } from "./personas/orca";
+import { LEVIATHAN_PERSONA } from "./personas/leviathan";
+import { MEGALODON_PERSONA } from "./personas/megalodon";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -43,6 +46,9 @@ export const PERSONAS = {
   "bullion": BULLION_PERSONA,
   "atlas": ATLAS_PERSONA,
   "kraken": KRAKEN_PERSONA,
+  "orca": ORCA_PERSONA,
+  "leviathan": LEVIATHAN_PERSONA,
+  "megalodon": MEGALODON_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -148,9 +154,16 @@ function formatTriggerSummary(
   if (
     personaKey === "whale" ||
     personaKey === "native" ||
-    personaKey === "kraken"
+    personaKey === "kraken" ||
+    personaKey === "orca" ||
+    personaKey === "leviathan" ||
+    personaKey === "megalodon"
   ) {
-    const srcName = String(trigger.sourceDisplayName ?? "the source");
+    // Bundle bots carry the specific wallet that moved in `sourceWallet`;
+    // fall back to the pool display name for plain single-wallet mirrors.
+    const srcName = String(
+      trigger.sourceWallet ?? trigger.sourceDisplayName ?? "the source",
+    );
     const px = Number(trigger.sourceEntryPx ?? 0);
     const sizeM = Number(trigger.sourceNotionalUsd ?? 0) / 1e6;
     const sizeText = sizeM >= 0.1 ? `$${sizeM.toFixed(2)}M` : `$${(sizeM * 1000).toFixed(0)}k`;

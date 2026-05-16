@@ -32,17 +32,38 @@ const ADD_BOTS: Record<
     config: Record<string, unknown>;
   }
 > = {
-  kraken: {
-    name: "Kraken",
-    avatarEmoji: "🦑",
-    personaVoiceKey: "kraken",
-    strategyKey: "kraken",
+  // 2026-05-16 — three new 3-whale bundle bots, each wrapping three
+  // super-active Pacifica directional whales (see strategies/*.ts).
+  orca: {
+    name: "Orca",
+    avatarEmoji: "🐳",
+    personaVoiceKey: "orca",
+    strategyKey: "orca",
     config: {
-      sourceKind: "hl-wallet",
-      // 0x939f95… picked 2026-05-15: $12.1M account value, single
-      // 40x BTC long up +485% ROE. The "max-leverage whale" archetype.
-      sourceAddress: "0x939f95036d2e7b6d7419ec072bf9d967352204d2",
-      maxLeverage: 40,
+      sourceKind: "multi-wallet",
+      maxLeverage: 50,
+      maxHoldMs: 24 * 60 * 60 * 1000,
+    },
+  },
+  leviathan: {
+    name: "Leviathan",
+    avatarEmoji: "🐉",
+    personaVoiceKey: "leviathan",
+    strategyKey: "leviathan",
+    config: {
+      sourceKind: "multi-wallet",
+      maxLeverage: 50,
+      maxHoldMs: 24 * 60 * 60 * 1000,
+    },
+  },
+  megalodon: {
+    name: "Megalodon",
+    avatarEmoji: "🦈",
+    personaVoiceKey: "megalodon",
+    strategyKey: "megalodon",
+    config: {
+      sourceKind: "multi-wallet",
+      maxLeverage: 50,
       maxHoldMs: 24 * 60 * 60 * 1000,
     },
   },

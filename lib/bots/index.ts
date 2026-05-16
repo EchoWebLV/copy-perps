@@ -1,24 +1,22 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
-// Active roster: 5 bots, each wrapping a real-world signal source.
-// - WHALE:   bundles 3 super-active whales (HL + Pacifica) behind one
-//            composite source — see strategies/whale.ts
-// - SNIPER:  fades cross-CEX funding extremes (structural)
+// Active roster: 7 bots.
+// - WHALE / ORCA / LEVIATHAN / MEGALODON: each bundles 3 super-active
+//   whales behind one composite source (see strategies/whale.ts).
 // - PULSE:   X (Twitter) trend catcher via Grok 4.3 (LLM)
 // - BULLION: 4h gold mean-reversion (algorithmic)
 // - ATLAS:   overnight SP500 drift (algorithmic)
 //
-// NATIVE and KRAKEN are no longer standalone bots — their wallets are
-// now two of the three whales inside the WHALE bundle. Their strategy
-// and persona files stay in the codebase, dormant. All older bots
-// (Vulture, Contrarian, Shadow, Grok, Claude, etc.) likewise remain
-// as dormant files in case we want to revive any.
+// NATIVE and KRAKEN are retired as standalone bots — their wallets are
+// whales inside the WHALE bundle. SNIPER is benched. Their strategy and
+// persona files stay in the codebase, dormant. All older bots (Vulture,
+// Contrarian, Shadow, Grok, Claude, etc.) likewise remain as dormant
+// files in case we want to revive any.
 import { WhaleStrategy, WhaleBot } from "./strategies/whale";
-import {
-  FundingSniperStrategy,
-  FundingSniperBot,
-} from "./strategies/funding-sniper";
+import { OrcaStrategy, OrcaBot } from "./strategies/orca";
+import { LeviathanStrategy, LeviathanBot } from "./strategies/leviathan";
+import { MegalodonStrategy, MegalodonBot } from "./strategies/megalodon";
 import { PulseStrategy, PulseBot } from "./strategies/pulse";
 import { BullionStrategy, BullionBot } from "./strategies/bullion";
 import { AtlasStrategy, AtlasBot } from "./strategies/atlas";
@@ -99,10 +97,12 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// Active roster — 5 bots. Native + Kraken are retired as standalone
-// bots; their wallets live on inside the WHALE bundle.
-registerBot(WhaleBot, WhaleStrategy); // Whale (3-whale bundle — HL + Pacifica)
-registerBot(FundingSniperBot, FundingSniperStrategy); // Sniper (funding extremes)
+// Active roster — 7 bots. Native, Kraken and Sniper are retired /
+// benched; their files stay dormant in the codebase.
+registerBot(WhaleBot, WhaleStrategy); // Whale (3-whale bundle)
+registerBot(OrcaBot, OrcaStrategy); // Orca (3-whale bundle)
+registerBot(LeviathanBot, LeviathanStrategy); // Leviathan (3-whale bundle)
+registerBot(MegalodonBot, MegalodonStrategy); // Megalodon (3-whale bundle)
 registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
 registerBot(BullionBot, BullionStrategy); // Bullion (4h gold mean-reversion)
 registerBot(AtlasBot, AtlasStrategy); // Atlas (overnight SP500 drift)

@@ -94,6 +94,30 @@ const BOTS: PersonaSpec[] = [
       STYLE,
   },
 
+  // Orca — 3-whale bundle bot. Cartoon killer-whale robot.
+  {
+    key: "orca",
+    prompt:
+      "A cocky cartoon orca-headed robot character, three-quarter view, head and shoulders. The head is shaped like a killer whale — sleek rounded skull in glossy black-and-white chrome panels with flat cartoon highlights, a tall chrome dorsal fin rising from the crown, a white eye-patch marking around a cartoon eye behind a glass visor, two small chrome pectoral fins at the collar. A sharp confident pack-hunter grin. Swaggering coordinated-predator energy." +
+      STYLE,
+  },
+
+  // Leviathan — 3-whale bundle bot. Cartoon ancient sea-serpent robot.
+  {
+    key: "leviathan",
+    prompt:
+      "A cocky cartoon sea-serpent robot character, three-quarter view, head and shoulders. The head is a long armored leviathan skull in deep-ocean teal and antique chrome with flat cartoon highlights, overlapping riveted serpent-scale plates, a row of small blunt chrome horns down the crown, glowing cartoon eyes behind a glass visor, a coil of the serpent's chrome neck looping at the shoulders. An unbothered ancient-monster smirk. Vast, patient, certain energy." +
+      STYLE,
+  },
+
+  // Megalodon — 3-whale bundle bot. Cartoon giant-shark robot.
+  {
+    key: "megalodon",
+    prompt:
+      "A cocky cartoon megalodon robot character, three-quarter view, head and shoulders. The head is a massive prehistoric great-white-shark skull in gunmetal and chrome with flat cartoon highlights, an enormous open jaw lined with rows of triangular chrome teeth, a tall pointed dorsal fin behind the head, gill-slit vents on the cheeks, one big glowing cartoon eye behind a glass visor. A ravenous apex-predator grin. Pure aggressive biggest-jaws-in-the-room energy." +
+      STYLE,
+  },
+
   // ── Dormant bot families below are kept for revival; the active
   //    roster above is what the v4 build uses.
 
@@ -138,12 +162,12 @@ const BOTS: PersonaSpec[] = [
 const FILTER = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const ACTIVE_KEYS = new Set([
   "whale",
-  "native",
-  "funding-sniper",
   "pulse",
   "bullion",
   "atlas",
-  "kraken",
+  "orca",
+  "leviathan",
+  "megalodon",
 ]);
 
 interface OpenAiImageResponse {
