@@ -24,7 +24,7 @@ const MODEL_FALLBACK_CHAIN = [
 ] as const;
 
 const STYLE =
-  " Hand-painted illustrated robot character bust in the style of Machinarium by Amanita Design — head and shoulders, profile-picture composition, perfectly centered on a solid #0a0a0a near-black background. Aged rusty copper and brass plating with visible rivets, bolts, weathered patina and verdigris, exposed bundles of copper wire and tarnished tubing, riveted metal panels with peeling old paint. Big round expressive light-bulb eyes that glow warmly. Charmingly wonky asymmetric proportions, faint hand-drawn ink outlines, watercolor texture, painterly brush strokes, soft warm shadows. Melancholic-but-lovable adventure-game character energy. No text, no logos, no watermarks, no scenery.";
+  " Drawn in the exact style of the Futurama animated TV series — flat 2D cel-shaded cartoon, bold clean uniform black outlines, flat color fills with simple hard-edged two-tone shading, retro-1960s 'world of tomorrow' robot design. Head and shoulders, profile-picture composition, perfectly centered on a solid #0a0a0a near-black background. Shiny chrome and brushed metal in cool blues, steels and greys with simple geometric highlight shapes. Cocky, sarcastic, swaggering robot attitude built into the expression. Clean flat digital-animation look — absolutely no painterly texture, no rust, no rivets, no verdigris, no watercolor. No text, no logos, no watermarks, no scenery.";
 
 interface PersonaSpec {
   key: string;
@@ -42,55 +42,55 @@ const BOTS: PersonaSpec[] = [
   {
     key: "whale",
     prompt:
-      "A charmingly wonky mechanical whale-headed robot character, three-quarter view, head and shoulders. The head is shaped like a humpback whale — rounded forehead, long curved lower jaw, made of riveted patchwork copper and weathered brass plates with deep-blue oxidation streaks suggesting the sea, a small dented chrome blowhole on top puffing a wisp of steam, copper-wire baleen tendrils hanging from the jaw, two tiny bent-brass pectoral-fin elements riveted at the collar. One enormous round single light-bulb eye on the side of the head glowing warm amber, a tiny ship-porthole window on the temple. Gentle giant melancholic expression." +
+      "A cocky cartoon whale-headed robot character, three-quarter view, head and shoulders. The head is shaped like a humpback whale — rounded forehead, long curved lower jaw — in shiny chrome and ocean-blue metal with simple flat highlight shapes, a small chrome blowhole on top, two stubby chrome pectoral-fin elements at the collar. Two cartoon eyes behind a glass visor dome, one eyebrow raised, a smug confident big-shot grin. Swaggering heavyweight attitude." +
       STYLE,
   },
 
-  // Native — mirrors a top Pacifica wallet. Steampunk samurai ronin.
+  // Native — mirrors a top Pacifica wallet. Cartoon samurai robot.
   {
     key: "native",
     prompt:
-      "A charmingly wonky steampunk-samurai robot character, three-quarter view, head and shoulders. Aged bronze and copper kabuto-style helmet with rivets, weathered verdigris-green oxidation streaks running along the seams, riveted samurai cheek-guard plates flaring out, a small brass topknot antenna sweeping back with a tiny glowing amber bulb at its tip, two small bronze flag-fins on the temples. One horizontal slit-eye visor glowing warm orange across the face, faint ink lines on the armor. Calm warrior-pride expression." +
+      "A cocky cartoon samurai robot character, three-quarter view, head and shoulders. Chrome kabuto-style helmet in cool steel-blue and silver with flat cartoon highlights, simple curved cheek-guard plates, a single bent springy antenna sweeping back with a tiny glowing bulb at the tip. A horizontal glowing visor-eye band across the face, a sly confident smirk built into the jaw plate below. Swaggering ronin-with-an-attitude energy." +
       STYLE,
   },
 
-  // Sniper — fades cross-CEX funding extremes. Steampunk marksman.
+  // Sniper — fades cross-CEX funding extremes. Cartoon marksman robot.
   {
     key: "funding-sniper",
     prompt:
-      "A charmingly wonky steampunk marksman robot character, three-quarter view, head and shoulders. Aged olive-bronze and copper plating with weathered rivets, hexagonal hammered-metal cheek guards, a giant oversized brass spyglass / monocle telescope tube replacing the face — multiple telescoping segments with rivet bands, an amber glass front lens with a thin glowing crosshair etched inside, twin brass range-finder antenna-spikes folded back across the crown, a small leather comms patch on one temple, frayed copper ghillie-strand wires draped over the shoulder collar. Quiet patient stillness." +
+      "A cocky cartoon marksman robot character, three-quarter view, head and shoulders. Chrome and gunmetal-grey plating with flat cartoon highlights, a big oversized telescopic scope tube replacing the face — simple chrome cylinder segments, a round glass front lens with a glowing crosshair inside, twin range-finder antenna-spikes folded back across the crown. A smug 'already-got-you' grin at the jaw. Cocky show-off sniper attitude." +
       STYLE,
   },
 
-  // Pulse — Grok 4.3 + X live search. Steampunk satellite robot.
+  // Pulse — Grok 4.3 + X live search. Cartoon satellite robot.
   {
     key: "pulse",
     prompt:
-      "A charmingly wonky steampunk satellite-headed robot character, three-quarter view, head and shoulders. The face is a large dented copper-and-brass dish antenna replacing where eyes and mouth would be — a riveted bowl shape with a single glowing warm-amber emitter bulb at the dish center, twin hammered-brass solar-panel wings flaring out from the temples like ears with patches of verdigris-green oxidation, three thin brass whip-antennas of varying lengths rising from the crown each tipped with a tiny glowing copper bulb, faint sound-wave ripples etched into the collar plate. Always-listening eccentric eavesdropper energy." +
+      "A cocky cartoon satellite-headed robot character, three-quarter view, head and shoulders. The face is a big chrome dish antenna with a single glowing emitter bulb at its center, twin flat solar-panel wings flaring out from the temples like ears, three bent springy whip-antennas of different lengths rising from the crown each tipped with a glowing bulb. Chrome and electric-blue plating with flat cartoon highlights. A loud-mouthed know-it-all eavesdropper smirk. Gossip-bot attitude." +
       STYLE,
   },
 
-  // Bullion — XAU long-only max-leverage scalper. Gold miser robot.
+  // Bullion — gold mean-revert trader. Cartoon gold-obsessed robot.
   {
     key: "bullion",
     prompt:
-      "A charmingly wonky steampunk gold-miser robot character, three-quarter view, head and shoulders. Head plated in real-looking aged gold leaf flaking off riveted brass beneath, deep tarnished patches and verdigris spots near the seams, a small brass balance-scale fitting riveted to the top of the head like a hat with two tiny pan dishes on chains, miniature gold coins hanging as ear-pieces from the temples on copper wires, monocle-style polished gold rim around one round light-bulb eye glowing warm yellow, the other eye a smaller dim amber bulb half-shut, faint melancholic smile, a single screw on one cheek. Gold-pilled true-believer energy." +
+      "A cocky cartoon gold-obsessed robot character, three-quarter view, head and shoulders. Head plated in shiny flat-cartoon gold with bright simple highlights, a little chrome balance-scale fitting perched on top like a hat, gold-coin earpieces hanging at the temples, a single bent springy antenna. Two cartoon eyes behind a glass visor, one eyebrow cocked high, a greedy confident grin. Gold-hoarding schemer attitude." +
       STYLE,
   },
 
-  // Atlas — SP500 long-only max-leverage scalper. Eternal-bull statue robot.
+  // Atlas — overnight SP500 trader. Cartoon classical-statue robot.
   {
     key: "atlas",
     prompt:
-      "A charmingly wonky steampunk classical-statue robot character, three-quarter view, head and shoulders. Head and shoulders styled like a weathered bronze Roman bust — tarnished verdigris-green oxidation streaks running down the face, riveted bronze plating where the skin would be, a small crown of laurel leaves cast in brass on the head, a tiny dented brass globe orb riveted to one shoulder like the world being carried, a thin paper-tape ribbon of stock-ticker numbers wrapped around the neck collar. Two round light-bulb eyes glowing soft warm orange, a faint stoic determined expression. Eternal-bull market-historian energy." +
+      "A cocky cartoon classical-statue robot character, three-quarter view, head and shoulders. Head and shoulders styled like a chrome Roman bust — smooth flat-cartoon metal in silver and warm bronze, a brass laurel-leaf crown, a little chrome globe orb on one shoulder, a thin paper ticker-tape ribbon around the neck collar. Two cartoon eyes behind a glass visor, a smug self-satisfied 'told-you-so' grin. Know-it-all attitude." +
       STYLE,
   },
 
-  // Kraken — high-leverage HL whale mirror. Sea-monster robot.
+  // Kraken — high-leverage HL whale mirror. Cartoon sea-monster robot.
   {
     key: "kraken",
     prompt:
-      "A charmingly wonky steampunk kraken-headed robot character, three-quarter view, head and shoulders. The head is shaped like a giant mechanical octopus / kraken — bulbous riveted copper skull with deep oxidized blue-green patches, eight thin brass mechanical tentacles unfurling from the base of the head and around the shoulders like a beard of cables ending in tiny copper suction cups, one enormous round glass-domed light-bulb eye on the side of the head glowing deep menacing amber (the bigger, more dangerous cousin of Whale), faint barnacle textures and rust pits across the plating, a tiny brass crown of pointed horns. Monster-from-the-depths apex-predator energy." +
+      "A cocky cartoon kraken-headed robot character, three-quarter view, head and shoulders. The head is a chrome mechanical octopus skull in deep teal and steel-blue with flat cartoon highlights, eight simple chrome tentacles unfurling around the head and shoulders ending in little suction cups, one big round glowing eye behind a glass dome, a tiny chrome crown of pointed horns, a wild reckless grin full of swagger. Unhinged maximum-leverage degenerate attitude." +
       STYLE,
   },
 
