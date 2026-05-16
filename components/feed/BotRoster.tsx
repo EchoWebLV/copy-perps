@@ -8,6 +8,7 @@ import { BotChatSheet } from "./BotChatSheet";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
+import { usePulseOnChange } from "@/lib/feed/use-pulse-on-change";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   BG,
@@ -229,6 +230,15 @@ function BotRow({
     livePositions.reduce((s, pos) => s + pos.livePaperPnlUsd, 0);
   const lifetimePct =
     (liveEquity - p.startingBalanceUsd) / p.startingBalanceUsd;
+  // Pulse the equity figure on every WS tick — drops the EQUITY number
+  // out of "stale poll" mode and into "alive" mode.
+  const equityPulse = usePulseOnChange(liveEquity);
+  const equityPulseClass =
+    equityPulse === "up"
+      ? "pulse-up"
+      : equityPulse === "down"
+        ? "pulse-down"
+        : "";
 
   return (
     <div
@@ -290,8 +300,15 @@ function BotRow({
             <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
               EQUITY
             </div>
-            <div className="mt-0.5">
-              <BigNum size={28}>${liveEquity.toFixed(0)}</BigNum>
+            <div
+              className={`mt-0.5 inline-block px-1 ${equityPulseClass}`}
+            >
+              <BigNum size={28}>
+                ${liveEquity.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </BigNum>
             </div>
           </div>
           <div className="text-right">

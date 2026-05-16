@@ -39,13 +39,27 @@ export interface LiveFill {
   timestampMs: number;
 }
 
+// Pacifica WS trade row (channel "trades"). Compact keys, all strings
+// for numerics: h=sequence, s=symbol, a=base amount, p=price,
+// d=taker direction (open_long/close_long/open_short/close_short),
+// t=timestamp in ms.
 interface PacificaWsTrade {
-  tradeSequenceNumber: string | number;
+  h: number;
+  s: string;
+  a: string;
+  p: string;
+  d: string;
+  t: number;
+}
+
+// Pacifica WS price row (channel "prices"). One entry per market,
+// delivered in batches. `mark` is the mark price we display.
+interface PacificaWsPrice {
   symbol: string;
-  side: "bid" | "ask";
-  quoteAmount: number;
-  baseAmount: number;
-  timestamp: string | number;
+  mark: string;
+  mid: string;
+  oracle: string;
+  timestamp: number;
 }
 
 interface LiveContextValue {
@@ -78,18 +92,32 @@ export function PacificaLiveProvider({
       wsRef.current = ws;
 
       ws.addEventListener("open", () => {
+        // "prices" — a single subscription that streams every market's
+        // mark price in batches (~3s cadence). This is the baseline:
+        // it covers low-volume symbols (gold, equities) that rarely
+        // print a trade, and doesn't depend on SUBSCRIBED_MARKETS being
+        // an exact match for Pacifica's symbol list.
+        ws.send(
+          JSON.stringify({
+            method: "subscribe",
+            params: { source: "prices" },
+          }),
+        );
+        // "trades" — per-symbol last-trade prints. Sub-second updates on
+        // liquid markets (BTC/ETH/SOL); this is what makes the cards
+        // flash continuously rather than every few seconds.
         for (const symbol of SUBSCRIBED_MARKETS) {
           ws.send(
             JSON.stringify({
-              type: "subscribe",
-              subscription: { channel: "trades", symbol },
+              method: "subscribe",
+              params: { source: "trades", symbol },
             }),
           );
         }
       });
 
       ws.addEventListener("message", (ev) => {
-        let m: { channel?: string; trades?: PacificaWsTrade[] };
+        let m: { channel?: string; data?: unknown };
         try {
           m = JSON.parse(
             typeof ev.data === "string" ? ev.data : String(ev.data),
@@ -97,39 +125,64 @@ export function PacificaLiveProvider({
         } catch {
           return;
         }
-        if (m.channel !== "trades" || !Array.isArray(m.trades)) return;
 
-        // Update marks for every trade (price = quoteAmount / baseAmount).
-        const markUpdates: Record<string, number> = {};
-        const newFills: LiveFill[] = [];
-        for (const t of m.trades) {
-          const notional = Number(t.quoteAmount);
-          const base = Number(t.baseAmount);
-          if (base > 0) markUpdates[t.symbol] = notional / base;
+        // "prices" — batched mark prices. Baseline coverage for every
+        // market, including the slow ones that rarely trade.
+        if (m.channel === "prices" && Array.isArray(m.data)) {
+          const markUpdates: Record<string, number> = {};
+          for (const row of m.data as PacificaWsPrice[]) {
+            const mark = Number(row.mark);
+            if (row.symbol && Number.isFinite(mark)) {
+              markUpdates[row.symbol] = mark;
+            }
+          }
+          if (Object.keys(markUpdates).length > 0) {
+            setMarks((prev) => ({ ...prev, ...markUpdates }));
+          }
+          return;
+        }
 
-          if (Number.isFinite(notional) && notional >= MIN_TAPE_NOTIONAL_USD) {
-            newFills.push({
-              id: `${t.symbol}:${t.tradeSequenceNumber}`,
-              symbol: t.symbol,
-              side: t.side,
-              notional,
-              timestampMs: Number(t.timestamp) * 1000,
+        // "trades" — last-trade prints. Drives sub-second mark updates
+        // on liquid markets plus the LiveTape fills strip.
+        if (m.channel === "trades" && Array.isArray(m.data)) {
+          const markUpdates: Record<string, number> = {};
+          const newFills: LiveFill[] = [];
+          for (const t of m.data as PacificaWsTrade[]) {
+            const price = Number(t.p);
+            const base = Number(t.a);
+            if (t.s && Number.isFinite(price)) markUpdates[t.s] = price;
+
+            const notional = price * base;
+            // Taker direction → tape side. A taker opening a long or
+            // closing a short is buying (bid); the inverse is selling.
+            const isBuy = t.d === "open_long" || t.d === "close_short";
+            if (
+              Number.isFinite(notional) &&
+              notional >= MIN_TAPE_NOTIONAL_USD
+            ) {
+              newFills.push({
+                id: `${t.s}:${t.h}`,
+                symbol: t.s,
+                side: isBuy ? "bid" : "ask",
+                notional,
+                timestampMs: Number(t.t),
+              });
+            }
+          }
+          if (Object.keys(markUpdates).length > 0) {
+            setMarks((prev) => ({ ...prev, ...markUpdates }));
+          }
+          if (newFills.length > 0) {
+            setFills((prev) => {
+              const seen = new Set(prev.map((f) => f.id));
+              const merged = [
+                ...newFills.filter((f) => !seen.has(f.id)),
+                ...prev,
+              ];
+              return merged.slice(0, MAX_TAPE_FILLS);
             });
           }
-        }
-
-        if (Object.keys(markUpdates).length > 0) {
-          setMarks((prev) => ({ ...prev, ...markUpdates }));
-        }
-        if (newFills.length > 0) {
-          setFills((prev) => {
-            const seen = new Set(prev.map((f) => f.id));
-            const merged = [
-              ...newFills.filter((f) => !seen.has(f.id)),
-              ...prev,
-            ];
-            return merged.slice(0, MAX_TAPE_FILLS);
-          });
+          return;
         }
       });
 

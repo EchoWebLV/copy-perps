@@ -166,18 +166,25 @@ export function Headline({
   );
 }
 
-/** P/L pill — green/red bg, white text, rounded slightly (Snapchat lean). */
+/** P/L pill — green/red bg, white text, rounded slightly (Snapchat lean).
+ *  Optional `pulse` flashes a ring shadow on each tick (the inline
+ *  green/red bg blocks bg-flash, so we use box-shadow for the visual
+ *  pop instead). */
 export function PnlPill({
   pnlUsd,
   size = 14,
+  pulse,
 }: {
   pnlUsd: number;
   size?: number;
+  pulse?: "up" | "down" | null;
 }) {
   const profit = pnlUsd >= 0;
+  const pulseClass =
+    pulse === "up" ? "pulse-up" : pulse === "down" ? "pulse-down" : "";
   return (
     <span
-      className="inline-block rounded font-black tabular-nums"
+      className={`inline-block rounded font-black tabular-nums ${pulseClass}`}
       style={{
         background: profit ? GREEN : RED,
         color: BG,

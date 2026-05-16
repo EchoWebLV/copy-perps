@@ -8,6 +8,7 @@ import { BotChatSheet } from "./BotChatSheet";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
+import { usePulseOnChange } from "@/lib/feed/use-pulse-on-change";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   BG,
@@ -403,6 +404,14 @@ function PositionCard({
   const profit = pos.livePaperPnlUsd >= 0;
   const fresh = now > 0 && now - pos.openSinceMs < 15 * 60 * 1000;
 
+  // Pulse hooks fire on every sub-second WS mark tick — "NOW" price and
+  // the live P/L percentage both flash green/red so the card reads as
+  // alive instead of just refreshing silently.
+  const markPulse = usePulseOnChange(pos.currentMark);
+  const pnlPulse = usePulseOnChange(pos.livePaperPnlPct);
+  const pnlPulseClass =
+    pnlPulse === "up" ? "pulse-up" : pnlPulse === "down" ? "pulse-down" : "";
+
   // Staking is handled by TailModal — opened via onTail() from the
   // TAIL CTA at the bottom of this card.
 
@@ -478,8 +487,9 @@ function PositionCard({
         <SpecCell label="ENTRY" value={fmtPrice(pos.entryMark)} bordered />
         <SpecCell
           label="NOW"
-          value={fmtPrice(pos.currentMark)}
+          value={fmtLivePrice(pos.currentMark)}
           color={profit ? GREEN : RED}
+          pulse={markPulse}
         />
       </div>
 
@@ -491,12 +501,14 @@ function PositionCard({
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span
-              className="tabular-nums font-black"
+              className={`tabular-nums font-black ${pnlPulseClass}`}
               style={{
                 color: profit ? GREEN : RED,
                 fontFamily: "system-ui, sans-serif",
                 fontSize: "28px",
                 lineHeight: 1,
+                display: "inline-block",
+                padding: "0 4px",
               }}
             >
               {profit ? "+" : ""}
@@ -611,12 +623,16 @@ function SpecCell({
   value,
   color = FG,
   bordered = false,
+  pulse,
 }: {
   label: string;
   value: string;
   color?: string;
   bordered?: boolean;
+  pulse?: "up" | "down" | null;
 }) {
+  const pulseClass =
+    pulse === "up" ? "pulse-up" : pulse === "down" ? "pulse-down" : "";
   return (
     <div
       className={`px-3 py-3 ${bordered ? "border-x" : ""}`}
@@ -626,8 +642,8 @@ function SpecCell({
         {label}
       </div>
       <div
-        className="mt-1 text-[18px] font-black tabular-nums"
-        style={{ color, fontFamily: FONT_DISPLAY }}
+        className={`mt-1 text-[18px] font-black tabular-nums ${pulseClass}`}
+        style={{ color, fontFamily: FONT_DISPLAY, display: "inline-block" }}
       >
         {value}
       </div>
@@ -639,6 +655,14 @@ function fmtPrice(v: number): string {
   if (v >= 1000) return `$${v.toFixed(0)}`;
   if (v >= 1) return `$${v.toFixed(2)}`;
   return `$${v.toPrecision(4)}`;
+}
+
+// Live-tick variant — always shows enough decimals that sub-second WS
+// updates change a visible digit alongside the pulse flash.
+function fmtLivePrice(v: number): string {
+  if (v >= 1000) return `$${v.toFixed(2)}`;
+  if (v >= 1) return `$${v.toFixed(3)}`;
+  return `$${v.toPrecision(5)}`;
 }
 
 function fmtAge(ms: number, now: number): string {

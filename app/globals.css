@@ -113,24 +113,54 @@ body {
   }
 }
 
-/* Pulse-on-change: applied for ~600ms when a live value updates. The
-   color of the flash hints direction — green when the new value is
-   greater than the previous, red when smaller. Kept short and subtle
-   so it reads as "alive" not "alarmed." */
+/* Pulse-on-change: applied for ~450ms when a live value updates. Each
+   sub-second WS tick retriggers the animation, so a live number reads
+   as a continuous green/red shimmer. Both text glow AND box-shadow ring
+   fire so the effect survives inline background-color (e.g. PnlPill). */
 @keyframes pulse-up {
-  0% { color: var(--color-up); text-shadow: 0 0 12px rgba(34, 197, 94, 0.55); }
-  100% { color: inherit; text-shadow: none; }
+  0% {
+    color: var(--color-up);
+    text-shadow: 0 0 14px rgba(34, 197, 94, 1), 0 0 28px rgba(34, 197, 94, 0.5);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.65), 0 0 18px 2px rgba(34, 197, 94, 0.45);
+    background-color: rgba(34, 197, 94, 0.22);
+  }
+  60% {
+    text-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35), 0 0 10px rgba(34, 197, 94, 0.25);
+  }
+  100% {
+    color: inherit;
+    text-shadow: none;
+    box-shadow: none;
+    background-color: transparent;
+  }
 }
 @keyframes pulse-down {
-  0% { color: var(--color-down); text-shadow: 0 0 12px rgba(239, 68, 68, 0.55); }
-  100% { color: inherit; text-shadow: none; }
+  0% {
+    color: var(--color-down);
+    text-shadow: 0 0 14px rgba(239, 68, 68, 1), 0 0 28px rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.65), 0 0 18px 2px rgba(239, 68, 68, 0.45);
+    background-color: rgba(239, 68, 68, 0.22);
+  }
+  60% {
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35), 0 0 10px rgba(239, 68, 68, 0.25);
+  }
+  100% {
+    color: inherit;
+    text-shadow: none;
+    box-shadow: none;
+    background-color: transparent;
+  }
 }
 
 .pulse-up {
-  animation: pulse-up 600ms ease-out;
+  animation: pulse-up 450ms ease-out;
+  border-radius: 4px;
 }
 .pulse-down {
-  animation: pulse-down 600ms ease-out;
+  animation: pulse-down 450ms ease-out;
+  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
