@@ -86,6 +86,17 @@ const ADD_BOTS: Record<
       regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
     },
   },
+  // 2026-05-17 — Tilt: degenerate revenge trader (momentum + martingale).
+  tilt: {
+    name: "Tilt",
+    avatarEmoji: "🎰",
+    personaVoiceKey: "tilt",
+    strategyKey: "tilt",
+    config: {
+      stakePctOverride: 0.6,
+      stopLossPct: 0.9,
+    },
+  },
 };
 
 async function main() {

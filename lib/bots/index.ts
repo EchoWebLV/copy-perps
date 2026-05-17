@@ -1,13 +1,14 @@
 // lib/bots/index.ts
 import type { BotConfig, Strategy } from "./types";
 import { buildStrategyFromBot } from "./factories";
-// Active roster: 8 bots.
+// Active roster: 9 bots.
 // - WHALE / ORCA / LEVIATHAN / MEGALODON: each bundles 3 super-active
 //   whales behind one composite source (see strategies/whale.ts).
 // - PULSE:   X (Twitter) catalyst trader via Grok 4.3 (LLM)
 // - BULLION: 4h gold mean-reversion (algorithmic)
 // - ATLAS:   overnight SP500 drift (algorithmic)
 // - BLITZ:   15m crypto momentum/breakout (algorithmic)
+// - TILT:    degen revenge trader — momentum + martingale leverage
 //
 // NATIVE and KRAKEN are retired as standalone bots — their wallets are
 // whales inside the WHALE bundle. SNIPER is benched. Their strategy and
@@ -22,6 +23,7 @@ import { PulseStrategy, PulseBot } from "./strategies/pulse";
 import { BullionStrategy, BullionBot } from "./strategies/bullion";
 import { AtlasStrategy, AtlasBot } from "./strategies/atlas";
 import { BlitzStrategy, BlitzBot } from "./strategies/blitz";
+import { TiltStrategy, TiltBot } from "./strategies/tilt";
 
 const BOTS = new Map<string, BotConfig>();
 const STRATEGIES = new Map<string, Strategy>();
@@ -99,7 +101,7 @@ export function reregisterBotDynamic(config: BotConfig): Strategy | null {
   return strategy;
 }
 
-// Active roster — 8 bots. Native, Kraken and Sniper are retired /
+// Active roster — 9 bots. Native, Kraken and Sniper are retired /
 // benched; their files stay dormant in the codebase.
 registerBot(WhaleBot, WhaleStrategy); // Whale (3-whale bundle)
 registerBot(OrcaBot, OrcaStrategy); // Orca (3-whale bundle)
@@ -109,3 +111,4 @@ registerBot(PulseBot, PulseStrategy); // Pulse (Grok 4.3 + X live search)
 registerBot(BullionBot, BullionStrategy); // Bullion (4h gold mean-reversion)
 registerBot(AtlasBot, AtlasStrategy); // Atlas (overnight SP500 drift)
 registerBot(BlitzBot, BlitzStrategy); // Blitz (15m crypto momentum/breakout)
+registerBot(TiltBot, TiltStrategy); // Tilt (degen revenge trader)

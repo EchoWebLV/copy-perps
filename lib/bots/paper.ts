@@ -171,3 +171,29 @@ export async function isInLossCooldown(args: {
   if (ageMs > args.windowMs) return false;
   return rows.every((r) => (r.pnl ?? 0) < 0);
 }
+
+/**
+ * Counts the bot's CURRENT consecutive-loss streak — how many of its
+ * most-recent closed positions lost money in a row, stopping at the
+ * first win. 0 = the last close was green (or the bot has no closed
+ * trades). Used by Tilt to martingale its leverage.
+ */
+export async function getLossStreak(botId: string): Promise<number> {
+  const rows = await db
+    .select({ pnl: paperPositions.paperPnlUsd })
+    .from(paperPositions)
+    .where(
+      and(
+        eq(paperPositions.botId, botId),
+        eq(paperPositions.status, "closed"),
+      ),
+    )
+    .orderBy(desc(paperPositions.exitTs))
+    .limit(20);
+  let streak = 0;
+  for (const r of rows) {
+    if ((r.pnl ?? 0) < 0) streak += 1;
+    else break;
+  }
+  return streak;
+}

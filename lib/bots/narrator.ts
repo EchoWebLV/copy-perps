@@ -25,6 +25,7 @@ import { ORCA_PERSONA } from "./personas/orca";
 import { LEVIATHAN_PERSONA } from "./personas/leviathan";
 import { MEGALODON_PERSONA } from "./personas/megalodon";
 import { BLITZ_PERSONA } from "./personas/blitz";
+import { TILT_PERSONA } from "./personas/tilt";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -51,6 +52,7 @@ export const PERSONAS = {
   "leviathan": LEVIATHAN_PERSONA,
   "megalodon": MEGALODON_PERSONA,
   "blitz": BLITZ_PERSONA,
+  "tilt": TILT_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -187,6 +189,17 @@ function formatTriggerSummary(
       return `Your own reasoning: "${reasoning}". You opened a ${side} on ${asset} with ${lev}× leverage.`;
     }
     return `You opened a ${side} on ${asset} with ${lev}× leverage based on your reasoning.`;
+  }
+  if (personaKey === "tilt") {
+    const move = Number(trigger.recentMovePct ?? 0) * 100;
+    const lev = Number(trigger.dynamicLeverage ?? 0);
+    const streak = Number(trigger.lossStreak ?? 0);
+    const dir = move >= 0 ? "ripped" : "dropped";
+    const streakLine =
+      streak > 0
+        ? ` Down ${streak} in a row — so you slammed it ${lev}× to win it back.`
+        : ` Clean slate, ${lev}×.`;
+    return `${asset} ${dir} ${Math.abs(move).toFixed(2)}% and you chased it ${side}.${streakLine}`;
   }
   return `Opened ${side} on ${asset}.`;
 }
