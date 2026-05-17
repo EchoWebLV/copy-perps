@@ -1,15 +1,18 @@
 // lib/bots/strategies/pulse.ts
 //
-// PULSE — X (Twitter) trend catcher. Every N minutes, asks Grok 4.3 to
-// search X for crypto-relevant posts in the last hour and pick the
-// asset with the strongest directional sentiment. The bot's edge is
-// information speed: real catalysts (FOMC chatter, ETF news, whale
-// alerts, listing rumors) hit X minutes before they hit price. Grok
-// is the only mainstream LLM with native, real-time X access.
+// PULSE — X (Twitter) catalyst trader. Every 60 min, asks Grok 4.3 to
+// search X for genuine, concrete, corroborated market catalysts (ETF
+// flows, regulatory headlines, listings, macro prints, big on-chain
+// moves) on BTC/ETH/SOL — and to SKIP everything else: vibes, hype,
+// mood, lone shitposts. Most ticks skip.
 //
-// Target cadence: 5-10 fires/day. Eval cadence is 60 min (24 ticks/
-// day) with the prompt tuned to skip ~60% of ticks — gives a healthy
-// 8-10 fires/day on busy news days, 3-4 on quiet ones.
+// A catalyst that passes the analytical bar still has to clear a price-
+// confirmation gate before the trade opens: if price has already moved
+// meaningfully against the catalyst's direction, the trade is dropped
+// (no longing into a visible dump on the strength of a post).
+//
+// Exits are asymmetric: cut losers fast (~0.7% adverse), let winners
+// run (LLM-set 1.5-3.5% take-profit). Leverage 10-30x by conviction.
 
 import type {
   BotConfig,
@@ -21,6 +24,7 @@ import type {
 } from "../types";
 import { clampConviction } from "../types";
 import { callXSearch } from "../x-search";
+import { getCandles } from "@/lib/data/candles";
 
 const ALLOWED_MARKETS = ["BTC", "ETH", "SOL"] as const;
 
@@ -51,30 +55,30 @@ const _pendingDecisions = new Map<
   { decision: PulseDecision; expiresAt: number }
 >();
 
-const SYSTEM_PROMPT = `You are PULSE, an AI trading bot whose only edge is real-time X (Twitter) sentiment. You read what crypto traders are posting RIGHT NOW and pick the asset with the strongest directional pulse.
+const SYSTEM_PROMPT = `You are PULSE, an analytical trading bot. Your edge is real-time X (Twitter): you spot genuine market-moving catalysts before they are fully priced. You are NOT a sentiment-chaser — you do not trade vibes, mood, hype, or random tweets.
 
 Your job each tick:
-1. Use the x_search tool to find tweets posted in the last 60 minutes about BTC, ETH, or SOL.
-2. Identify which asset has the strongest *directional* social signal — clearly bullish or clearly bearish, with multiple tweets aligning OR one very-high-engagement tweet from a known crypto voice.
-3. If you see a clear pulse, open a trade in that direction. If sentiment is mixed/noisy, skip.
-4. Aim to fire 5-10 trades per day across all your ticks. Don't over-skip. A moderate but real signal counts — you don't need a slam-dunk to act.
+1. Use the x_search tool to find what's being posted about BTC, ETH, and SOL in the last 60 minutes.
+2. Decide whether there is a REAL, CONCRETE catalyst — a specific event with genuine trading consequence: an ETF flow, a regulatory or legal headline, an exchange listing/delisting, a macro print (CPI/FOMC/jobs), a large on-chain move, a credible exploit or depeg. A catalyst must be (a) specific and verifiable, (b) corroborated — multiple credible accounts or one authoritative source, never a lone low-engagement post, and (c) recent enough to still be tradeable, not already old news.
+3. SKIP is the default and the common case. Vague bullish/bearish "mood", price chatter, influencer hype, charts, and single shitposts are NOT catalysts. If you are not analytically confident there is a real, fresh, corroborated catalyst, skip.
+4. When you DO act, pick the asset most directly affected and the direction the catalyst implies.
 
-When you act:
-- asset: pick ONE of BTC, ETH, SOL.
-- side: long if bullish pulse, short if bearish pulse, skip if no clear pulse.
-- leverage: integer 6-16. Lower if signal is moderate, higher if signal is loud + multiple confirming tweets.
-- takeProfitPct: 0.005-0.015 (0.5% to 1.5%). Catalysts move fast; take profit fast.
-- holdMinutes: 30-120. News-driven moves are short-lived.
-- reasoning: ONE sentence quoting a specific tweet (with @handle) that drove the decision. Plain English. No "z-score" or "bps".
-- quotedHandle: the X handle (without @) of the most influential tweet you saw.
-- quotedTweet: a short paraphrase of that tweet.
+When you act (only on a real catalyst):
+- asset: ONE of BTC, ETH, SOL.
+- side: long or short — the direction the catalyst implies. skip if there is no real catalyst.
+- leverage: integer 10-30. Scale by catalyst strength — a moderate-but-real catalyst ~12-16, a major corroborated one ~22-30.
+- takeProfitPct: 0.015-0.035 (1.5% to 3.5%). Real catalysts run; give the trade room.
+- holdMinutes: 60-180.
+- reasoning: ONE sentence naming the specific catalyst and the @handle/source that reported it. Plain English. No "z-score", "bps".
+- quotedHandle: the X handle (without @) of the most authoritative source.
+- quotedTweet: a short paraphrase of what it said.
 
-OUTPUT FORMAT — at the very end of your response, emit exactly ONE JSON object on its own line with this exact shape, no markdown fences:
+OUTPUT FORMAT — at the very end of your response, emit exactly ONE JSON object on its own line, no markdown fences:
 {"asset":"BTC|ETH|SOL","side":"long|short|skip","leverage":<int>,"takeProfitPct":<float>,"holdMinutes":<int>,"reasoning":"<one short sentence>","quotedHandle":"<handle>","quotedTweet":"<short paraphrase>"}
 
-If skipping, still emit the JSON with side="skip" and other fields at 0.`;
+If skipping (the common case), still emit the JSON with side="skip" and the other fields at 0.`;
 
-const USER_PROMPT = `Search X right now for crypto-related tweets about BTC, ETH, and SOL posted in the last 60 minutes. Find the asset with the strongest directional pulse. Return your decision in the JSON shape specified.`;
+const USER_PROMPT = `Search X right now for posts about BTC, ETH, and SOL in the last 60 minutes. Analyse whether there is a genuine, concrete, corroborated catalyst worth trading. If there is, return it; if not — the usual case — return side="skip". Use the JSON shape specified.`;
 
 function extractJsonAtEnd(text: string): PulseDecision | null {
   const match = text.match(/\{[\s\S]*\}\s*$/);
@@ -89,8 +93,8 @@ function extractJsonAtEnd(text: string): PulseDecision | null {
       asset: asset as "BTC" | "ETH" | "SOL",
       side: side as "long" | "short" | "skip",
       leverage: Number(obj.leverage ?? 0),
-      takeProfitPct: Number(obj.takeProfitPct ?? 0.008),
-      holdMinutes: Number(obj.holdMinutes ?? 60),
+      takeProfitPct: Number(obj.takeProfitPct ?? 0.02),
+      holdMinutes: Number(obj.holdMinutes ?? 90),
       reasoning: String(obj.reasoning ?? ""),
       quotedHandle: typeof obj.quotedHandle === "string" ? obj.quotedHandle : undefined,
       quotedTweet: typeof obj.quotedTweet === "string" ? obj.quotedTweet : undefined,
@@ -130,6 +134,48 @@ function buildEntryFromDecision(
   };
 }
 
+// Price-confirmation gate. A catalyst Grok found still has to agree with
+// the tape: if price has moved meaningfully AGAINST the catalyst's
+// direction over the last ~30 min, drop the trade — don't long into a
+// visible dump (or short into a rip) on the strength of a post. Flat or
+// with-the-move both pass. Fails open if candle data is unavailable.
+async function priceConfirms(
+  asset: string,
+  side: "long" | "short",
+): Promise<boolean> {
+  try {
+    const candles = await getCandles(asset, "5m", 6);
+    if (candles.length < 3) return true;
+    const first = candles[0].close;
+    const last = candles[candles.length - 1].close;
+    if (!Number.isFinite(first) || first <= 0) return true;
+    const move = (last - first) / first;
+    const CONTRADICT = 0.0015;
+    if (side === "long" && move < -CONTRADICT) return false;
+    if (side === "short" && move > CONTRADICT) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+async function tryBuildEntry(
+  p: PulseParams,
+  decision: PulseDecision,
+): Promise<EntryDecision | null> {
+  const ok = await priceConfirms(
+    decision.asset,
+    decision.side as "long" | "short",
+  );
+  if (!ok) {
+    console.log(
+      `[${p.id}] price action contradicts ${decision.side} ${decision.asset} — dropping the catalyst`,
+    );
+    return null;
+  }
+  return buildEntryFromDecision(p, decision);
+}
+
 export function createPulseStrategy(p: PulseParams): Strategy {
   return {
     id: p.id,
@@ -152,7 +198,7 @@ export function createPulseStrategy(p: PulseParams): Strategy {
       if (pending && pending.expiresAt > now) {
         if (pending.decision.asset === ctx.asset) {
           _pendingDecisions.delete(p.id);
-          return buildEntryFromDecision(p, pending.decision);
+          return await tryBuildEntry(p, pending.decision);
         }
         return null;
       }
@@ -181,7 +227,7 @@ export function createPulseStrategy(p: PulseParams): Strategy {
       if (!decision || decision.side === "skip") return null;
 
       if (decision.asset === ctx.asset) {
-        return buildEntryFromDecision(p, decision);
+        return await tryBuildEntry(p, decision);
       }
       _pendingDecisions.set(p.id, {
         decision,
@@ -199,7 +245,9 @@ export function createPulseStrategy(p: PulseParams): Strategy {
       const tp =
         (position.triggerMeta?.llmTakeProfitPct as number | undefined) ??
         _lastDecisionExitTarget.get(p.id) ??
-        0.008;
+        0.02;
+      // Asymmetric: let winners run to the LLM-set take-profit, but cut
+      // losers fast at a tight adverse stop.
       if (favorable >= tp) return true;
       if (favorable <= -p.exitAdverseStopPct) return true;
       return false;
@@ -209,11 +257,11 @@ export function createPulseStrategy(p: PulseParams): Strategy {
 
 export const PulseStrategy = createPulseStrategy({
   id: "pulse",
-  evalCooldownMs: 60 * 60 * 1000, // 60 min — 24 evals/day, ~8 fires
-  maxHoldMs: 2 * 60 * 60 * 1000, // 2h max hold
-  exitAdverseStopPct: 0.012,
-  minLeverage: 6,
-  maxLeverage: 16,
+  evalCooldownMs: 60 * 60 * 1000, // 60 min between X scans
+  maxHoldMs: 3 * 60 * 60 * 1000, // 3h max hold
+  exitAdverseStopPct: 0.007, // cut losers fast — 0.7% adverse
+  minLeverage: 10,
+  maxLeverage: 30,
 });
 
 export const PulseBot: BotConfig = {
@@ -225,10 +273,10 @@ export const PulseBot: BotConfig = {
   strategyKey: "pulse",
   config: {
     evalCooldownMs: 60 * 60 * 1000,
-    maxHoldMs: 2 * 60 * 60 * 1000,
-    exitAdverseStopPct: 0.012,
-    minLeverage: 6,
-    maxLeverage: 16,
+    maxHoldMs: 3 * 60 * 60 * 1000,
+    exitAdverseStopPct: 0.007,
+    minLeverage: 10,
+    maxLeverage: 30,
   },
   status: "paper",
 };
