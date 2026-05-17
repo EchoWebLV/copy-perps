@@ -20,6 +20,8 @@ const BOT_IMAGES: Record<string, string> = {
   orca: "/bots/orca.png",
   leviathan: "/bots/leviathan.png",
   megalodon: "/bots/megalodon.png",
+  blitz: "/bots/blitz.png",
+  tilt: "/bots/tilt.png",
 
   // ── Dormant arena-era bots (kept for revival) ─────────────────
   vulture: "/bots/vulture.png",

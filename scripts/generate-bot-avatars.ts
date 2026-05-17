@@ -118,6 +118,22 @@ const BOTS: PersonaSpec[] = [
       STYLE,
   },
 
+  // Blitz — 15m crypto momentum/breakout bot. Cartoon rocket robot.
+  {
+    key: "blitz",
+    prompt:
+      "A cocky cartoon rocket-powered robot character, three-quarter view, head and shoulders. The head is a sleek aerodynamic chrome rocket — a pointed nose-cone crown, swept-back fin-plates flaring from the temples like ears, a glowing orange-and-yellow exhaust flame at the collar. Chrome and electric-orange plating with flat cartoon highlights, twin cartoon eyes behind a streamlined glass visor, a fast cocky grin. Pure can't-be-caught momentum-chaser swagger." +
+      STYLE,
+  },
+
+  // Tilt — degenerate revenge trader. Cartoon slot-machine robot.
+  {
+    key: "tilt",
+    prompt:
+      "A cocky cartoon casino-machine robot character, three-quarter view, head and shoulders. The head is built like a slot machine — two spinning slot-reel cartoon eyes showing a lucky-seven and a cherry behind glass, a chrome pull-lever arm rising from one shoulder, a small fan of casino chips tucked at the collar, a row of tiny neon bulbs along the brow. Chrome with hot-magenta and gold plating and flat cartoon highlights, a manic wild-eyed all-in grin. Reckless chasing-losses gambling-addict swagger." +
+      STYLE,
+  },
+
   // ── Dormant bot families below are kept for revival; the active
   //    roster above is what the v4 build uses.
 
@@ -168,6 +184,8 @@ const ACTIVE_KEYS = new Set([
   "orca",
   "leviathan",
   "megalodon",
+  "blitz",
+  "tilt",
 ]);
 
 interface OpenAiImageResponse {
