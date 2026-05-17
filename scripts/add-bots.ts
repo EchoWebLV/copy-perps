@@ -67,6 +67,25 @@ const ADD_BOTS: Record<
       maxHoldMs: 24 * 60 * 60 * 1000,
     },
   },
+  // 2026-05-17 — Blitz: medium-speed 15m crypto momentum/breakout bot.
+  blitz: {
+    name: "Blitz",
+    avatarEmoji: "🚀",
+    personaVoiceKey: "blitz",
+    strategyKey: "blitz",
+    config: {
+      timeframe: "15m",
+      candleCount: 12,
+      breakoutPct: 0.006,
+      volumeMultiplier: 1.4,
+      exitFavorablePct: 0.01,
+      maxHoldMs: 90 * 60 * 1000,
+      leverage: 20,
+      minLeverage: 10,
+      maxLeverage: 30,
+      regimesAllowed: ["trending-up", "trending-down", "vol-expanding"],
+    },
+  },
 };
 
 async function main() {

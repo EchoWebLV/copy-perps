@@ -24,6 +24,7 @@ import { KRAKEN_PERSONA } from "./personas/kraken";
 import { ORCA_PERSONA } from "./personas/orca";
 import { LEVIATHAN_PERSONA } from "./personas/leviathan";
 import { MEGALODON_PERSONA } from "./personas/megalodon";
+import { BLITZ_PERSONA } from "./personas/blitz";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -49,6 +50,7 @@ export const PERSONAS = {
   "orca": ORCA_PERSONA,
   "leviathan": LEVIATHAN_PERSONA,
   "megalodon": MEGALODON_PERSONA,
+  "blitz": BLITZ_PERSONA,
 } as const;
 
 export type PersonaKey = keyof typeof PERSONAS;
@@ -86,7 +88,7 @@ function formatTriggerSummary(
   side: "long" | "short",
   trigger: Record<string, unknown>,
 ): string {
-  if (personaKey === "momo-max") {
+  if (personaKey === "momo-max" || personaKey === "blitz") {
     const breakout = Number(trigger.breakoutPct ?? 0);
     const volRatio = Number(trigger.volumeRatio ?? 0);
     const direction = breakout >= 0 ? "jumped" : "dropped";
