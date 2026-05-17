@@ -224,10 +224,9 @@ body {
   .coin-flip { animation: none; }
 }
 
-/* First-open welcome intro. Brand-hero treatment, intentionally
-   distinct from the rail-picker's solid-black editorial style:
-   animated mesh-gradient backdrop, large display headline, colourful
-   chips, full-width emerald CTA. */
+/* First-open welcome intro. Matches the app design language — warm
+   near-black substrate, acid-yellow accent, condensed hypebeast
+   headline + factory stamps, factory-numbered rows, chunky yellow CTA. */
 .welcome-in { animation: welcome-fade-in 420ms ease-out both; }
 .welcome-out { animation: welcome-fade-out 320ms ease-in both; }
 
@@ -240,16 +239,14 @@ body {
   100% { opacity: 0; }
 }
 
-/* Mesh: three coloured radial gradients drifting against each other.
-   Slower than gwak-breathe and uses a different palette so the welcome
-   doesn't read as the same surface as the landing page. */
+/* Backdrop: two faint yellow radial glows on the app's near-black
+   substrate, slowly drifting. Subtle — the welcome reads as the same
+   surface family as the rest of the app. */
 .welcome-mesh {
   background:
-    radial-gradient(58% 42% at 18% 22%, rgba(74, 222, 128, 0.28), transparent 60%),
-    radial-gradient(50% 38% at 82% 30%, rgba(167, 139, 250, 0.26), transparent 62%),
-    radial-gradient(70% 50% at 50% 92%, rgba(59, 130, 246, 0.22), transparent 65%),
-    #050505;
-  filter: saturate(1.05);
+    radial-gradient(58% 42% at 50% 6%, rgba(250, 229, 0, 0.1), transparent 68%),
+    radial-gradient(64% 46% at 50% 100%, rgba(250, 229, 0, 0.05), transparent 70%),
+    #0e0d10;
   animation: welcome-mesh-pan 18s ease-in-out infinite;
 }
 @keyframes welcome-mesh-pan {

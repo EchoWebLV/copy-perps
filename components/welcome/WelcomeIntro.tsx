@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import {
+  BG,
+  FG,
+  ACCENT,
+  FONT_DISPLAY,
+  FONT_BODY,
+  Headline,
+  Stamp,
+} from "@/components/v2/ui";
 
-const STORAGE_KEY = "gwak.welcomed.v1";
+const STORAGE_KEY = "breach.welcomed.v2";
 
 // First-open intro. Localised to the device — backed by localStorage,
 // not the users table — so it shows once per browser even before login.
 // Mounted at the (app)/layout level so it covers any first app surface.
 //
-// Visually distinct from the rail picker (which is editorial / solid
-// black). This is brand-hero: animated mesh backdrop, prominent logo,
-// large display headline, brand-coloured rail chips, full-width
-// emerald CTA. No emojis.
+// Styled to match the app's design language: warm near-black substrate,
+// acid-yellow accent, condensed hypebeast headline + factory stamps,
+// factory-numbered bot rows, chunky yellow CTA.
 export function WelcomeIntro() {
   const [shown, setShown] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -36,102 +43,114 @@ export function WelcomeIntro() {
 
   return (
     <div
-      className={`fixed inset-0 z-50 overflow-hidden bg-black text-white ${
+      className={`fixed inset-0 z-50 overflow-hidden ${
         closing ? "welcome-out" : "welcome-in"
       }`}
+      style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
       <div className="welcome-mesh absolute inset-0" />
       <div className="welcome-grain absolute inset-0" />
 
-      <div className="relative flex h-full flex-col px-7 pb-8 pt-6">
-        <div className="flex items-center justify-end">
+      <div className="relative flex h-full flex-col px-6 pb-8 pt-6">
+        {/* Brand bar — wordmark left, skip right */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="block h-3.5 w-3.5 rounded-[3px]"
+              style={{ background: ACCENT }}
+            />
+            <Headline size={20}>BREACH</Headline>
+          </div>
           <button
             type="button"
             onClick={finish}
-            className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/45 transition hover:text-white"
+            className="text-[9px] font-black uppercase tracking-[0.24em] text-[#fafaf2]/45 transition hover:text-[#fafaf2]"
+            style={{ fontFamily: FONT_DISPLAY }}
             aria-label="Skip intro"
           >
             skip
           </button>
         </div>
 
-        <div className="welcome-logo-wrap mt-2 flex justify-center">
-          <Image
-            src="/logo.png"
-            alt="gwak.gg"
-            width={1280}
-            height={853}
-            priority
-            className="h-auto w-[220px] drop-shadow-[0_0_40px_rgba(74,222,128,0.25)]"
-          />
-        </div>
-
+        {/* Content — bottom-anchored */}
         <div className="mt-auto">
-          <div className="welcome-eyebrow font-mono text-[11px] uppercase tracking-[0.32em] text-emerald-300/90">
-            welcome
+          <div className="welcome-eyebrow">
+            <Stamp label="WELCOME" />
           </div>
 
-          <h1 className="welcome-headline mt-3 text-[64px] font-black leading-[0.88] tracking-tight">
-            Gwak<span className="welcome-grad"> season.</span>
-          </h1>
+          <div className="welcome-headline mt-3">
+            <Headline size={60} color={ACCENT}>{`"BOT`}</Headline>
+            <br />
+            <Headline size={60}>{`ARENA"`}</Headline>
+          </div>
 
-          <p className="welcome-sub mt-5 max-w-[20rem] text-base leading-relaxed text-white/70">
-            Memes, predictions, whale plays. Scroll, tap, stake. One feed, all
-            on Solana.
+          <p
+            className="welcome-sub mt-4 max-w-[20rem] leading-relaxed"
+            style={{
+              fontFamily: FONT_BODY,
+              fontSize: "14px",
+              color: "rgba(250,250,242,0.62)",
+            }}
+          >
+            Trading bots that mirror real on-chain whales. Live PnL. Scroll the
+            feed and watch them battle.
           </p>
 
-          <div className="welcome-chips mt-7 flex flex-wrap gap-2">
-            <Chip label="Memes" tint="#ff5e3a" />
-            <Chip label="Markets" tint="#3b82f6" />
-            <Chip label="Whales" tint="#a855f7" />
-          </div>
-
-          <div className="welcome-tips mt-8 flex flex-col gap-1.5 text-[13px] text-white/55">
-            <TipLine k="01" v="Buy hottest meme." />
-            <TipLine k="02" v="Copy the best whales." />
-            <TipLine k="03" v="Bet on every event." />
+          <div className="welcome-tips mt-7 flex flex-col gap-2.5">
+            <TipRow k="01" v="Algo bots mirror real whales" />
+            <TipRow k="02" v="Bot trades hit the feed live" />
+            <TipRow k="03" v="10K each" />
           </div>
         </div>
 
         <button
           type="button"
           onClick={finish}
-          className="welcome-cta mt-10 flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-400 py-4 text-base font-bold uppercase tracking-[0.15em] text-black transition active:scale-[0.98]"
+          className="welcome-cta mt-8 flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black uppercase tracking-widest transition active:scale-[0.98]"
+          style={{
+            background: ACCENT,
+            color: BG,
+            fontFamily: FONT_DISPLAY,
+            fontSize: "16px",
+            boxShadow: "0 4px 0 #fae50099, inset 0 -2px 0 rgba(0,0,0,0.2)",
+          }}
         >
-          <span>Start scrolling</span>
-          <span className="font-mono text-lg">→</span>
+          <span>Enter the arena</span>
+          <span aria-hidden>→</span>
         </button>
       </div>
     </div>
   );
 }
 
-function Chip({ label, tint }: { label: string; tint: string }) {
+// One factory-numbered row: acid-yellow index chip + condensed caps line.
+function TipRow({ k, v }: { k: string; v: string }) {
   return (
-    <span
-      className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-semibold backdrop-blur-sm"
-      style={{
-        borderColor: `${tint}55`,
-        background: `${tint}1a`,
-        color: tint,
-      }}
-    >
+    <div className="flex items-center gap-3">
       <span
-        className="inline-block h-2 w-2 rounded-full"
-        style={{ background: tint, boxShadow: `0 0 10px ${tint}` }}
-      />
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function TipLine({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="font-mono text-[10px] tabular-nums tracking-wider text-white/35">
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md tabular-nums"
+        style={{
+          background: ACCENT,
+          color: BG,
+          fontFamily: FONT_DISPLAY,
+          fontSize: "12px",
+          fontWeight: 900,
+          letterSpacing: "-0.02em",
+        }}
+      >
         {k}
       </span>
-      <span>{v}</span>
+      <span
+        className="font-black uppercase"
+        style={{
+          fontFamily: FONT_DISPLAY,
+          fontSize: "13px",
+          letterSpacing: "0.04em",
+          color: FG,
+        }}
+      >
+        {v}
+      </span>
     </div>
   );
 }
