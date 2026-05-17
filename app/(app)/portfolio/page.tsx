@@ -29,14 +29,7 @@ import {
   truncateAddress,
 } from "@/lib/privy/use-solana-wallet";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
-import { useWatchlist } from "@/components/watchlist/WatchlistProvider";
-import {
-  WatchlistRow,
-  EmptyWatchlist,
-} from "@/components/watchlist/WatchlistRow";
-import { WatchlistModal } from "@/components/watchlist/WatchlistModal";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
-import type { Signal } from "@/lib/types";
 
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
@@ -47,9 +40,7 @@ export default function PortfolioPage() {
   const [copyRows, setCopyRows] = useState<CopyRowData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"open" | "closed" | "watchlist">("open");
-  const { items: watchlistItems } = useWatchlist();
-  const [modalSignal, setModalSignal] = useState<Signal | null>(null);
+  const [tab, setTab] = useState<"open" | "closed">("open");
 
   // `silent` = true skips the spinner + error UI flash; used by the
   // background polling loop so live updates don't feel like a manual
@@ -157,12 +148,7 @@ export default function PortfolioPage() {
   const realizedPnl = closedProceeds - closedCost;
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
-  const visiblePositions =
-    tab === "open"
-      ? openPositions
-      : tab === "closed"
-        ? closedPositions
-        : [];
+  const visiblePositions = tab === "open" ? openPositions : closedPositions;
 
   return (
     <main
@@ -315,7 +301,6 @@ export default function PortfolioPage() {
               [
                 ["open", "Open", openPositions.length],
                 ["closed", "Closed", closedPositions.length],
-                ["watchlist", "Watchlist", watchlistItems.length],
               ] as const
             ).map(([key, label, count]) => {
               const active = tab === key;
@@ -371,77 +356,58 @@ export default function PortfolioPage() {
 
           <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col gap-2 pb-24">
-              {tab !== "watchlist" && (
-                <>
-                  {error && (
-                    <div
-                      className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
-                      style={{ background: `${RED}20`, color: RED, border: `1px solid ${RED}40` }}
-                    >
-                      {error}
-                    </div>
-                  )}
-                  {positions === null && !error && (
-                    <div
-                      className="py-12 text-center text-[11px] font-black uppercase tracking-widest"
-                      style={{ color: DIM }}
-                    >
-                      LOADING POSITIONS…
-                    </div>
-                  )}
-                  {positions && visiblePositions.length === 0 && (
-                    <div className="py-12 text-center">
-                      <Headline size={22}>
-                        {tab === "open"
-                          ? `"NO OPEN POSITIONS"`
-                          : `"NO CLOSED YET"`}
-                      </Headline>
-                      <p
-                        className="mt-2 text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: DIM }}
-                      >
-                        {tab === "open"
-                          ? "TAP A BOT IN THE FEED TO TAIL ONE."
-                          : "CLOSED BETS SHOW UP HERE."}
-                      </p>
-                    </div>
-                  )}
-                  {visiblePositions.map((p) => (
-                    <PositionRow
-                      key={p.id}
-                      position={p}
-                      onClosed={load}
-                      onShared={load}
+              {error && (
+                <div
+                  className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
+                  style={{ background: `${RED}20`, color: RED, border: `1px solid ${RED}40` }}
+                >
+                  {error}
+                </div>
+              )}
+              {positions === null && !error && (
+                <div
+                  className="py-12 text-center text-[11px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  LOADING POSITIONS…
+                </div>
+              )}
+              {positions && visiblePositions.length === 0 && (
+                <div className="py-12 text-center">
+                  <Headline size={22}>
+                    {tab === "open"
+                      ? `"NO OPEN POSITIONS"`
+                      : `"NO CLOSED YET"`}
+                  </Headline>
+                  <p
+                    className="mt-2 text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    {tab === "open"
+                      ? "TAP A BOT IN THE FEED TO TAIL ONE."
+                      : "CLOSED BETS SHOW UP HERE."}
+                  </p>
+                </div>
+              )}
+              {visiblePositions.map((p) => (
+                <PositionRow
+                  key={p.id}
+                  position={p}
+                  onClosed={load}
+                  onShared={load}
+                />
+              ))}
+              {tab === "open" && copyRows.length > 0 && (
+                <section className="mt-4 space-y-2">
+                  <Stamp label="COPIES" value={`${copyRows.length}`} />
+                  {copyRows.map((row) => (
+                    <CopyRow
+                      key={row.betId}
+                      row={row}
+                      onClosed={() => void load()}
                     />
                   ))}
-                  {tab === "open" && copyRows.length > 0 && (
-                    <section className="mt-4 space-y-2">
-                      <Stamp label="COPIES" value={`${copyRows.length}`} />
-                      {copyRows.map((row) => (
-                        <CopyRow
-                          key={row.betId}
-                          row={row}
-                          onClosed={() => void load()}
-                        />
-                      ))}
-                    </section>
-                  )}
-                </>
-              )}
-              {tab === "watchlist" && (
-                <>
-                  {watchlistItems.length === 0 ? (
-                    <EmptyWatchlist />
-                  ) : (
-                    watchlistItems.map((item) => (
-                      <WatchlistRow
-                        key={item.signalId}
-                        signal={item.payload}
-                        onOpen={setModalSignal}
-                      />
-                    ))
-                  )}
-                </>
+                </section>
               )}
               <button
                 onClick={logout}
@@ -456,7 +422,6 @@ export default function PortfolioPage() {
       )}
 
       <BottomNav />
-      <WatchlistModal signal={modalSignal} onClose={() => setModalSignal(null)} />
     </main>
   );
 }

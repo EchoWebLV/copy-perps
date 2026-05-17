@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { WatchlistProvider } from "@/components/watchlist/WatchlistProvider";
-import { AnalyzeProvider } from "@/components/feed/AnalyzeProvider";
 import { UserEnsure } from "@/components/auth/UserEnsure";
 import { PreferencesProvider } from "@/components/onboarding/PreferencesProvider";
 import { WelcomeIntro } from "@/components/welcome/WelcomeIntro";
@@ -13,10 +11,6 @@ import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 //
 // UserEnsure — no-op when unauthed; on first authed render syncs the
 // user row + solana pubkey via /api/users/me.
-// WatchlistProvider — bookmark state shared between feed (where you save)
-// and portfolio (where you read).
-// AnalyzeProvider — Gwak's "live take" modal, openable from any card icon
-// in the feed OR from a card opened via the watchlist modal.
 // PacificaLiveProvider — single global WS connection feeding live mark
 // prices and the trade tape to every page. Bot PnL on /feed and /live
 // recomputes from these marks client-side for sub-second updates.
@@ -25,11 +19,7 @@ export default function ContainedLayout({ children }: { children: ReactNode }) {
     <div className="phone-frame">
       <UserEnsure />
       <PreferencesProvider>
-        <WatchlistProvider>
-          <AnalyzeProvider>
-            <PacificaLiveProvider>{children}</PacificaLiveProvider>
-          </AnalyzeProvider>
-        </WatchlistProvider>
+        <PacificaLiveProvider>{children}</PacificaLiveProvider>
       </PreferencesProvider>
       <WelcomeIntro />
     </div>
