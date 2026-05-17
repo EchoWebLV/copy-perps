@@ -7,7 +7,6 @@ import {
   uuid,
   doublePrecision,
   index,
-  primaryKey,
   boolean,
 } from "drizzle-orm/pg-core";
 
@@ -30,23 +29,6 @@ export const users = pgTable("users", {
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
-
-export const signals = pgTable(
-  "signals",
-  {
-    id: text("id").primaryKey(),
-    type: text("type").notNull(),
-    assetId: text("asset_id").notNull(),
-    heatScore: integer("heat_score").notNull(),
-    payload: jsonb("payload").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    heatIdx: index("signals_heat_idx").on(t.heatScore),
-    typeIdx: index("signals_type_idx").on(t.type),
-  }),
-);
 
 export const bets = pgTable(
   "bets",
@@ -76,41 +58,6 @@ export const bets = pgTable(
     sharedIdx: index("bets_shared_idx").on(t.sharedAt),
   }),
 );
-
-export const whaleWallets = pgTable("whale_wallets", {
-  address: text("address").primaryKey(),
-  pnl30d: doublePrecision("pnl_30d"),
-  label: text("label"),
-  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
-});
-
-export const watchlistItems = pgTable(
-  "watchlist_items",
-  {
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    signalId: text("signal_id").notNull(),
-    signalType: text("signal_type").notNull(),
-    payload: jsonb("payload").notNull(),
-    addedAt: timestamp("added_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.userId, t.signalId] }),
-    userIdx: index("watchlist_user_idx").on(t.userId, t.addedAt),
-  }),
-);
-
-export const feedViews = pgTable("feed_views", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  // Soft pointer — see comment on bets.signalId. Signals get evicted.
-  signalId: text("signal_id").notNull(),
-  action: text("action").notNull(),
-  viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
-});
 
 export const waitlist = pgTable("waitlist", {
   id: uuid("id").primaryKey().defaultRandom(),
