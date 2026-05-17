@@ -1,13 +1,11 @@
 // lib/bots/cross-bot.ts
 //
 // Snapshot of all paper bots' open positions, grouped by (asset, side) and
-// by asset. The resolver consumes this for pileup prevention (don't open
-// the 4th bot on the same side of the same asset). The signal generator
-// consumes it for the disagreement-linking UI on bot cards.
+// by asset. The resolver consumes familyHoldings for family-dedupe of
+// variant strategies; the feed UI consumes botsByAsset for the
+// disagreement-linking on bot cards.
 //
-// Cached 5s — fresh enough that pileup checks see recently-opened positions
-// from earlier in the same tick chain, cheap enough that it doesn't dominate
-// the resolver loop.
+// Cached 5s — cheap enough that it doesn't dominate the resolver loop.
 
 import { db } from "@/lib/db";
 import { bots, paperPositions } from "@/lib/db/schema";

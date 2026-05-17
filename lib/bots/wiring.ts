@@ -83,7 +83,7 @@ const REGIME_CLASSIFIER: DataSource = {
 const CROSS_BOT_STATE: DataSource = {
   label: "Cross-bot state",
   purpose:
-    "Snapshot of all bots' currently-open positions, grouped by (asset, side). Used by the resolver to prevent more than MAX_BOTS_SAME_SIDE bots piling into the same trade, and by the feed UI to surface disagreement between bots holding opposite sides of the same asset.",
+    "Snapshot of all bots' currently-open positions, grouped by (asset, side). Used by the feed UI to surface disagreement between bots holding opposite sides of the same asset, and by the resolver for family-dedupe of variant strategies.",
   endpoint: "Internal DB read (paper_positions WHERE status='open')",
   file: "lib/bots/cross-bot.ts",
   refreshHint: "5s cache, refreshed each resolver tick and each feed-pool render.",

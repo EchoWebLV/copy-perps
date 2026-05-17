@@ -18,6 +18,7 @@ vi.mock("@/lib/data/marks", () => ({
 }));
 vi.mock("@/lib/hyperliquid/client", () => ({
   getRecentLiquidations: vi.fn(async () => []),
+  getRecentWhaleOpens: vi.fn(async () => []),
 }));
 vi.mock("@/lib/data/cex-funding", () => ({
   getFundingRates: vi.fn(async () => ({})),
@@ -31,6 +32,7 @@ vi.mock("./paper", async () => {
     fetchOpenPositionsForBot: vi.fn(async () => []),
     getBotBalance: vi.fn(async () => 1000),
     markBotBusted: vi.fn(),
+    isInLossCooldown: vi.fn(async () => false),
   };
 });
 vi.mock("./cross-bot", () => ({
@@ -91,9 +93,9 @@ describe("resolver.tick", () => {
     await tick();
 
     expect(openPaperPosition).toHaveBeenCalledTimes(1);
-    // 1000 balance × 0.5 MAX_STAKE_PCT × 0.5 conviction = 250
+    // 1000 balance × stakePctFromConviction(0.5) ≈ 0.3214 → ≈ 321.43
     const callArg = vi.mocked(openPaperPosition).mock.calls[0][0];
-    expect(callArg.stakeUsd).toBe(250);
+    expect(callArg.stakeUsd).toBeCloseTo(321.43, 2);
     expect(closePaperPosition).not.toHaveBeenCalled();
   });
 
@@ -217,7 +219,7 @@ describe("resolver.tick", () => {
     expect(result.busted).toBe(1);
   });
 
-  it("skips entry when MAX_BOTS_SAME_SIDE is already reached", async () => {
+  it("opens entry even when 3 bots already hold the same side (pileup cap removed)", async () => {
     const bot: BotConfig = {
       id: "test-bot",
       parentId: null,
@@ -261,7 +263,8 @@ describe("resolver.tick", () => {
 
     await tick();
 
-    // Strategy fired, but pileup gate blocked the open.
-    expect(openPaperPosition).not.toHaveBeenCalled();
+    // No pileup cap — the bot still mirrors its signal regardless of how
+    // many other bots already hold that (asset, side).
+    expect(openPaperPosition).toHaveBeenCalledTimes(1);
   });
 });

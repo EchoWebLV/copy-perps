@@ -41,7 +41,6 @@ const MAX_STAKE_PCT = 0.5;
 const CONVICTION_FLOOR = 0.3; // mirrors clampConviction's default floor
 const MIN_STAKE_USD = 10;
 const BUST_THRESHOLD_USD = 10;
-const MAX_BOTS_SAME_SIDE = 3;
 // Tilt guard: two consecutive losses within 5 minutes parks new entries
 // until either a green close lands or the window expires. Stops the
 // strategy from doubling-down inside an actively-chopping regime that's
@@ -216,11 +215,8 @@ export async function tick(): Promise<{
       const decision = await strategy.evaluateEntry(ctx, signals);
       if (!decision) continue;
 
-      // Pileup prevention: skip if ≥MAX_BOTS_SAME_SIDE bots already hold this
-      // (asset, side). Forces diversification across the roster.
-      const sideKey = `${decision.asset}|${decision.side}`;
-      const sameSideCount = crossBot.positionsByAssetSide.get(sideKey) ?? 0;
-      if (sameSideCount >= MAX_BOTS_SAME_SIDE) continue;
+      // No cross-roster pileup cap: a mirror bot must faithfully reflect
+      // its source whale even if other bots already hold that (asset, side).
 
       // Family dedupe: variants share strategy logic with their parent, so
       // letting Phoebe and Phoebe-Lite both short AVAX is one signal counted
@@ -284,13 +280,6 @@ export async function tick(): Promise<{
       slots -= 1;
       freeBalance -= stake;
       openAssets.add(decision.asset);
-      // Increment local snapshot so the next iteration sees this bot's new
-      // position when checking pileup (in case this bot also tries the same
-      // asset+side via another market entry — unlikely but consistent).
-      crossBot.positionsByAssetSide.set(
-        sideKey,
-        (crossBot.positionsByAssetSide.get(sideKey) ?? 0) + 1,
-      );
       if (myFamily) {
         crossBot.familyHoldings.add(
           `${myFamily}|${decision.asset}|${decision.side}`,
