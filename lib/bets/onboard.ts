@@ -4,12 +4,14 @@ import { buildDepositTx } from "@/lib/pacifica/deposit";
 import {
   generateAgentKeypair,
   getAgentWallet,
-  persistAgentWallet,
+  getAgentWalletRow,
+  createPendingAgentWallet,
+  markAgentWalletBound,
 } from "@/lib/wallets/agent";
 
 export interface OnboardPlan {
   alreadyOnboarded: boolean;
-  // Present when client must sign the bind message and the deposit tx.
+  // Present when the client must sign the bind message and the deposit tx.
   bindMessage?: string;
   bindAgentPubkey?: string;
   depositTransactionB64?: string;
@@ -18,18 +20,40 @@ export interface OnboardPlan {
 
 const DEFAULT_INITIAL_DEPOSIT_USDC = 25; // covers one $5-$20 tap plus headroom
 
-// Builds the onboarding payload the client needs to sign on first tap.
-// Does NOT persist the agent wallet yet — that happens in
-// finalizeAgentBind after the bind tx is confirmed by Pacifica.
+// Builds the onboarding payload the client signs on first tap.
+//
+// The agent wallet is persisted to its DB row immediately — with
+// bound_at = null — BEFORE the Pacifica bind round-trip. A server restart
+// or a second instance between plan and bind can therefore never orphan
+// the bind: the seed is already durable, and finalizeAgentBind only flips
+// bound_at. A retried onboarding reuses the existing unbound row instead
+// of minting a second agent wallet (and a second deposit address).
 export async function planOnboarding(params: {
   userId: string;
   userMainPubkey: string;
   desiredStakeUsdc: number;
 }): Promise<OnboardPlan> {
-  const existing = await getAgentWallet(params.userId);
-  if (existing) return { alreadyOnboarded: true };
+  if (await getAgentWallet(params.userId)) {
+    return { alreadyOnboarded: true };
+  }
 
-  const { publicKeyB58: agentPubkey, seed } = generateAgentKeypair();
+  // Reuse a generated-but-unbound row from an interrupted onboarding;
+  // otherwise mint a fresh agent keypair and persist it now.
+  const existing = await getAgentWalletRow(params.userId);
+  let agentPubkey: string;
+  if (existing) {
+    agentPubkey = existing.agentPubkey;
+  } else {
+    const generated = generateAgentKeypair();
+    agentPubkey = generated.publicKeyB58;
+    await createPendingAgentWallet({
+      userId: params.userId,
+      mainPubkey: params.userMainPubkey,
+      agentPubkey,
+      seed: generated.seed,
+    });
+  }
+
   const timestamp = Date.now();
   const bindMessage = buildMessage(
     { type: "bind_agent_wallet", timestamp, expiry_window: 5000 },
@@ -45,18 +69,6 @@ export async function planOnboarding(params: {
     amountUsdc: initialDeposit,
   });
 
-  // Stash the freshly-generated agent seed in a one-time cache. Server
-  // re-loads it during finalize. For Phase 1 we store it transiently
-  // in process memory keyed on agentPubkey — finalize must happen on
-  // the same instance; if not, the user re-onboards. Acceptable trade
-  // off; Phase 2 moves this to Redis/KV.
-  pendingAgentSeeds.set(agentPubkey, {
-    userId: params.userId,
-    mainPubkey: params.userMainPubkey,
-    seed,
-    expiresAt: Date.now() + 10 * 60 * 1000,
-  });
-
   return {
     alreadyOnboarded: false,
     bindMessage,
@@ -66,36 +78,18 @@ export async function planOnboarding(params: {
   };
 }
 
-interface PendingSeed {
-  userId: string;
-  mainPubkey: string;
-  seed: Uint8Array;
-  expiresAt: number;
-}
-const pendingAgentSeeds = new Map<string, PendingSeed>();
-
-// Called from /api/users/me/agent/bind after Pacifica acknowledges
-// the bind. Idempotent: returns persisted: false if the pending entry
-// has expired or was already consumed.
+// Called from /api/users/me/agent/bind after Pacifica acknowledges the
+// bind. The agent wallet row already exists (planOnboarding persisted it);
+// this only stamps bound_at, after which getAgentWallet returns it.
+// persisted: false means no matching pending row — the client should
+// re-run the onboarding plan.
 export async function finalizeAgentBind(params: {
+  userId: string;
   agentPubkey: string;
 }): Promise<{ persisted: boolean }> {
-  const pending = pendingAgentSeeds.get(params.agentPubkey);
-  if (!pending) return { persisted: false };
-  if (pending.expiresAt < Date.now()) {
-    pendingAgentSeeds.delete(params.agentPubkey);
-    return { persisted: false };
-  }
-  await persistAgentWallet({
-    userId: pending.userId,
-    mainPubkey: pending.mainPubkey,
-    agentPubkey: params.agentPubkey,
-    seed: pending.seed,
-  });
-  pendingAgentSeeds.delete(params.agentPubkey);
-  return { persisted: true };
-}
-
-export function clearPendingAgent(agentPubkey: string): void {
-  pendingAgentSeeds.delete(agentPubkey);
+  const persisted = await markAgentWalletBound(
+    params.userId,
+    params.agentPubkey,
+  );
+  return { persisted };
 }

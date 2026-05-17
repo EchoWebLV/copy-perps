@@ -8,6 +8,7 @@ import { getPositions } from "@/lib/pacifica/client";
 import { clampLeverageForNotional } from "@/lib/pacifica/markets";
 import { openCopyOrder } from "@/lib/pacifica/orders";
 import { planOnboarding } from "@/lib/bets/onboard";
+import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
       desiredStakeUsdc: body.stakeUsdc,
     });
     return NextResponse.json({ phase: "onboard", ...plan });
+  }
+
+  // One open tail per market: Pacifica nets positions by (account, symbol),
+  // so a second tail on the same market would merge into one position —
+  // closing one would close the other and misattribute its PnL.
+  if (await hasOpenTailOnMarket(user.id, body.market)) {
+    return NextResponse.json(
+      { error: `you already have an open ${body.market} tail — close it first` },
+      { status: 409 },
+    );
   }
 
   // Re-verify the leader still holds the matching position.

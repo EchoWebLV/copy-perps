@@ -78,7 +78,11 @@ export const agentWallets = pgTable("agent_wallets", {
   // in AGENT_WALLET_ENCRYPTION_KEY. Format:
   // base64(iv || ciphertext || authTag).
   agentSecretEnc: text("agent_secret_enc").notNull(),
-  boundAt: timestamp("bound_at", { withTimezone: true }).notNull().defaultNow(),
+  // Nullable: bound_at = null marks a generated-but-not-yet-bound agent
+  // (onboarding interrupted between keypair generation and the Pacifica
+  // bind). getAgentWallet ignores unbound rows; planOnboarding reuses them
+  // so a restart mid-onboarding never orphans the bind.
+  boundAt: timestamp("bound_at", { withTimezone: true }),
 });
 
 export const bots = pgTable("bots", {

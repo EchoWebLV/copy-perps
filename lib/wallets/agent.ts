@@ -1,5 +1,5 @@
 import { Keypair } from "@solana/web3.js";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { agentWallets } from "@/lib/db/schema";
@@ -57,11 +57,14 @@ export function generateAgentKeypair(): { publicKeyB58: string; seed: Uint8Array
   };
 }
 
+// Returns the user's BOUND agent wallet (usable for trading), or null.
+// A row whose bound_at is still null — onboarding interrupted before the
+// Pacifica bind — is treated as "no wallet" so callers re-onboard it.
 export async function getAgentWallet(userId: string): Promise<AgentWalletRecord | null> {
   const [row] = await db
     .select()
     .from(agentWallets)
-    .where(eq(agentWallets.userId, userId))
+    .where(and(eq(agentWallets.userId, userId), isNotNull(agentWallets.boundAt)))
     .limit(1);
   if (!row) return null;
   const seed = decryptSeed(row.agentSecretEnc);
@@ -74,7 +77,28 @@ export async function getAgentWallet(userId: string): Promise<AgentWalletRecord 
   };
 }
 
-export async function persistAgentWallet(params: {
+// Lightweight lookup (no seed decryption) used by the onboarding planner
+// to decide: bound row → done; unbound row → reuse it; nothing → mint one.
+export async function getAgentWalletRow(
+  userId: string,
+): Promise<{ agentPubkey: string; mainPubkey: string; boundAt: Date | null } | null> {
+  const [row] = await db
+    .select({
+      agentPubkey: agentWallets.agentPubkey,
+      mainPubkey: agentWallets.mainPubkey,
+      boundAt: agentWallets.boundAt,
+    })
+    .from(agentWallets)
+    .where(eq(agentWallets.userId, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+// Inserts a generated-but-not-yet-bound agent wallet (bound_at = null).
+// The encrypted seed is persisted up front so a server restart between
+// this and the Pacifica bind can never orphan the bind — finalizeAgentBind
+// only has to flip bound_at.
+export async function createPendingAgentWallet(params: {
   userId: string;
   mainPubkey: string;
   agentPubkey: string;
@@ -85,5 +109,26 @@ export async function persistAgentWallet(params: {
     mainPubkey: params.mainPubkey,
     agentPubkey: params.agentPubkey,
     agentSecretEnc: encryptSeed(params.seed),
+    boundAt: null,
   });
+}
+
+// Stamps bound_at once Pacifica acknowledges the bind. Scoped by
+// (userId, agentPubkey) so a stale agentPubkey can't bind the wrong row.
+// Returns false when no matching pending row exists.
+export async function markAgentWalletBound(
+  userId: string,
+  agentPubkey: string,
+): Promise<boolean> {
+  const updated = await db
+    .update(agentWallets)
+    .set({ boundAt: new Date() })
+    .where(
+      and(
+        eq(agentWallets.userId, userId),
+        eq(agentWallets.agentPubkey, agentPubkey),
+      ),
+    )
+    .returning({ userId: agentWallets.userId });
+  return updated.length > 0;
 }

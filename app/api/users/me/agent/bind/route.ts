@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { bindAgentWallet } from "@/lib/pacifica/client";
-import { finalizeAgentBind, clearPendingAgent } from "@/lib/bets/onboard";
+import { finalizeAgentBind } from "@/lib/bets/onboard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -45,14 +45,23 @@ export async function POST(request: Request) {
       payload: { agent_wallet: body.agentPubkey },
     });
   } catch (err) {
-    clearPendingAgent(body.agentPubkey);
-    console.error("[agent/bind] Pacifica rejected:", err);
-    return NextResponse.json(
-      { error: `Pacifica bind failed: ${String(err)}` },
-      { status: 502 },
-    );
+    const msg = String(err);
+    // If Pacifica reports the agent is already bound, a prior attempt
+    // landed on their side but we never stamped bound_at locally —
+    // recover by finalizing instead of failing the user.
+    if (!/already/i.test(msg)) {
+      console.error("[agent/bind] Pacifica rejected:", err);
+      return NextResponse.json(
+        { error: `Pacifica bind failed: ${msg}` },
+        { status: 502 },
+      );
+    }
+    console.warn("[agent/bind] agent already bound on Pacifica — finalizing");
   }
 
-  const persisted = await finalizeAgentBind({ agentPubkey: body.agentPubkey });
+  const persisted = await finalizeAgentBind({
+    userId: user.id,
+    agentPubkey: body.agentPubkey,
+  });
   return NextResponse.json({ ok: true, persisted });
 }

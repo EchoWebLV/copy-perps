@@ -30,6 +30,7 @@ import {
   TAKER_FEE_BPS,
 } from "./fees";
 import type { ExternalSignals, MarketContext } from "./types";
+import { runMirrorCloseSweep } from "@/lib/bets/mirror-close";
 
 const MAX_CONCURRENT_POSITIONS = 8;
 // Position sizing: stake scales from 25% of bankroll on a weak signal
@@ -286,6 +287,40 @@ export async function tick(): Promise<{
         );
       }
     }
+  }
+
+  // Auto-close real-money tails whose bot/leader has exited its position.
+  // Runs after the per-bot loop so a paper position closed earlier this
+  // tick is already flat when the sweep checks it. Isolated in try/catch
+  // AND time-boxed: the ticker is sequential and also runs every bot's
+  // stop-losses, so a slow/hung Pacifica must never freeze it.
+  try {
+    const SWEEP_TIMEOUT_MS = 20_000;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const sweep = await Promise.race([
+      runMirrorCloseSweep(),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () =>
+            reject(
+              new Error(`mirror-close sweep exceeded ${SWEEP_TIMEOUT_MS}ms`),
+            ),
+          SWEEP_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    if (sweep.closesAttempted > 0 || sweep.errors.length > 0) {
+      console.log(
+        `[mirror-close] ${sweep.closesSucceeded}/${sweep.closesAttempted} ` +
+          `tails auto-closed, ${sweep.errors.length} error(s)`,
+      );
+      for (const e of sweep.errors) {
+        console.error(`[mirror-close] bet ${e.betId}: ${e.message}`);
+      }
+    }
+  } catch (err) {
+    console.error("[mirror-close] sweep failed or timed out:", err);
   }
 
   return { opened, closed, busted };

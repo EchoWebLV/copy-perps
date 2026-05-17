@@ -4,6 +4,7 @@ import { bets, users, agentWallets, paperPositions } from "@/lib/db/schema";
 import { Keypair } from "@solana/web3.js";
 import { getPositions } from "@/lib/pacifica/client";
 import { closeCopyOrder } from "@/lib/pacifica/orders";
+import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import type { AgentWalletRecord } from "@/lib/wallets/agent";
 import { createDecipheriv } from "crypto";
 
@@ -40,14 +41,25 @@ interface MirrorResult {
 type OpenBetRow = {
   betId: string;
   userId: string;
+  amountUsdc: number;
   meta: unknown;
   userMainPubkey: string | null;
   agentPubkey: string;
   agentSecretEnc: string;
 };
 
+/** Merges a leaderClosedAt stamp into the bet's existing meta JSON, so the
+ *  close is attributable to the leader/bot exiting (not a manual close). */
+function withLeaderClosedAt(meta: unknown): Record<string, unknown> {
+  return {
+    ...((meta as Record<string, unknown> | null) ?? {}),
+    leaderClosedAt: new Date().toISOString(),
+  };
+}
+
 /** Shared close logic: look up the user's live position on Pacifica and submit
- *  a reduce-only close order. Updates the bet row on success. */
+ *  a reduce-only close order. Updates the bet row on success — recording
+ *  realized PnL and stamping leaderClosedAt. */
 async function closeFollowerBet(
   row: OpenBetRow,
   meta: BetMeta,
@@ -72,11 +84,18 @@ async function closeFollowerBet(
           (meta.leaderSide === "short" && p.side === "ask")),
     );
     if (!userPos) {
-      // Position already gone on user side (manual close beat us).
+      // Position already gone on user side (manual close or liquidation
+      // beat us). Proceeds unknown — leave proceedsUsdc null.
       await db
         .update(bets)
-        .set({ status: "closed", closedAt: new Date() })
-        .where(eq(bets.id, row.betId));
+        .set({
+          status: "closed",
+          closedAt: new Date(),
+          meta: withLeaderClosedAt(row.meta),
+        })
+        .where(
+          and(eq(bets.id, row.betId), eq(bets.status, "confirmed")),
+        );
       result.closesSucceeded++;
       return;
     }
@@ -86,14 +105,26 @@ async function closeFollowerBet(
       positionSide: meta.leaderSide,
       amountBase: userPos.amount,
     });
+    // Record realized PnL so the auto-closed tail shows true PnL in the
+    // portfolio rather than a fabricated total loss.
+    const realized = await realizedPnlForOrder({
+      account: row.userMainPubkey!,
+      orderId: fill.order_id,
+    });
     await db
       .update(bets)
       .set({
         status: "closed",
         closedAt: new Date(),
         closeTxHash: `pacifica:${fill.order_id}`,
+        meta: withLeaderClosedAt(row.meta),
+        ...(realized != null
+          ? { proceedsUsdc: row.amountUsdc + realized }
+          : {}),
       })
-      .where(eq(bets.id, row.betId));
+      .where(
+        and(eq(bets.id, row.betId), eq(bets.status, "confirmed")),
+      );
     result.closesSucceeded++;
   } catch (err) {
     result.errors.push({ betId: row.betId, message: String(err) });
@@ -209,6 +240,7 @@ export async function runMirrorCloseSweep(): Promise<MirrorResult> {
     .select({
       betId: bets.id,
       userId: bets.userId,
+      amountUsdc: bets.amountUsdc,
       meta: bets.meta,
       userMainPubkey: users.solanaPubkey,
       agentPubkey: agentWallets.agentPubkey,

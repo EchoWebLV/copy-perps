@@ -5,6 +5,7 @@ import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
 import { getPositions } from "@/lib/pacifica/client";
+import { getMarksSnapshot } from "@/lib/data/marks";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -58,11 +59,17 @@ export async function GET(request: Request) {
   // --- Pacifica copy bets ---
   const copyBets = userBets.filter((b) => b.type === "copy");
   let userPositions = null;
+  let marks: Map<string, number> | null = null;
   if (copyBets.length > 0 && user.solanaPubkey) {
     try {
       userPositions = await getPositions(user.solanaPubkey);
     } catch (err) {
       console.warn("[portfolio] pacifica positions fetch failed:", err);
+    }
+    try {
+      marks = await getMarksSnapshot();
+    } catch (err) {
+      console.warn("[portfolio] marks snapshot failed:", err);
     }
   }
   const copyRows = copyBets
@@ -81,7 +88,20 @@ export async function GET(request: Request) {
           ((meta.leaderSide === "long" && p.side === "bid") ||
             (meta.leaderSide === "short" && p.side === "ask")),
       );
-      void livePos; // referenced for future PnL; intentionally unused now
+      // Live unrealized PnL as a % of stake. Pacifica's /positions omits
+      // computed PnL, so derive it from the position's entry vs the
+      // current mark. Null when the position or a mark is unavailable.
+      let unrealizedPnlPct: number | null = null;
+      if (livePos && marks && b.amountUsdc > 0) {
+        const mark = marks.get(meta.leaderMarket);
+        const entry = Number(livePos.entry_price);
+        const size = Number(livePos.amount);
+        if (mark != null && Number.isFinite(entry) && Number.isFinite(size)) {
+          const dir = livePos.side === "bid" ? 1 : -1;
+          const pnlUsd = (mark - entry) * size * dir;
+          unrealizedPnlPct = (pnlUsd / b.amountUsdc) * 100;
+        }
+      }
       return {
         betId: b.id,
         market: meta.leaderMarket,
@@ -90,9 +110,7 @@ export async function GET(request: Request) {
         stakeUsdc: b.amountUsdc,
         leaderAddress: meta.leaderAddress,
         leaderUsername: null,
-        // Pacifica's /positions does not expose unrealized PnL%; null in
-        // Phase 1 (computed via WS mark in Phase 2).
-        unrealizedPnlPct: null,
+        unrealizedPnlPct,
         leaderClosedAt: meta.leaderClosedAt ?? null,
       };
     });

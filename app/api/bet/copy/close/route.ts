@@ -7,6 +7,7 @@ import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { getPositions } from "@/lib/pacifica/client";
+import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -90,14 +91,28 @@ export async function POST(request: Request) {
     );
   }
 
+  // Realized PnL of the close (net of fees) so the portfolio shows true
+  // closed PnL — without it, a null proceeds renders as a 100% loss.
+  const realized = await realizedPnlForOrder({
+    account: user.solanaPubkey,
+    orderId: fill.order_id,
+  });
+  if (realized == null) {
+    console.warn(
+      `[bet/copy/close] realized PnL unavailable for order ${fill.order_id}; proceeds left unset`,
+    );
+  }
+  const proceedsUsdc = realized == null ? null : bet.amountUsdc + realized;
+
   await db
     .update(bets)
     .set({
       status: "closed",
       closedAt: new Date(),
       closeTxHash: `pacifica:${fill.order_id}`,
+      ...(proceedsUsdc != null ? { proceedsUsdc } : {}),
     })
     .where(eq(bets.id, bet.id));
 
-  return NextResponse.json({ ok: true, orderId: fill.order_id });
+  return NextResponse.json({ ok: true, orderId: fill.order_id, proceedsUsdc });
 }

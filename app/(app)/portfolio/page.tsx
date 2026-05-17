@@ -24,6 +24,7 @@ import {
   type PortfolioPosition,
 } from "@/components/portfolio/PositionRow";
 import { WithdrawButton } from "@/components/portfolio/WithdrawButton";
+import { PacificaWithdrawButton } from "@/components/portfolio/PacificaWithdrawButton";
 import {
   useEmbeddedSolanaWallet,
   truncateAddress,
@@ -139,9 +140,12 @@ export default function PortfolioPage() {
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
   const totalNetWorth = positionsValue + (walletUsd ?? 0);
 
-  // Realized PnL summary for the Closed tab.
-  const closedCost = closedPositions.reduce((sum, p) => sum + p.amountUsdc, 0);
-  const closedProceeds = closedPositions.reduce(
+  // Realized PnL summary for the Closed tab. Only positions with known
+  // proceeds count — a closed position whose proceeds haven't been
+  // recorded yet would otherwise read as a fabricated 100% loss.
+  const settledClosed = closedPositions.filter((p) => p.proceedsUsdc != null);
+  const closedCost = settledClosed.reduce((sum, p) => sum + p.amountUsdc, 0);
+  const closedProceeds = settledClosed.reduce(
     (sum, p) => sum + (p.proceedsUsdc ?? 0),
     0,
   );
@@ -289,7 +293,10 @@ export default function PortfolioPage() {
                   {openPositions.length} OPEN · {closedPositions.length} CLOSED
                 </span>
               </div>
-              <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+              <div className="flex items-center gap-2">
+                <PacificaWithdrawButton onComplete={load} />
+                <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+              </div>
             </div>
           </div>
 
