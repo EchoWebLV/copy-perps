@@ -6,8 +6,18 @@ import { USDC_MINT } from "@/lib/jupiter/constants";
 
 const PACIFICA_TAKER_FEE_BPS = 4;
 const OPEN_ORDER_BUFFER_USDC = 0.1;
+export const PACIFICA_MIN_DEPOSIT_USDC = 10;
 const PACIFICA_PROGRAM_ID = "PCFA5iYgmqK6MqPhWNKg7Yv7auX7VZ4Cx7T1eJyrAMH";
 const RECENT_DEPOSIT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+export class PacificaDepositPendingError extends Error {
+  constructor(public recentDepositUsdc: number) {
+    super(
+      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit landed on-chain, but Pacifica has not credited the account yet. Do not deposit again; wait for Pacifica support/credit before tailing.`,
+    );
+    this.name = "PacificaDepositPendingError";
+  }
+}
 
 function roundUpCents(value: number): number {
   if (value <= 0) return 0;
@@ -24,6 +34,13 @@ export function requiredPacificaCollateralUsdc(params: {
   return roundUpCents(stake + openingFee + OPEN_ORDER_BUFFER_USDC);
 }
 
+export function requiredPacificaDepositUsdc(params: {
+  stakeUsdc: number;
+  leverage: number;
+}): number {
+  return Math.max(PACIFICA_MIN_DEPOSIT_USDC, requiredPacificaCollateralUsdc(params));
+}
+
 export function pacificaDepositTopUpUsdc(params: {
   availableToSpendUsdc: number;
   stakeUsdc: number;
@@ -36,7 +53,8 @@ export function pacificaDepositTopUpUsdc(params: {
     stakeUsdc: params.stakeUsdc,
     leverage: params.leverage,
   });
-  return roundUpCents(Math.max(0, required - available));
+  const shortfall = roundUpCents(Math.max(0, required - available));
+  return shortfall > 0 ? Math.max(PACIFICA_MIN_DEPOSIT_USDC, shortfall) : 0;
 }
 
 export function recentDepositCoversRequired(params: {
@@ -116,21 +134,12 @@ export async function planPacificaDepositTopUp(params: {
   const availablePacificaUsdc = await getPacificaAvailableToSpendUsdc(
     params.userMainPubkey,
   );
-  const requiredUsdc = requiredPacificaCollateralUsdc({
-    stakeUsdc: params.stakeUsdc,
-    leverage: params.leverage,
-  });
   if (availablePacificaUsdc === null) {
     const recentDepositUsdc = await getRecentPacificaDepositUsdc(
       params.userMainPubkey,
     );
-    if (
-      recentDepositCoversRequired({
-        recentDepositUsdc,
-        requiredUsdc,
-      })
-    ) {
-      return null;
+    if (recentDepositUsdc > 0) {
+      throw new PacificaDepositPendingError(recentDepositUsdc);
     }
   }
   const topUpUsdc = pacificaDepositTopUpUsdc({

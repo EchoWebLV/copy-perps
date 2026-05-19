@@ -9,7 +9,10 @@ import { openCopyOrder } from "@/lib/pacifica/orders";
 import { lotSizedAmountFromNotional } from "@/lib/pacifica/sizing";
 import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
-import { planPacificaDepositTopUp } from "@/lib/bets/funding";
+import {
+  PacificaDepositPendingError,
+  planPacificaDepositTopUp,
+} from "@/lib/bets/funding";
 import { fetchOpenPositionForBot } from "@/lib/bots/paper";
 import { getBot } from "@/lib/bots";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
@@ -34,6 +37,9 @@ interface Body {
 function fundingErrorResponse(err: unknown): NextResponse | null {
   if (err instanceof InsufficientWalletUsdcError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  if (err instanceof PacificaDepositPendingError) {
+    return NextResponse.json({ error: err.message }, { status: 409 });
   }
   return null;
 }

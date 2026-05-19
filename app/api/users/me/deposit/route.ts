@@ -6,6 +6,7 @@ import {
   buildDepositTx,
   InsufficientWalletUsdcError,
 } from "@/lib/pacifica/deposit";
+import { PACIFICA_MIN_DEPOSIT_USDC } from "@/lib/bets/funding";
 import {
   ensureGasWalletReady,
   GasWalletExhaustedError,
@@ -25,9 +26,9 @@ export async function POST(request: Request) {
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = (await request.json().catch(() => null)) as Body | null;
-  if (!body?.amountUsdc || body.amountUsdc < 5) {
+  if (!body?.amountUsdc || body.amountUsdc < PACIFICA_MIN_DEPOSIT_USDC) {
     return NextResponse.json(
-      { error: "amountUsdc >= 5 required" },
+      { error: `amountUsdc >= ${PACIFICA_MIN_DEPOSIT_USDC} required` },
       { status: 400 },
     );
   }

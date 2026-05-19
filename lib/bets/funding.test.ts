@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  PACIFICA_MIN_DEPOSIT_USDC,
   recentDepositCoversRequired,
+  requiredPacificaDepositUsdc,
   requiredPacificaCollateralUsdc,
   pacificaDepositTopUpUsdc,
 } from "./funding";
@@ -10,16 +12,19 @@ describe("Pacifica funding math", () => {
     expect(
       requiredPacificaCollateralUsdc({ stakeUsdc: 5, leverage: 10 }),
     ).toBe(5.12);
+    expect(requiredPacificaDepositUsdc({ stakeUsdc: 5, leverage: 10 })).toBe(
+      PACIFICA_MIN_DEPOSIT_USDC,
+    );
   });
 
-  it("only tops up the shortfall when Pacifica already has collateral", () => {
+  it("tops up the shortfall while obeying Pacifica's minimum deposit", () => {
     expect(
       pacificaDepositTopUpUsdc({
         availableToSpendUsdc: 3,
         stakeUsdc: 5,
         leverage: 10,
       }),
-    ).toBe(2.12);
+    ).toBe(PACIFICA_MIN_DEPOSIT_USDC);
 
     expect(
       pacificaDepositTopUpUsdc({
