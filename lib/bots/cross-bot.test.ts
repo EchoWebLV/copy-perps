@@ -19,10 +19,19 @@ describe("getCrossBotSnapshot", () => {
   });
 
   function setRows(rows: ReturnType<typeof makeRow>[]) {
-    // Drizzle pattern: db.select(...).from(...).where(...) resolves to rows.
+    // Drizzle pattern:
+    // 1. db.select().from(paperPositions).where(...) resolves to open rows.
+    // 2. db.select().from(bots) resolves to bot metadata rows.
     const where = vi.fn().mockResolvedValue(rows);
-    const from = vi.fn().mockReturnValue({ where });
-    (db.select as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+    const fromPositions = vi.fn().mockReturnValue({ where });
+    const botRows = rows.map((r) => ({
+      id: r.botId,
+      strategyKey: r.botId,
+    }));
+    const fromBots = vi.fn().mockResolvedValue(botRows);
+    (db.select as unknown as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({ from: fromPositions })
+      .mockReturnValueOnce({ from: fromBots });
   }
 
   it("returns empty maps when no open positions", async () => {

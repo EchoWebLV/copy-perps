@@ -69,6 +69,11 @@ const _cache = new Map<
   { candles: Candle[]; expiresAt: number; inflight: Promise<Candle[]> | null }
 >();
 
+/** Test-only: clear the candle cache between runs. */
+export function _clearCandlesCache(): void {
+  _cache.clear();
+}
+
 /**
  * Fetches the most recent `count` candles for an asset from Hyperliquid.
  * Returned in chronological order (oldest first). The cache stores up to

@@ -105,8 +105,8 @@ export function createMeanRevertMikeStrategy(p: MikeParams): Strategy {
 }
 
 // Fade — alpha-arena bot. Smarter v2: BTC/ETH/SOL only, z-threshold
-// raised 1.2 → 2.0 (fades real stretches, not noise), dynamic leverage
-// 5-15x scaled by overshoot. Tighter triggers cut trade frequency ~half
+// raised 1.2 -> 2.0 (fades real stretches, not noise), dynamic leverage
+// 5-15x scaled by overshoot. It only fades in mean-reverting/chop regimes
 // so fewer mean-revert-eats-trend disasters.
 export const MeanRevertMikeStrategy = createMeanRevertMikeStrategy({
   id: "mean-revert-mike",
@@ -118,7 +118,7 @@ export const MeanRevertMikeStrategy = createMeanRevertMikeStrategy({
   leverage: 10,
   minLeverage: 5,
   maxLeverage: 15,
-  regimesAllowed: [],
+  regimesAllowed: ["mean-reverting", "chop"],
 });
 
 export const MeanRevertMikePatientStrategy = createMeanRevertMikeStrategy({
@@ -148,7 +148,7 @@ export const MeanRevertMikeBot: BotConfig = {
     leverage: 10,
     minLeverage: 5,
     maxLeverage: 15,
-    regimesAllowed: [],
+    regimesAllowed: ["mean-reverting", "chop"],
   },
   status: "paper",
 };

@@ -143,15 +143,15 @@ export const VolVectorStrategy = createVolVectorStrategy({
 });
 
 // Bolt — alpha-arena bot. Smarter v2: BTC/ETH/SOL only, vol multiplier
-// raised 1.05 → 1.5 (real vol pops only), trendConsistency raised 0.3 →
-// 0.5 (directional bias must be visible). Dynamic leverage 6-14x.
+// stays lower than the headliner, while trendConsistency is 0.5 (directional
+// bias must be visible). Dynamic leverage 6-14x.
 export const VolVectorHairTriggerStrategy = createVolVectorStrategy({
   id: "vol-vector-hair-trigger",
   recentTimeframe: "1m",
   recentCount: 5,
   baselineTimeframe: "1m",
   baselineCount: 30,
-  volMultiplier: 1.5,
+  volMultiplier: 1.15,
   trendConsistencyMin: 0.5,
   exitFavorablePct: 0.004,
   maxHoldMs: 6 * 60 * 1000,
@@ -195,7 +195,7 @@ export const VolVectorHairTriggerBot: BotConfig = {
     recentCount: 5,
     baselineTimeframe: "1m",
     baselineCount: 30,
-    volMultiplier: 1.5,
+    volMultiplier: 1.15,
     trendConsistencyMin: 0.5,
     exitFavorablePct: 0.004,
     maxHoldMs: 6 * 60 * 1000,

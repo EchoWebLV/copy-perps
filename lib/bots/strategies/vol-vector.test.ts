@@ -133,9 +133,14 @@ describe("VolVectorHairTrigger (variant)", () => {
   });
 
   it("fires at a lower vol multiplier than the headliner", async () => {
-    vi.mocked(getCandles).mockImplementation(async (_asset, tf) => {
-      if (tf === "1m") return trendingCandles(100, 0.1, 5, 60_000);
-      return constantCandles(100, 24, 60 * 60_000);
+    vi.mocked(getCandles).mockImplementation(async (_asset, tf, count) => {
+      if (tf === "1m" && count === 5) {
+        return trendingCandles(100, 0.25, 5, 60_000);
+      }
+      if (tf === "1m") {
+        return trendingCandles(100, 0.08, 30, 60_000);
+      }
+      return trendingCandles(100, 0.2, 24, 60 * 60_000);
     });
     const headliner = await VolVectorStrategy.evaluateEntry(
       { asset: "SOL", mark: 100.5 },

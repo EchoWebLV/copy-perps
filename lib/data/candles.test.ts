@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({ db: {} }));
 
-import { getCandles, type Candle } from "./candles";
+import { _clearCandlesCache, getCandles } from "./candles";
 
 describe("getCandles", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    _clearCandlesCache();
   });
 
   it("returns parsed candles in chronological order (oldest first)", async () => {
@@ -46,7 +47,7 @@ describe("getCandles", () => {
     expect(candles).toEqual([]);
   });
 
-  it("requests count candles by computing startTime from interval", async () => {
+  it("requests the buffered candle window from the upstream API", async () => {
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify([]), { status: 200 }),
     );
@@ -57,7 +58,7 @@ describe("getCandles", () => {
     expect(body.req.coin).toBe("XRP");
     expect(body.req.interval).toBe("5m");
     const windowMs = body.req.endTime - body.req.startTime;
-    expect(windowMs).toBeGreaterThanOrEqual(60 * 60 * 1000);
-    expect(windowMs).toBeLessThanOrEqual(70 * 60 * 1000);
+    expect(windowMs).toBeGreaterThanOrEqual(16 * 60 * 60 * 1000);
+    expect(windowMs).toBeLessThanOrEqual(17 * 60 * 60 * 1000);
   });
 });
