@@ -14,7 +14,7 @@ export function BalancePill() {
     return (
       <button
         onClick={login}
-        className="absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl px-4 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+        className="absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl px-4 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] lg:hidden"
         style={{
           background: ACCENT,
           color: BG,
@@ -37,7 +37,7 @@ export function BalancePill() {
 
   return (
     <div
-      className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 inline-flex items-baseline gap-2 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-widest"
+      className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 inline-flex items-baseline gap-2 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-widest lg:hidden"
       style={{
         background: PANEL,
         color: FG,

@@ -4,10 +4,9 @@ import { PreferencesProvider } from "@/components/onboarding/PreferencesProvider
 import { WelcomeIntro } from "@/components/welcome/WelcomeIntro";
 import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 
-// Pages inside this route group render inside the phone-frame: full-bleed
-// on mobile, centered phone-shaped container on desktop. The landing page
-// at app/page.tsx sits OUTSIDE this group so it stays full-bleed on every
-// viewport.
+// Pages inside this route group render inside the app-frame: full-screen on
+// mobile and command-center sized on desktop. The landing page at app/page.tsx
+// sits OUTSIDE this group so it stays full-bleed on every viewport.
 //
 // UserEnsure — no-op when unauthed; on first authed render syncs the
 // user row + solana pubkey via /api/users/me.
@@ -16,7 +15,7 @@ import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 // recomputes from these marks client-side for sub-second updates.
 export default function ContainedLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="phone-frame">
+    <div className="app-frame">
       <UserEnsure />
       <PreferencesProvider>
         <PacificaLiveProvider>{children}</PacificaLiveProvider>
