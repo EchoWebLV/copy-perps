@@ -120,6 +120,7 @@ export async function postSigned<P, R>(
     header: SignatureHeader;
     payload: P;
   },
+  options: { allowNullData?: boolean } = {},
 ): Promise<R> {
   const body: Record<string, unknown> = {
     account: signed.account,
@@ -136,10 +137,10 @@ export async function postSigned<P, R>(
   });
   const rawText = await r.text().catch(() => "");
   const env = parseEnvelope<R>(rawText);
-  if (!r.ok || !env || !env.success || env.data === null) {
+  if (!r.ok || !env || !env.success || (!options.allowNullData && env.data === null)) {
     throw new Error(postErrorMessage(path, r.status, env, rawText));
   }
-  return env.data;
+  return env.data as R;
 }
 
 // Place a market order. Caller has already signed the payload with
@@ -167,5 +168,6 @@ export async function bindAgentWallet(signed: {
   header: SignatureHeader;
   payload: { agent_wallet: string };
 }): Promise<{ ok: boolean }> {
-  return postSigned("/agent/bind", signed);
+  await postSigned("/agent/bind", signed, { allowNullData: true });
+  return { ok: true };
 }

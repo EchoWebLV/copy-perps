@@ -55,4 +55,31 @@ describe("Pacifica signed POST errors", () => {
     const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
     expect(body.signature).toEqual({ type: "hardware", value: "signature" });
   });
+
+  it("treats successful bind responses with null data as ok", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: null,
+          error: null,
+          code: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      bindAgentWallet({
+        account: "account",
+        signatureB58: "signature",
+        header: {
+          type: "bind_agent_wallet",
+          timestamp: 1,
+          expiry_window: 5000,
+        },
+        payload: { agent_wallet: "agent" },
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
 });
