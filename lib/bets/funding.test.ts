@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  recentDepositCoversRequired,
   requiredPacificaCollateralUsdc,
   pacificaDepositTopUpUsdc,
 } from "./funding";
@@ -27,5 +28,21 @@ describe("Pacifica funding math", () => {
         leverage: 10,
       }),
     ).toBe(0);
+  });
+
+  it("treats a recent vault deposit as covering a missing Pacifica account", () => {
+    expect(
+      recentDepositCoversRequired({
+        recentDepositUsdc: 5.12,
+        requiredUsdc: 5.12,
+      }),
+    ).toBe(true);
+
+    expect(
+      recentDepositCoversRequired({
+        recentDepositUsdc: 5,
+        requiredUsdc: 5.12,
+      }),
+    ).toBe(false);
   });
 });
