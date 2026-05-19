@@ -18,6 +18,13 @@ interface ApiEnvelope<T> {
   code: number | null;
 }
 
+type PacificaSignature =
+  | string
+  | {
+      type: "hardware";
+      value: string;
+    };
+
 async function getEnvelope<T>(path: string, attempt = 0): Promise<T> {
   const r = await fetch(`${BASE_URL}${path}`, {
     method: "GET",
@@ -40,6 +47,27 @@ async function getEnvelope<T>(path: string, attempt = 0): Promise<T> {
     throw new Error(`Pacifica GET ${path} failed: ${errMsg}`);
   }
   return j.data;
+}
+
+function postErrorMessage<R>(
+  path: string,
+  status: number,
+  env: ApiEnvelope<R> | null,
+  rawText: string,
+): string {
+  const bodyMsg =
+    env?.error ??
+    (rawText.trim().length > 0 ? rawText.trim().slice(0, 300) : null);
+  return `Pacifica POST ${path} failed: ${bodyMsg ?? `HTTP ${status}`}`;
+}
+
+function parseEnvelope<R>(rawText: string): ApiEnvelope<R> | null {
+  if (!rawText) return null;
+  try {
+    return JSON.parse(rawText) as ApiEnvelope<R>;
+  } catch {
+    return null;
+  }
 }
 
 export async function getMarkets(): Promise<PacificaMarketInfo[]> {
@@ -88,7 +116,7 @@ export async function postSigned<P, R>(
   signed: {
     account: string;
     agentWallet?: string;
-    signatureB58: string;
+    signatureB58: PacificaSignature;
     header: SignatureHeader;
     payload: P;
   },
@@ -106,10 +134,10 @@ export async function postSigned<P, R>(
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
-  const env = (await r.json().catch(() => null)) as ApiEnvelope<R> | null;
+  const rawText = await r.text().catch(() => "");
+  const env = parseEnvelope<R>(rawText);
   if (!r.ok || !env || !env.success || env.data === null) {
-    const errMsg = env?.error ?? `HTTP ${r.status}`;
-    throw new Error(`Pacifica POST ${path} failed: ${errMsg}`);
+    throw new Error(postErrorMessage(path, r.status, env, rawText));
   }
   return env.data;
 }
@@ -135,7 +163,7 @@ export async function placeMarketOrder(signed: {
 
 export async function bindAgentWallet(signed: {
   account: string;
-  signatureB58: string;
+  signatureB58: PacificaSignature;
   header: SignatureHeader;
   payload: { agent_wallet: string };
 }): Promise<{ ok: boolean }> {

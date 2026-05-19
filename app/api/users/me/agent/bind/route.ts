@@ -3,6 +3,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { bindAgentWallet } from "@/lib/pacifica/client";
 import { finalizeAgentBind } from "@/lib/bets/onboard";
+import { buildMessage, verifySig } from "@/lib/pacifica/sign";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -33,16 +34,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
+  const header = {
+    type: "bind_agent_wallet",
+    timestamp: body.timestamp,
+    expiry_window: body.expiryWindow,
+  };
+  const payload = { agent_wallet: body.agentPubkey };
+  const bindMessage = buildMessage(header, payload);
+  const locallyValid = await verifySig(
+    bindMessage,
+    body.signatureB58,
+    user.solanaPubkey,
+  ).catch(() => false);
   try {
     await bindAgentWallet({
       account: user.solanaPubkey,
-      signatureB58: body.signatureB58,
-      header: {
-        type: "bind_agent_wallet",
-        timestamp: body.timestamp,
-        expiry_window: body.expiryWindow,
-      },
-      payload: { agent_wallet: body.agentPubkey },
+      // Browser wallets commonly sign Solana messages with the off-chain
+      // message prefix. Pacifica accepts those as hardware-style
+      // signatures; raw signatures stay as plain strings.
+      signatureB58: locallyValid
+        ? body.signatureB58
+        : { type: "hardware", value: body.signatureB58 },
+      header,
+      payload,
     });
   } catch (err) {
     const msg = String(err);
