@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildMessage } from "@/lib/pacifica/sign";
 import { buildDepositTx } from "@/lib/pacifica/deposit";
+import { requiredPacificaCollateralUsdc } from "@/lib/bets/funding";
 import {
   generateAgentKeypair,
   getAgentWallet,
@@ -18,8 +19,6 @@ export interface OnboardPlan {
   initialDepositUsdc?: number;
 }
 
-const DEFAULT_INITIAL_DEPOSIT_USDC = 25; // covers one $5-$20 tap plus headroom
-
 // Builds the onboarding payload the client signs on first tap.
 //
 // The agent wallet is persisted to its DB row immediately — with
@@ -32,6 +31,7 @@ export async function planOnboarding(params: {
   userId: string;
   userMainPubkey: string;
   desiredStakeUsdc: number;
+  leverage: number;
 }): Promise<OnboardPlan> {
   if (await getAgentWallet(params.userId)) {
     return { alreadyOnboarded: true };
@@ -60,10 +60,10 @@ export async function planOnboarding(params: {
     { agent_wallet: agentPubkey },
   );
 
-  const initialDeposit = Math.max(
-    DEFAULT_INITIAL_DEPOSIT_USDC,
-    Math.ceil(params.desiredStakeUsdc * 2.5),
-  );
+  const initialDeposit = requiredPacificaCollateralUsdc({
+    stakeUsdc: params.desiredStakeUsdc,
+    leverage: params.leverage,
+  });
   const { transactionB64 } = await buildDepositTx({
     userPubkey: new PublicKey(params.userMainPubkey),
     amountUsdc: initialDeposit,

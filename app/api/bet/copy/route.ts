@@ -7,7 +7,9 @@ import { getAgentWallet } from "@/lib/wallets/agent";
 import { getPositions } from "@/lib/pacifica/client";
 import { clampLeverageForNotional } from "@/lib/pacifica/markets";
 import { openCopyOrder } from "@/lib/pacifica/orders";
+import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
+import { planPacificaDepositTopUp } from "@/lib/bets/funding";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
 
 export const runtime = "nodejs";
@@ -25,6 +27,13 @@ interface Body {
   stakeUsdc?: number;
   signalId?: string;
   walletAddress?: string;
+}
+
+function fundingErrorResponse(err: unknown): NextResponse | null {
+  if (err instanceof InsufficientWalletUsdcError) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -54,19 +63,6 @@ export async function POST(request: Request) {
   const user = await ensureUser(claims.userId, body.walletAddress ?? null);
   if (!user.solanaPubkey) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
-  }
-
-  // First-tap onboarding: if no agent wallet exists yet, return the
-  // bind+deposit plan to the client. Client signs both, calls the
-  // onboarding routes, then re-POSTs here.
-  const agent = await getAgentWallet(user.id);
-  if (!agent) {
-    const plan = await planOnboarding({
-      userId: user.id,
-      userMainPubkey: user.solanaPubkey,
-      desiredStakeUsdc: body.stakeUsdc,
-    });
-    return NextResponse.json({ phase: "onboard", ...plan });
   }
 
   // One open tail per market: Pacifica nets positions by (account, symbol),
@@ -109,6 +105,42 @@ export async function POST(request: Request) {
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const entryPrice = Number(leaderPos.entry_price);
   const amountBase = (finalNotional / entryPrice).toFixed(6);
+
+  const agent = await getAgentWallet(user.id);
+  if (!agent) {
+    try {
+      const plan = await planOnboarding({
+        userId: user.id,
+        userMainPubkey: user.solanaPubkey,
+        desiredStakeUsdc: body.stakeUsdc,
+        leverage: effectiveLeverage,
+      });
+      return NextResponse.json({ phase: "onboard", ...plan });
+    } catch (err) {
+      const fundingError = fundingErrorResponse(err);
+      if (fundingError) return fundingError;
+      throw err;
+    }
+  }
+
+  try {
+    const depositPlan = await planPacificaDepositTopUp({
+      userMainPubkey: user.solanaPubkey,
+      stakeUsdc: body.stakeUsdc,
+      leverage: effectiveLeverage,
+    });
+    if (depositPlan) {
+      return NextResponse.json({ phase: "deposit", ...depositPlan });
+    }
+  } catch (err) {
+    const fundingError = fundingErrorResponse(err);
+    if (fundingError) return fundingError;
+    console.error("[bet/copy] funding check failed:", err);
+    return NextResponse.json(
+      { error: `Pacifica funding check failed: ${String(err)}` },
+      { status: 502 },
+    );
+  }
 
   let fill;
   try {

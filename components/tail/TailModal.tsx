@@ -42,6 +42,13 @@ interface OnboardResponse {
   initialDepositUsdc: number;
 }
 
+interface DepositResponse {
+  phase: "deposit";
+  depositTransactionB64: string;
+  initialDepositUsdc: number;
+  availablePacificaUsdc?: number;
+}
+
 interface OpenResponse {
   phase: "open";
   betId: string;
@@ -164,7 +171,26 @@ export function TailModal({ open, onClose, source }: Props) {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error ?? `HTTP ${resp.status}`);
       }
-      const first = (await resp.json()) as OnboardResponse | OpenResponse;
+      const first = (await resp.json()) as
+        | OnboardResponse
+        | DepositResponse
+        | OpenResponse;
+      let result: OnboardResponse | DepositResponse | OpenResponse = first;
+
+      const signAndSendDeposit = async (depositTransactionB64: string) => {
+        setStatus("Depositing USDC…");
+        const txBytes = b64ToBytes(depositTransactionB64);
+        const { signedTransaction } = (await signTransaction({
+          transaction: txBytes,
+          wallet,
+        })) as { signedTransaction: Uint8Array };
+        const conn = new Connection(RPC, "confirmed");
+        const sig = await conn.sendRawTransaction(signedTransaction, {
+          maxRetries: 3,
+        });
+        await conn.confirmTransaction(sig, "confirmed");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      };
 
       if (first.phase === "onboard") {
         setStatus("Authorizing trader…");
@@ -197,19 +223,13 @@ export function TailModal({ open, onClose, source }: Props) {
           const e = await bindResp.json().catch(() => ({}));
           throw new Error(`bind failed: ${e.error ?? bindResp.status}`);
         }
+        await signAndSendDeposit(first.depositTransactionB64);
+      }
 
-        setStatus("Depositing USDC…");
-        const txBytes = b64ToBytes(first.depositTransactionB64);
-        const { signedTransaction } = (await signTransaction({
-          transaction: txBytes,
-          wallet,
-        })) as { signedTransaction: Uint8Array };
-        const conn = new Connection(RPC, "confirmed");
-        const sig = await conn.sendRawTransaction(signedTransaction, {
-          maxRetries: 3,
-        });
-        await conn.confirmTransaction(sig, "confirmed");
-
+      if (first.phase === "onboard" || first.phase === "deposit") {
+        if (first.phase === "deposit") {
+          await signAndSendDeposit(first.depositTransactionB64);
+        }
         setStatus("Placing order…");
         resp = await fetch("/api/bet/bot", {
           method: "POST",
@@ -223,10 +243,20 @@ export function TailModal({ open, onClose, source }: Props) {
           const e = await resp.json().catch(() => ({}));
           throw new Error(e.error ?? `HTTP ${resp.status}`);
         }
+        result = (await resp.json()) as
+          | OnboardResponse
+          | DepositResponse
+          | OpenResponse;
       }
 
-      const open = (await resp.json()) as OpenResponse;
-      setSuccess(open);
+      if (result.phase !== "open") {
+        throw new Error(
+          result.phase === "deposit"
+            ? "Deposit confirmed. Pacifica balance is still settling; try again in a few seconds."
+            : "Onboarding needs to be retried.",
+        );
+      }
+      setSuccess(result);
       setStatus(null);
     } catch (err) {
       console.error("[tail] failed:", err);

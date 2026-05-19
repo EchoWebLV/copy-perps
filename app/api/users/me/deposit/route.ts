@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { buildDepositTx } from "@/lib/pacifica/deposit";
+import {
+  buildDepositTx,
+  InsufficientWalletUsdcError,
+} from "@/lib/pacifica/deposit";
 import {
   ensureGasWalletReady,
   GasWalletExhaustedError,
@@ -43,9 +46,17 @@ export async function POST(request: Request) {
     throw err;
   }
 
-  const tx = await buildDepositTx({
-    userPubkey: new PublicKey(user.solanaPubkey),
-    amountUsdc: body.amountUsdc,
-  });
+  let tx;
+  try {
+    tx = await buildDepositTx({
+      userPubkey: new PublicKey(user.solanaPubkey),
+      amountUsdc: body.amountUsdc,
+    });
+  } catch (err) {
+    if (err instanceof InsufficientWalletUsdcError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
   return NextResponse.json({ depositTransaction: tx.transactionB64 });
 }

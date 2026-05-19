@@ -6,7 +6,9 @@ import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { clampLeverageForNotional } from "@/lib/pacifica/markets";
 import { openCopyOrder } from "@/lib/pacifica/orders";
+import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
+import { planPacificaDepositTopUp } from "@/lib/bets/funding";
 import { fetchOpenPositionForBot } from "@/lib/bots/paper";
 import { getBot } from "@/lib/bots";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
@@ -25,6 +27,13 @@ interface Body {
   leverage?: number;
   stakeUsdc?: number;
   walletAddress?: string;
+}
+
+function fundingErrorResponse(err: unknown): NextResponse | null {
+  if (err instanceof InsufficientWalletUsdcError) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -61,27 +70,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
-  // First-tap onboarding (identical to /api/bet/copy flow)
-  const agent = await getAgentWallet(user.id);
-  if (!agent) {
-    const plan = await planOnboarding({
-      userId: user.id,
-      userMainPubkey: user.solanaPubkey,
-      desiredStakeUsdc: body.stakeUsdc,
-    });
-    return NextResponse.json({ phase: "onboard", ...plan });
-  }
-
-  // One open tail per market: Pacifica nets positions by (account, symbol),
-  // so a second tail on the same market would merge into one position —
-  // closing one would close the other and misattribute its PnL.
-  if (await hasOpenTailOnMarket(user.id, body.market)) {
-    return NextResponse.json(
-      { error: `you already have an open ${body.market} tail — close it first` },
-      { status: 409 },
-    );
-  }
-
   // Re-fetch the bot's current paper position to validate the user is
   // copying what's currently open.
   const paperPos = await fetchOpenPositionForBot(body.botId);
@@ -111,6 +99,52 @@ export async function POST(request: Request) {
   const effectiveLeverage = Math.min(paperPos.leverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const amountBase = (finalNotional / paperPos.entryMark).toFixed(6);
+
+  // One open tail per market: Pacifica nets positions by (account, symbol),
+  // so a second tail on the same market would merge into one position —
+  // closing one would close the other and misattribute its PnL.
+  if (await hasOpenTailOnMarket(user.id, body.market)) {
+    return NextResponse.json(
+      { error: `you already have an open ${body.market} tail — close it first` },
+      { status: 409 },
+    );
+  }
+
+  const agent = await getAgentWallet(user.id);
+  if (!agent) {
+    try {
+      const plan = await planOnboarding({
+        userId: user.id,
+        userMainPubkey: user.solanaPubkey,
+        desiredStakeUsdc: body.stakeUsdc,
+        leverage: effectiveLeverage,
+      });
+      return NextResponse.json({ phase: "onboard", ...plan });
+    } catch (err) {
+      const fundingError = fundingErrorResponse(err);
+      if (fundingError) return fundingError;
+      throw err;
+    }
+  }
+
+  try {
+    const depositPlan = await planPacificaDepositTopUp({
+      userMainPubkey: user.solanaPubkey,
+      stakeUsdc: body.stakeUsdc,
+      leverage: effectiveLeverage,
+    });
+    if (depositPlan) {
+      return NextResponse.json({ phase: "deposit", ...depositPlan });
+    }
+  } catch (err) {
+    const fundingError = fundingErrorResponse(err);
+    if (fundingError) return fundingError;
+    console.error("[bet/bot] funding check failed:", err);
+    return NextResponse.json(
+      { error: `Pacifica funding check failed: ${String(err)}` },
+      { status: 502 },
+    );
+  }
 
   // Open the real Pacifica order
   let fill;

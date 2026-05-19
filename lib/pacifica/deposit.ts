@@ -30,6 +30,18 @@ const USDC_MINT = new PublicKey(
 );
 const SYS_PROGRAM_ID = new PublicKey("11111111111111111111111111111111");
 
+export class InsufficientWalletUsdcError extends Error {
+  constructor(
+    public requiredUsdc: number,
+    public walletUsdc: number,
+  ) {
+    super(
+      `Insufficient wallet USDC: need $${requiredUsdc.toFixed(2)}, have $${walletUsdc.toFixed(2)}`,
+    );
+    this.name = "InsufficientWalletUsdcError";
+  }
+}
+
 function getDiscriminator(name: string): Buffer {
   return createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
 }
@@ -44,6 +56,19 @@ function buildDepositIxData(amountUsdc: number): Buffer {
   return Buffer.concat([disc, amt]);
 }
 
+async function getAtaUsdcBalance(
+  conn: ReturnType<typeof getConnection>,
+  ata: PublicKey,
+): Promise<number> {
+  try {
+    const balance = await conn.getTokenAccountBalance(ata, "confirmed");
+    return Number(balance.value.amount) / 1_000_000;
+  } catch (err) {
+    if (/could not find account|Invalid param/i.test(String(err))) return 0;
+    throw err;
+  }
+}
+
 // Returns a base64-encoded v0 tx with Gas Wallet as fee payer,
 // partial-signed by Gas Wallet. Client signs (adds user signature)
 // and broadcasts via Helius.
@@ -55,6 +80,11 @@ export async function buildDepositTx(params: {
     USDC_MINT,
     params.userPubkey,
   );
+  const conn = getConnection();
+  const walletUsdc = await getAtaUsdcBalance(conn, userUsdcAta);
+  if (walletUsdc + 0.000001 < params.amountUsdc) {
+    throw new InsufficientWalletUsdcError(params.amountUsdc, walletUsdc);
+  }
   const [eventAuthority] = PublicKey.findProgramAddressSync(
     [Buffer.from("__event_authority")],
     PACIFICA_PROGRAM_ID,
@@ -77,7 +107,6 @@ export async function buildDepositTx(params: {
     data: buildDepositIxData(params.amountUsdc),
   });
 
-  const conn = getConnection();
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const msg = new TransactionMessage({
     payerKey: getGasWalletPubkey(),
