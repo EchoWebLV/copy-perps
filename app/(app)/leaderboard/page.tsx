@@ -96,7 +96,7 @@ export default function LeaderboardPage() {
           )}
           {cards === null && !error && (
             <div className="py-12 text-center text-sm text-neutral-500">
-              Loading leaderboard,
+              Loading leaderboard...
             </div>
           )}
           {cards && cards.length === 0 && !error && (

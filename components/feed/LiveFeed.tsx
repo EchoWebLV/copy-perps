@@ -225,14 +225,15 @@ export function LiveFeed({ initialBots, botFilter }: Props) {
         timer = null;
       }
     };
-    start();
-    document.addEventListener("visibilitychange", () => {
+    const onVisibilityChange = () => {
       if (document.hidden) stop();
       else start();
-    });
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       stop();
-      document.removeEventListener("visibilitychange", () => {});
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [load]);
 
