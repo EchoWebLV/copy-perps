@@ -32,7 +32,7 @@ export function DesktopNav() {
               href={item.href}
               aria-label={item.label}
               title={item.label}
-              className="group relative flex h-11 w-11 items-center justify-center rounded-2xl transition active:scale-95"
+              className="group relative flex h-11 w-11 items-center justify-center rounded-2xl transition active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: active ? ACCENT : PANEL,
                 color: active ? BG : FG,
@@ -42,7 +42,7 @@ export function DesktopNav() {
             >
               <Icon size={19} strokeWidth={active ? 3 : 2.4} />
               <span
-                className="pointer-events-none absolute left-[52px] z-50 hidden rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest group-hover:block"
+                className="pointer-events-none absolute left-[52px] z-50 hidden rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest group-hover:block group-focus-visible:block"
                 style={{ background: PANEL, color: active ? ACCENT : DIM, border: `1px solid ${FAINT}` }}
               >
                 {item.label}

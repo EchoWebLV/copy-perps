@@ -17,7 +17,8 @@ export function AppShell({
   return (
     <div className="h-full w-full lg:flex lg:h-dvh lg:overflow-hidden" style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}>
       <DesktopNav />
-      <main className={`min-h-0 flex-1 ${mainClassName}`}>{children}</main>
+      {/* AppShell owns the page main landmark; route children should use div/section. */}
+      <main className={`h-full min-h-0 flex-1 ${mainClassName}`}>{children}</main>
       <DesktopContextRail title={railTitle}>{rail}</DesktopContextRail>
     </div>
   );
