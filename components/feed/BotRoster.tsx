@@ -5,6 +5,7 @@ import { MessageCircle, Zap } from "lucide-react";
 import type { BotSignal } from "@/lib/types";
 import type { MoodBadge } from "@/lib/bots/mood";
 import { BotChatSheet } from "./BotChatSheet";
+import { BotRosterDesktop } from "./BotRosterDesktop";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
@@ -147,67 +148,74 @@ export function BotRoster({ initialBots }: Props) {
   const chatBot = bots.find((b) => b.payload.botId === chatBotId) ?? null;
 
   return (
-    <div
-      className="relative flex h-full w-full flex-col"
-      style={{
-        background: BG,
-        color: FG,
-        fontFamily: FONT_DISPLAY,
-      }}
-    >
-      <BalancePill />
+    <>
+      <div className="h-full lg:hidden">
+        <div
+          className="relative flex h-full w-full flex-col"
+          style={{
+            background: BG,
+            color: FG,
+            fontFamily: FONT_DISPLAY,
+          }}
+        >
+          <BalancePill />
 
-      {/* Header */}
-      <div className="px-5 pt-[72px] pb-3">
-        <div className="flex items-end justify-between">
-          <Headline size={42}>{`"ROSTER"`}</Headline>
-          <div
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-              style={{ background: GREEN, boxShadow: `0 0 6px ${GREEN}` }}
-            />
-            LIVE
+          {/* Header */}
+          <div className="px-5 pt-[72px] pb-3">
+            <div className="flex items-end justify-between">
+              <Headline size={42}>{`"ROSTER"`}</Headline>
+              <div
+                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
+                style={{ color: DIM }}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+                  style={{ background: GREEN, boxShadow: `0 0 6px ${GREEN}` }}
+                />
+                LIVE
+              </div>
+            </div>
           </div>
+
+          {/* Roster scroll */}
+          <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-5 pb-32">
+            {bots.map((bot, idx) => (
+              <BotRow
+                key={bot.payload.botId}
+                bot={bot}
+                rank={idx + 1}
+                onChat={() => setChatBotId(bot.payload.botId)}
+                onTail={(source) => setTailSource(source)}
+              />
+            ))}
+          </div>
+
+          {chatBot && (
+            <BotChatSheet
+              botId={chatBot.payload.botId}
+              botName={chatBot.payload.botName}
+              avatarEmoji={chatBot.payload.avatarEmoji}
+              avatarImageUrl={chatBot.payload.avatarImageUrl}
+              openingThoughts={chatBot.payload.currentPositions.map((pos) => ({
+                asset: pos.asset,
+                side: pos.side,
+                narration: pos.narrationOpen,
+              }))}
+              onClose={() => setChatBotId(null)}
+            />
+          )}
+
+          <TailModal
+            open={!!tailSource}
+            source={tailSource}
+            onClose={() => setTailSource(null)}
+          />
         </div>
       </div>
-
-      {/* Roster scroll */}
-      <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-5 pb-32">
-        {bots.map((bot, idx) => (
-          <BotRow
-            key={bot.payload.botId}
-            bot={bot}
-            rank={idx + 1}
-            onChat={() => setChatBotId(bot.payload.botId)}
-            onTail={(source) => setTailSource(source)}
-          />
-        ))}
+      <div className="hidden h-full lg:block">
+        <BotRosterDesktop bots={bots} />
       </div>
-
-      {chatBot && (
-        <BotChatSheet
-          botId={chatBot.payload.botId}
-          botName={chatBot.payload.botName}
-          avatarEmoji={chatBot.payload.avatarEmoji}
-          avatarImageUrl={chatBot.payload.avatarImageUrl}
-          openingThoughts={chatBot.payload.currentPositions.map((pos) => ({
-            asset: pos.asset,
-            side: pos.side,
-            narration: pos.narrationOpen,
-          }))}
-          onClose={() => setChatBotId(null)}
-        />
-      )}
-
-      <TailModal
-        open={!!tailSource}
-        source={tailSource}
-        onClose={() => setTailSource(null)}
-      />
-    </div>
+    </>
   );
 }
 
