@@ -32,10 +32,45 @@ import {
 // useLiveMark, so this poll only carries open/close events.
 const POLL_MS = 4_000;
 
-// Tagline + style copy per bot. Hardcoded by id — we only have 3 bots
-// in the alpha-arena roster, and surfacing it gives each card a unique
-// identity without needing a new DB column.
+// Tagline + style copy per bot. Hardcoded by id so roster cards get a
+// clear identity without needing a DB migration for copy-only metadata.
 const BOT_META: Record<string, { tagline: string; style: string }> = {
+  whale: {
+    tagline: "Whale composite",
+    style: "Source mirror",
+  },
+  orca: {
+    tagline: "Flow tracker",
+    style: "Source mirror",
+  },
+  leviathan: {
+    tagline: "Deep-pocket shadow",
+    style: "Source mirror",
+  },
+  megalodon: {
+    tagline: "Aggressive whale tape",
+    style: "Source mirror",
+  },
+  pulse: {
+    tagline: "Catalyst hunter",
+    style: "X search · Grok",
+  },
+  bullion: {
+    tagline: "Gold mean reversion",
+    style: "XAU · 4h",
+  },
+  atlas: {
+    tagline: "Index drift",
+    style: "SP500 · overnight",
+  },
+  blitz: {
+    tagline: "Momentum hunter",
+    style: "Breakout · 15m",
+  },
+  tilt: {
+    tagline: "Revenge trader",
+    style: "Martingale momentum",
+  },
   "momo-max-aggressive": {
     tagline: "Momentum hunter",
     style: "Breakout · 1m",
