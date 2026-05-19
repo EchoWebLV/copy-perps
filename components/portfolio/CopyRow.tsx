@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { formatCopySourceLabel } from "@/lib/positions/copy-row";
 
 export interface CopyRowData {
   betId: string;
@@ -10,8 +11,10 @@ export interface CopyRowData {
   side: "long" | "short";
   leverage: number;
   stakeUsdc: number;
-  leaderAddress: string;
+  leaderAddress: string | null;
   leaderUsername: string | null;
+  botId: string | null;
+  botName: string | null;
   unrealizedPnlPct: number | null;
   leaderClosedAt: string | null;
 }
@@ -63,9 +66,7 @@ export function CopyRow({ row, onClosed }: Props) {
           {row.market} {row.side.toUpperCase()} {Math.round(row.leverage)}x
         </div>
         <div className="text-xs text-white/60">
-          Stake ${row.stakeUsdc} · Copying{" "}
-          {row.leaderUsername ??
-            `${row.leaderAddress.slice(0, 4)}...${row.leaderAddress.slice(-4)}`}
+          Stake ${row.stakeUsdc} · Copying {formatCopySourceLabel(row)}
         </div>
         {row.leaderClosedAt && (
           <div className="mt-1 text-xs text-amber-300">

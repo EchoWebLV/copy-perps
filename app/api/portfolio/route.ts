@@ -6,6 +6,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
 import { getPositions } from "@/lib/pacifica/client";
 import { getMarksSnapshot } from "@/lib/data/marks";
+import { getBot } from "@/lib/bots";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -79,7 +80,8 @@ export async function GET(request: Request) {
         leaderMarket: string;
         leaderSide: "long" | "short";
         leverage: number;
-        leaderAddress: string;
+        leaderAddress?: string;
+        botId?: string;
         leaderClosedAt?: string;
       };
       const livePos = userPositions?.find(
@@ -108,8 +110,10 @@ export async function GET(request: Request) {
         side: meta.leaderSide,
         leverage: meta.leverage,
         stakeUsdc: b.amountUsdc,
-        leaderAddress: meta.leaderAddress,
+        leaderAddress: meta.leaderAddress ?? null,
         leaderUsername: null,
+        botId: meta.botId ?? null,
+        botName: meta.botId ? (getBot(meta.botId)?.name ?? meta.botId) : null,
         unrealizedPnlPct,
         leaderClosedAt: meta.leaderClosedAt ?? null,
       };
