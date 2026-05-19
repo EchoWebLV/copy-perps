@@ -164,7 +164,7 @@ export function ShareCard({ card }: { card: LeaderboardCard }) {
           {card.sharedAt && <span>{fmtTimeAgo(card.sharedAt)}</span>}
           <span>·</span>
           <span className="font-bold tracking-wider text-neutral-300">
-            gwak.gg
+            Breach
           </span>
         </div>
       </div>

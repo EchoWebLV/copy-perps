@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { isAdminEnabled } from "@/lib/admin/auth";
 
 export const metadata = {
-  title: "Bot Admin · gwak.gg",
+  title: "Bot Admin · Breach",
 };
 
 export default function AdminLayout({

@@ -6,13 +6,13 @@ import { PostHogProvider } from "@/components/providers/PostHogProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "gwak.gg",
-  description: "Trade. Watch. Grow.",
+  title: "Breach",
+  description: "Watch the bots. Tail the signal.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "gwak.gg",
+    title: "Breach",
   },
 };
 
