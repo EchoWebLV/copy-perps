@@ -19,6 +19,17 @@ export class PacificaDepositPendingError extends Error {
   }
 }
 
+export class PacificaDepositSettlingError extends Error {
+  retryAfterMs = 2000;
+
+  constructor(public recentDepositUsdc: number) {
+    super(
+      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit is confirmed on-chain; Pacifica is still crediting it. Waiting before opening the tail.`,
+    );
+    this.name = "PacificaDepositSettlingError";
+  }
+}
+
 function roundUpCents(value: number): number {
   if (value <= 0) return 0;
   return Math.ceil((value - 1e-9) * 100) / 100;
@@ -57,11 +68,14 @@ export function pacificaDepositTopUpUsdc(params: {
   return shortfall > 0 ? Math.max(PACIFICA_MIN_DEPOSIT_USDC, shortfall) : 0;
 }
 
-export function recentDepositCoversRequired(params: {
+export function classifyRecentPacificaDeposit(params: {
   recentDepositUsdc: number;
-  requiredUsdc: number;
-}): boolean {
-  return params.recentDepositUsdc + 0.000001 >= params.requiredUsdc;
+}): "none" | "below_minimum" | "settling" {
+  if (params.recentDepositUsdc <= 0.000001) return "none";
+  if (params.recentDepositUsdc + 0.000001 < PACIFICA_MIN_DEPOSIT_USDC) {
+    return "below_minimum";
+  }
+  return "settling";
 }
 
 async function getRecentPacificaDepositUsdc(account: string): Promise<number> {
@@ -134,13 +148,32 @@ export async function planPacificaDepositTopUp(params: {
   const availablePacificaUsdc = await getPacificaAvailableToSpendUsdc(
     params.userMainPubkey,
   );
-  if (availablePacificaUsdc === null) {
-    const recentDepositUsdc = await getRecentPacificaDepositUsdc(
+  let recentDepositUsdc = 0;
+  let recentDepositState:
+    | ReturnType<typeof classifyRecentPacificaDeposit>
+    | null = null;
+  const loadRecentDepositState = async () => {
+    if (recentDepositState !== null) return recentDepositState;
+    recentDepositUsdc = await getRecentPacificaDepositUsdc(
       params.userMainPubkey,
     );
-    if (recentDepositUsdc > 0) {
+    recentDepositState = classifyRecentPacificaDeposit({
+      recentDepositUsdc,
+    });
+    return recentDepositState;
+  };
+  const throwForRecentDepositState = (
+    state: ReturnType<typeof classifyRecentPacificaDeposit>,
+  ) => {
+    if (state === "below_minimum") {
       throw new PacificaDepositPendingError(recentDepositUsdc);
     }
+    if (state === "settling") {
+      throw new PacificaDepositSettlingError(recentDepositUsdc);
+    }
+  };
+  if (availablePacificaUsdc === null) {
+    throwForRecentDepositState(await loadRecentDepositState());
   }
   const topUpUsdc = pacificaDepositTopUpUsdc({
     availableToSpendUsdc: availablePacificaUsdc ?? 0,
@@ -148,6 +181,9 @@ export async function planPacificaDepositTopUp(params: {
     leverage: params.leverage,
   });
   if (topUpUsdc <= 0) return null;
+  if (availablePacificaUsdc !== null) {
+    throwForRecentDepositState(await loadRecentDepositState());
+  }
 
   const { transactionB64 } = await buildDepositTx({
     userPubkey: new PublicKey(params.userMainPubkey),

@@ -12,6 +12,7 @@ import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
 import {
   PacificaDepositPendingError,
+  PacificaDepositSettlingError,
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
@@ -39,6 +40,12 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
   }
   if (err instanceof PacificaDepositPendingError) {
     return NextResponse.json({ error: err.message }, { status: 409 });
+  }
+  if (err instanceof PacificaDepositSettlingError) {
+    return NextResponse.json(
+      { error: err.message, retryable: true, retryAfterMs: err.retryAfterMs },
+      { status: 409 },
+    );
   }
   return null;
 }

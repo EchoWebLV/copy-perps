@@ -77,6 +77,21 @@ function fmtPrice(v: number): string {
   return `$${v.toPrecision(4)}`;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+class TailRequestError extends Error {
+  constructor(
+    message: string,
+    public retryable: boolean,
+    public retryAfterMs: number,
+  ) {
+    super(message);
+    this.name = "TailRequestError";
+  }
+}
+
 export function TailModal({ open, onClose, source }: Props) {
   const { getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
@@ -160,22 +175,53 @@ export function TailModal({ open, onClose, source }: Props) {
         stakeUsdc: effectiveStake,
         walletAddress: wallet.address,
       };
-      let resp = await fetch("/api/bet/bot", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const e = await resp.json().catch(() => ({}));
-        throw new Error(e.error ?? `HTTP ${resp.status}`);
-      }
-      const first = (await resp.json()) as
-        | OnboardResponse
-        | DepositResponse
-        | OpenResponse;
+      const requestTail = async () => {
+        const resp = await fetch("/api/bet/bot", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) {
+          return (await resp.json()) as
+            | OnboardResponse
+            | DepositResponse
+            | OpenResponse;
+        }
+        const e = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+          retryable?: boolean;
+          retryAfterMs?: number;
+        };
+        throw new TailRequestError(
+          e.error ?? `HTTP ${resp.status}`,
+          e.retryable === true,
+          typeof e.retryAfterMs === "number" && Number.isFinite(e.retryAfterMs)
+            ? e.retryAfterMs
+            : 2000,
+        );
+      };
+      const requestTailWithSettlingRetry = async () => {
+        const deadline = Date.now() + 30_000;
+        for (;;) {
+          try {
+            return await requestTail();
+          } catch (err) {
+            if (
+              !(err instanceof TailRequestError) ||
+              !err.retryable ||
+              Date.now() >= deadline
+            ) {
+              throw err;
+            }
+            setStatus("Waiting for Pacifica credit…");
+            await sleep(Math.min(Math.max(err.retryAfterMs, 1000), 5000));
+          }
+        }
+      };
+      const first = await requestTailWithSettlingRetry();
       let result: OnboardResponse | DepositResponse | OpenResponse = first;
 
       const signAndSendDeposit = async (depositTransactionB64: string) => {
@@ -190,7 +236,7 @@ export function TailModal({ open, onClose, source }: Props) {
           maxRetries: 3,
         });
         await conn.confirmTransaction(sig, "confirmed");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await sleep(1000);
       };
 
       if (first.phase === "onboard") {
@@ -231,23 +277,8 @@ export function TailModal({ open, onClose, source }: Props) {
         if (first.phase === "deposit") {
           await signAndSendDeposit(first.depositTransactionB64);
         }
-        setStatus("Placing order…");
-        resp = await fetch("/api/bet/bot", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-        if (!resp.ok) {
-          const e = await resp.json().catch(() => ({}));
-          throw new Error(e.error ?? `HTTP ${resp.status}`);
-        }
-        result = (await resp.json()) as
-          | OnboardResponse
-          | DepositResponse
-          | OpenResponse;
+        setStatus("Waiting for Pacifica credit…");
+        result = await requestTailWithSettlingRetry();
       }
 
       if (result.phase !== "open") {

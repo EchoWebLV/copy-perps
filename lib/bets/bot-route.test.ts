@@ -1,6 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  PacificaDepositPendingError: class PacificaDepositPendingError extends Error {
+    constructor(public recentDepositUsdc: number) {
+      super(`pending ${recentDepositUsdc}`);
+      this.name = "PacificaDepositPendingError";
+    }
+  },
+  PacificaDepositSettlingError: class PacificaDepositSettlingError extends Error {
+    retryAfterMs = 2000;
+
+    constructor(public recentDepositUsdc: number) {
+      super(`settling ${recentDepositUsdc}`);
+      this.name = "PacificaDepositSettlingError";
+    }
+  },
   verifyPrivyRequest: vi.fn(),
   ensureUser: vi.fn(),
   getAgentWallet: vi.fn(),
@@ -33,6 +47,8 @@ vi.mock("@/lib/bets/onboard", () => ({
   planOnboarding: mocks.planOnboarding,
 }));
 vi.mock("@/lib/bets/funding", () => ({
+  PacificaDepositPendingError: mocks.PacificaDepositPendingError,
+  PacificaDepositSettlingError: mocks.PacificaDepositSettlingError,
   planPacificaDepositTopUp: mocks.planPacificaDepositTopUp,
 }));
 vi.mock("@/lib/bots/paper", () => ({
@@ -135,5 +151,45 @@ describe("POST /api/bet/bot", () => {
         amountBase: "0.0236",
       }),
     );
+  });
+
+  it("marks credited-but-not-visible Pacifica deposits as retryable settling", async () => {
+    mocks.fetchOpenPositionForBot.mockResolvedValue({
+      id: "eth-pos",
+      asset: "ETH",
+      side: "long",
+      leverage: 10,
+      entryMark: 2118.51,
+    });
+    mocks.planPacificaDepositTopUp.mockRejectedValue(
+      new mocks.PacificaDepositSettlingError(10),
+    );
+
+    const response = await POST(
+      new Request("http://local.test/api/bet/bot", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token",
+        },
+        body: JSON.stringify({
+          botId: "megalodon",
+          positionId: "eth-pos",
+          market: "ETH",
+          side: "long",
+          leverage: 10,
+          stakeUsdc: 5,
+          walletAddress: "wallet-1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "settling 10",
+      retryable: true,
+      retryAfterMs: 2000,
+    });
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 });
