@@ -153,6 +153,7 @@ export function TailModal({ open, onClose, source }: Props) {
 
       const body = {
         botId: source.botId,
+        positionId: source.positionId,
         market: source.asset,
         side: source.side,
         leverage: source.leverage,

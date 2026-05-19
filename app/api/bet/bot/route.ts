@@ -22,6 +22,7 @@ const MAX_USDC = 1000;
 
 interface Body {
   botId?: string;
+  positionId?: string;
   market?: string;
   side?: "long" | "short";
   leverage?: number;
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
 
   // Re-fetch the bot's current paper position to validate the user is
   // copying what's currently open.
-  const paperPos = await fetchOpenPositionForBot(body.botId);
+  const paperPos = await fetchOpenPositionForBot(body.botId, body.positionId);
   if (!paperPos) {
     return NextResponse.json(
       { error: "bot has no open position" },

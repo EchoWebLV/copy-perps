@@ -43,13 +43,18 @@ export async function fetchOpenPositions(): Promise<PaperPosition[]> {
 
 export async function fetchOpenPositionForBot(
   botId: string,
+  positionId?: string,
 ): Promise<PaperPosition | null> {
+  const filters = [
+    eq(paperPositions.botId, botId),
+    eq(paperPositions.status, "open"),
+  ];
+  if (positionId) filters.push(eq(paperPositions.id, positionId));
+
   const rows = await db
     .select()
     .from(paperPositions)
-    .where(
-      and(eq(paperPositions.botId, botId), eq(paperPositions.status, "open")),
-    )
+    .where(and(...filters))
     .limit(1);
   return rows[0] ? rowToPosition(rows[0]) : null;
 }
