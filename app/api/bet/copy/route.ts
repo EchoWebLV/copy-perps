@@ -5,8 +5,9 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { getPositions } from "@/lib/pacifica/client";
-import { clampLeverageForNotional } from "@/lib/pacifica/markets";
+import { clampLeverageForNotional, getMarketBySymbol } from "@/lib/pacifica/markets";
 import { openCopyOrder } from "@/lib/pacifica/orders";
+import { lotSizedAmountFromNotional } from "@/lib/pacifica/sizing";
 import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
 import { planPacificaDepositTopUp } from "@/lib/bets/funding";
@@ -104,7 +105,18 @@ export async function POST(request: Request) {
   const effectiveLeverage = Math.min(body.leverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const entryPrice = Number(leaderPos.entry_price);
-  const amountBase = (finalNotional / entryPrice).toFixed(6);
+  const marketInfo = await getMarketBySymbol(body.market);
+  if (!marketInfo) {
+    return NextResponse.json(
+      { error: `unknown Pacifica market: ${body.market}` },
+      { status: 409 },
+    );
+  }
+  const amountBase = lotSizedAmountFromNotional({
+    notionalUsd: finalNotional,
+    price: entryPrice,
+    lotSize: marketInfo.lot_size,
+  });
 
   const agent = await getAgentWallet(user.id);
   if (!agent) {

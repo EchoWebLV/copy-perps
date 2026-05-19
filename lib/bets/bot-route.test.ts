@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   ensureUser: vi.fn(),
   getAgentWallet: vi.fn(),
   clampLeverageForNotional: vi.fn(),
+  getMarketBySymbol: vi.fn(),
   openCopyOrder: vi.fn(),
   planOnboarding: vi.fn(),
   planPacificaDepositTopUp: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/lib/wallets/agent", () => ({
 }));
 vi.mock("@/lib/pacifica/markets", () => ({
   clampLeverageForNotional: mocks.clampLeverageForNotional,
+  getMarketBySymbol: mocks.getMarketBySymbol,
 }));
 vi.mock("@/lib/pacifica/orders", () => ({
   openCopyOrder: mocks.openCopyOrder,
@@ -68,6 +70,10 @@ describe("POST /api/bet/bot", () => {
     });
     mocks.hasOpenTailOnMarket.mockResolvedValue(false);
     mocks.clampLeverageForNotional.mockResolvedValue(10);
+    mocks.getMarketBySymbol.mockResolvedValue({
+      symbol: "ETH",
+      lot_size: "0.0001",
+    });
     mocks.planPacificaDepositTopUp.mockResolvedValue(null);
     mocks.openCopyOrder.mockResolvedValue({
       order_id: "order-1",
@@ -126,6 +132,7 @@ describe("POST /api/bet/bot", () => {
       expect.objectContaining({
         symbol: "ETH",
         side: "long",
+        amountBase: "0.0236",
       }),
     );
   });
