@@ -42,6 +42,13 @@ vi.mock("./cross-bot", () => ({
     familyHoldings: new Set<string>(),
   })),
 }));
+vi.mock("@/lib/bets/mirror-close", () => ({
+  runMirrorCloseSweep: vi.fn(async () => ({
+    closesAttempted: 0,
+    closesSucceeded: 0,
+    errors: [],
+  })),
+}));
 
 import { tick } from "./resolver";
 import { listBots, getStrategy } from "./index";
