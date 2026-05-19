@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MessageCircle, Zap } from "lucide-react";
 import type { BotSignal } from "@/lib/types";
+import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
+import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { AppShell } from "@/components/shell/AppShell";
 import {
   ACCENT,
@@ -29,15 +31,78 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
   );
   const [chatBotId, setChatBotId] = useState<string | null>(null);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
+  const liveMarks = useLiveMarks();
+
+  useEffect(() => {
+    const selectedExists =
+      selectedId === null ||
+      bots.some((bot) => bot.payload.botId === selectedId);
+    if (!selectedExists) {
+      setSelectedId(pickInitialBotId(bots));
+    } else if (selectedId === null && bots.length > 0) {
+      setSelectedId(pickInitialBotId(bots));
+    }
+  }, [bots, selectedId]);
+
+  const liveBots = useMemo(
+    () =>
+      bots.map((bot) => {
+        const livePositions = bot.payload.currentPositions.map((position) => {
+          const liveMark = liveMarks[position.asset] ?? position.currentMark;
+          const livePaperPnlPct = computeLivePaperPnlPct({
+            side: position.side,
+            leverage: position.leverage,
+            entryMark: position.entryMark,
+            currentMark: liveMark,
+            asset: position.asset,
+            stakeUsd: position.stakeUsd,
+          });
+          return {
+            ...position,
+            liveMark,
+            livePaperPnlPct,
+            livePaperPnlUsd: livePaperPnlPct * position.stakeUsd,
+          };
+        });
+        const liveEquity =
+          bot.payload.cashUsd +
+          livePositions.reduce(
+            (sum, position) => sum + position.livePaperPnlUsd,
+            0,
+          );
+        return { bot, liveEquity, livePositions };
+      }),
+    [bots, liveMarks],
+  );
 
   const selected = useMemo(
-    () => bots.find((bot) => bot.payload.botId === selectedId) ?? bots[0] ?? null,
-    [bots, selectedId],
+    () =>
+      liveBots.find((item) => item.bot.payload.botId === selectedId) ??
+      liveBots[0] ??
+      null,
+    [liveBots, selectedId],
   );
   const chatBot = bots.find((bot) => bot.payload.botId === chatBotId) ?? null;
-  const selectedPosition = selected?.payload.currentPositions[0] ?? null;
+  const selectedBot = selected?.bot ?? null;
+  const selectedPosition = selected?.livePositions[0] ?? null;
 
-  const rail = selected ? (
+  const tailSelectedPosition = () => {
+    if (!selectedBot || !selectedPosition) return;
+    setTailSource({
+      kind: "bot",
+      botId: selectedBot.payload.botId,
+      botName: selectedBot.payload.botName,
+      avatarEmoji: selectedBot.payload.avatarEmoji,
+      avatarImageUrl: selectedBot.payload.avatarImageUrl,
+      asset: selectedPosition.asset,
+      side: selectedPosition.side,
+      leverage: selectedPosition.leverage,
+      entryMark: selectedPosition.entryMark,
+      positionId: selectedPosition.positionId,
+    });
+  };
+
+  const rail = selectedBot ? (
     <div className="space-y-3">
       <div
         className="rounded-xl p-4"
@@ -46,24 +111,24 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
         <Stamp label="Selected Bot" />
         <div className="mt-3 flex items-center gap-3">
           <StoryAvatar
-            emoji={selected.payload.avatarEmoji}
-            imageUrl={selected.payload.avatarImageUrl}
-            mood={selected.payload.mood ?? "DORMANT"}
+            emoji={selectedBot.payload.avatarEmoji}
+            imageUrl={selectedBot.payload.avatarImageUrl}
+            mood={selectedBot.payload.mood ?? "DORMANT"}
             size={52}
           />
           <div className="min-w-0">
-            <Headline size={24}>{selected.payload.botName}</Headline>
+            <Headline size={24}>{selectedBot.payload.botName}</Headline>
             <p
               className="mt-1 text-[10px] font-black uppercase tracking-widest"
               style={{ color: DIM }}
             >
-              {selected.payload.currentPositions.length} open positions
+              {selected.livePositions.length} open positions
             </p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() => setChatBotId(selected.payload.botId)}
+          onClick={() => setChatBotId(selectedBot.payload.botId)}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-widest"
           style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
         >
@@ -73,20 +138,7 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
       {selectedPosition && (
         <button
           type="button"
-          onClick={() =>
-            setTailSource({
-              kind: "bot",
-              botId: selected.payload.botId,
-              botName: selected.payload.botName,
-              avatarEmoji: selected.payload.avatarEmoji,
-              avatarImageUrl: selected.payload.avatarImageUrl,
-              asset: selectedPosition.asset,
-              side: selectedPosition.side,
-              leverage: selectedPosition.leverage,
-              entryMark: selectedPosition.entryMark,
-              positionId: selectedPosition.positionId,
-            })
-          }
+          onClick={tailSelectedPosition}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[12px] font-black uppercase tracking-widest"
           style={{ background: ACCENT, color: BG }}
         >
@@ -107,60 +159,56 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
             <Headline size={30}>{`"ROSTER"`}</Headline>
           </div>
           <div className="no-scrollbar h-[calc(100%-60px)] overflow-y-auto p-3">
-            {bots.map((bot, index) => (
-              <button
-                key={bot.payload.botId}
-                type="button"
-                onClick={() => setSelectedId(bot.payload.botId)}
-                className="mb-2 flex w-full items-center gap-3 rounded-xl p-3 text-left transition active:scale-[0.99]"
-                style={{
-                  background:
-                    bot.payload.botId === selected?.payload.botId
-                      ? PANEL_2
-                      : "transparent",
-                  border: `1px solid ${
-                    bot.payload.botId === selected?.payload.botId
-                      ? ACCENT
-                      : FAINT
-                  }`,
-                }}
-              >
-                <span
-                  className="w-7 text-[10px] font-black"
-                  style={{ color: index === 0 ? ACCENT : DIM }}
+            {liveBots.map(({ bot, liveEquity, livePositions }, index) => {
+              const rowSelected =
+                bot.payload.botId === selectedBot?.payload.botId;
+              return (
+                <button
+                  key={bot.payload.botId}
+                  type="button"
+                  onClick={() => setSelectedId(bot.payload.botId)}
+                  aria-pressed={rowSelected}
+                  className="mb-2 flex w-full items-center gap-3 rounded-xl p-3 text-left transition active:scale-[0.99]"
+                  style={{
+                    background: rowSelected ? PANEL_2 : "transparent",
+                    border: `1px solid ${rowSelected ? ACCENT : FAINT}`,
+                  }}
                 >
-                  #{index + 1}
-                </span>
-                <StoryAvatar
-                  emoji={bot.payload.avatarEmoji}
-                  imageUrl={bot.payload.avatarImageUrl}
-                  mood={bot.payload.mood ?? "DORMANT"}
-                  size={42}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-black uppercase">
-                    {bot.payload.botName}
-                  </div>
-                  <div
-                    className="text-[10px] font-black uppercase tracking-widest"
-                    style={{ color: DIM }}
+                  <span
+                    className="w-7 text-[10px] font-black"
+                    style={{ color: index === 0 ? ACCENT : DIM }}
                   >
-                    {bot.payload.currentPositions.length} open ·{" "}
-                    {bot.payload.stats.totalTrades} trades
+                    #{index + 1}
+                  </span>
+                  <StoryAvatar
+                    emoji={bot.payload.avatarEmoji}
+                    imageUrl={bot.payload.avatarImageUrl}
+                    mood={bot.payload.mood ?? "DORMANT"}
+                    size={42}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-black uppercase">
+                      {bot.payload.botName}
+                    </div>
+                    <div
+                      className="text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      {livePositions.length} open ·{" "}
+                      {bot.payload.stats.totalTrades} trades
+                    </div>
                   </div>
-                </div>
-                <BigNum
-                  size={18}
-                  color={
-                    bot.payload.balanceUsd >= bot.payload.startingBalanceUsd
-                      ? GREEN
-                      : RED
-                  }
-                >
-                  ${bot.payload.balanceUsd.toFixed(0)}
-                </BigNum>
-              </button>
-            ))}
+                  <BigNum
+                    size={18}
+                    color={
+                      liveEquity >= bot.payload.startingBalanceUsd ? GREEN : RED
+                    }
+                  >
+                    ${liveEquity.toFixed(0)}
+                  </BigNum>
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -168,58 +216,82 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
           className="min-h-0 overflow-hidden rounded-2xl p-5"
           style={{ background: PANEL, border: `1px solid ${FAINT}` }}
         >
-          {selected ? (
+          {selected && selectedBot ? (
             <div className="flex h-full flex-col">
               <Stamp
                 label="Command Center"
-                value={selected.payload.botName.toUpperCase()}
+                value={selectedBot.payload.botName.toUpperCase()}
               />
               <div className="mt-5 flex items-center gap-4">
                 <StoryAvatar
-                  emoji={selected.payload.avatarEmoji}
-                  imageUrl={selected.payload.avatarImageUrl}
-                  mood={selected.payload.mood ?? "DORMANT"}
+                  emoji={selectedBot.payload.avatarEmoji}
+                  imageUrl={selectedBot.payload.avatarImageUrl}
+                  mood={selectedBot.payload.mood ?? "DORMANT"}
                   size={76}
                 />
                 <div>
-                  <Headline size={44}>{selected.payload.botName}</Headline>
+                  <Headline size={44}>{selectedBot.payload.botName}</Headline>
                   <p
                     className="mt-2 text-[11px] font-black uppercase tracking-widest"
                     style={{ color: DIM }}
                   >
-                    Live equity ${selected.payload.balanceUsd.toFixed(2)}
+                    Live equity ${selected.liveEquity.toFixed(2)}
                   </p>
                 </div>
+              </div>
+              <div className="mt-5 flex gap-2 xl:hidden">
+                <button
+                  type="button"
+                  onClick={() => setChatBotId(selectedBot.payload.botId)}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-widest"
+                  style={{
+                    background: PANEL_2,
+                    color: FG,
+                    border: `1px solid ${FAINT}`,
+                  }}
+                >
+                  <MessageCircle size={14} /> Chat
+                </button>
+                {selectedPosition && (
+                  <button
+                    type="button"
+                    onClick={tailSelectedPosition}
+                    className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-widest"
+                    style={{ background: ACCENT, color: BG }}
+                  >
+                    <Zap size={14} fill={BG} /> Tail current position
+                  </button>
+                )}
               </div>
               <div className="mt-6 grid grid-cols-4 gap-2">
                 <Metric
                   label="24H"
-                  value={`${selected.payload.stats.paperPnl24hUsd >= 0 ? "+" : "-"}$${Math.abs(
-                    selected.payload.stats.paperPnl24hUsd,
+                  value={`${selectedBot.payload.stats.paperPnl24hUsd >= 0 ? "+" : "-"}$${Math.abs(
+                    selectedBot.payload.stats.paperPnl24hUsd,
                   ).toFixed(0)}`}
                   color={
-                    selected.payload.stats.paperPnl24hUsd >= 0 ? GREEN : RED
+                    selectedBot.payload.stats.paperPnl24hUsd >= 0 ? GREEN : RED
                   }
                 />
                 <Metric
                   label="Win Rate"
                   value={
-                    selected.payload.stats.winRate == null
+                    selectedBot.payload.stats.winRate == null
                       ? "-"
-                      : `${(selected.payload.stats.winRate * 100).toFixed(0)}%`
+                      : `${(selectedBot.payload.stats.winRate * 100).toFixed(0)}%`
                   }
                 />
                 <Metric
                   label="Trades"
-                  value={String(selected.payload.stats.totalTrades)}
+                  value={String(selectedBot.payload.stats.totalTrades)}
                 />
                 <Metric
                   label="Open"
-                  value={String(selected.payload.currentPositions.length)}
+                  value={String(selected.livePositions.length)}
                 />
               </div>
               <div className="mt-6 min-h-0 flex-1 overflow-y-auto">
-                {selected.payload.currentPositions.length === 0 ? (
+                {selected.livePositions.length === 0 ? (
                   <div
                     className="rounded-xl p-5 text-[12px] font-black uppercase tracking-widest"
                     style={{ background: PANEL_2, color: DIM }}
@@ -228,7 +300,7 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {selected.payload.currentPositions.map((position) => (
+                    {selected.livePositions.map((position) => (
                       <div
                         key={position.positionId}
                         className="rounded-xl p-4"
@@ -246,6 +318,22 @@ export function BotRosterDesktop({ bots }: { bots: BotSignal[] }) {
                             }}
                           >
                             {position.side} ×{position.leverage}
+                          </span>
+                        </div>
+                        <div
+                          className="mt-3 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: DIM }}
+                        >
+                          <span>Mark ${position.liveMark.toFixed(2)}</span>
+                          <span
+                            style={{
+                              color:
+                                position.livePaperPnlPct >= 0 ? GREEN : RED,
+                            }}
+                          >
+                            {position.livePaperPnlPct >= 0 ? "+" : "-"}
+                            {Math.abs(position.livePaperPnlPct * 100).toFixed(1)}
+                            %
                           </span>
                         </div>
                         <p className="mt-3 text-sm leading-snug" style={{ color: FG }}>
