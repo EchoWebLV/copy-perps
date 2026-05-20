@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MessageCircle, Zap } from "lucide-react";
 import type { BotSignal } from "@/lib/types";
@@ -57,11 +57,22 @@ export function LiveFeedDesktop({
     });
   }, [bots, botFilter, liveMarks]);
 
+  const fallbackPosition = positions[0] ?? null;
   const selected =
     positions.find((position) => position.positionId === selectedId) ??
-    positions[0] ??
-    null;
+    fallbackPosition;
   const chatBot = bots.find((bot) => bot.payload.botId === chatBotId) ?? null;
+
+  useEffect(() => {
+    const fallbackId = fallbackPosition?.positionId ?? null;
+    if (selectedId === null) {
+      if (fallbackId !== null) setSelectedId(fallbackId);
+      return;
+    }
+    if (!positions.some((position) => position.positionId === selectedId)) {
+      setSelectedId(fallbackId);
+    }
+  }, [fallbackPosition?.positionId, positions, selectedId]);
 
   return (
     <AppShell
@@ -91,6 +102,7 @@ export function LiveFeedDesktop({
                 key={pos.positionId}
                 type="button"
                 onClick={() => setSelectedId(pos.positionId)}
+                aria-pressed={pos.positionId === selected?.positionId}
                 className="mb-2 w-full rounded-xl p-3 text-left"
                 style={{
                   background:
@@ -184,49 +196,54 @@ function LivePositionHero({
 }) {
   const profit = pos.livePaperPnlPct >= 0;
   return (
-    <div className="flex h-full flex-col">
-      <Stamp label="Selected Position" value={pos.bot.botName.toUpperCase()} />
-      <div className="mt-5 flex items-center gap-4">
-        <StoryAvatar
-          emoji={pos.bot.avatarEmoji}
-          imageUrl={pos.bot.avatarImageUrl}
-          mood={pos.bot.mood ?? "DORMANT"}
-          size={70}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 pb-4">
+        <Stamp
+          label="Selected Position"
+          value={pos.bot.botName.toUpperCase()}
         />
-        <div>
-          <Headline size={52}>{pos.asset}</Headline>
-          <div
-            className="mt-2 text-[13px] font-black uppercase tracking-widest"
-            style={{ color: pos.side === "long" ? GREEN : RED }}
-          >
-            {pos.side} ×{pos.leverage}
+        <div className="mt-5 flex items-center gap-4">
+          <StoryAvatar
+            emoji={pos.bot.avatarEmoji}
+            imageUrl={pos.bot.avatarImageUrl}
+            mood={pos.bot.mood ?? "DORMANT"}
+            size={70}
+          />
+          <div>
+            <Headline size={52}>{pos.asset}</Headline>
+            <div
+              className="mt-2 text-[13px] font-black uppercase tracking-widest"
+              style={{ color: pos.side === "long" ? GREEN : RED }}
+            >
+              {pos.side} ×{pos.leverage}
+            </div>
           </div>
         </div>
-      </div>
-      <div
-        className="mt-8 rounded-2xl p-5"
-        style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
-      >
         <div
-          className="text-[10px] font-black uppercase tracking-widest"
-          style={{ color: DIM }}
+          className="mt-8 rounded-2xl p-5"
+          style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
         >
-          Live P/L
+          <div
+            className="text-[10px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            Live P/L
+          </div>
+          <div
+            className="mt-2 text-[46px] font-black tabular-nums"
+            style={{ color: profit ? GREEN : RED }}
+          >
+            {profit ? "+" : ""}
+            {(pos.livePaperPnlPct * 100).toFixed(2)}%
+          </div>
         </div>
-        <div
-          className="mt-2 text-[46px] font-black tabular-nums"
-          style={{ color: profit ? GREEN : RED }}
-        >
-          {profit ? "+" : ""}
-          {(pos.livePaperPnlPct * 100).toFixed(2)}%
-        </div>
+        {pos.narrationOpen && (
+          <p className="mt-5 text-lg leading-snug italic">
+            "{pos.narrationOpen}"
+          </p>
+        )}
       </div>
-      {pos.narrationOpen && (
-        <p className="mt-5 text-lg leading-snug italic">
-          "{pos.narrationOpen}"
-        </p>
-      )}
-      <div className="mt-auto flex gap-3">
+      <div className="shrink-0 pt-3 flex gap-3">
         <button
           type="button"
           onClick={onTail}
