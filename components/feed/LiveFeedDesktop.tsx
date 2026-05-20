@@ -22,6 +22,7 @@ import {
 import { computeLivePaperPnlPct } from "@/lib/bots/pnl";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BotChatSheet } from "./BotChatSheet";
+import { LiveEntryChart } from "./LiveEntryChart";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { flattenBotPositions, type FlatPosition } from "./live-positions";
 
@@ -189,10 +190,12 @@ function LivePositionHero({
   pos,
   onTail,
   onChat,
+  showEntryChart = true,
 }: {
   pos: FlatPosition;
   onTail: () => void;
   onChat: () => void;
+  showEntryChart?: boolean;
 }) {
   const profit = pos.livePaperPnlPct >= 0;
   return (
@@ -237,6 +240,7 @@ function LivePositionHero({
             {(pos.livePaperPnlPct * 100).toFixed(2)}%
           </div>
         </div>
+        {showEntryChart && <LiveEntryChart pos={pos} />}
         {pos.narrationOpen && (
           <p className="mt-5 text-lg leading-snug italic">
             "{pos.narrationOpen}"
@@ -279,7 +283,14 @@ function LiveRail({
   onTail: () => void;
   onChat: () => void;
 }) {
-  return <LivePositionHero pos={pos} onTail={onTail} onChat={onChat} />;
+  return (
+    <LivePositionHero
+      pos={pos}
+      onTail={onTail}
+      onChat={onChat}
+      showEntryChart={false}
+    />
+  );
 }
 
 function EmptyLive() {
