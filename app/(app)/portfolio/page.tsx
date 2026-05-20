@@ -33,6 +33,21 @@ import {
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    const onChange = () => setMatches(mediaQuery.matches);
+
+    onChange();
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
+}
+
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
@@ -43,6 +58,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"open" | "closed">("open");
+  const isXl = useMediaQuery("(min-width: 1280px)");
 
   // `silent` = true skips the spinner + error UI flash; used by the
   // background polling loop so live updates don't feel like a manual
@@ -154,7 +170,40 @@ export default function PortfolioPage() {
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
   const visiblePositions = tab === "open" ? openPositions : closedPositions;
-  const portfolioRail = authenticated ? (
+  const closedPnlSummary = (className: string) =>
+    tab === "closed" && closedPositions.length > 0 ? (
+      <div
+        className={className}
+        style={{
+          background: PANEL,
+          borderRadius: 14,
+          border: `1px solid ${FAINT}`,
+        }}
+      >
+        <Stamp label="REALIZED P/L" />
+        <div className="mt-0.5 flex items-baseline gap-2">
+          <BigNum size={20} color={realizedPnl >= 0 ? GREEN : RED}>
+            {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
+          </BigNum>
+          {closedCost > 0 && (
+            <span
+              className="text-[11px] font-black tracking-widest"
+              style={{ color: realizedPnl >= 0 ? GREEN : RED }}
+            >
+              {realizedPnlPct >= 0 ? "+" : ""}
+              {realizedPnlPct.toFixed(1)}%
+            </span>
+          )}
+        </div>
+        <div
+          className="text-[10px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          COST ${closedCost.toFixed(2)}
+        </div>
+      </div>
+    ) : null;
+  const portfolioRail = authenticated && isXl ? (
     <div className="space-y-3">
       <div
         className="p-4"
@@ -369,75 +418,50 @@ export default function PortfolioPage() {
                     {openPositions.length} OPEN · {closedPositions.length} CLOSED
                   </span>
                 </div>
-                <div className="flex items-center gap-2 lg:hidden">
-                  <PacificaWithdrawButton onComplete={load} />
-                  <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
-                </div>
+                {!isXl && (
+                  <div className="flex items-center gap-2 xl:hidden">
+                    <PacificaWithdrawButton onComplete={load} />
+                    <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+                  </div>
+                )}
               </div>
             </div>
 
-            <div
-              className="mt-4 flex flex-none gap-1 rounded-2xl p-1"
-              style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
-            >
-              {(
-                [
-                  ["open", "Open", openPositions.length],
-                  ["closed", "Closed", closedPositions.length],
-                ] as const
-              ).map(([key, label, count]) => {
-                const active = tab === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setTab(key)}
-                    className="flex-1 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                    style={{
-                      background: active ? ACCENT : "transparent",
-                      color: active ? BG : FG,
-                      opacity: active ? 1 : 0.55,
-                    }}
-                  >
-                    {label} · {count}
-                  </button>
-                );
-              })}
+            <div className="flex flex-none flex-col">
+              <div
+                className="mt-4 flex gap-1 rounded-2xl p-1"
+                style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
+              >
+                {(
+                  [
+                    ["open", "Open", openPositions.length],
+                    ["closed", "Closed", closedPositions.length],
+                  ] as const
+                ).map(([key, label, count]) => {
+                  const active = tab === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTab(key)}
+                      className="flex-1 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                      style={{
+                        background: active ? ACCENT : "transparent",
+                        color: active ? BG : FG,
+                        opacity: active ? 1 : 0.55,
+                      }}
+                    >
+                      {label} · {count}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {closedPnlSummary("mt-3 flex-none p-3 lg:hidden")}
             </div>
 
             <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
               <div className="flex flex-col gap-2 pb-24 lg:grid lg:grid-cols-2 lg:items-start lg:pb-6">
-                {tab === "closed" && closedPositions.length > 0 && (
-                  <div
-                    className="p-3 lg:col-span-2"
-                    style={{
-                      background: PANEL,
-                      borderRadius: 14,
-                      border: `1px solid ${FAINT}`,
-                    }}
-                  >
-                    <Stamp label="REALIZED P/L" />
-                    <div className="mt-0.5 flex items-baseline gap-2">
-                      <BigNum size={20} color={realizedPnl >= 0 ? GREEN : RED}>
-                        {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
-                      </BigNum>
-                      {closedCost > 0 && (
-                        <span
-                          className="text-[11px] font-black tracking-widest"
-                          style={{ color: realizedPnl >= 0 ? GREEN : RED }}
-                        >
-                          {realizedPnlPct >= 0 ? "+" : ""}
-                          {realizedPnlPct.toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className="text-[10px] font-black uppercase tracking-widest"
-                      style={{ color: DIM }}
-                    >
-                      COST ${closedCost.toFixed(2)}
-                    </div>
-                  </div>
-                )}
+                {closedPnlSummary("hidden p-3 lg:col-span-2 lg:block")}
                 {error && (
                   <div
                     className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest lg:col-span-2"
