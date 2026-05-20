@@ -120,11 +120,11 @@ export function BotChatSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:items-center lg:justify-center"
       onClick={onClose}
     >
       <div
-        className="relative flex max-h-[88vh] w-full flex-col rounded-t-3xl border-t border-white/10 bg-neutral-950 shadow-2xl"
+        className="relative flex max-h-[88vh] w-full flex-col rounded-t-3xl border-t border-white/10 bg-neutral-950 shadow-2xl lg:mx-auto lg:max-w-[520px] lg:rounded-3xl lg:border"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
