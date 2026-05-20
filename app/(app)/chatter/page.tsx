@@ -1,4 +1,5 @@
 import { getChatterEvents, type ChatterEvent } from "@/lib/bots/chatter";
+import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
   BG,
@@ -126,9 +127,21 @@ export default async function ChatterPage() {
   const events = await getChatterEvents(EVENT_LIMIT);
 
   return (
-    <>
-      <main
-        className="no-scrollbar mx-auto h-full w-full max-w-md overflow-y-auto pb-32"
+    <AppShell
+      railTitle="Chatter Context"
+      rail={
+        <div
+          className="rounded-xl p-4 text-[12px] leading-relaxed"
+          style={{ background: PANEL_2, border: `1px solid ${FAINT}`, color: DIM }}
+        >
+          Latest bot trade narration streams here. Use roster and live views for
+          action context.
+        </div>
+      }
+      mainClassName="overflow-hidden"
+    >
+      <div
+        className="no-scrollbar mx-auto h-full w-full max-w-md overflow-y-auto pb-32 lg:max-w-none lg:px-6 lg:pb-6"
         style={{
           background: BG,
           color: FG,
@@ -185,8 +198,8 @@ export default async function ChatterPage() {
             ))}
           </ul>
         )}
-      </main>
+      </div>
       <BottomNav />
-    </>
+    </AppShell>
   );
 }

@@ -4,6 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useFundWallet } from "@privy-io/react-auth/solana";
 import { useState } from "react";
 import { Copy, Check, LogOut, CreditCard, Zap } from "lucide-react";
+import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
@@ -71,11 +72,55 @@ export default function DepositPage() {
     }
   };
 
+  const rail =
+    ready && authenticated ? (
+      <div className="flex flex-col gap-3">
+        <div
+          className="p-4"
+          style={{
+            background: PANEL,
+            borderRadius: 16,
+            border: `1px solid ${FAINT}`,
+          }}
+        >
+          <Stamp label="Wallet" />
+          <div
+            className="mt-3 break-all font-mono text-[11px]"
+            style={{ color: wallet?.address ? FG : DIM }}
+          >
+            {wallet?.address ?? "GENERATING WALLET..."}
+          </div>
+        </div>
+
+        <div
+          className="p-4"
+          style={{
+            background: PANEL,
+            borderRadius: 16,
+            border: `1px solid ${FAINT}`,
+          }}
+        >
+          <Stamp label="Feed Preferences" />
+          <p
+            className="mt-3 text-[11px] font-black uppercase tracking-widest leading-relaxed"
+            style={{ color: DIM }}
+          >
+            Use the main settings panel to toggle rails.
+          </p>
+        </div>
+      </div>
+    ) : undefined;
+
   return (
-    <main
-      className="flex min-h-screen w-full flex-col px-5 pt-12 pb-32"
-      style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
+    <AppShell
+      rail={rail}
+      railTitle="Settings"
+      mainClassName={`${ready && authenticated ? "" : "[&+aside]:hidden"} lg:overflow-y-auto`}
     >
+      <div
+        className="flex min-h-screen w-full flex-col px-5 pt-12 pb-32 lg:h-full lg:min-h-0 lg:max-w-3xl lg:px-6 lg:pt-6"
+        style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
+      >
       <div>
         <Headline size={30}>{`"SETTINGS"`}</Headline>
         <p
@@ -269,7 +314,8 @@ export default function DepositPage() {
         </>
       )}
 
+      </div>
       <BottomNav />
-    </main>
+    </AppShell>
   );
 }
