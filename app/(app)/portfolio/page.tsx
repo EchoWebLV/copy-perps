@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { LogOut, RefreshCw } from "lucide-react";
+import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
   BG,
@@ -153,282 +154,357 @@ export default function PortfolioPage() {
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
   const visiblePositions = tab === "open" ? openPositions : closedPositions;
-
-  return (
-    <main
-      className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12"
-      style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
-    >
-      <div className="flex flex-none items-baseline justify-between">
-        <div>
-          <Headline size={30}>{`"PORTFOLIO"`}</Headline>
-          <p
-            className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
-            style={{ color: DIM }}
-          >
-            YOUR TAIL TRADES
-          </p>
+  const portfolioRail = authenticated ? (
+    <div className="space-y-3">
+      <div
+        className="p-4"
+        style={{
+          background: PANEL,
+          borderRadius: 16,
+          border: `1px solid ${FAINT}`,
+        }}
+      >
+        <Stamp label="Wallet" />
+        <div
+          className="mt-3 font-mono text-[12px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          {truncateAddress(wallet?.address)}
         </div>
-        {authenticated && (
-          <button
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded-xl p-2 transition active:scale-95 disabled:opacity-50"
-            style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
-            aria-label="Refresh"
-          >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          </button>
-        )}
+        <div
+          className="mt-5 text-[10px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          Available
+        </div>
+        <div className="mt-1">
+          <BigNum size={26}>
+            {walletUsd == null ? "-" : `$${walletUsd.toFixed(2)}`}
+          </BigNum>
+        </div>
       </div>
 
-      {!ready && (
-        <p className="mt-6 text-sm text-neutral-500">Loading…</p>
-      )}
-
-      {ready && !authenticated && (
-        <div className="mt-12 text-center">
-          <Headline size={26}>{`"LOG IN"`}</Headline>
-          <p
-            className="mt-2 text-[11px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            TO SEE YOUR POSITIONS
-          </p>
-          <button
-            onClick={login}
-            className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
-            style={{
-              background: ACCENT,
-              color: BG,
-              boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
-            }}
-          >
-            LOG IN
-          </button>
+      <div
+        className="p-4"
+        style={{
+          background: PANEL,
+          borderRadius: 16,
+          border: `1px solid ${FAINT}`,
+        }}
+      >
+        <Stamp label="Actions" />
+        <div className="mt-3 flex flex-col items-stretch gap-2 [&>button]:w-full">
+          <PacificaWithdrawButton onComplete={load} />
+          <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
         </div>
-      )}
+      </div>
+    </div>
+  ) : null;
 
-      {ready && authenticated && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div
-            className="mt-4 flex-none p-4"
-            style={{
-              background: PANEL,
-              borderRadius: 18,
-              border: `1px solid ${FAINT}`,
-            }}
-          >
-            <Stamp label="NET WORTH · LIVE" />
-            <div className="mt-1">
-              <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
-            </div>
+  return (
+    <AppShell rail={portfolioRail} railTitle="Portfolio">
+      <div
+        className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12 lg:max-w-none lg:px-6 lg:pt-6"
+        style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
+      >
+        <div className="flex flex-none items-baseline justify-between">
+          <div>
+            <Headline size={30}>{`"PORTFOLIO"`}</Headline>
+            <p
+              className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
+              style={{ color: DIM }}
+            >
+              YOUR TAIL TRADES
+            </p>
+          </div>
+          {authenticated && (
+            <button
+              onClick={() => void load()}
+              disabled={loading}
+              className="rounded-xl p-2 transition active:scale-95 disabled:opacity-50"
+              style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+              aria-label="Refresh"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            </button>
+          )}
+        </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <div
-                className="p-3"
-                style={{ background: PANEL_2, borderRadius: 14 }}
-              >
+        {!ready && (
+          <p className="mt-6 text-sm text-neutral-500">Loading…</p>
+        )}
+
+        {ready && !authenticated && (
+          <div className="mt-12 text-center">
+            <Headline size={26}>{`"LOG IN"`}</Headline>
+            <p
+              className="mt-2 text-[11px] font-black uppercase tracking-widest"
+              style={{ color: DIM }}
+            >
+              TO SEE YOUR POSITIONS
+            </p>
+            <button
+              onClick={login}
+              className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
+              style={{
+                background: ACCENT,
+                color: BG,
+                boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+              }}
+            >
+              LOG IN
+            </button>
+          </div>
+        )}
+
+        {ready && authenticated && (
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-rows-[auto_auto_minmax(0,1fr)]">
+            <div
+              className="mt-4 flex-none p-4"
+              style={{
+                background: PANEL,
+                borderRadius: 18,
+                border: `1px solid ${FAINT}`,
+              }}
+            >
+              <Stamp label="NET WORTH · LIVE" />
+              <div className="mt-1">
+                <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <div
-                  className="text-[10px] font-black uppercase tracking-widest"
-                  style={{ color: DIM }}
+                  className="p-3"
+                  style={{ background: PANEL_2, borderRadius: 14 }}
                 >
-                  AVAILABLE
-                </div>
-                <div className="mt-0.5">
-                  <BigNum size={18}>
-                    {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
-                  </BigNum>
-                </div>
-                {walletSol != null && (
                   <div
                     className="text-[10px] font-black uppercase tracking-widest"
                     style={{ color: DIM }}
                   >
-                    + {walletSol.toFixed(4)} SOL
+                    AVAILABLE
                   </div>
-                )}
-              </div>
-              <div
-                className="p-3"
-                style={{ background: PANEL_2, borderRadius: 14 }}
-              >
-                <div
-                  className="text-[10px] font-black uppercase tracking-widest"
-                  style={{ color: DIM }}
-                >
-                  IN POSITIONS
-                </div>
-                <div className="mt-0.5 flex items-baseline gap-2">
-                  <BigNum size={18}>${positionsValue.toFixed(2)}</BigNum>
-                  {totalCost > 0 && (
-                    <span
-                      className="text-[11px] font-black tracking-widest"
-                      style={{ color: positionsPnl >= 0 ? GREEN : RED }}
+                  <div className="mt-0.5">
+                    <BigNum size={18}>
+                      {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
+                    </BigNum>
+                  </div>
+                  {walletSol != null && (
+                    <div
+                      className="text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
                     >
-                      {positionsPnl >= 0 ? "+" : ""}
-                      {positionsPnlPct.toFixed(1)}%
-                    </span>
+                      + {walletSol.toFixed(4)} SOL
+                    </div>
                   )}
                 </div>
                 <div
-                  className="text-[10px] font-black uppercase tracking-widest"
-                  style={{ color: DIM }}
+                  className="p-3"
+                  style={{ background: PANEL_2, borderRadius: 14 }}
                 >
-                  COST ${totalCost.toFixed(2)}
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="mt-3 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono">
-                  {truncateAddress(wallet?.address)}
-                </span>
-                <span>·</span>
-                <span>
-                  {openPositions.length} OPEN · {closedPositions.length} CLOSED
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <PacificaWithdrawButton onComplete={load} />
-                <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="mt-4 flex flex-none gap-1 rounded-2xl p-1"
-            style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
-          >
-            {(
-              [
-                ["open", "Open", openPositions.length],
-                ["closed", "Closed", closedPositions.length],
-              ] as const
-            ).map(([key, label, count]) => {
-              const active = tab === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setTab(key)}
-                  className="flex-1 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                  style={{
-                    background: active ? ACCENT : "transparent",
-                    color: active ? BG : FG,
-                    opacity: active ? 1 : 0.55,
-                  }}
-                >
-                  {label} · {count}
-                </button>
-              );
-            })}
-          </div>
-
-          {tab === "closed" && closedPositions.length > 0 && (
-            <div
-              className="mt-3 flex-none p-3"
-              style={{
-                background: PANEL,
-                borderRadius: 14,
-                border: `1px solid ${FAINT}`,
-              }}
-            >
-              <Stamp label="REALIZED P/L" />
-              <div className="mt-0.5 flex items-baseline gap-2">
-                <BigNum size={20} color={realizedPnl >= 0 ? GREEN : RED}>
-                  {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
-                </BigNum>
-                {closedCost > 0 && (
-                  <span
-                    className="text-[11px] font-black tracking-widest"
-                    style={{ color: realizedPnl >= 0 ? GREEN : RED }}
-                  >
-                    {realizedPnlPct >= 0 ? "+" : ""}
-                    {realizedPnlPct.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-              <div
-                className="text-[10px] font-black uppercase tracking-widest"
-                style={{ color: DIM }}
-              >
-                COST ${closedCost.toFixed(2)}
-              </div>
-            </div>
-          )}
-
-          <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
-            <div className="flex flex-col gap-2 pb-24">
-              {error && (
-                <div
-                  className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
-                  style={{ background: `${RED}20`, color: RED, border: `1px solid ${RED}40` }}
-                >
-                  {error}
-                </div>
-              )}
-              {positions === null && !error && (
-                <div
-                  className="py-12 text-center text-[11px] font-black uppercase tracking-widest"
-                  style={{ color: DIM }}
-                >
-                  LOADING POSITIONS…
-                </div>
-              )}
-              {positions && visiblePositions.length === 0 && (
-                <div className="py-12 text-center">
-                  <Headline size={22}>
-                    {tab === "open"
-                      ? `"NO OPEN POSITIONS"`
-                      : `"NO CLOSED YET"`}
-                  </Headline>
-                  <p
-                    className="mt-2 text-[10px] font-black uppercase tracking-widest"
+                  <div
+                    className="text-[10px] font-black uppercase tracking-widest"
                     style={{ color: DIM }}
                   >
-                    {tab === "open"
-                      ? "TAP A BOT IN THE FEED TO TAIL ONE."
-                      : "CLOSED BETS SHOW UP HERE."}
-                  </p>
+                    IN POSITIONS
+                  </div>
+                  <div className="mt-0.5 flex items-baseline gap-2">
+                    <BigNum size={18}>${positionsValue.toFixed(2)}</BigNum>
+                    {totalCost > 0 && (
+                      <span
+                        className="text-[11px] font-black tracking-widest"
+                        style={{ color: positionsPnl >= 0 ? GREEN : RED }}
+                      >
+                        {positionsPnl >= 0 ? "+" : ""}
+                        {positionsPnlPct.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    COST ${totalCost.toFixed(2)}
+                  </div>
                 </div>
-              )}
-              {visiblePositions.map((p) => (
-                <PositionRow
-                  key={p.id}
-                  position={p}
-                  onClosed={load}
-                  onShared={load}
-                />
-              ))}
-              {tab === "open" && copyRows.length > 0 && (
-                <section className="mt-4 space-y-2">
-                  <Stamp label="COPIES" value={`${copyRows.length}`} />
-                  {copyRows.map((row) => (
-                    <CopyRow
-                      key={row.betId}
-                      row={row}
-                      onClosed={() => void load()}
-                    />
-                  ))}
-                </section>
-              )}
-              <button
-                onClick={logout}
-                className="mt-6 flex items-center justify-center gap-2 self-center text-[10px] font-black uppercase tracking-widest transition hover:opacity-100"
+                <div
+                  className="p-3"
+                  style={{ background: PANEL_2, borderRadius: 14 }}
+                >
+                  <div
+                    className="text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    OPEN
+                  </div>
+                  <div className="mt-0.5">
+                    <BigNum size={18}>{openPositions.length}</BigNum>
+                  </div>
+                </div>
+                <div
+                  className="p-3"
+                  style={{ background: PANEL_2, borderRadius: 14 }}
+                >
+                  <div
+                    className="text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    CLOSED
+                  </div>
+                  <div className="mt-0.5">
+                    <BigNum size={18}>{closedPositions.length}</BigNum>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="mt-3 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest"
                 style={{ color: DIM }}
               >
-                <LogOut size={12} /> Log out
-              </button>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono">
+                    {truncateAddress(wallet?.address)}
+                  </span>
+                  <span>·</span>
+                  <span>
+                    {openPositions.length} OPEN · {closedPositions.length} CLOSED
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 lg:hidden">
+                  <PacificaWithdrawButton onComplete={load} />
+                  <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="mt-4 flex flex-none gap-1 rounded-2xl p-1"
+              style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
+            >
+              {(
+                [
+                  ["open", "Open", openPositions.length],
+                  ["closed", "Closed", closedPositions.length],
+                ] as const
+              ).map(([key, label, count]) => {
+                const active = tab === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className="flex-1 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                    style={{
+                      background: active ? ACCENT : "transparent",
+                      color: active ? BG : FG,
+                      opacity: active ? 1 : 0.55,
+                    }}
+                  >
+                    {label} · {count}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-col gap-2 pb-24 lg:grid lg:grid-cols-2 lg:items-start lg:pb-6">
+                {tab === "closed" && closedPositions.length > 0 && (
+                  <div
+                    className="p-3 lg:col-span-2"
+                    style={{
+                      background: PANEL,
+                      borderRadius: 14,
+                      border: `1px solid ${FAINT}`,
+                    }}
+                  >
+                    <Stamp label="REALIZED P/L" />
+                    <div className="mt-0.5 flex items-baseline gap-2">
+                      <BigNum size={20} color={realizedPnl >= 0 ? GREEN : RED}>
+                        {realizedPnl >= 0 ? "+" : ""}${realizedPnl.toFixed(2)}
+                      </BigNum>
+                      {closedCost > 0 && (
+                        <span
+                          className="text-[11px] font-black tracking-widest"
+                          style={{ color: realizedPnl >= 0 ? GREEN : RED }}
+                        >
+                          {realizedPnlPct >= 0 ? "+" : ""}
+                          {realizedPnlPct.toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      COST ${closedCost.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+                {error && (
+                  <div
+                    className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest lg:col-span-2"
+                    style={{ background: `${RED}20`, color: RED, border: `1px solid ${RED}40` }}
+                  >
+                    {error}
+                  </div>
+                )}
+                {positions === null && !error && (
+                  <div
+                    className="py-12 text-center text-[11px] font-black uppercase tracking-widest lg:col-span-2"
+                    style={{ color: DIM }}
+                  >
+                    LOADING POSITIONS…
+                  </div>
+                )}
+                {positions && visiblePositions.length === 0 && (
+                  <div className="py-12 text-center lg:col-span-2">
+                    <Headline size={22}>
+                      {tab === "open"
+                        ? `"NO OPEN POSITIONS"`
+                        : `"NO CLOSED YET"`}
+                    </Headline>
+                    <p
+                      className="mt-2 text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      {tab === "open"
+                        ? "TAP A BOT IN THE FEED TO TAIL ONE."
+                        : "CLOSED BETS SHOW UP HERE."}
+                    </p>
+                  </div>
+                )}
+                {visiblePositions.map((p) => (
+                  <PositionRow
+                    key={p.id}
+                    position={p}
+                    onClosed={load}
+                    onShared={load}
+                  />
+                ))}
+                {tab === "open" && copyRows.length > 0 && (
+                  <section className="mt-4 space-y-2 lg:col-span-2">
+                    <Stamp label="COPIES" value={`${copyRows.length}`} />
+                    {copyRows.map((row) => (
+                      <CopyRow
+                        key={row.betId}
+                        row={row}
+                        onClosed={() => void load()}
+                      />
+                    ))}
+                  </section>
+                )}
+                <button
+                  onClick={logout}
+                  className="mt-6 flex items-center justify-center gap-2 self-center text-[10px] font-black uppercase tracking-widest transition hover:opacity-100 lg:col-span-2"
+                  style={{ color: DIM }}
+                >
+                  <LogOut size={12} /> Log out
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <BottomNav />
-    </main>
+    </AppShell>
   );
 }
