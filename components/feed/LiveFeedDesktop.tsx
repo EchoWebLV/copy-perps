@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { MessageCircle, Zap } from "lucide-react";
+import { MessageCircle, Users, Zap } from "lucide-react";
 import type { BotSignal } from "@/lib/types";
 import { AppShell } from "@/components/shell/AppShell";
 import {
@@ -24,6 +24,7 @@ import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BotChatSheet } from "./BotChatSheet";
 import { LiveEntryChart } from "./LiveEntryChart";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { buildLivePositionContext } from "./live-position-context";
 import { flattenBotPositions, type FlatPosition } from "./live-positions";
 
 export function LiveFeedDesktop({
@@ -79,14 +80,16 @@ export function LiveFeedDesktop({
     <AppShell
       rail={
         selected ? (
-          <LiveRail
+          <LiveTradeContextRail
             pos={selected}
+            positions={positions}
             onTail={() => setTailSource(toTailSource(selected))}
             onChat={() => setChatBotId(selected.bot.botId)}
+            onSelect={setSelectedId}
           />
         ) : null
       }
-      railTitle="Position Context"
+      railTitle="Trade Context"
       mainClassName="overflow-hidden"
     >
       <div className="grid h-full grid-cols-[minmax(320px,420px)_minmax(0,1fr)] gap-4 p-4">
@@ -274,23 +277,230 @@ function LivePositionHero({
   );
 }
 
-function LiveRail({
+function LiveTradeContextRail({
   pos,
+  positions,
   onTail,
   onChat,
+  onSelect,
 }: {
   pos: FlatPosition;
+  positions: FlatPosition[];
   onTail: () => void;
   onChat: () => void;
+  onSelect: (positionId: string) => void;
+}) {
+  const context = buildLivePositionContext(positions, pos);
+  const profit = pos.livePaperPnlPct >= 0;
+  const moveColor = profit ? GREEN : RED;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <section
+        className="rounded-xl p-4"
+        style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+      >
+        <Stamp label="Active Trade" value={pos.bot.botName.toUpperCase()} />
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[34px] font-black uppercase leading-none">
+              {pos.asset}
+            </div>
+            <div
+              className="mt-2 text-[10px] font-black uppercase tracking-widest"
+              style={{ color: pos.side === "long" ? GREEN : RED }}
+            >
+              {pos.side} x{pos.leverage}
+            </div>
+          </div>
+          <div
+            className="text-right text-[26px] font-black tabular-nums"
+            style={{ color: moveColor }}
+          >
+            {formatPct(pos.livePaperPnlPct)}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <TradeStat label="Entry" value={formatPrice(pos.entryMark)} />
+          <TradeStat label="Now" value={formatPrice(pos.currentMark)} />
+          <TradeStat
+            label="Move"
+            value={formatPct(pos.livePaperPnlPct)}
+            color={moveColor}
+          />
+          <TradeStat label="Open" value={formatOpenAge(pos.openSinceMs)} />
+          <TradeStat label="Stake" value={formatUsd(pos.stakeUsd)} />
+          <TradeStat
+            label="Paper"
+            value={formatUsd(pos.livePaperPnlUsd)}
+            color={moveColor}
+          />
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={onTail}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[12px] font-black uppercase tracking-widest"
+            style={{ background: ACCENT, color: BG }}
+          >
+            <Zap size={14} fill={BG} /> Tail
+          </button>
+          <button
+            type="button"
+            onClick={onChat}
+            className="rounded-xl px-4 py-3"
+            aria-label={`Open ${pos.bot.botName} chat`}
+            style={{
+              background: PANEL_2,
+              color: FG,
+              border: `1px solid ${FAINT}`,
+            }}
+          >
+            <MessageCircle size={16} />
+          </button>
+        </div>
+      </section>
+
+      <section
+        className="flex min-h-0 flex-1 flex-col rounded-xl"
+        style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+      >
+        <div className="border-b p-4" style={{ borderColor: FAINT }}>
+          <div className="flex items-center justify-between gap-3">
+            <Stamp
+              label="Same Market"
+              value={`${context.longCount}L / ${context.shortCount}S`}
+            />
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"
+              style={{ color: biasColor(context.bias) }}
+            >
+              <Users size={13} />
+              {context.bias} bias
+            </span>
+          </div>
+        </div>
+
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+          {context.peers.length > 0 ? (
+            context.peers.map((peer) => (
+              <button
+                key={peer.positionId}
+                type="button"
+                onClick={() => onSelect(peer.positionId)}
+                className="mb-2 w-full rounded-lg p-3 text-left transition active:scale-[0.99]"
+                style={{
+                  background: PANEL_2,
+                  border: `1px solid ${FAINT}`,
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <StoryAvatar
+                    emoji={peer.bot.avatarEmoji}
+                    imageUrl={peer.bot.avatarImageUrl}
+                    mood={peer.bot.mood ?? "DORMANT"}
+                    size={34}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12px] font-black uppercase">
+                      {peer.bot.botName}
+                    </div>
+                    <div
+                      className="mt-1 text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: peer.side === "long" ? GREEN : RED }}
+                    >
+                      {peer.side} x{peer.leverage}
+                    </div>
+                  </div>
+                  <div
+                    className="text-[13px] font-black tabular-nums"
+                    style={{
+                      color: peer.livePaperPnlPct >= 0 ? GREEN : RED,
+                    }}
+                  >
+                    {formatPct(peer.livePaperPnlPct)}
+                  </div>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div
+              className="rounded-lg p-3 text-[11px] font-black uppercase tracking-widest"
+              style={{ color: DIM, border: `1px solid ${FAINT}` }}
+            >
+              No other live {pos.asset} positions.
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TradeStat({
+  label,
+  value,
+  color = FG,
+}: {
+  label: string;
+  value: string;
+  color?: string;
 }) {
   return (
-    <LivePositionHero
-      pos={pos}
-      onTail={onTail}
-      onChat={onChat}
-      showEntryChart={false}
-    />
+    <div
+      className="rounded-lg px-3 py-2"
+      style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
+    >
+      <div
+        className="text-[9px] font-black uppercase tracking-widest"
+        style={{ color: DIM }}
+      >
+        {label}
+      </div>
+      <div
+        className="mt-1 text-[14px] font-black tabular-nums"
+        style={{ color }}
+      >
+        {value}
+      </div>
+    </div>
   );
+}
+
+function biasColor(bias: "long" | "short" | "split"): string {
+  if (bias === "long") return GREEN;
+  if (bias === "short") return RED;
+  return DIM;
+}
+
+function formatPct(value: number): string {
+  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+}
+
+function formatPrice(value: number): string {
+  if (Math.abs(value) >= 1000) return `$${value.toFixed(0)}`;
+  if (Math.abs(value) >= 1) return `$${value.toFixed(2)}`;
+  return `$${value.toPrecision(4)}`;
+}
+
+function formatUsd(value: number): string {
+  return `${value < 0 ? "-" : ""}$${Math.abs(value).toFixed(2)}`;
+}
+
+function formatOpenAge(openSinceMs: number): string {
+  const totalMinutes = Math.max(
+    0,
+    Math.floor((Date.now() - openSinceMs) / 60_000),
+  );
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 24) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
 function EmptyLive() {
