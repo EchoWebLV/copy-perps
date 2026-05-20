@@ -92,17 +92,17 @@ export default function LeaderboardPage() {
         <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 pb-24 lg:grid lg:grid-cols-2 lg:items-start lg:pb-6 xl:grid-cols-3">
             {error && (
-              <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300">
+              <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300 lg:col-span-full">
                 {error}
               </div>
             )}
             {cards === null && !error && (
-              <div className="py-12 text-center text-sm text-neutral-500">
+              <div className="py-12 text-center text-sm text-neutral-500 lg:col-span-full">
                 Loading leaderboard...
               </div>
             )}
             {cards && cards.length === 0 && !error && (
-              <div className="py-16 text-center">
+              <div className="py-16 text-center lg:col-span-full">
                 <Trophy
                   size={32}
                   className="mx-auto text-neutral-600"
