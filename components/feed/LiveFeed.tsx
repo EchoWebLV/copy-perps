@@ -25,75 +25,17 @@ import {
   Headline,
   Stamp,
 } from "@/components/v2/ui";
+import { LiveFeedDesktop } from "./LiveFeedDesktop";
+import { flattenBotPositions, type FlatPosition } from "./live-positions";
 
 // Bot list polling: 4s, fast enough that opens/closes from the resolver
 // tick appear within a single React paint of when they hit the DB.
 // Live PnL on each card refreshes on every Pacifica WS mark tick.
 const POLL_MS = 4_000;
 
-interface FlatPosition {
-  positionId: string;
-  asset: string;
-  side: "long" | "short";
-  leverage: number;
-  entryMark: number;
-  currentMark: number;
-  stakeUsd: number;
-  livePaperPnlUsd: number;
-  livePaperPnlPct: number;
-  openSinceMs: number;
-  narrationOpen: string | null;
-  bot: {
-    botId: string;
-    botName: string;
-    avatarEmoji: string;
-    avatarImageUrl: string | null;
-    mood: BotSignal["payload"]["mood"];
-  };
-  disagreements: Array<{
-    botId: string;
-    botName: string;
-    avatarEmoji: string;
-    avatarImageUrl: string | null;
-  }>;
-}
-
 interface Props {
   initialBots: BotSignal[];
   botFilter: string | null;
-}
-
-function flatten(bots: BotSignal[], filter: string | null): FlatPosition[] {
-  const out: FlatPosition[] = [];
-  for (const bot of bots) {
-    if (filter && bot.payload.botId !== filter) continue;
-    for (const pos of bot.payload.currentPositions) {
-      out.push({
-        positionId: pos.positionId,
-        asset: pos.asset,
-        side: pos.side,
-        leverage: pos.leverage,
-        entryMark: pos.entryMark,
-        currentMark: pos.currentMark,
-        stakeUsd: pos.stakeUsd,
-        livePaperPnlUsd: pos.livePaperPnlUsd,
-        livePaperPnlPct: pos.livePaperPnlPct,
-        openSinceMs: pos.openSinceMs,
-        narrationOpen: pos.narrationOpen,
-        bot: {
-          botId: bot.payload.botId,
-          botName: bot.payload.botName,
-          avatarEmoji: bot.payload.avatarEmoji,
-          avatarImageUrl: bot.payload.avatarImageUrl,
-          mood: bot.payload.mood,
-        },
-        disagreements: pos.disagreements,
-      });
-    }
-  }
-  // Freshest first — newly-opened positions surface at the top.
-  out.sort((a, b) => b.openSinceMs - a.openSinceMs);
-  return out;
 }
 
 export function LiveFeed({ initialBots, botFilter }: Props) {
@@ -111,7 +53,7 @@ export function LiveFeed({ initialBots, botFilter }: Props) {
   // freshness. Recomputed whenever the bot snapshot from the API poll
   // changes (open/close/equity moves).
   const baseFlat = useMemo(
-    () => flatten(bots, botFilter),
+    () => flattenBotPositions(bots, botFilter),
     [bots, botFilter],
   );
 
@@ -240,115 +182,120 @@ export function LiveFeed({ initialBots, botFilter }: Props) {
   const chatBot = bots.find((b) => b.payload.botId === chatBotId) ?? null;
 
   return (
-    <div
-      className="relative h-full w-full overflow-hidden"
-      style={{
-        background: BG,
-        color: FG,
-        fontFamily: FONT_DISPLAY,
-      }}
-    >
-      <BalancePill />
+    <>
+      <div
+        className="relative h-full w-full overflow-hidden lg:hidden"
+        style={{
+          background: BG,
+          color: FG,
+          fontFamily: FONT_DISPLAY,
+        }}
+      >
+        <BalancePill />
 
-      {/* Back / filter pill — fixed top-left */}
-      <div className="pointer-events-none absolute top-[18px] left-3 z-30">
-        <Link
-          href="/feed"
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
-          style={{
-            background: PANEL,
-            color: FG,
-            border: `1px solid ${FAINT}`,
-          }}
-        >
-          <ArrowLeft size={11} strokeWidth={3} />
-          ROSTER
-        </Link>
-      </div>
+        {/* Back / filter pill — fixed top-left */}
+        <div className="pointer-events-none absolute top-[18px] left-3 z-30">
+          <Link
+            href="/feed"
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
+            style={{
+              background: PANEL,
+              color: FG,
+              border: `1px solid ${FAINT}`,
+            }}
+          >
+            <ArrowLeft size={11} strokeWidth={3} />
+            ROSTER
+          </Link>
+        </div>
 
       {/* New-position pill — fires when the bot poll brings in fresh
           opens while the user is scrolled past slide 0. Tap to jump
           to the top and dismiss. */}
-      {newCount > 0 && (
-        <button
-          type="button"
-          onClick={jumpToTop}
-          className="absolute top-[68px] left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-widest shadow-lg transition active:scale-[0.97]"
-          style={{
-            background: ACCENT,
-            color: BG,
-            boxShadow: `0 6px 18px ${ACCENT}55`,
-            fontFamily: FONT_DISPLAY,
-          }}
-        >
-          <ArrowUp size={12} strokeWidth={3} />
-          {newCount} NEW
-        </button>
-      )}
+        {newCount > 0 && (
+          <button
+            type="button"
+            onClick={jumpToTop}
+            className="absolute top-[68px] left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-widest shadow-lg transition active:scale-[0.97]"
+            style={{
+              background: ACCENT,
+              color: BG,
+              boxShadow: `0 6px 18px ${ACCENT}55`,
+              fontFamily: FONT_DISPLAY,
+            }}
+          >
+            <ArrowUp size={12} strokeWidth={3} />
+            {newCount} NEW
+          </button>
+        )}
 
-      {positions.length === 0 ? (
-        <EmptyState filter={botFilter} />
-      ) : (
-        <div
-          ref={scrollerRef}
-          className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
-          style={{ scrollSnapStop: "always" }}
-        >
-          {positions.map((pos, i) => (
-            <div
-              key={pos.positionId}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              data-idx={i}
-              className="h-full w-full snap-start"
-            >
-              <PositionCard
-                pos={pos}
-                slideIndex={i}
-                total={positions.length}
-                onChat={() => setChatBotId(pos.bot.botId)}
-                onTail={() =>
-                  setTailSource({
-                    kind: "bot",
-                    botId: pos.bot.botId,
-                    botName: pos.bot.botName,
-                    avatarEmoji: pos.bot.avatarEmoji,
-                    avatarImageUrl: pos.bot.avatarImageUrl,
-                    asset: pos.asset,
-                    side: pos.side,
-                    leverage: pos.leverage,
-                    entryMark: pos.entryMark,
-                    positionId: pos.positionId,
-                  })
-                }
-              />
-            </div>
-          ))}
-        </div>
-      )}
+        {positions.length === 0 ? (
+          <EmptyState filter={botFilter} />
+        ) : (
+          <div
+            ref={scrollerRef}
+            className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
+            style={{ scrollSnapStop: "always" }}
+          >
+            {positions.map((pos, i) => (
+              <div
+                key={pos.positionId}
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                data-idx={i}
+                className="h-full w-full snap-start"
+              >
+                <PositionCard
+                  pos={pos}
+                  slideIndex={i}
+                  total={positions.length}
+                  onChat={() => setChatBotId(pos.bot.botId)}
+                  onTail={() =>
+                    setTailSource({
+                      kind: "bot",
+                      botId: pos.bot.botId,
+                      botName: pos.bot.botName,
+                      avatarEmoji: pos.bot.avatarEmoji,
+                      avatarImageUrl: pos.bot.avatarImageUrl,
+                      asset: pos.asset,
+                      side: pos.side,
+                      leverage: pos.leverage,
+                      entryMark: pos.entryMark,
+                      positionId: pos.positionId,
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
-      {chatBot && (
-        <BotChatSheet
-          botId={chatBot.payload.botId}
-          botName={chatBot.payload.botName}
-          avatarEmoji={chatBot.payload.avatarEmoji}
-          avatarImageUrl={chatBot.payload.avatarImageUrl}
-          openingThoughts={chatBot.payload.currentPositions.map((p) => ({
-            asset: p.asset,
-            side: p.side,
-            narration: p.narrationOpen,
-          }))}
-          onClose={() => setChatBotId(null)}
+        {chatBot && (
+          <BotChatSheet
+            botId={chatBot.payload.botId}
+            botName={chatBot.payload.botName}
+            avatarEmoji={chatBot.payload.avatarEmoji}
+            avatarImageUrl={chatBot.payload.avatarImageUrl}
+            openingThoughts={chatBot.payload.currentPositions.map((p) => ({
+              asset: p.asset,
+              side: p.side,
+              narration: p.narrationOpen,
+            }))}
+            onClose={() => setChatBotId(null)}
+          />
+        )}
+
+        <TailModal
+          open={!!tailSource}
+          source={tailSource}
+          onClose={() => setTailSource(null)}
         />
-      )}
-
-      <TailModal
-        open={!!tailSource}
-        source={tailSource}
-        onClose={() => setTailSource(null)}
-      />
-    </div>
+      </div>
+      <div className="hidden h-full lg:block">
+        <LiveFeedDesktop bots={bots} botFilter={botFilter} />
+      </div>
+    </>
   );
 }
 
