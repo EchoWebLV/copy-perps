@@ -6,6 +6,10 @@ import {
   PacificaDepositSettlingError,
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
+import {
+  releaseTailReservation,
+  reserveTailOnMarket,
+} from "@/lib/bets/tail-reservation";
 import { buildWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { planOnboarding } from "@/lib/bets/onboard";
 import { db } from "@/lib/db";
@@ -98,6 +102,12 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+  if (whale.status !== "active") {
+    return NextResponse.json(
+      { error: "whale is not active" },
+      { status: 409 },
+    );
+  }
   if (position.source !== "pacifica" || whale.source !== "pacifica") {
     return NextResponse.json(
       { error: "only Pacifica whale copying is supported" },
@@ -135,7 +145,10 @@ export async function POST(request: Request) {
   }
   const amountBase = lotSizedAmountFromNotional({
     notionalUsd: finalNotional,
-    price: position.entryPrice,
+    price:
+      typeof position.currentMark === "number" && position.currentMark > 0
+        ? position.currentMark
+        : position.entryPrice,
     lotSize: marketInfo.lot_size,
   });
 
@@ -182,6 +195,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const reserved = await reserveTailOnMarket(user.id, position.market);
+  if (!reserved) {
+    return NextResponse.json(
+      { error: `you already have an open ${position.market} tail - close it first` },
+      { status: 409 },
+    );
+  }
+
   let fill;
   try {
     fill = await openCopyOrder({
@@ -191,6 +212,7 @@ export async function POST(request: Request) {
       amountBase,
     });
   } catch (err) {
+    await releaseTailReservation(user.id, position.market);
     console.error("[bet/whale] open failed:", err);
     return NextResponse.json(
       { error: `Pacifica order failed: ${String(err)}` },
@@ -198,28 +220,40 @@ export async function POST(request: Request) {
     );
   }
 
-  const [bet] = await db
-    .insert(bets)
-    .values({
-      userId: user.id,
-      type: "copy",
-      amountUsdc: body.stakeUsdc,
-      status: "confirmed",
-      meta: buildWhaleCopyMeta({
-        whaleId: whale.id,
-        source: position.source,
-        sourceAccount: position.sourceAccount,
-        sourcePositionId: position.id,
-        leaderMarket: position.market,
-        leaderSide: position.side,
-        leverage: effectiveLeverage,
-        autoCloseOnSourceClose: body.autoCloseOnSourceClose,
-        userEntryPrice: Number(fill.avg_fill_price),
-        sourceEntryPriceAtCopy: position.entryPrice,
-        pacificaOrderId: fill.order_id,
-      }),
-    })
-    .returning();
+  let bet: typeof bets.$inferSelect;
+  try {
+    [bet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "copy",
+        amountUsdc: body.stakeUsdc,
+        status: "confirmed",
+        meta: buildWhaleCopyMeta({
+          whaleId: whale.id,
+          source: position.source,
+          sourceAccount: position.sourceAccount,
+          sourcePositionId: position.id,
+          leaderMarket: position.market,
+          leaderSide: position.side,
+          leverage: effectiveLeverage,
+          autoCloseOnSourceClose: body.autoCloseOnSourceClose,
+          userEntryPrice: Number(fill.avg_fill_price),
+          sourceEntryPriceAtCopy: position.entryPrice,
+          pacificaOrderId: fill.order_id,
+        }),
+      })
+      .returning();
+  } catch (err) {
+    await releaseTailReservation(user.id, position.market);
+    console.error("[bet/whale] ledger insert failed:", err);
+    return NextResponse.json(
+      { error: "Could not record whale copy bet" },
+      { status: 502 },
+    );
+  }
+
+  await releaseTailReservation(user.id, position.market);
 
   return NextResponse.json({
     phase: "open",

@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => {
     planOnboarding: vi.fn(),
     planPacificaDepositTopUp: vi.fn(),
     hasOpenTailOnMarket: vi.fn(),
+    reserveTailOnMarket: vi.fn(),
+    releaseTailReservation: vi.fn(),
     selectChain,
     selectLimit,
     insertValues,
@@ -71,6 +73,10 @@ vi.mock("@/lib/bets/funding", () => ({
 vi.mock("@/lib/bets/copy-guard", () => ({
   hasOpenTailOnMarket: mocks.hasOpenTailOnMarket,
 }));
+vi.mock("@/lib/bets/tail-reservation", () => ({
+  reserveTailOnMarket: mocks.reserveTailOnMarket,
+  releaseTailReservation: mocks.releaseTailReservation,
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     select: () => mocks.selectChain,
@@ -96,6 +102,8 @@ function whaleRequest(body: unknown) {
 function openPacificaSource(overrides?: {
   source?: string;
   status?: string;
+  whaleStatus?: string;
+  currentMark?: number | null;
   lastSeenAt?: Date;
 }) {
   const source = overrides?.source ?? "pacifica";
@@ -109,6 +117,7 @@ function openPacificaSource(overrides?: {
       side: "long",
       leverage: 7,
       entryPrice: 2000,
+      currentMark: overrides?.currentMark ?? null,
       status: overrides?.status ?? "open",
       lastSeenAt: overrides?.lastSeenAt ?? new Date("2026-05-23T12:00:00.000Z"),
     },
@@ -117,6 +126,7 @@ function openPacificaSource(overrides?: {
       source,
       sourceAccount: "abc",
       displayName: "Whale ABC",
+      status: overrides?.whaleStatus ?? "active",
     },
   };
 }
@@ -145,6 +155,8 @@ describe("POST /api/bet/whale", () => {
       lot_size: "0.001",
     });
     mocks.planPacificaDepositTopUp.mockResolvedValue(null);
+    mocks.reserveTailOnMarket.mockResolvedValue(true);
+    mocks.releaseTailReservation.mockResolvedValue(undefined);
     mocks.openCopyOrder.mockResolvedValue({
       order_id: "order-1",
       avg_fill_price: "2010.50",
@@ -194,6 +206,8 @@ describe("POST /api/bet/whale", () => {
         amountBase: "0.025",
       }),
     );
+    expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+    expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
     expect(mocks.insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-1",
@@ -235,6 +249,104 @@ describe("POST /api/bet/whale", () => {
         autoCloseOnSourceClose: true,
       },
     });
+  });
+
+  it("sizes the copy from current mark when it is available", async () => {
+    mocks.selectLimit.mockResolvedValue([openPacificaSource({ currentMark: 2500 })]);
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.openCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ETH",
+        side: "long",
+        amountBase: "0.020",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          sourceEntryPriceAtCopy: 2000,
+        }),
+      }),
+    );
+  });
+
+  it.each(["hidden", "retired"])(
+    "rejects %s whales before trading",
+    async (whaleStatus) => {
+      mocks.selectLimit.mockResolvedValue([
+        openPacificaSource({ whaleStatus }),
+      ]);
+
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "whale is not active",
+      });
+      expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects when the tail reservation cannot be acquired", async () => {
+    mocks.reserveTailOnMarket.mockResolvedValue(false);
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "you already have an open ETH tail - close it first",
+    });
+    expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+    expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
+  });
+
+  it("releases the tail reservation when Pacifica order opening fails", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.openCopyOrder.mockRejectedValue(new Error("network down"));
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("rejects stale whale positions before trading", async () => {
