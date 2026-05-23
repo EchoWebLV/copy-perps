@@ -15,6 +15,10 @@ export async function register(): Promise<void> {
   // resolver needs Node APIs (os, crypto) and direct DB access. The
   // dynamic import keeps that Node-only code out of the edge bundle.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { startBotTicker } = await import("@/lib/bots/ticker");
+  const [{ startBotTicker }, { startWhaleTicker }] = await Promise.all([
+    import("@/lib/bots/ticker"),
+    import("@/lib/whales/ticker"),
+  ]);
   startBotTicker();
+  startWhaleTicker();
 }
