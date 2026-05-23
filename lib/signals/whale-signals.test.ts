@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     getLeaderboard: vi.fn(),
     getPositionsHistory: vi.fn(),
     getWhaleLiveSnapshot: vi.fn(),
+    refreshPacificaWhales: vi.fn(),
     analysisRows: [] as unknown[],
   };
 });
@@ -30,6 +31,10 @@ vi.mock("@/lib/pacifica/client", () => ({
 
 vi.mock("@/lib/whales/live-cache", () => ({
   getWhaleLiveSnapshot: mocks.getWhaleLiveSnapshot,
+}));
+
+vi.mock("@/lib/whales/refresh-pacifica", () => ({
+  refreshPacificaWhales: mocks.refreshPacificaWhales,
 }));
 
 vi.mock("@/lib/db/schema", () => ({
@@ -102,13 +107,17 @@ function snapshot(
 
 describe("whale signals", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.setSystemTime(new Date("2026-05-23T12:00:00.000Z"));
 
     mocks.analysisRows = [];
     mocks.getLeaderboard.mockResolvedValue([]);
     mocks.getPositionsHistory.mockResolvedValue([]);
     mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
+    mocks.refreshPacificaWhales.mockResolvedValue({
+      whalesSeen: 1,
+      positionsSeen: 1,
+    });
     mocks.query.from.mockReturnValue(mocks.query);
     mocks.query.where.mockReturnValue(mocks.query);
     mocks.query.limit.mockImplementation(async () => mocks.analysisRows);
@@ -503,6 +512,41 @@ describe("whale signals", () => {
     expect(
       traders[0]?.payload.openPositions.map((item) => item.positionId),
     ).toEqual(["active-pos"]);
+  });
+
+  it("refreshes the live cache on demand when the cache is missing", async () => {
+    mocks.getWhaleLiveSnapshot
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(snapshot());
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const signals = await buildWhalePositionSignals();
+
+    expect(mocks.refreshPacificaWhales).toHaveBeenCalledTimes(1);
+    expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
+  });
+
+  it("refreshes the live cache on demand when the snapshot is stale", async () => {
+    mocks.getWhaleLiveSnapshot
+      .mockResolvedValueOnce(
+        snapshot({
+          observedAt: new Date("2026-05-23T11:55:00.000Z"),
+          positions: [
+            position({
+              lastSeenAt: new Date("2026-05-23T11:55:00.000Z"),
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(snapshot());
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const signals = await buildWhalePositionSignals();
+
+    expect(mocks.refreshPacificaWhales).toHaveBeenCalledTimes(1);
+    expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
   });
 
   it("returns no whale signals when the live cache is empty", async () => {

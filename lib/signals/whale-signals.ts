@@ -13,6 +13,7 @@ import {
   getWhaleLiveSnapshot,
   type WhaleLiveSnapshot,
 } from "@/lib/whales/live-cache";
+import { refreshPacificaWhales } from "@/lib/whales/refresh-pacifica";
 
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
@@ -22,6 +23,35 @@ const pnlHistoryCache = new Map<
   string,
   { expiresAt: number; curve: WhalePnlPoint[] }
 >();
+let liveRefreshInFlight: Promise<void> | null = null;
+
+async function refreshLiveSnapshotOnce(): Promise<void> {
+  if (!liveRefreshInFlight) {
+    liveRefreshInFlight = refreshPacificaWhales()
+      .then(() => undefined)
+      .finally(() => {
+        liveRefreshInFlight = null;
+      });
+  }
+
+  await liveRefreshInFlight;
+}
+
+async function getWhaleLiveSnapshotOrRefresh(): Promise<WhaleLiveSnapshot | null> {
+  const snapshot = await getWhaleLiveSnapshot();
+  if (snapshot !== null && isSourceFresh(snapshot.observedAt.getTime())) {
+    return snapshot;
+  }
+
+  try {
+    await refreshLiveSnapshotOnce();
+  } catch (err) {
+    console.warn("[whales] on-demand refresh failed:", err);
+    return snapshot;
+  }
+
+  return getWhaleLiveSnapshot();
+}
 
 async function forEachWithConcurrency<T>(
   items: T[],
@@ -186,13 +216,13 @@ async function buildWhalePositionSignalsFromSnapshot(
 export async function buildWhalePositionSignals(
   limit = 100,
 ): Promise<WhalePositionSignal[]> {
-  const snapshot = await getWhaleLiveSnapshot();
+  const snapshot = await getWhaleLiveSnapshotOrRefresh();
   if (snapshot === null) return [];
   return buildWhalePositionSignalsFromSnapshot(snapshot, limit);
 }
 
 export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
-  const snapshot = await getWhaleLiveSnapshot();
+  const snapshot = await getWhaleLiveSnapshotOrRefresh();
   if (snapshot === null) return [];
 
   const activeWhales = snapshot.whales.filter(
