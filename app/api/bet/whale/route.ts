@@ -12,6 +12,7 @@ import {
 } from "@/lib/bets/tail-reservation";
 import { buildWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { planOnboarding } from "@/lib/bets/onboard";
+import { getMark } from "@/lib/data/marks";
 import { db } from "@/lib/db";
 import { bets, whalePositions, whales } from "@/lib/db/schema";
 import { whaleSocialEnabled } from "@/lib/features";
@@ -52,6 +53,30 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
     );
   }
   return null;
+}
+
+async function releaseReservationBestEffort(userId: string, market: string) {
+  try {
+    await releaseTailReservation(userId, market);
+  } catch (err) {
+    console.warn("[bet/whale] reservation cleanup failed:", err);
+  }
+}
+
+async function markBetFailedBestEffort(betId: string) {
+  try {
+    await db.update(bets).set({ status: "failed" }).where(eq(bets.id, betId));
+  } catch (err) {
+    console.warn("[bet/whale] failed bet update failed:", err);
+  }
+}
+
+async function resolveSizingPrice(position: typeof whalePositions.$inferSelect) {
+  if (typeof position.currentMark === "number" && position.currentMark > 0) {
+    return position.currentMark;
+  }
+  const mark = await getMark(position.market);
+  return typeof mark === "number" && mark > 0 ? mark : null;
 }
 
 export async function POST(request: Request) {
@@ -143,12 +168,16 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+  const sizingPrice = await resolveSizingPrice(position);
+  if (!sizingPrice) {
+    return NextResponse.json(
+      { error: `Live price is unavailable for ${position.market}` },
+      { status: 409 },
+    );
+  }
   const amountBase = lotSizedAmountFromNotional({
     notionalUsd: finalNotional,
-    price:
-      typeof position.currentMark === "number" && position.currentMark > 0
-        ? position.currentMark
-        : position.entryPrice,
+    price: sizingPrice,
     lotSize: marketInfo.lot_size,
   });
 
@@ -203,6 +232,39 @@ export async function POST(request: Request) {
     );
   }
 
+  let pendingBet: typeof bets.$inferSelect;
+  try {
+    [pendingBet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "copy",
+        amountUsdc: body.stakeUsdc,
+        status: "pending",
+        meta: buildWhaleCopyMeta({
+          whaleId: whale.id,
+          source: position.source,
+          sourceAccount: position.sourceAccount,
+          sourcePositionId: position.id,
+          leaderMarket: position.market,
+          leaderSide: position.side,
+          leverage: effectiveLeverage,
+          autoCloseOnSourceClose: body.autoCloseOnSourceClose,
+          userEntryPrice: 0,
+          sourceEntryPriceAtCopy: position.entryPrice,
+          pacificaOrderId: "pending",
+        }),
+      })
+      .returning();
+  } catch (err) {
+    await releaseReservationBestEffort(user.id, position.market);
+    console.error("[bet/whale] pending ledger insert failed:", err);
+    return NextResponse.json(
+      { error: "Could not prepare whale copy bet" },
+      { status: 502 },
+    );
+  }
+
   let fill;
   try {
     fill = await openCopyOrder({
@@ -212,7 +274,8 @@ export async function POST(request: Request) {
       amountBase,
     });
   } catch (err) {
-    await releaseTailReservation(user.id, position.market);
+    await markBetFailedBestEffort(pendingBet.id);
+    await releaseReservationBestEffort(user.id, position.market);
     console.error("[bet/whale] open failed:", err);
     return NextResponse.json(
       { error: `Pacifica order failed: ${String(err)}` },
@@ -223,11 +286,8 @@ export async function POST(request: Request) {
   let bet: typeof bets.$inferSelect;
   try {
     [bet] = await db
-      .insert(bets)
-      .values({
-        userId: user.id,
-        type: "copy",
-        amountUsdc: body.stakeUsdc,
+      .update(bets)
+      .set({
         status: "confirmed",
         meta: buildWhaleCopyMeta({
           whaleId: whale.id,
@@ -243,21 +303,18 @@ export async function POST(request: Request) {
           pacificaOrderId: fill.order_id,
         }),
       })
+      .where(eq(bets.id, pendingBet.id))
       .returning();
   } catch (err) {
-    await releaseTailReservation(user.id, position.market);
-    console.error("[bet/whale] ledger insert failed:", err);
+    await releaseReservationBestEffort(user.id, position.market);
+    console.error("[bet/whale] ledger update failed:", err);
     return NextResponse.json(
-      { error: "Could not record whale copy bet" },
+      { error: "Could not confirm whale copy bet" },
       { status: 502 },
     );
   }
 
-  try {
-    await releaseTailReservation(user.id, position.market);
-  } catch (err) {
-    console.warn("[bet/whale] reservation cleanup failed:", err);
-  }
+  await releaseReservationBestEffort(user.id, position.market);
 
   return NextResponse.json({
     phase: "open",
