@@ -15,6 +15,41 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
+type CopyRowMeta = {
+  leaderMarket: string;
+  leaderSide: "long" | "short";
+  leverage: number;
+  leaderAddress?: string;
+  botId?: string;
+  leaderClosedAt?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseCopyRowMeta(value: unknown): CopyRowMeta | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.leaderMarket !== "string") return null;
+  if (value.leaderSide !== "long" && value.leaderSide !== "short") return null;
+  if (typeof value.leverage !== "number" || !Number.isFinite(value.leverage)) {
+    return null;
+  }
+
+  return {
+    leaderMarket: value.leaderMarket,
+    leaderSide: value.leaderSide,
+    leverage: value.leverage,
+    leaderAddress: optionalString(value.leaderAddress),
+    botId: optionalString(value.botId),
+    leaderClosedAt: optionalString(value.leaderClosedAt),
+  };
+}
+
 export async function GET(request: Request) {
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
@@ -76,16 +111,10 @@ export async function GET(request: Request) {
   }
   const copyRows = copyBets
     .filter((b) => b.status === "confirmed")
-    .map((b) => {
+    .flatMap((b) => {
       const whaleMeta = parseWhaleCopyMeta(b.meta);
-      const meta = b.meta as {
-        leaderMarket: string;
-        leaderSide: "long" | "short";
-        leverage: number;
-        leaderAddress?: string;
-        botId?: string;
-        leaderClosedAt?: string;
-      };
+      const meta = parseCopyRowMeta(b.meta);
+      if (!meta) return [];
       const livePos = userPositions?.find(
         (p) =>
           p.symbol === meta.leaderMarket &&
