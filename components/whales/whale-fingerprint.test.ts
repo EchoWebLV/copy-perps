@@ -21,7 +21,7 @@ describe("buildWhaleFingerprintAvatarModel", () => {
     expect(first.colors.primary).not.toEqual(second.colors.primary);
   });
 
-  it("includes QR-style finder anchors and colored data modules", () => {
+  it("includes QR-style finder anchors and wallet-colored data modules", () => {
     const model = buildWhaleFingerprintAvatarModel("0xabc");
     const finderCells = model.cells.filter((cell) => cell.role === "finder");
     const dataCells = model.cells.filter((cell) => cell.role === "data");
@@ -32,7 +32,26 @@ describe("buildWhaleFingerprintAvatarModel", () => {
     expect(finderKeys.has("0:0")).toBe(true);
     expect(finderKeys.has(`${WHALE_FINGERPRINT_GRID_SIZE - 1}:0`)).toBe(true);
     expect(finderKeys.has(`0:${WHALE_FINGERPRINT_GRID_SIZE - 1}`)).toBe(true);
-    expect(dataCells.length).toBeGreaterThan(80);
-    expect(new Set(dataCells.map((cell) => cell.color)).size).toBeGreaterThan(1);
+    expect(dataCells.length).toBeGreaterThan(45);
+    expect(new Set(dataCells.map((cell) => cell.color))).toEqual(
+      new Set([model.colors.primary]),
+    );
+  });
+
+  it("keeps the generated code inside an exact 16 by 16 module grid", () => {
+    const model = buildWhaleFingerprintAvatarModel("0xabc");
+    const cols = model.cells.map((cell) => cell.col);
+    const rows = model.cells.map((cell) => cell.row);
+    const dataColors = new Set(
+      model.cells
+        .filter((cell) => cell.role === "data")
+        .map((cell) => cell.color),
+    );
+
+    expect(Math.min(...cols)).toBe(0);
+    expect(Math.max(...cols)).toBe(WHALE_FINGERPRINT_GRID_SIZE - 1);
+    expect(Math.min(...rows)).toBe(0);
+    expect(Math.max(...rows)).toBe(WHALE_FINGERPRINT_GRID_SIZE - 1);
+    expect(dataColors).toEqual(new Set([model.colors.primary]));
   });
 });

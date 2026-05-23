@@ -7,6 +7,16 @@ function readComponent(path: string): string {
 }
 
 describe("Whale fingerprint avatar contract", () => {
+  it("renders a literal crisp 16 by 16 SVG code without decorative layers", () => {
+    const source = readComponent("components/whales/WhaleFingerprintAvatar.tsx");
+
+    expect(source).toContain("WHALE_FINGERPRINT_GRID_SIZE");
+    expect(source).toContain('shapeRendering="crispEdges"');
+    expect(source).not.toContain("<circle");
+    expect(source).not.toContain("<path");
+    expect(source).not.toContain("conic-gradient");
+  });
+
   it("uses source-account fingerprints in whale roster cards", () => {
     const source = readComponent("components/whales/WhaleRoster.tsx");
 

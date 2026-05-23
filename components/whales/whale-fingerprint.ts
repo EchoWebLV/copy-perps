@@ -38,13 +38,12 @@ export function buildWhaleFingerprintAvatarModel(
   const secondaryHue = (baseHue + 88 + Math.floor(random() * 88)) % 360;
   const accentHue = (baseHue + 196 + Math.floor(random() * 72)) % 360;
   const colors = {
-    background: `hsl(${(baseHue + 232) % 360} 42% 9%)`,
-    primary: `hsl(${baseHue} 94% 62%)`,
-    secondary: `hsl(${secondaryHue} 88% 58%)`,
-    accent: `hsl(${accentHue} 96% 66%)`,
-    ink: `hsl(${(baseHue + 18) % 360} 96% 78%)`,
+    background: `hsl(${(baseHue + 232) % 360} 46% 8%)`,
+    primary: `hsl(${baseHue} 96% 62%)`,
+    secondary: `hsl(${secondaryHue} 88% 56%)`,
+    accent: `hsl(${accentHue} 96% 68%)`,
+    ink: `hsl(${(baseHue + 18) % 360} 92% 76%)`,
   };
-  const palette = [colors.primary, colors.secondary, colors.accent, colors.ink];
   const cells: WhaleFingerprintCell[] = [];
   const reserved = new Set<string>();
 
@@ -88,12 +87,12 @@ export function buildWhaleFingerprintAvatarModel(
         col === WHALE_FINGERPRINT_GRID_SIZE - 1
           ? 0.08
           : 0;
-      if (random() < 0.46 + edgeBias) continue;
+      if (random() < 0.68 + edgeBias) continue;
       cells.push({
         col,
         row,
-        color: palette[Math.floor(random() * palette.length)] ?? colors.primary,
-        opacity: 0.68 + random() * 0.3,
+        color: colors.primary,
+        opacity: 0.94,
         role: "data",
       });
     }

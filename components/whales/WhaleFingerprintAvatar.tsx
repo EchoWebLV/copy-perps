@@ -28,9 +28,6 @@ export function WhaleFingerprintAvatar({
 }) {
   const model = buildWhaleFingerprintAvatarModel(sourceAccount);
   const ringColor = (mood && MOOD_RING[mood]) || model.colors.primary;
-  const pad = 4.5;
-  const moduleStep = (64 - pad * 2) / WHALE_FINGERPRINT_GRID_SIZE;
-  const moduleSize = moduleStep * 0.72;
   const labelText = label ? `${label} wallet fingerprint` : "Wallet fingerprint";
 
   return (
@@ -42,9 +39,9 @@ export function WhaleFingerprintAvatar({
       style={{
         width: size,
         height: size,
-        padding: 3,
-        background: `conic-gradient(from ${model.rotationDeg}deg, ${model.colors.primary}, ${ringColor}, ${model.colors.secondary}, ${model.colors.accent}, ${model.colors.primary})`,
-        boxShadow: `0 0 18px ${ringColor}55`,
+        padding: 2,
+        background: ringColor,
+        boxShadow: `0 0 10px ${ringColor}44`,
       }}
     >
       <div
@@ -52,57 +49,28 @@ export function WhaleFingerprintAvatar({
         style={{ background: BG }}
       >
         <svg
-          viewBox="0 0 64 64"
+          viewBox={`0 0 ${WHALE_FINGERPRINT_GRID_SIZE} ${WHALE_FINGERPRINT_GRID_SIZE}`}
           className="h-full w-full"
           aria-hidden="true"
           focusable="false"
+          shapeRendering="crispEdges"
         >
-          <rect width="64" height="64" rx="18" fill={model.colors.background} />
-          <circle
-            cx="47"
-            cy="16"
-            r="18"
-            fill={model.colors.secondary}
-            opacity="0.14"
-          />
-          <circle
-            cx="18"
-            cy="47"
-            r="22"
-            fill={model.colors.accent}
-            opacity="0.1"
-          />
-          <path
-            d="M16 45c4-10 13-15 24-13M18 52c5-9 13-13 23-10M21 58c6-8 13-10 22-8"
-            fill="none"
-            stroke={model.colors.ink}
-            strokeLinecap="round"
-            strokeWidth="1.7"
-            opacity="0.35"
+          <rect
+            width={WHALE_FINGERPRINT_GRID_SIZE}
+            height={WHALE_FINGERPRINT_GRID_SIZE}
+            fill={model.colors.background}
           />
           {model.cells.map((cell) => (
             <rect
               key={`${cell.col}-${cell.row}-${cell.role}`}
-              x={pad + cell.col * moduleStep}
-              y={pad + cell.row * moduleStep}
-              width={moduleSize}
-              height={moduleSize}
-              rx={cell.role === "finder" ? 1.05 : 1.35}
+              x={cell.col}
+              y={cell.row}
+              width="1"
+              height="1"
               fill={cell.color}
               opacity={cell.opacity}
             />
           ))}
-          <rect
-            x="4.5"
-            y="4.5"
-            width="55"
-            height="55"
-            rx="15"
-            fill="none"
-            stroke={model.colors.ink}
-            strokeWidth="1"
-            opacity="0.22"
-          />
         </svg>
       </div>
     </div>
