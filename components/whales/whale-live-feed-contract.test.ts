@@ -34,4 +34,17 @@ describe("WhaleLiveFeed position card contract", () => {
     expect(source).not.toContain("SEEN {");
     expect(source).toContain("OPENED {formatWhalePositionAge");
   });
+
+  it("does not reserve title space above live position cards", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
+      "utf8",
+    );
+
+    expect(source).not.toContain('{`"LIVE POSITIONS"`}');
+    expect(source).not.toContain("Open source positions");
+    expect(source).not.toContain("LIVE POSITIONS");
+    expect(source).not.toContain("pt-[72px]");
+    expect(source).not.toContain("pl-[80px]");
+  });
 });

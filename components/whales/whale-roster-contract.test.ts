@@ -14,4 +14,16 @@ describe("WhaleRoster feed layout", () => {
     expect(source).not.toContain("lg:grid-cols");
     expect(source).not.toContain("auto-rows-max");
   });
+
+  it("does not reserve a title band above the whale cards", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).not.toContain('{`"WHALES"`}');
+    expect(source).not.toContain("Ranked source accounts ready to copy");
+    expect(source).not.toContain("pt-[150px]");
+    expect(source).not.toContain("lg:pt-[118px]");
+  });
 });

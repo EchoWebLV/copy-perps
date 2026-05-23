@@ -93,24 +93,6 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
     >
       <BalancePill />
 
-      <div className="pointer-events-none absolute top-[18px] left-3 z-30 lg:hidden">
-        <Link
-          href="/feed"
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
-          style={{ background: PANEL, color: FG, border: `1px solid ${FAINT}` }}
-        >
-          <ArrowLeft size={11} strokeWidth={3} />
-          WHALES
-        </Link>
-      </div>
-
-      <div
-        className="pointer-events-none absolute top-[18px] right-3 z-30 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest lg:hidden"
-        style={{ background: PANEL, color: FG, border: `1px solid ${FAINT}` }}
-      >
-        LIVE POSITIONS
-      </div>
-
       {sorted.length === 0 ? (
         <EmptyLive />
       ) : (
@@ -142,12 +124,6 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
 
           <div className="hidden h-full min-h-0 grid-cols-[360px_minmax(0,1fr)] gap-4 p-6 lg:grid">
             <aside className="min-h-0 overflow-hidden rounded-2xl p-4" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-              <div className="mb-4">
-                <Headline size={28}>{`"LIVE POSITIONS"`}</Headline>
-                <p className="mt-1 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                  Open source positions
-                </p>
-              </div>
               <div className="no-scrollbar space-y-2 overflow-y-auto">
                 {sorted.map((position, i) => (
                   <button
@@ -238,9 +214,9 @@ function PositionCard({
   }, []);
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[72px] pb-24 lg:px-8 lg:pt-8 lg:pb-8" style={{ background: BG }}>
+    <div className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-12 pb-24 lg:px-8 lg:pt-8 lg:pb-8" style={{ background: BG }}>
       <div className="flex min-h-0 flex-1 flex-col pr-1">
-        <div className="flex items-baseline justify-between pl-[80px] lg:pl-0">
+        <div className="flex items-baseline justify-between">
           <Stamp
             label="POS"
             value={`${String(slideIndex + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`}

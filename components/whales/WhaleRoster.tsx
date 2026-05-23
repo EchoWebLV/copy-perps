@@ -63,31 +63,6 @@ export function WhaleRoster({ initialWhales }: Props) {
     >
       <BalancePill />
 
-      <div className="pointer-events-none absolute top-[72px] right-5 left-5 z-20 flex items-end justify-between gap-4 lg:top-8 lg:right-8 lg:left-8">
-        <header className="flex w-full items-end justify-between gap-4">
-          <div>
-            <Headline size={42}>{`"WHALES"`}</Headline>
-            <p className="mt-1 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-              Ranked source accounts ready to copy
-            </p>
-          </div>
-          <div
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
-            style={{
-              background: `${GREEN}18`,
-              color: GREEN,
-              border: `1px solid ${GREEN}40`,
-            }}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-              style={{ background: GREEN, boxShadow: `0 0 6px ${GREEN}` }}
-            />
-            LIVE
-          </div>
-        </header>
-      </div>
-
       {ranked.length === 0 ? (
         <EmptyRoster />
       ) : (
@@ -95,7 +70,7 @@ export function WhaleRoster({ initialWhales }: Props) {
           {ranked.map((whale, idx) => (
             <section
               key={whale.payload.whaleId}
-              className="flex h-full w-full snap-start items-center justify-center px-5 pt-[150px] pb-28 lg:px-8 lg:pt-[118px] lg:pb-8"
+              className="flex h-full w-full snap-start items-center justify-center px-3 pt-12 pb-24 lg:px-8 lg:py-8"
               style={{ scrollSnapStop: "always" }}
             >
               <WhaleCard
