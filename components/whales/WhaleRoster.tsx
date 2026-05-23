@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Radio, Zap } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Layers, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import {
+  buildWhaleExposureSummary,
+  type WhaleExposureSummary,
+} from "./whale-exposure-summary";
+import {
   ACCENT,
   BG,
-  BigNum,
   DIM,
   FAINT,
   FG,
@@ -117,15 +121,11 @@ function WhaleCard({
   onTail: (source: TailSource) => void;
 }) {
   const p = whale.payload;
-  const copyablePositions = p.openPositions.filter((position) => !position.stale);
+  const exposureSummary = buildWhaleExposureSummary(p.openPositions);
   const fresh = !p.stale;
-  const canTail = copyablePositions.length > 0;
+  const canTail = exposureSummary.copyableCount > 0;
   const totalPnl = p.stats.pnlAllTimeUsdc;
   const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
-  const exposureUsd = p.openPositions.reduce(
-    (sum, position) => sum + position.notionalUsd,
-    0,
-  );
 
   return (
     <article
@@ -198,42 +198,49 @@ function WhaleCard({
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black uppercase tracking-widest">
-        <MiniMetric label="Open" value={String(p.openPositionsCount)} active={p.openPositionsCount > 0} />
-        <MiniMetric label="Exposure" value={exposureUsd > 0 ? fmtUsd(exposureUsd) : "N/A"} active={exposureUsd > 0} />
+        <MiniMetric label="Open" value={String(exposureSummary.totalCount)} active={exposureSummary.totalCount > 0} />
+        <MiniMetric label="Exposure" value={exposureSummary.exposureUsd > 0 ? fmtUsd(exposureSummary.exposureUsd) : "N/A"} active={exposureSummary.exposureUsd > 0} />
         <MiniMetric label="Vol 1D" value={p.stats.volume1dUsdc > 0 ? fmtUsd(p.stats.volume1dUsdc) : "N/A"} active={p.stats.volume1dUsdc > 0} />
       </div>
 
-      {p.openPositions.length > 0 ? (
-        <OpenPositionsStack positions={p.openPositions} />
-      ) : (
-        <div className="mt-3 flex items-center gap-2 border-t pt-3 text-[11px] font-black uppercase tracking-widest" style={{ borderColor: FAINT, color: DIM }}>
-          <Radio size={14} strokeWidth={2.8} />
-          Watching for next open position
-        </div>
-      )}
+      <WhaleExposurePanel summary={exposureSummary} />
 
-      <button
-        type="button"
-        disabled={!canTail}
-        onClick={() => {
-          const source = buildWhaleTailSource(p);
-          if (!source) return;
-          onTail(source);
-        }}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
-        style={{
-          background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
-          color: canTail ? BG : DIM,
-          boxShadow: canTail
-            ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
-            : "none",
-        }}
-      >
-        <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
-        {canTail
-          ? `TAIL WHALE (${copyablePositions.length})`
-          : "TAIL UNAVAILABLE"}
-      </button>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link
+          href="/live"
+          className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+          style={{
+            background: PANEL_2,
+            color: FG,
+            border: `1px solid ${FAINT}`,
+          }}
+        >
+          <ArrowRight size={12} strokeWidth={3} />
+          View positions
+        </Link>
+        <button
+          type="button"
+          disabled={!canTail}
+          onClick={() => {
+            const source = buildWhaleTailSource(p);
+            if (!source) return;
+            onTail(source);
+          }}
+          className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
+          style={{
+            background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
+            color: canTail ? BG : DIM,
+            boxShadow: canTail
+              ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
+              : "none",
+          }}
+        >
+          <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
+          {canTail
+            ? `Tail whale (${exposureSummary.copyableCount})`
+            : "Unavailable"}
+        </button>
+      </div>
     </article>
   );
 }
@@ -319,75 +326,72 @@ function WhalePnlGraph({
   );
 }
 
-function OpenPositionsStack({
-  positions,
-}: {
-  positions: WhaleTraderSignal["payload"]["openPositions"];
-}) {
+function WhaleExposurePanel({ summary }: { summary: WhaleExposureSummary }) {
+  const largest = summary.largestPosition;
+  const largestSideColor = largest?.side === "long" ? GREEN : RED;
+  const largestPnl = largest?.unrealizedPnlPct ?? null;
+  const largestProfit = (largestPnl ?? 0) >= 0;
+
   return (
     <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
-      <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-        <span>Open positions</span>
-        <span>{positions.filter((position) => !position.stale).length}/{positions.length}</span>
+      <div className="mb-2 flex items-center justify-between text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+        <span>Current exposure</span>
+        <span>{summary.copyableCount}/{summary.totalCount} copy ready</span>
       </div>
-      <div className="space-y-2">
-        {positions.map((position) => (
-          <WhalePositionRow key={position.positionId} position={position} />
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function WhalePositionRow({
-  position,
-}: {
-  position: WhaleTraderSignal["payload"]["openPositions"][number];
-}) {
-  const sideColor = position.side === "long" ? GREEN : RED;
-  const pnl = position.unrealizedPnlPct;
-  const profit = (pnl ?? 0) >= 0;
+      {summary.totalCount === 0 ? (
+        <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+          <Layers size={14} strokeWidth={2.8} />
+          Watching for next open position
+        </div>
+      ) : (
+        <div>
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[26px] font-black tabular-nums leading-none">
+                {summary.totalCount} OPEN
+              </div>
+              <div className="mt-1 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                {summary.stanceLabel}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                Exposure
+              </div>
+              <div className="mt-1 text-[18px] font-black tabular-nums">
+                {fmtUsd(summary.exposureUsd)}
+              </div>
+            </div>
+          </div>
 
-  return (
-    <div
-      className="rounded-xl px-2.5 py-2"
-      style={{
-        background: PANEL_2,
-        border: `1px solid ${position.stale ? `${RED}40` : FAINT}`,
-      }}
-    >
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-1.5">
-            <BigNum size={21}>{position.market}</BigNum>
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${sideColor}22`, color: sideColor }}>
-              {position.side}
-            </span>
-            <span className="text-[11px] font-black" style={{ color: DIM }}>{position.leverage}x</span>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            <span>Entry {fmtPrice(position.entryPrice)}</span>
-            <span>Mark {position.currentMark === null ? "N/A" : fmtPrice(position.currentMark)}</span>
-          </div>
+          {largest ? (
+            <div className="mt-3 flex items-center justify-between gap-3 border-t pt-2" style={{ borderColor: FAINT }}>
+              <div className="min-w-0">
+                <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                  Largest
+                </div>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-black uppercase tracking-widest">
+                  <span>{largest.market}</span>
+                  <span style={{ color: largestSideColor }}>{largest.side}</span>
+                  <span style={{ color: DIM }}>{largest.leverage}x</span>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-[11px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
+                  {fmtUsd(largest.notionalUsd)}
+                </div>
+                <div
+                  className="mt-1 text-[14px] font-black uppercase tracking-widest tabular-nums"
+                  style={{ color: largestPnl === null ? DIM : largestProfit ? GREEN : RED }}
+                >
+                  {fmtPct(largestPnl)}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-[11px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
-            {fmtUsd(position.notionalUsd)}
-          </div>
-          <div
-            className="mt-1 text-[14px] font-black uppercase tracking-widest tabular-nums"
-            style={{ color: pnl === null ? DIM : profit ? GREEN : RED }}
-          >
-            {fmtPct(pnl)}
-          </div>
-          <div
-            className="mt-1 text-[9px] font-black uppercase tracking-widest"
-            style={{ color: position.stale ? RED : GREEN }}
-          >
-            {position.stale ? "STALE" : "COPY READY"}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -504,10 +508,4 @@ function fmtSignedUsd(v: number): string {
 function fmtPct(v: number | null): string {
   if (v === null) return "P/L N/A";
   return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-
-function fmtPrice(v: number): string {
-  if (v >= 1000) return `$${v.toFixed(0)}`;
-  if (v >= 1) return `$${v.toFixed(2)}`;
-  return `$${v.toPrecision(4)}`;
 }
