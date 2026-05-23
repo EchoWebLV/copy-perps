@@ -7,6 +7,7 @@ import {
   uuid,
   doublePrecision,
   index,
+  uniqueIndex,
   boolean,
 } from "drizzle-orm/pg-core";
 
@@ -209,3 +210,76 @@ export const thoughtSettings = pgTable("thought_settings", {
     .notNull()
     .defaultNow(),
 });
+
+export const whales = pgTable(
+  "whales",
+  {
+    id: text("id").primaryKey(),
+    source: text("source").notNull(),
+    sourceAccount: text("source_account").notNull(),
+    displayName: text("display_name").notNull(),
+    avatarUrl: text("avatar_url"),
+    status: text("status").notNull().default("active"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    sourceAccountIdx: uniqueIndex("whales_source_account_idx").on(
+      t.source,
+      t.sourceAccount,
+    ),
+    statusIdx: index("whales_status_idx").on(t.status),
+  }),
+);
+
+export const whalePositions = pgTable(
+  "whale_positions",
+  {
+    id: text("id").primaryKey(),
+    whaleId: text("whale_id")
+      .notNull()
+      .references(() => whales.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    sourceAccount: text("source_account").notNull(),
+    market: text("market").notNull(),
+    side: text("side").notNull(),
+    leverage: integer("leverage").notNull(),
+    amountBase: doublePrecision("amount_base").notNull(),
+    notionalUsd: doublePrecision("notional_usd").notNull(),
+    entryPrice: doublePrecision("entry_price").notNull(),
+    currentMark: doublePrecision("current_mark"),
+    unrealizedPnlPct: doublePrecision("unrealized_pnl_pct"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    status: text("status").notNull().default("open"),
+    raw: jsonb("raw").$type<Record<string, unknown>>().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  },
+  (t) => ({
+    whaleOpenIdx: index("whale_positions_whale_open_idx").on(t.whaleId, t.status),
+    sourceOpenIdx: index("whale_positions_source_open_idx").on(
+      t.source,
+      t.sourceAccount,
+      t.status,
+    ),
+    openFreshIdx: index("whale_positions_open_fresh_idx").on(t.status, t.lastSeenAt),
+  }),
+);
+
+export const whalePositionAnalysis = pgTable(
+  "whale_position_analysis",
+  {
+    positionId: text("position_id")
+      .primaryKey()
+      .references(() => whalePositions.id, { onDelete: "cascade" }),
+    summary: text("summary").notNull(),
+    thesis: text("thesis").notNull(),
+    risk: text("risk").notNull(),
+    entryGapWarning: text("entry_gap_warning"),
+    confidence: doublePrecision("confidence").notNull(),
+    model: text("model").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);

@@ -9,6 +9,8 @@ export type SignalType =
   | "meme"
   | "prediction"
   | "whale"
+  | "whale_trader"
+  | "whale_position"
   | "multiprediction"
   | "pacifica_trader"
   | "bot";
@@ -130,6 +132,60 @@ export interface PacificaTraderSignal extends BaseSignal {
   stats: PacificaTraderStats;
 }
 
+export interface WhaleTraderSignal extends BaseSignal {
+  type: "whale_trader";
+  payload: {
+    whaleId: string;
+    source: "pacifica" | "hyperliquid";
+    sourceAccount: string;
+    displayName: string;
+    avatarUrl: string | null;
+    tags: string[];
+    openPositionsCount: number;
+    bestPosition: WhalePositionSignal["payload"] | null;
+    stats: {
+      pnl1dUsdc: number;
+      pnl7dUsdc: number;
+      pnl30dUsdc: number;
+      winRatePct1d: number | null;
+      totalCloses1d: number;
+      volume1dUsdc: number;
+    };
+    lastSeenAt: string | null;
+    stale: boolean;
+  };
+}
+
+export interface WhalePositionSignal extends BaseSignal {
+  type: "whale_position";
+  payload: {
+    positionId: string;
+    whaleId: string;
+    source: "pacifica" | "hyperliquid";
+    sourceAccount: string;
+    displayName: string;
+    avatarUrl: string | null;
+    market: string;
+    side: "long" | "short";
+    leverage: number;
+    amountBase: number;
+    notionalUsd: number;
+    entryPrice: number;
+    currentMark: number | null;
+    unrealizedPnlPct: number | null;
+    openedAtMs: number;
+    lastSeenAtMs: number;
+    stale: boolean;
+    analysis: {
+      summary: string;
+      thesis: string;
+      risk: string;
+      entryGapWarning: string | null;
+      confidence: number;
+    } | null;
+  };
+}
+
 export interface BotSignal extends BaseSignal {
   type: "bot";
   payload: {
@@ -187,6 +243,8 @@ export type Signal =
   | MemeSignal
   | PredictionSignal
   | WhaleSignal
+  | WhaleTraderSignal
+  | WhalePositionSignal
   | MultiPredictionSignal
   | PacificaTraderSignal
   | BotSignal;

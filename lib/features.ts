@@ -13,3 +13,7 @@ export function copyTradeEnabled(): boolean {
 export function casinoModeEnabled(): boolean {
   return process.env.FEATURE_CASINO_MODE === "true";
 }
+
+export function whaleSocialEnabled(): boolean {
+  return process.env.FEATURE_WHALE_SOCIAL === "true";
+}
