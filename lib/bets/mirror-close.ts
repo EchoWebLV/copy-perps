@@ -5,7 +5,10 @@ import { Keypair } from "@solana/web3.js";
 import { getPositions } from "@/lib/pacifica/client";
 import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
+import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
+import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import type { AgentWalletRecord } from "@/lib/wallets/agent";
+import type { WhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { createDecipheriv } from "crypto";
 
 interface BetMeta {
@@ -48,14 +51,34 @@ type OpenBetRow = {
   agentSecretEnc: string;
 };
 
+type AutoCloseReason = Extract<
+  WhaleCopyMeta["closeReason"],
+  "source_closed" | "already_flat"
+>;
+
 /** Merges a leaderClosedAt stamp into the bet's existing meta JSON, so the
- *  close is attributable to the leader/bot exiting (not a manual close). */
-function withLeaderClosedAt(meta: unknown): Record<string, unknown> {
-  return {
+ *  close is attributable to the leader/bot/source exiting (not a manual close). */
+function withLeaderClosedAt(
+  meta: unknown,
+  closeReason?: AutoCloseReason,
+): Record<string, unknown> {
+  const nextMeta = {
     ...((meta as Record<string, unknown> | null) ?? {}),
     leaderClosedAt: new Date().toISOString(),
   };
+  if (closeReason !== undefined) {
+    return {
+      ...nextMeta,
+      closeReason,
+    };
+  }
+  return nextMeta;
 }
+
+type CloseFollowerBetOptions = {
+  closeReason?: AutoCloseReason;
+  alreadyFlatCloseReason?: AutoCloseReason;
+};
 
 /** Shared close logic: look up the user's live position on Pacifica and submit
  *  a reduce-only close order. Updates the bet row on success — recording
@@ -64,6 +87,7 @@ async function closeFollowerBet(
   row: OpenBetRow,
   meta: BetMeta,
   result: MirrorResult,
+  options: CloseFollowerBetOptions = {},
 ): Promise<void> {
   result.closesAttempted++;
   try {
@@ -91,7 +115,10 @@ async function closeFollowerBet(
         .set({
           status: "closed",
           closedAt: new Date(),
-          meta: withLeaderClosedAt(row.meta),
+          meta: withLeaderClosedAt(
+            row.meta,
+            options.alreadyFlatCloseReason ?? options.closeReason,
+          ),
         })
         .where(
           and(eq(bets.id, row.betId), eq(bets.status, "confirmed")),
@@ -117,7 +144,7 @@ async function closeFollowerBet(
         status: "closed",
         closedAt: new Date(),
         closeTxHash: `pacifica:${fill.order_id}`,
-        meta: withLeaderClosedAt(row.meta),
+        meta: withLeaderClosedAt(row.meta, options.closeReason),
         ...(realized != null
           ? { proceedsUsdc: row.amountUsdc + realized }
           : {}),
@@ -228,6 +255,45 @@ async function closeBotFollowers(
   }
 }
 
+/** Whale-source close path: if the copied source position has disappeared and
+ *  the user opted into source-close listening, close the follower position. */
+async function closeWhaleFollowers(
+  openBets: OpenBetRow[],
+  result: MirrorResult,
+): Promise<void> {
+  for (const row of openBets) {
+    const meta = parseWhaleCopyMeta(row.meta);
+    if (meta === null) continue;
+    if (meta.source !== "pacifica") continue;
+    if (meta.autoCloseOnSourceClose === false) continue;
+
+    let sourcePositions;
+    try {
+      result.scannedLeaders++;
+      sourcePositions = await getPositions(meta.sourceAccount);
+    } catch (err) {
+      result.errors.push({
+        betId: row.betId,
+        message: `source fetch: ${err}`,
+      });
+      continue;
+    }
+
+    const sourceStillOpen = sourcePositions.some(
+      (p) =>
+        p.symbol === meta.leaderMarket &&
+        ((meta.leaderSide === "long" && p.side === "bid") ||
+          (meta.leaderSide === "short" && p.side === "ask")),
+    );
+    if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
+
+    await closeFollowerBet(row, meta, result, {
+      closeReason: "source_closed",
+      alreadyFlatCloseReason: "already_flat",
+    });
+  }
+}
+
 export async function runMirrorCloseSweep(): Promise<MirrorResult> {
   const result: MirrorResult = {
     scannedLeaders: 0,
@@ -263,6 +329,9 @@ export async function runMirrorCloseSweep(): Promise<MirrorResult> {
 
   // New bot-keyed close path.
   await closeBotFollowers(openBets, result);
+
+  // Whale-source close path.
+  await closeWhaleFollowers(openBets, result);
 
   return result;
 }
