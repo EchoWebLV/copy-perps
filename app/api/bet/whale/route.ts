@@ -18,7 +18,7 @@ import { bets, whalePositions, whales } from "@/lib/db/schema";
 import { whaleSocialEnabled } from "@/lib/features";
 import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { clampLeverageForNotional, getMarketBySymbol } from "@/lib/pacifica/markets";
-import { openCopyOrder } from "@/lib/pacifica/orders";
+import { closeCopyOrder, openCopyOrder } from "@/lib/pacifica/orders";
 import { lotSizedAmountFromNotional } from "@/lib/pacifica/sizing";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
@@ -312,8 +312,26 @@ export async function POST(request: Request) {
       throw new Error("confirmed bet update returned no row");
     }
   } catch (err) {
-    await releaseReservationBestEffort(user.id, position.market);
     console.error("[bet/whale] ledger update failed:", err);
+    try {
+      await closeCopyOrder({
+        agent,
+        symbol: position.market,
+        positionSide: position.side,
+        amountBase,
+      });
+    } catch (closeErr) {
+      console.error("[bet/whale] compensation close failed:", closeErr);
+      return NextResponse.json(
+        {
+          error:
+            "Whale copy opened but could not be recorded or auto-closed. Manual review required.",
+        },
+        { status: 502 },
+      );
+    }
+    await markBetFailedBestEffort(pendingBet.id);
+    await releaseReservationBestEffort(user.id, position.market);
     return NextResponse.json(
       { error: "Could not confirm whale copy bet" },
       { status: 502 },

@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
     clampLeverageForNotional: vi.fn(),
     getMarketBySymbol: vi.fn(),
     openCopyOrder: vi.fn(),
+    closeCopyOrder: vi.fn(),
     planOnboarding: vi.fn(),
     planPacificaDepositTopUp: vi.fn(),
     hasOpenTailOnMarket: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("@/lib/pacifica/markets", () => ({
 }));
 vi.mock("@/lib/pacifica/orders", () => ({
   openCopyOrder: mocks.openCopyOrder,
+  closeCopyOrder: mocks.closeCopyOrder,
 }));
 vi.mock("@/lib/bets/onboard", () => ({
   planOnboarding: mocks.planOnboarding,
@@ -176,6 +178,12 @@ describe("POST /api/bet/whale", () => {
       avg_fill_price: "2010.50",
       filled_amount: "0.025",
       side: "bid",
+    });
+    mocks.closeCopyOrder.mockResolvedValue({
+      order_id: "close-order-1",
+      avg_fill_price: "2009.50",
+      filled_amount: "0.025",
+      side: "ask",
     });
     mocks.insertValues.mockReturnValue({
       returning: mocks.insertReturning,
@@ -427,7 +435,46 @@ describe("POST /api/bet/whale", () => {
     }
   });
 
-  it("returns confirm error when confirmed ledger update returns no row", async () => {
+  it("compensates when confirmed ledger update throws after open", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.updateReturning.mockRejectedValueOnce(new Error("update failed"));
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "Could not confirm whale copy bet",
+      });
+      expect(mocks.openCopyOrder).toHaveBeenCalled();
+      expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          symbol: "ETH",
+          positionSide: "long",
+          amountBase: "0.025",
+        }),
+      );
+      expect(mocks.updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+        }),
+      );
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("compensates when confirmed ledger update returns no row", async () => {
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -448,7 +495,58 @@ describe("POST /api/bet/whale", () => {
         error: "Could not confirm whale copy bet",
       });
       expect(mocks.openCopyOrder).toHaveBeenCalled();
+      expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          symbol: "ETH",
+          positionSide: "long",
+          amountBase: "0.025",
+        }),
+      );
+      expect(mocks.updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+        }),
+      );
       expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("keeps reservation when compensation close fails after confirm update failure", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.updateReturning.mockRejectedValueOnce(new Error("update failed"));
+    mocks.closeCopyOrder.mockRejectedValue(new Error("close failed"));
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error:
+          "Whale copy opened but could not be recorded or auto-closed. Manual review required.",
+      });
+      expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          symbol: "ETH",
+          positionSide: "long",
+          amountBase: "0.025",
+        }),
+      );
+      expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[bet/whale] compensation close failed:",
+        expect.any(Error),
+      );
     } finally {
       consoleError.mockRestore();
     }
