@@ -5,13 +5,14 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/data/candles", () => ({
   getCandles: vi.fn(),
 }));
-vi.mock("ai", () => ({
-  generateText: vi.fn(),
+vi.mock("@/lib/xai/responses", () => ({
+  XAI_RESPONSES_MODEL_ID: "grok-4.3",
+  generateXaiText: vi.fn(),
 }));
 
 import { getRegime } from "./regime";
 import { getCandles } from "@/lib/data/candles";
-import { generateText } from "ai";
+import { generateXaiText } from "@/lib/xai/responses";
 
 function flatCandles(price: number, n: number) {
   return Array.from({ length: n }, (_, i) => ({
@@ -45,14 +46,14 @@ describe("getRegime", () => {
 
   it("returns null when xAI errors", async () => {
     vi.mocked(getCandles).mockResolvedValue(flatCandles(100, 30));
-    vi.mocked(generateText).mockRejectedValue(new Error("xAI down"));
+    vi.mocked(generateXaiText).mockRejectedValue(new Error("xAI down"));
     const result = await getRegime("SOL");
     expect(result).toBeNull();
   });
 
   it("returns null when xAI response is not valid JSON", async () => {
     vi.mocked(getCandles).mockResolvedValue(flatCandles(100, 30));
-    vi.mocked(generateText).mockResolvedValue({ text: "not json at all" } as any);
+    vi.mocked(generateXaiText).mockResolvedValue("not json at all");
     const result = await getRegime("BTC");
     expect(result).toBeNull();
   });
@@ -62,14 +63,14 @@ describe("getRegime", () => {
     const result = await getRegime("HYPE");
     expect(result).toBeNull();
     // Should not have called xAI when candles are insufficient.
-    expect(generateText).not.toHaveBeenCalled();
+    expect(generateXaiText).not.toHaveBeenCalled();
   });
 
   it("parses a valid xAI response into a RegimeSnapshot", async () => {
     vi.mocked(getCandles).mockResolvedValue(trendingCandles(100, 0.5, 30));
-    vi.mocked(generateText).mockResolvedValue({
-      text: '{"regime": "trending-up", "confidence": 0.85}',
-    } as any);
+    vi.mocked(generateXaiText).mockResolvedValue(
+      '{"regime": "trending-up", "confidence": 0.85}',
+    );
     const result = await getRegime("ETH");
     expect(result).not.toBeNull();
     expect(result!.regime).toBe("trending-up");
@@ -79,18 +80,18 @@ describe("getRegime", () => {
 
   it("rejects unknown regime labels from xAI", async () => {
     vi.mocked(getCandles).mockResolvedValue(flatCandles(100, 30));
-    vi.mocked(generateText).mockResolvedValue({
-      text: '{"regime": "made-up-label", "confidence": 0.5}',
-    } as any);
+    vi.mocked(generateXaiText).mockResolvedValue(
+      '{"regime": "made-up-label", "confidence": 0.5}',
+    );
     const result = await getRegime("XRP");
     expect(result).toBeNull();
   });
 
   it("clamps confidence to [0, 1]", async () => {
     vi.mocked(getCandles).mockResolvedValue(flatCandles(100, 30));
-    vi.mocked(generateText).mockResolvedValue({
-      text: '{"regime": "chop", "confidence": 1.5}',
-    } as any);
+    vi.mocked(generateXaiText).mockResolvedValue(
+      '{"regime": "chop", "confidence": 1.5}',
+    );
     const result = await getRegime("DOGE");
     expect(result).not.toBeNull();
     expect(result!.confidence).toBe(1);
@@ -98,11 +99,11 @@ describe("getRegime", () => {
 
   it("caches per asset (second call within TTL doesn't hit xAI again)", async () => {
     vi.mocked(getCandles).mockResolvedValue(flatCandles(100, 30));
-    vi.mocked(generateText).mockResolvedValue({
-      text: '{"regime": "chop", "confidence": 0.7}',
-    } as any);
+    vi.mocked(generateXaiText).mockResolvedValue(
+      '{"regime": "chop", "confidence": 0.7}',
+    );
     await getRegime("AVAX");
     await getRegime("AVAX");
-    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(generateXaiText).toHaveBeenCalledTimes(1);
   });
 });

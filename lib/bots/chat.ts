@@ -8,11 +8,9 @@
 // public broadcast — visible on cards and the Chatter feed. This module
 // is the private back-and-forth that lives in the bot_chats table.
 
-import { generateText } from "ai";
-import { xai } from "@ai-sdk/xai";
 import { PERSONAS } from "./narrator";
+import { generateXaiTextFromMessages } from "@/lib/xai/responses";
 
-const MODEL_ID = "grok-4.3";
 const MAX_OUTPUT_TOKENS = 250;
 const CHAT_TIMEOUT_MS = 8_000;
 
@@ -81,10 +79,9 @@ Chat rules:
     { role: "user" as const, content: args.userMessage },
   ];
 
-  const { text } = await withTimeout(
-    generateText({
-      model: xai(MODEL_ID),
-      system: systemPrompt,
+  const text = await withTimeout(
+    generateXaiTextFromMessages({
+      systemPrompt,
       messages,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
     }),

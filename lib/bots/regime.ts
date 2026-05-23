@@ -9,9 +9,11 @@
 // to trade with degraded info than to freeze the whole roster on a single
 // API outage.
 
-import { generateText } from "ai";
-import { xai } from "@ai-sdk/xai";
 import { getCandles } from "@/lib/data/candles";
+import {
+  generateXaiText,
+  XAI_RESPONSES_MODEL_ID,
+} from "@/lib/xai/responses";
 
 export type Regime =
   | "trending-up"
@@ -34,7 +36,7 @@ const VALID_REGIMES = new Set<Regime>([
   "chop",
 ]);
 
-const MODEL_ID = "grok-4.3";
+const MODEL_ID = XAI_RESPONSES_MODEL_ID;
 const TTL_MS = 60_000;
 const _cache = new Map<string, { snapshot: RegimeSnapshot; expiresAt: number }>();
 
@@ -117,13 +119,14 @@ export async function getRegime(asset: string): Promise<RegimeSnapshot | null> {
 
   let text: string;
   try {
-    const result = await generateText({
-      model: xai(MODEL_ID),
-      system: SYSTEM_PROMPT,
-      prompt: buildUserPrompt(asset, features),
-      maxOutputTokens: 60,
-    });
-    text = result.text.trim();
+    text = (
+      await generateXaiText({
+        model: MODEL_ID,
+        systemPrompt: SYSTEM_PROMPT,
+        prompt: buildUserPrompt(asset, features),
+        maxOutputTokens: 60,
+      })
+    ).trim();
   } catch (err) {
     console.error("[regime] xAI error:", err);
     return null;

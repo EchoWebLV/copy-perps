@@ -1,9 +1,11 @@
-import { xai } from "@ai-sdk/xai";
-import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  generateXaiJson,
+  XAI_RESPONSES_MODEL_ID,
+} from "@/lib/xai/responses";
 import type { WhaleSide, WhaleSource } from "./types";
 
-const MODEL_ID = "grok-4.3";
+const MODEL_ID = XAI_RESPONSES_MODEL_ID;
 
 export const WhaleAnalysisSchema = z.object({
   summary: z.string().min(1),
@@ -101,10 +103,10 @@ export async function generateWhaleAnalysis(
   });
 
   try {
-    const { object } = await generateObject({
-      model: xai(MODEL_ID),
+    const object = await generateXaiJson({
       schema: WhaleAnalysisSchema,
       prompt: buildWhaleAnalysisPrompt(args),
+      maxOutputTokens: 600,
     });
     const now = new Date();
     return {

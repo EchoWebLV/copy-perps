@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const generateObject = vi.fn();
-const xai = vi.fn((model: string) => ({ provider: "xai", model }));
+const generateXaiJson = vi.fn();
 
-vi.mock("ai", () => ({
-  generateObject,
-}));
-
-vi.mock("@ai-sdk/xai", () => ({
-  xai,
+vi.mock("@/lib/xai/responses", () => ({
+  XAI_RESPONSES_MODEL_ID: "grok-4.3",
+  generateXaiJson,
 }));
 
 const baseArgs = {
@@ -147,13 +143,11 @@ describe("whale analysis helpers", () => {
   });
 
   it("returns the AI object with metadata and entry gap warning", async () => {
-    generateObject.mockResolvedValue({
-      object: {
-        summary: "Whale One is long BTC.",
-        thesis: "Momentum context supports the position.",
-        risk: "Invalidation risk is elevated.",
-        confidence: 0.7,
-      },
+    generateXaiJson.mockResolvedValue({
+      summary: "Whale One is long BTC.",
+      thesis: "Momentum context supports the position.",
+      risk: "Invalidation risk is elevated.",
+      confidence: 0.7,
     });
     const { generateWhaleAnalysis, WhaleAnalysisSchema } = await import(
       "./analysis"
@@ -172,16 +166,15 @@ describe("whale analysis helpers", () => {
     });
     expect(result.createdAt).toBeInstanceOf(Date);
     expect(result.updatedAt).toBeInstanceOf(Date);
-    expect(xai).toHaveBeenCalledWith("grok-4.3");
-    expect(generateObject).toHaveBeenCalledWith({
-      model: { provider: "xai", model: "grok-4.3" },
+    expect(generateXaiJson).toHaveBeenCalledWith({
       schema: WhaleAnalysisSchema,
       prompt: expect.stringContaining("Whale One"),
+      maxOutputTokens: 600,
     });
   });
 
   it("returns fallback analysis with metadata when AI generation fails", async () => {
-    generateObject.mockRejectedValue(new Error("xAI down"));
+    generateXaiJson.mockRejectedValue(new Error("xAI down"));
     const { generateWhaleAnalysis } = await import("./analysis");
 
     const result = await generateWhaleAnalysis(baseArgs);

@@ -8,12 +8,10 @@
 
 import { familyOf } from "../wiring";
 import { PERSONAS } from "../narrator";
-import { generateText } from "ai";
-import { xai } from "@ai-sdk/xai";
+import { generateXaiText } from "@/lib/xai/responses";
 import type { ExternalSignals } from "../types";
 import type { ThoughtCandidate } from "./types";
 
-const MODEL_ID = "grok-4.3";
 const NEAR_LOW = 0.7;
 const NEAR_HIGH = 0.99;
 const LIQUIDATION_FRESH_MS = 60_000;
@@ -128,10 +126,9 @@ acting yet. Stay in character. No markdown. No quotes around your reply.
 Do not start with "I'm watching".`;
 
   try {
-    const { text } = await Promise.race([
-      generateText({
-        model: xai(MODEL_ID),
-        system: persona.systemPrompt,
+    const text = await Promise.race([
+      generateXaiText({
+        systemPrompt: persona.systemPrompt,
         prompt,
         maxOutputTokens: 80,
       }),

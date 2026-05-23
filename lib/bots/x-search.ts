@@ -10,32 +10,16 @@
 // quoted tweet + citation URL. Cheaper than maintaining our own
 // keyword-search pipeline and matches Grok's native flow.
 //
-// Reads XAI_API_KEY from process.env, falling back to .env.local on
-// disk for the same reason llm-trader.ts does (the dev server's env
-// is frozen at boot).
+// Reads XAI_API_KEY from process.env, falling back to .env.local through
+// the shared Responses helper. That fallback keeps local dev working when
+// the Next process was booted before .env.local changed.
 
-import { readFileSync } from "node:fs";
-
-const XAI_RESPONSES_URL = "https://api.x.ai/v1/responses";
-
-function readKeyFromEnvLocal(name: string): string | undefined {
-  try {
-    const txt = readFileSync(".env.local", "utf-8");
-    const m = txt.match(new RegExp("^" + name + "=(.+)$", "m"));
-    const v = m?.[1].trim();
-    if (!v) return undefined;
-    return v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
-  } catch {
-    return undefined;
-  }
-}
-
-function getXaiKey(): string | undefined {
-  if (process.env.XAI_API_KEY && process.env.XAI_API_KEY.length > 0) {
-    return process.env.XAI_API_KEY;
-  }
-  return readKeyFromEnvLocal("XAI_API_KEY");
-}
+import {
+  getXaiApiKey,
+  XAI_NON_REASONING,
+  XAI_RESPONSES_MODEL_ID,
+  XAI_RESPONSES_URL,
+} from "@/lib/xai/responses";
 
 export interface XSearchCitation {
   url: string;
@@ -62,6 +46,7 @@ interface ResponsesOutputItem {
 
 interface ResponsesPayload {
   model: string;
+  reasoning: typeof XAI_NON_REASONING;
   input: Array<{ role: "user" | "system"; content: string }>;
   tools: Array<{ type: string }>;
   max_output_tokens?: number;
@@ -79,14 +64,15 @@ export async function callXSearch(args: {
   maxOutputTokens?: number;
   timeoutMs?: number;
 }): Promise<XSearchResult | null> {
-  const key = getXaiKey();
+  const key = getXaiApiKey();
   if (!key) {
     console.warn("[x-search] XAI_API_KEY missing");
     return null;
   }
 
   const body: ResponsesPayload = {
-    model: args.model ?? "grok-4.3",
+    model: args.model ?? XAI_RESPONSES_MODEL_ID,
+    reasoning: XAI_NON_REASONING,
     input: [],
     tools: [{ type: "x_search" }],
     max_output_tokens: args.maxOutputTokens ?? 800,

@@ -1,6 +1,4 @@
 // lib/bots/narrator.ts
-import { generateText } from "ai";
-import { xai } from "@ai-sdk/xai";
 import { LIQUIDATION_LIZARD_PERSONA } from "./personas/liquidation-lizard";
 import { FUNDING_PHOEBE_PERSONA } from "./personas/funding-phoebe";
 import { MEAN_REVERT_MIKE_PERSONA } from "./personas/mean-revert-mike";
@@ -26,6 +24,7 @@ import { LEVIATHAN_PERSONA } from "./personas/leviathan";
 import { MEGALODON_PERSONA } from "./personas/megalodon";
 import { BLITZ_PERSONA } from "./personas/blitz";
 import { TILT_PERSONA } from "./personas/tilt";
+import { generateXaiText } from "@/lib/xai/responses";
 
 export const PERSONAS = {
   "liquidation-lizard": LIQUIDATION_LIZARD_PERSONA,
@@ -74,9 +73,6 @@ export interface NarrateCloseArgs {
   exitMark: number;
   paperPnlUsd: number;
 }
-
-// Matches the model already in use in app/api/analyze/route.ts.
-const MODEL_ID = "grok-4.3";
 
 // Render the strategy's triggerMeta into a single human-readable line.
 // Goal: plain English a non-trader can parse. Numbers stay (the persona
@@ -213,9 +209,8 @@ export async function narrateOpen(args: NarrateOpenArgs): Promise<string> {
     args.side,
     args.trigger,
   );
-  const { text } = await generateText({
-    model: xai(MODEL_ID),
-    system: persona.systemPrompt,
+  const text = await generateXaiText({
+    systemPrompt: persona.systemPrompt,
     prompt: [
       `Event: opened a paper position.`,
       `Asset: ${args.asset}`,
@@ -241,9 +236,8 @@ export async function narrateClose(args: NarrateCloseArgs): Promise<string> {
       ? ((args.exitMark - args.entryMark) / args.entryMark) * 100
       : 0;
   const winning = args.paperPnlUsd >= 0;
-  const { text } = await generateText({
-    model: xai(MODEL_ID),
-    system: persona.systemPrompt,
+  const text = await generateXaiText({
+    systemPrompt: persona.systemPrompt,
     prompt: [
       `Event: closed a paper position.`,
       `Asset: ${args.asset}`,
