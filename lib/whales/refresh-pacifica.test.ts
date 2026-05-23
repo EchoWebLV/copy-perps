@@ -8,6 +8,7 @@ const getMarksSnapshot = vi.fn();
 const upsertWhale = vi.fn();
 const upsertWhalePosition = vi.fn();
 const markMissingPacificaPositionsClosed = vi.fn();
+const writeWhaleLiveSnapshot = vi.fn();
 
 vi.mock("@/lib/pacifica/client", () => ({
   getLeaderboard,
@@ -23,6 +24,10 @@ vi.mock("./repository", () => ({
   upsertWhale,
   upsertWhalePosition,
   markMissingPacificaPositionsClosed,
+}));
+
+vi.mock("./live-cache", () => ({
+  writeWhaleLiveSnapshot,
 }));
 
 const validPosition: PacificaPosition = {
@@ -62,6 +67,7 @@ describe("refreshPacificaWhales", () => {
     upsertWhale.mockResolvedValue(undefined);
     upsertWhalePosition.mockResolvedValue(undefined);
     markMissingPacificaPositionsClosed.mockResolvedValue(undefined);
+    writeWhaleLiveSnapshot.mockResolvedValue(undefined);
   });
 
   it("skips invalid source positions and persists valid positions", async () => {
@@ -94,6 +100,27 @@ describe("refreshPacificaWhales", () => {
       expect.objectContaining({
         sourceAccount: "ABC123",
         openPositionIds: ["pacifica:ABC123:BTC:long:1779543000000"],
+      }),
+    );
+    expect(writeWhaleLiveSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "pacifica",
+        accounts: ["ABC123"],
+        whales: [
+          expect.objectContaining({
+            id: "pacifica:ABC123",
+            sourceAccount: "ABC123",
+            displayName: "captaindegen",
+            status: "active",
+          }),
+        ],
+        positions: [
+          expect.objectContaining({
+            id: "pacifica:ABC123:BTC:long:1779543000000",
+            sourceAccount: "ABC123",
+            status: "open",
+          }),
+        ],
       }),
     );
     expect(warn).toHaveBeenCalledWith(

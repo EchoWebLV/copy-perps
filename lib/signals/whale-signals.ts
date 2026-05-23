@@ -1,11 +1,7 @@
 import { db } from "@/lib/db";
-import {
-  whales,
-  whalePositionAnalysis,
-  whalePositions,
-} from "@/lib/db/schema";
+import { whalePositionAnalysis } from "@/lib/db/schema";
 import { isSourceFresh } from "@/lib/whales/identity";
-import { and, desc, eq } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import { getLeaderboard, getPositionsHistory } from "@/lib/pacifica/client";
 import type { PacificaLeaderboardEntry } from "@/lib/pacifica/types";
@@ -13,6 +9,10 @@ import {
   buildWhalePnlCurve,
   type WhalePnlPoint,
 } from "@/lib/whales/pnl-curve";
+import {
+  getWhaleLiveSnapshot,
+  type WhaleLiveSnapshot,
+} from "@/lib/whales/live-cache";
 
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
@@ -102,84 +102,104 @@ function statsForLeaderboardEntry(entry: PacificaLeaderboardEntry | undefined) {
   };
 }
 
+async function getAnalysisByPositionId(
+  positionIds: string[],
+): Promise<Map<string, typeof whalePositionAnalysis.$inferSelect>> {
+  if (positionIds.length === 0) return new Map();
+
+  const rows = await db
+    .select()
+    .from(whalePositionAnalysis)
+    .where(inArray(whalePositionAnalysis.positionId, positionIds))
+    .limit(positionIds.length);
+
+  return new Map(rows.map((row) => [row.positionId, row]));
+}
+
+async function buildWhalePositionSignalsFromSnapshot(
+  snapshot: WhaleLiveSnapshot,
+  limit: number,
+): Promise<WhalePositionSignal[]> {
+  const whaleById = new Map(snapshot.whales.map((whale) => [whale.id, whale]));
+  const livePositions = [...snapshot.positions]
+    .filter((position) => position.status === "open")
+    .filter((position) => isSourceFresh(position.lastSeenAt.getTime()))
+    .filter((position) => whaleById.get(position.whaleId)?.status === "active")
+    .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
+    .slice(0, limit);
+  const analysisById = await getAnalysisByPositionId(
+    livePositions.map((position) => position.id),
+  );
+  const stamp = new Date().toISOString();
+
+  return livePositions.flatMap((position) => {
+    const whale = whaleById.get(position.whaleId);
+    if (!whale || whale.status !== "active") return [];
+
+    const analysis = analysisById.get(position.id) ?? null;
+    const openedAtMs = position.openedAt.getTime();
+    const lastSeenAtMs = position.lastSeenAt.getTime();
+    const stale = !isSourceFresh(lastSeenAtMs);
+
+    return {
+      id: `whale_position:${position.id}`,
+      type: "whale_position",
+      heatScore: heatForPosition({
+        notionalUsd: position.notionalUsd,
+        unrealizedPnlPct: position.unrealizedPnlPct,
+        lastSeenAtMs,
+      }),
+      createdAt: stamp,
+      chips: [],
+      payload: {
+        positionId: position.id,
+        whaleId: whale.id,
+        source: whale.source,
+        sourceAccount: whale.sourceAccount,
+        displayName: whale.displayName,
+        avatarUrl: whale.avatarUrl,
+        market: position.market,
+        side: position.side,
+        leverage: position.leverage,
+        amountBase: position.amountBase,
+        notionalUsd: position.notionalUsd,
+        entryPrice: position.entryPrice,
+        currentMark: position.currentMark,
+        unrealizedPnlPct: position.unrealizedPnlPct,
+        openedAtMs,
+        lastSeenAtMs,
+        stale,
+        analysis: analysis
+          ? {
+              summary: analysis.summary,
+              thesis: analysis.thesis,
+              risk: analysis.risk,
+              entryGapWarning: analysis.entryGapWarning,
+              confidence: analysis.confidence,
+            }
+          : null,
+      },
+    } satisfies WhalePositionSignal;
+  });
+}
+
 export async function buildWhalePositionSignals(
   limit = 100,
 ): Promise<WhalePositionSignal[]> {
-  const rows = await db
-    .select({
-      position: whalePositions,
-      whale: whales,
-      analysis: whalePositionAnalysis,
-    })
-    .from(whalePositions)
-    .innerJoin(whales, eq(whalePositions.whaleId, whales.id))
-    .leftJoin(
-      whalePositionAnalysis,
-      eq(whalePositionAnalysis.positionId, whalePositions.id),
-    )
-    .where(and(eq(whalePositions.status, "open"), eq(whales.status, "active")))
-    .orderBy(desc(whalePositions.lastSeenAt))
-    .limit(limit);
-
-  const stamp = new Date().toISOString();
-
-  return rows
-    .filter(({ whale }) => whale.status === "active")
-    .map(({ position, whale, analysis }) => {
-      const openedAtMs = position.openedAt.getTime();
-      const lastSeenAtMs = position.lastSeenAt.getTime();
-      const stale = !isSourceFresh(lastSeenAtMs);
-
-      return {
-        id: `whale_position:${position.id}`,
-        type: "whale_position",
-        heatScore: heatForPosition({
-          notionalUsd: position.notionalUsd,
-          unrealizedPnlPct: position.unrealizedPnlPct,
-          lastSeenAtMs,
-        }),
-        createdAt: stamp,
-        chips: [],
-        payload: {
-          positionId: position.id,
-          whaleId: whale.id,
-          source: whale.source as "pacifica" | "hyperliquid",
-          sourceAccount: whale.sourceAccount,
-          displayName: whale.displayName,
-          avatarUrl: whale.avatarUrl,
-          market: position.market,
-          side: position.side as "long" | "short",
-          leverage: position.leverage,
-          amountBase: position.amountBase,
-          notionalUsd: position.notionalUsd,
-          entryPrice: position.entryPrice,
-          currentMark: position.currentMark,
-          unrealizedPnlPct: position.unrealizedPnlPct,
-          openedAtMs,
-          lastSeenAtMs,
-          stale,
-          analysis: analysis
-            ? {
-                summary: analysis.summary,
-                thesis: analysis.thesis,
-                risk: analysis.risk,
-                entryGapWarning: analysis.entryGapWarning,
-                confidence: analysis.confidence,
-              }
-            : null,
-        },
-      } satisfies WhalePositionSignal;
-    });
+  const snapshot = await getWhaleLiveSnapshot();
+  if (snapshot === null) return [];
+  return buildWhalePositionSignalsFromSnapshot(snapshot, limit);
 }
 
 export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
-  const [positions, activeWhales, leaderboard] = await Promise.all([
-    buildWhalePositionSignals(1000),
-    db
-      .select()
-      .from(whales)
-      .where(eq(whales.status, "active"))
-      .limit(500),
+  const snapshot = await getWhaleLiveSnapshot();
+  if (snapshot === null) return [];
+
+  const activeWhales = snapshot.whales.filter(
+    (whale) => whale.status === "active",
+  );
+  const [positions, leaderboard] = await Promise.all([
+    buildWhalePositionSignalsFromSnapshot(snapshot, 1000),
     getLeaderboard().catch(() => [] as PacificaLeaderboardEntry[]),
   ]);
   const leaderboardByAccount = new Map(

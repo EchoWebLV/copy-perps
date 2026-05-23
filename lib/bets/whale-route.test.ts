@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => {
     planOnboarding: vi.fn(),
     planPacificaDepositTopUp: vi.fn(),
     hasOpenTailOnMarket: vi.fn(),
+    getWhaleLivePositionById: vi.fn(),
     reserveTailOnMarket: vi.fn(),
     blockTailReservation: vi.fn(),
     releaseTailReservation: vi.fn(),
@@ -85,6 +86,9 @@ vi.mock("@/lib/bets/funding", () => ({
 }));
 vi.mock("@/lib/bets/copy-guard", () => ({
   hasOpenTailOnMarket: mocks.hasOpenTailOnMarket,
+}));
+vi.mock("@/lib/whales/live-cache", () => ({
+  getWhaleLivePositionById: mocks.getWhaleLivePositionById,
 }));
 vi.mock("@/lib/bets/tail-reservation", () => ({
   reserveTailOnMarket: mocks.reserveTailOnMarket,
@@ -164,7 +168,7 @@ describe("POST /api/bet/whale", () => {
       agentPubkey: "agent-1",
       agentSecretKey: new Uint8Array(32),
     });
-    mocks.selectLimit.mockResolvedValue([openPacificaSource()]);
+    mocks.getWhaleLivePositionById.mockResolvedValue(openPacificaSource());
     mocks.hasOpenTailOnMarket.mockResolvedValue(false);
     mocks.getMark.mockResolvedValue(2000);
     mocks.clampLeverageForNotional.mockResolvedValue(5);
@@ -291,7 +295,9 @@ describe("POST /api/bet/whale", () => {
   });
 
   it("sizes the copy from current mark when it is available", async () => {
-    mocks.selectLimit.mockResolvedValue([openPacificaSource({ currentMark: 2500 })]);
+    mocks.getWhaleLivePositionById.mockResolvedValue(
+      openPacificaSource({ currentMark: 2500 }),
+    );
 
     const response = await POST(
       whaleRequest({
@@ -320,9 +326,9 @@ describe("POST /api/bet/whale", () => {
   });
 
   it("sizes the copy from fetched mark when current mark is missing", async () => {
-    mocks.selectLimit.mockResolvedValue([
+    mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ currentMark: null }),
-    ]);
+    );
     mocks.getMark.mockResolvedValue(2500);
 
     const response = await POST(
@@ -344,9 +350,9 @@ describe("POST /api/bet/whale", () => {
   });
 
   it("rejects before reservation when no live price is available", async () => {
-    mocks.selectLimit.mockResolvedValue([
+    mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ currentMark: null }),
-    ]);
+    );
     mocks.getMark.mockResolvedValue(null);
 
     const response = await POST(
@@ -369,9 +375,9 @@ describe("POST /api/bet/whale", () => {
   it.each(["hidden", "retired"])(
     "rejects %s whales before trading",
     async (whaleStatus) => {
-      mocks.selectLimit.mockResolvedValue([
+      mocks.getWhaleLivePositionById.mockResolvedValue(
         openPacificaSource({ whaleStatus }),
-      ]);
+      );
 
       const response = await POST(
         whaleRequest({
@@ -634,11 +640,11 @@ describe("POST /api/bet/whale", () => {
   });
 
   it("rejects stale whale positions before trading", async () => {
-    mocks.selectLimit.mockResolvedValue([
+    mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({
         lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
       }),
-    ]);
+    );
 
     const response = await POST(
       whaleRequest({
@@ -657,9 +663,9 @@ describe("POST /api/bet/whale", () => {
   });
 
   it("rejects non-Pacifica whale sources", async () => {
-    mocks.selectLimit.mockResolvedValue([
+    mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ source: "hyperliquid" }),
-    ]);
+    );
 
     const response = await POST(
       whaleRequest({

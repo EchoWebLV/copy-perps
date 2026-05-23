@@ -1,0 +1,134 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WhaleLiveSnapshot } from "./live-cache";
+
+function whale(overrides: Partial<WhaleLiveSnapshot["whales"][number]> = {}) {
+  const now = new Date("2026-05-23T12:00:00.000Z");
+  return {
+    id: "pacifica:acct-1",
+    source: "pacifica" as const,
+    sourceAccount: "acct-1",
+    displayName: "Alpha Whale",
+    avatarUrl: null,
+    status: "active" as const,
+    tags: ["leader"],
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function position(
+  overrides: Partial<WhaleLiveSnapshot["positions"][number]> = {},
+) {
+  return {
+    id: "pacifica:acct-1:BTC:long:1779543000000",
+    whaleId: "pacifica:acct-1",
+    source: "pacifica" as const,
+    sourceAccount: "acct-1",
+    market: "BTC",
+    side: "long" as const,
+    leverage: 10,
+    amountBase: 0.5,
+    notionalUsd: 32500,
+    entryPrice: 65000,
+    currentMark: 66300,
+    unrealizedPnlPct: 2,
+    openedAt: new Date("2026-05-23T11:30:00.000Z"),
+    closedAt: null,
+    status: "open" as const,
+    raw: { source: "test" },
+    lastSeenAt: new Date("2026-05-23T11:59:45.000Z"),
+    ...overrides,
+  };
+}
+
+describe("whale live cache", () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-23T12:00:00.000Z"));
+    const { clearWhaleLiveSnapshotForTests } = await import("./live-cache");
+    await clearWhaleLiveSnapshotForTests();
+  });
+
+  it("stores and restores live snapshots with date fields", async () => {
+    const {
+      getWhaleLiveSnapshot,
+      writeWhaleLiveSnapshot,
+    } = await import("./live-cache");
+
+    await writeWhaleLiveSnapshot({
+      source: "pacifica",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["acct-1"],
+      whales: [whale()],
+      positions: [position()],
+    });
+
+    const snapshot = await getWhaleLiveSnapshot();
+
+    expect(snapshot).toEqual({
+      source: "pacifica",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["acct-1"],
+      whales: [whale()],
+      positions: [position()],
+    });
+    expect(snapshot?.positions[0]?.openedAt).toBeInstanceOf(Date);
+    expect(snapshot?.positions[0]?.lastSeenAt).toBeInstanceOf(Date);
+  });
+
+  it("distinguishes fetched-empty accounts from cache misses", async () => {
+    const {
+      getWhaleLivePositionsForAccount,
+      writeWhaleLiveSnapshot,
+    } = await import("./live-cache");
+
+    await writeWhaleLiveSnapshot({
+      source: "pacifica",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["acct-1", "empty-acct"],
+      whales: [
+        whale(),
+        whale({
+          id: "pacifica:empty-acct",
+          sourceAccount: "empty-acct",
+          displayName: "Flat Whale",
+        }),
+      ],
+      positions: [position()],
+    });
+
+    await expect(getWhaleLivePositionsForAccount("acct-1")).resolves.toEqual([
+      position(),
+    ]);
+    await expect(getWhaleLivePositionsForAccount("empty-acct")).resolves.toEqual(
+      [],
+    );
+    await expect(getWhaleLivePositionsForAccount("missing-acct")).resolves.toBe(
+      null,
+    );
+  });
+
+  it("finds a cached live position with its whale", async () => {
+    const {
+      getWhaleLivePositionById,
+      writeWhaleLiveSnapshot,
+    } = await import("./live-cache");
+
+    await writeWhaleLiveSnapshot({
+      source: "pacifica",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["acct-1"],
+      whales: [whale()],
+      positions: [position()],
+    });
+
+    await expect(
+      getWhaleLivePositionById("pacifica:acct-1:BTC:long:1779543000000"),
+    ).resolves.toEqual({
+      whale: whale(),
+      position: position(),
+    });
+    await expect(getWhaleLivePositionById("missing")).resolves.toBe(null);
+  });
+});

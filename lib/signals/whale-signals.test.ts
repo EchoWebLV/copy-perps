@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WhaleLiveSnapshot } from "@/lib/whales/live-cache";
 
 const mocks = vi.hoisted(() => {
   const query = {
     from: vi.fn(),
-    innerJoin: vi.fn(),
-    leftJoin: vi.fn(),
     where: vi.fn(),
-    orderBy: vi.fn(),
     limit: vi.fn(),
   };
   return {
@@ -16,8 +14,8 @@ const mocks = vi.hoisted(() => {
     },
     getLeaderboard: vi.fn(),
     getPositionsHistory: vi.fn(),
-    rows: [] as unknown[],
-    resultSets: [] as unknown[][],
+    getWhaleLiveSnapshot: vi.fn(),
+    analysisRows: [] as unknown[],
   };
 });
 
@@ -30,113 +28,130 @@ vi.mock("@/lib/pacifica/client", () => ({
   getPositionsHistory: mocks.getPositionsHistory,
 }));
 
+vi.mock("@/lib/whales/live-cache", () => ({
+  getWhaleLiveSnapshot: mocks.getWhaleLiveSnapshot,
+}));
+
 vi.mock("@/lib/db/schema", () => ({
-  whales: {
-    id: "whales.id",
-    source: "whales.source",
-    sourceAccount: "whales.sourceAccount",
-    status: "whales.status",
-  },
-  whalePositions: {
-    id: "whalePositions.id",
-    whaleId: "whalePositions.whaleId",
-    status: "whalePositions.status",
-    lastSeenAt: "whalePositions.lastSeenAt",
-  },
   whalePositionAnalysis: {
     positionId: "whalePositionAnalysis.positionId",
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
-  and: vi.fn((...conditions: unknown[]) => ({ and: conditions })),
-  desc: vi.fn((column: unknown) => ({ desc: column })),
-  eq: vi.fn((left: unknown, right: unknown) => ({ eq: [left, right] })),
+  inArray: vi.fn((column: unknown, values: unknown[]) => ({
+    inArray: [column, values],
+  })),
 }));
+
+function whale(
+  overrides: Partial<WhaleLiveSnapshot["whales"][number]> = {},
+): WhaleLiveSnapshot["whales"][number] {
+  const now = new Date("2026-05-23T12:00:00.000Z");
+  return {
+    id: "whale-1",
+    source: "pacifica",
+    sourceAccount: "acct-1",
+    displayName: "Alpha",
+    avatarUrl: "https://example.com/alpha.png",
+    status: "active",
+    tags: ["leader"],
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function position(
+  overrides: Partial<WhaleLiveSnapshot["positions"][number]> = {},
+): WhaleLiveSnapshot["positions"][number] {
+  return {
+    id: "pos-1",
+    whaleId: "whale-1",
+    source: "pacifica",
+    sourceAccount: "acct-1",
+    market: "BTC",
+    side: "long",
+    leverage: 10,
+    amountBase: 0.5,
+    notionalUsd: 450_000,
+    entryPrice: 60_000,
+    currentMark: 63_000,
+    unrealizedPnlPct: 12.6,
+    openedAt: new Date("2026-05-23T11:00:00.000Z"),
+    closedAt: null,
+    status: "open",
+    raw: {},
+    lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
+    ...overrides,
+  };
+}
+
+function snapshot(
+  overrides: Partial<WhaleLiveSnapshot> = {},
+): WhaleLiveSnapshot {
+  return {
+    source: "pacifica",
+    observedAt: new Date("2026-05-23T11:59:50.000Z"),
+    accounts: ["acct-1"],
+    whales: [whale()],
+    positions: [position()],
+    ...overrides,
+  };
+}
 
 describe("whale signals", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.setSystemTime(new Date("2026-05-23T12:00:00.000Z"));
 
-    mocks.rows = [];
-    mocks.resultSets = [];
+    mocks.analysisRows = [];
     mocks.getLeaderboard.mockResolvedValue([]);
     mocks.getPositionsHistory.mockResolvedValue([]);
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
     mocks.query.from.mockReturnValue(mocks.query);
-    mocks.query.innerJoin.mockReturnValue(mocks.query);
-    mocks.query.leftJoin.mockReturnValue(mocks.query);
     mocks.query.where.mockReturnValue(mocks.query);
-    mocks.query.orderBy.mockReturnValue(mocks.query);
-    mocks.query.limit.mockImplementation(async () => {
-      return mocks.resultSets.length > 0 ? mocks.resultSets.shift() : mocks.rows;
-    });
+    mocks.query.limit.mockImplementation(async () => mocks.analysisRows);
     mocks.db.select.mockReturnValue(mocks.query);
   });
 
-  it("maps open whale positions with heat, stale state, and optional analysis", async () => {
-    mocks.rows = [
+  it("maps cached live positions with heat and optional analysis", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        whales: [whale(), whale({ id: "whale-2", sourceAccount: "acct-2" })],
+        accounts: ["acct-1", "acct-2"],
+        positions: [
+          position(),
+          position({
+            id: "pos-2",
+            whaleId: "whale-2",
+            sourceAccount: "acct-2",
+            market: "ETH",
+            side: "short",
+            leverage: 5,
+            amountBase: 2,
+            notionalUsd: 50_000,
+            entryPrice: 3_200,
+            currentMark: null,
+            unrealizedPnlPct: null,
+            openedAt: new Date("2026-05-23T10:00:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:59:10.000Z"),
+          }),
+          position({
+            id: "stale-pos",
+            lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
+          }),
+        ],
+      }),
+    );
+    mocks.analysisRows = [
       {
-        position: {
-          id: "pos-1",
-          whaleId: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          market: "BTC",
-          side: "long",
-          leverage: 10,
-          amountBase: 0.5,
-          notionalUsd: 450_000,
-          entryPrice: 60_000,
-          currentMark: 63_000,
-          unrealizedPnlPct: 12.6,
-          openedAt: new Date("2026-05-23T11:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
-        },
-        whale: {
-          id: "joined-whale-1",
-          source: "hyperliquid",
-          sourceAccount: "joined-acct-1",
-          displayName: "Alpha",
-          avatarUrl: "https://example.com/alpha.png",
-          status: "active",
-          tags: [],
-        },
-        analysis: {
-          summary: "Momentum long",
-          thesis: "Breakout continuation",
-          risk: "Invalidates under VWAP",
-          entryGapWarning: null,
-          confidence: 0.72,
-        },
-      },
-      {
-        position: {
-          id: "pos-2",
-          whaleId: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          market: "ETH",
-          side: "short",
-          leverage: 5,
-          amountBase: 2,
-          notionalUsd: 50_000,
-          entryPrice: 3_200,
-          currentMark: null,
-          unrealizedPnlPct: null,
-          openedAt: new Date("2026-05-23T10:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
-        },
-        whale: {
-          id: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          displayName: "Beta",
-          avatarUrl: null,
-          status: "active",
-          tags: [],
-        },
-        analysis: null,
+        positionId: "pos-1",
+        summary: "Momentum long",
+        thesis: "Breakout continuation",
+        risk: "Invalidates under VWAP",
+        entryGapWarning: null,
+        confidence: 0.72,
       },
     ];
 
@@ -145,178 +160,107 @@ describe("whale signals", () => {
     const signals = await buildWhalePositionSignals(2);
 
     expect(mocks.query.limit).toHaveBeenCalledWith(2);
-    expect(signals).toEqual([
-      {
-        id: "whale_position:pos-1",
-        type: "whale_position",
-        heatScore: 913,
-        createdAt: "2026-05-23T12:00:00.000Z",
-        chips: [],
-        payload: {
-          positionId: "pos-1",
-          whaleId: "joined-whale-1",
-          source: "hyperliquid",
-          sourceAccount: "joined-acct-1",
-          displayName: "Alpha",
-          avatarUrl: "https://example.com/alpha.png",
-          market: "BTC",
-          side: "long",
-          leverage: 10,
-          amountBase: 0.5,
-          notionalUsd: 450_000,
-          entryPrice: 60_000,
-          currentMark: 63_000,
-          unrealizedPnlPct: 12.6,
-          openedAtMs: 1779534000000,
-          lastSeenAtMs: 1779537570000,
-          stale: false,
-          analysis: {
-            summary: "Momentum long",
-            thesis: "Breakout continuation",
-            risk: "Invalidates under VWAP",
-            entryGapWarning: null,
-            confidence: 0.72,
-          },
-        },
-      },
-      {
-        id: "whale_position:pos-2",
-        type: "whale_position",
-        heatScore: 300,
-        createdAt: "2026-05-23T12:00:00.000Z",
-        chips: [],
-        payload: {
-          positionId: "pos-2",
-          whaleId: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          displayName: "Beta",
-          avatarUrl: null,
-          market: "ETH",
-          side: "short",
-          leverage: 5,
-          amountBase: 2,
-          notionalUsd: 50_000,
-          entryPrice: 3_200,
-          currentMark: null,
-          unrealizedPnlPct: null,
-          openedAtMs: 1779530400000,
-          lastSeenAtMs: 1779537480000,
-          stale: true,
-          analysis: null,
-        },
-      },
+    expect(signals.map((signal) => signal.payload.positionId)).toEqual([
+      "pos-1",
+      "pos-2",
     ]);
+    expect(signals[0]).toEqual({
+      id: "whale_position:pos-1",
+      type: "whale_position",
+      heatScore: 913,
+      createdAt: "2026-05-23T12:00:00.000Z",
+      chips: [],
+      payload: {
+        positionId: "pos-1",
+        whaleId: "whale-1",
+        source: "pacifica",
+        sourceAccount: "acct-1",
+        displayName: "Alpha",
+        avatarUrl: "https://example.com/alpha.png",
+        market: "BTC",
+        side: "long",
+        leverage: 10,
+        amountBase: 0.5,
+        notionalUsd: 450_000,
+        entryPrice: 60_000,
+        currentMark: 63_000,
+        unrealizedPnlPct: 12.6,
+        openedAtMs: 1779534000000,
+        lastSeenAtMs: 1779537570000,
+        stale: false,
+        analysis: {
+          summary: "Momentum long",
+          thesis: "Breakout continuation",
+          risk: "Invalidates under VWAP",
+          entryGapWarning: null,
+          confidence: 0.72,
+        },
+      },
+    });
+    expect(signals[1]).toMatchObject({
+      id: "whale_position:pos-2",
+      heatScore: 650,
+      payload: {
+        positionId: "pos-2",
+        whaleId: "whale-2",
+        market: "ETH",
+        stale: false,
+        analysis: null,
+      },
+    });
   });
 
   it("groups position signals into sorted trader signals", async () => {
-    mocks.rows = [
-      {
-        position: {
-          id: "pos-1",
-          whaleId: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          market: "BTC",
-          side: "long",
-          leverage: 10,
-          amountBase: 0.5,
-          notionalUsd: 450_000,
-          entryPrice: 60_000,
-          currentMark: 63_000,
-          unrealizedPnlPct: 12,
-          openedAt: new Date("2026-05-23T11:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
-        },
-        whale: {
-          id: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          displayName: "Alpha",
-          avatarUrl: "https://example.com/alpha.png",
-          status: "active",
-          tags: ["leader"],
-        },
-        analysis: null,
-      },
-      {
-        position: {
-          id: "pos-2",
-          whaleId: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          market: "ETH",
-          side: "short",
-          leverage: 5,
-          amountBase: 1,
-          notionalUsd: 10_000,
-          entryPrice: 3_000,
-          currentMark: 2_900,
-          unrealizedPnlPct: 4,
-          openedAt: new Date("2026-05-23T10:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:58:45.000Z"),
-        },
-        whale: {
-          id: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          displayName: "Alpha",
-          avatarUrl: "https://example.com/alpha.png",
-          status: "active",
-          tags: ["leader"],
-        },
-        analysis: null,
-      },
-      {
-        position: {
-          id: "pos-3",
-          whaleId: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          market: "SOL",
-          side: "long",
-          leverage: 3,
-          amountBase: 20,
-          notionalUsd: 20_000,
-          entryPrice: 150,
-          currentMark: 155,
-          unrealizedPnlPct: 3,
-          openedAt: new Date("2026-05-23T09:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:57:00.000Z"),
-        },
-        whale: {
-          id: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          displayName: "Beta",
-          avatarUrl: null,
-          status: "active",
-          tags: [],
-        },
-        analysis: null,
-      },
-    ];
-    mocks.resultSets = [
-      mocks.rows,
-      [
-        {
-          id: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
-          displayName: "Alpha",
-          avatarUrl: "https://example.com/alpha.png",
-          tags: ["leader"],
-        },
-        {
-          id: "whale-2",
-          source: "hyperliquid",
-          sourceAccount: "acct-2",
-          displayName: "Beta",
-          avatarUrl: null,
-          tags: [],
-        },
-      ],
-    ];
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        whales: [
+          whale(),
+          whale({
+            id: "whale-2",
+            source: "hyperliquid",
+            sourceAccount: "acct-2",
+            displayName: "Beta",
+            avatarUrl: null,
+            tags: [],
+          }),
+        ],
+        accounts: ["acct-1", "acct-2"],
+        positions: [
+          position({
+            unrealizedPnlPct: 12,
+          }),
+          position({
+            id: "pos-2",
+            market: "ETH",
+            side: "short",
+            leverage: 5,
+            amountBase: 1,
+            notionalUsd: 10_000,
+            entryPrice: 3_000,
+            currentMark: 2_900,
+            unrealizedPnlPct: 4,
+            openedAt: new Date("2026-05-23T10:00:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:59:15.000Z"),
+          }),
+          position({
+            id: "pos-3",
+            whaleId: "whale-2",
+            source: "hyperliquid",
+            sourceAccount: "acct-2",
+            market: "SOL",
+            side: "long",
+            leverage: 3,
+            amountBase: 20,
+            notionalUsd: 20_000,
+            entryPrice: 150,
+            currentMark: 155,
+            unrealizedPnlPct: 3,
+            openedAt: new Date("2026-05-23T09:00:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
+          }),
+        ],
+      }),
+    );
     mocks.getLeaderboard.mockResolvedValue([
       {
         address: "acct-1",
@@ -356,7 +300,6 @@ describe("whale signals", () => {
 
     const signals = await buildWhaleTraderSignals();
 
-    expect(mocks.query.limit).toHaveBeenCalledWith(1000);
     expect(signals.map((signal) => signal.id)).toEqual([
       "whale_trader:whale-1",
       "whale_trader:whale-2",
@@ -401,12 +344,12 @@ describe("whale signals", () => {
       signals[1]?.payload.openPositions.map((position) => position.positionId),
     ).toEqual(["pos-3"]);
     expect(signals[1]).toMatchObject({
-      heatScore: 298,
+      heatScore: 648,
       payload: {
         whaleId: "whale-2",
         openPositionsCount: 1,
-        lastSeenAt: "2026-05-23T11:57:00.000Z",
-        stale: true,
+        lastSeenAt: "2026-05-23T11:59:00.000Z",
+        stale: false,
         stats: {
           equityUsdc: 0,
           openInterestUsdc: 0,
@@ -422,19 +365,21 @@ describe("whale signals", () => {
   });
 
   it("includes active whales without open positions in trader signals", async () => {
-    mocks.resultSets = [
-      [],
-      [
-        {
-          id: "idle-whale",
-          source: "pacifica",
-          sourceAccount: "idle-acct",
-          displayName: "Idle Alpha",
-          avatarUrl: null,
-          tags: ["steady", "watchlist"],
-        },
-      ],
-    ];
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        accounts: ["idle-acct"],
+        whales: [
+          whale({
+            id: "idle-whale",
+            sourceAccount: "idle-acct",
+            displayName: "Idle Alpha",
+            avatarUrl: null,
+            tags: ["steady", "watchlist"],
+          }),
+        ],
+        positions: [],
+      }),
+    );
 
     const { buildWhaleTraderSignals } = await import("./whale-signals");
 
@@ -481,119 +426,94 @@ describe("whale signals", () => {
     ]);
   });
 
-  it("filters hidden and retired whales out of position and trader signals", async () => {
-    const positionRows = [
-      {
-        position: {
-          id: "hidden-pos",
-          whaleId: "hidden-whale",
-          source: "pacifica",
-          sourceAccount: "hidden-acct",
-          market: "BTC",
-          side: "long",
-          leverage: 10,
-          amountBase: 0.5,
-          notionalUsd: 450_000,
-          entryPrice: 60_000,
-          currentMark: 63_000,
-          unrealizedPnlPct: 12,
-          openedAt: new Date("2026-05-23T11:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
-        },
-        whale: {
-          id: "hidden-whale",
-          source: "pacifica",
-          sourceAccount: "hidden-acct",
-          displayName: "Hidden",
-          avatarUrl: null,
-          status: "hidden",
-          tags: [],
-        },
-        analysis: null,
-      },
-      {
-        position: {
-          id: "retired-pos",
-          whaleId: "retired-whale",
-          source: "hyperliquid",
-          sourceAccount: "retired-acct",
-          market: "ETH",
-          side: "short",
-          leverage: 5,
-          amountBase: 2,
-          notionalUsd: 50_000,
-          entryPrice: 3_200,
-          currentMark: null,
-          unrealizedPnlPct: null,
-          openedAt: new Date("2026-05-23T10:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
-        },
-        whale: {
-          id: "retired-whale",
-          source: "hyperliquid",
-          sourceAccount: "retired-acct",
-          displayName: "Retired",
-          avatarUrl: null,
-          status: "retired",
-          tags: [],
-        },
-        analysis: null,
-      },
-      {
-        position: {
-          id: "active-pos",
-          whaleId: "active-whale",
-          source: "pacifica",
-          sourceAccount: "active-acct",
-          market: "SOL",
-          side: "long",
-          leverage: 3,
-          amountBase: 20,
-          notionalUsd: 20_000,
-          entryPrice: 150,
-          currentMark: 155,
-          unrealizedPnlPct: 3,
-          openedAt: new Date("2026-05-23T09:00:00.000Z"),
-          lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
-        },
-        whale: {
-          id: "active-whale",
-          source: "pacifica",
-          sourceAccount: "active-acct",
-          displayName: "Active",
-          avatarUrl: null,
-          status: "active",
-          tags: ["copyable"],
-        },
-        analysis: null,
-      },
-    ];
-    const activeWhaleRows = [
-      {
-        id: "active-whale",
-        source: "pacifica",
-        sourceAccount: "active-acct",
-        displayName: "Active",
-        avatarUrl: null,
-        tags: ["copyable"],
-      },
-    ];
+  it("filters hidden whales, retired whales, and stale positions", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        accounts: ["hidden-acct", "retired-acct", "active-acct"],
+        whales: [
+          whale({
+            id: "hidden-whale",
+            sourceAccount: "hidden-acct",
+            displayName: "Hidden",
+            avatarUrl: null,
+            status: "hidden",
+            tags: [],
+          }),
+          whale({
+            id: "retired-whale",
+            source: "hyperliquid",
+            sourceAccount: "retired-acct",
+            displayName: "Retired",
+            avatarUrl: null,
+            status: "retired",
+            tags: [],
+          }),
+          whale({
+            id: "active-whale",
+            sourceAccount: "active-acct",
+            displayName: "Active",
+            avatarUrl: null,
+            tags: ["copyable"],
+          }),
+        ],
+        positions: [
+          position({
+            id: "hidden-pos",
+            whaleId: "hidden-whale",
+            sourceAccount: "hidden-acct",
+          }),
+          position({
+            id: "retired-pos",
+            whaleId: "retired-whale",
+            source: "hyperliquid",
+            sourceAccount: "retired-acct",
+          }),
+          position({
+            id: "active-pos",
+            whaleId: "active-whale",
+            sourceAccount: "active-acct",
+            market: "SOL",
+            notionalUsd: 20_000,
+            lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
+          }),
+          position({
+            id: "active-stale-pos",
+            whaleId: "active-whale",
+            sourceAccount: "active-acct",
+            lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
+          }),
+        ],
+      }),
+    );
 
     const { buildWhalePositionSignals, buildWhaleTraderSignals } = await import(
       "./whale-signals"
     );
 
-    mocks.resultSets = [positionRows];
     const positions = await buildWhalePositionSignals();
-    mocks.resultSets = [positionRows, activeWhaleRows];
     const traders = await buildWhaleTraderSignals();
 
-    expect(positions.map((position) => position.payload.whaleId)).toEqual([
-      "active-whale",
+    expect(positions.map((item) => item.payload.positionId)).toEqual([
+      "active-pos",
     ]);
     expect(traders.map((trader) => trader.payload.whaleId)).toEqual([
       "active-whale",
     ]);
     expect(traders[0]?.payload.tags).toEqual(["copyable"]);
+    expect(
+      traders[0]?.payload.openPositions.map((item) => item.positionId),
+    ).toEqual(["active-pos"]);
+  });
+
+  it("returns no whale signals when the live cache is empty", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
+
+    const { buildWhalePositionSignals, buildWhaleTraderSignals } = await import(
+      "./whale-signals"
+    );
+
+    await expect(buildWhalePositionSignals()).resolves.toEqual([]);
+    await expect(buildWhaleTraderSignals()).resolves.toEqual([]);
+    expect(mocks.db.select).not.toHaveBeenCalled();
   });
 });

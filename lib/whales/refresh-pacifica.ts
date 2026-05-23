@@ -2,6 +2,7 @@ import { getLeaderboard, getMarkets, getPositions } from "@/lib/pacifica/client"
 import { filterTradeable, preRankByActivity } from "@/lib/pacifica/leaderboard";
 import { getMarksSnapshot } from "@/lib/data/marks";
 import { generatedWhaleHandle, makeWhaleId } from "./identity";
+import { writeWhaleLiveSnapshot } from "./live-cache";
 import {
   InvalidPacificaPositionError,
   mapPacificaPosition,
@@ -12,6 +13,7 @@ import {
   upsertWhale,
   upsertWhalePosition,
 } from "./repository";
+import type { WhalePositionRecord, WhaleRecord } from "./types";
 
 const LEADERBOARD_LIMIT = 30;
 const CLOSE_GRACE_MS = 90_000;
@@ -53,21 +55,28 @@ export async function refreshPacificaWhales(): Promise<{
   ]);
 
   let positionsSeen = 0;
+  const snapshotObservedAt = new Date();
+  const snapshotAccounts: string[] = [];
+  const snapshotWhales: WhaleRecord[] = [];
+  const snapshotPositions: WhalePositionRecord[] = [];
 
   for (const account of accounts) {
     const curated = curatedByAccount.get(account);
     const leaderboardEntry = leaderboardByAccount.get(account);
     const whaleId = makeWhaleId("pacifica", account);
+    const displayName =
+      (curated?.displayName ?? leaderboardEntry?.username) ||
+      generatedWhaleHandle(account);
+    const avatarUrl = curated?.avatarUrl ?? null;
+    const tags = curated?.tags ?? [];
 
     await upsertWhale({
       id: whaleId,
       source: "pacifica",
       sourceAccount: account,
-      displayName:
-        (curated?.displayName ?? leaderboardEntry?.username) ||
-        generatedWhaleHandle(account),
-      avatarUrl: curated?.avatarUrl ?? null,
-      tags: curated?.tags ?? [],
+      displayName,
+      avatarUrl,
+      tags,
     });
 
     let sourcePositions;
@@ -77,6 +86,19 @@ export async function refreshPacificaWhales(): Promise<{
       console.warn(`[whales] Pacifica positions failed for ${account}:`, err);
       continue;
     }
+
+    snapshotAccounts.push(account);
+    snapshotWhales.push({
+      id: whaleId,
+      source: "pacifica",
+      sourceAccount: account,
+      displayName,
+      avatarUrl,
+      status: "active",
+      tags,
+      createdAt: snapshotObservedAt,
+      updatedAt: snapshotObservedAt,
+    });
 
     const openPositionIds: string[] = [];
     const now = new Date();
@@ -92,6 +114,7 @@ export async function refreshPacificaWhales(): Promise<{
         });
         await upsertWhalePosition(mapped);
         openPositionIds.push(mapped.id);
+        snapshotPositions.push(mapped);
         positionsSeen += 1;
       } catch (err) {
         if (err instanceof InvalidPacificaPositionError) {
@@ -110,6 +133,20 @@ export async function refreshPacificaWhales(): Promise<{
       openPositionIds,
       graceCutoff: new Date(Date.now() - CLOSE_GRACE_MS),
     });
+  }
+
+  if (snapshotAccounts.length > 0) {
+    try {
+      await writeWhaleLiveSnapshot({
+        source: "pacifica",
+        observedAt: snapshotObservedAt,
+        accounts: snapshotAccounts,
+        whales: snapshotWhales,
+        positions: snapshotPositions,
+      });
+    } catch (err) {
+      console.warn("[whales] live cache write failed:", err);
+    }
   }
 
   return { whalesSeen: accounts.size, positionsSeen };

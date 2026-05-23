@@ -15,7 +15,7 @@ import { buildWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { planOnboarding } from "@/lib/bets/onboard";
 import { getMark } from "@/lib/data/marks";
 import { db } from "@/lib/db";
-import { bets, whalePositions, whales } from "@/lib/db/schema";
+import { bets } from "@/lib/db/schema";
 import { whaleSocialEnabled } from "@/lib/features";
 import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { clampLeverageForNotional, getMarketBySymbol } from "@/lib/pacifica/markets";
@@ -25,6 +25,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { isSourceFresh } from "@/lib/whales/identity";
+import { getWhaleLivePositionById } from "@/lib/whales/live-cache";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -91,7 +92,10 @@ async function blockReservationBestEffort(userId: string, market: string) {
   }
 }
 
-async function resolveSizingPrice(position: typeof whalePositions.$inferSelect) {
+async function resolveSizingPrice(position: {
+  currentMark: number | null;
+  market: string;
+}) {
   if (typeof position.currentMark === "number" && position.currentMark > 0) {
     return position.currentMark;
   }
@@ -129,15 +133,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const rows = await db
-    .select({ position: whalePositions, whale: whales })
-    .from(whalePositions)
-    .innerJoin(whales, eq(whalePositions.whaleId, whales.id))
-    .where(eq(whalePositions.id, body.positionId))
-    .limit(1);
-  const source = rows[0];
+  const source = await getWhaleLivePositionById(body.positionId);
   if (!source) {
-    return NextResponse.json({ error: "whale position not found" }, { status: 404 });
+    return NextResponse.json({ error: "whale position is not live" }, { status: 404 });
   }
 
   const { position, whale } = source;

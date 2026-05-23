@@ -8,10 +8,12 @@ import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { makeWhalePositionId } from "@/lib/whales/identity";
+import { getWhaleLivePositionsForAccount } from "@/lib/whales/live-cache";
 import { pacificaSideToWhaleSide } from "@/lib/whales/pacifica-source";
 import type { AgentWalletRecord } from "@/lib/wallets/agent";
 import type { WhaleCopyMeta } from "@/lib/bets/whale-meta";
 import type { PacificaPosition } from "@/lib/pacifica/types";
+import type { WhalePositionRecord } from "@/lib/whales/types";
 import { createDecipheriv } from "crypto";
 
 interface BetMeta {
@@ -286,6 +288,16 @@ function isWhaleSourcePositionStillOpen(
   );
 }
 
+function isCachedWhaleSourcePositionStillOpen(
+  meta: WhaleCopyMeta,
+  sourcePositions: WhalePositionRecord[],
+): boolean {
+  return sourcePositions.some(
+    (position) =>
+      position.id === meta.sourcePositionId && position.status === "open",
+  );
+}
+
 /** Whale-source close path: if the copied source position has disappeared and
  *  the user opted into source-close listening, close the follower position. */
 async function closeWhaleFollowers(
@@ -307,9 +319,28 @@ async function closeWhaleFollowers(
   }
 
   for (const [sourceAccount, followers] of bySourceAccount.entries()) {
+    result.scannedLeaders++;
+
+    const cachedSourcePositions =
+      await getWhaleLivePositionsForAccount(sourceAccount);
+    if (cachedSourcePositions !== null) {
+      for (const { row, meta } of followers) {
+        const sourceStillOpen = isCachedWhaleSourcePositionStillOpen(
+          meta,
+          cachedSourcePositions,
+        );
+        if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
+
+        await closeFollowerBet(row, meta, result, {
+          closeReason: "source_closed",
+          alreadyFlatCloseReason: "already_flat",
+        });
+      }
+      continue;
+    }
+
     let sourcePositions;
     try {
-      result.scannedLeaders++;
       sourcePositions = await getPositions(sourceAccount);
     } catch (err) {
       for (const follower of followers) {

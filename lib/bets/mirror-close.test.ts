@@ -7,6 +7,7 @@ import type { WhaleCopyMeta } from "./whale-meta";
 const mocks = vi.hoisted(() => ({
   closeCopyOrder: vi.fn(),
   getPositions: vi.fn(),
+  getWhaleLivePositionsForAccount: vi.fn(),
   openBets: [] as Array<Record<string, unknown>>,
   realizedPnlForOrder: vi.fn(),
   updates: [] as Array<Record<string, unknown>>,
@@ -14,6 +15,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/pacifica/client", () => ({
   getPositions: mocks.getPositions,
+}));
+
+vi.mock("@/lib/whales/live-cache", () => ({
+  getWhaleLivePositionsForAccount: mocks.getWhaleLivePositionsForAccount,
 }));
 
 vi.mock("@/lib/pacifica/orders", () => ({
@@ -113,6 +118,7 @@ describe("runMirrorCloseSweep whale source closes", () => {
     vi.clearAllMocks();
     mocks.openBets = [];
     mocks.updates = [];
+    mocks.getWhaleLivePositionsForAccount.mockResolvedValue(null);
     mocks.closeCopyOrder.mockResolvedValue({ order_id: "close-order-1" });
     mocks.realizedPnlForOrder.mockResolvedValue(2);
   });
@@ -260,5 +266,33 @@ describe("runMirrorCloseSweep whale source closes", () => {
     expect(result.scannedLeaders).toBe(1);
     expect(mocks.getPositions).toHaveBeenCalledTimes(1);
     expect(mocks.getPositions).toHaveBeenCalledWith("source-1");
+  });
+
+  it("uses cached whale source positions when the live snapshot has the account", async () => {
+    mocks.openBets = [openWhaleBet()];
+    mocks.getWhaleLivePositionsForAccount.mockResolvedValue([]);
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "user-main-1") {
+        return [sourcePosition({ amount: "0.25" })];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.getWhaleLivePositionsForAccount).toHaveBeenCalledWith(
+      "source-1",
+    );
+    expect(mocks.getPositions).not.toHaveBeenCalledWith("source-1");
+    expect(mocks.getPositions).toHaveBeenCalledWith("user-main-1");
+    expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "BTC",
+        positionSide: "long",
+        amountBase: "0.25",
+      }),
+    );
   });
 });
