@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildLiveEntryChartModel, type ChartCandle } from "./live-entry-chart";
+import {
+  buildLiveEntryChartModel,
+  initialLiveEntryChartNowMs,
+  type ChartCandle,
+} from "./live-entry-chart";
 
 const candles: ChartCandle[] = [
   { ts: 1_000, open: 100, high: 104, low: 99, close: 102, volume: 10 },
@@ -8,6 +12,10 @@ const candles: ChartCandle[] = [
 ];
 
 describe("buildLiveEntryChartModel", () => {
+  it("uses a deterministic initial now value for hydration", () => {
+    expect(initialLiveEntryChartNowMs(2_000)).toBe(62_000);
+  });
+
   it("places the entry dot at the position open time and entry price", () => {
     const model = buildLiveEntryChartModel({
       candles,

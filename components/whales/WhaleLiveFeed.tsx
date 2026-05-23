@@ -28,6 +28,7 @@ import {
   computeWhalePositionPnlPct,
   toWhaleEntryChartPosition,
 } from "./whale-entry-chart-position";
+import { buildWhaleLiveTailButtonLabel } from "./whale-live-tail-label";
 
 const POLL_MS = 4_000;
 const BODY_FONT = "system-ui, -apple-system, 'Inter', sans-serif";
@@ -332,7 +333,9 @@ function PositionCard({
         }}
       >
         <Zap size={14} strokeWidth={3} fill={p.stale ? "none" : BG} />
-        {p.stale ? "TAIL DISABLED" : `TAIL ${p.displayName.toUpperCase()}`}
+        {buildWhaleLiveTailButtonLabel({
+          stale: p.stale,
+        })}
       </button>
     </div>
   );

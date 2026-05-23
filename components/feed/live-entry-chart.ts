@@ -62,6 +62,10 @@ const PLOT = {
   volumeTop: 202,
 };
 
+export function initialLiveEntryChartNowMs(openSinceMs: number): number {
+  return Math.max(0, openSinceMs) + 60_000;
+}
+
 export function buildLiveEntryChartModel({
   candles,
   entryMark,

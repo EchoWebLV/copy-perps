@@ -13,6 +13,7 @@ import {
 import type { FlatPosition } from "./live-positions";
 import {
   buildLiveEntryChartModel,
+  initialLiveEntryChartNowMs,
   type ChartCandle,
 } from "./live-entry-chart";
 
@@ -30,10 +31,14 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
   const id = useId().replace(/:/g, "");
   const [candles, setCandles] = useState<ChartCandle[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "empty">("loading");
+  const [chartNowMs, setChartNowMs] = useState(() =>
+    initialLiveEntryChartNowMs(pos.openSinceMs),
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();
     setStatus("loading");
+    setChartNowMs(Date.now());
     fetch(
       `/api/markets/candles?asset=${encodeURIComponent(pos.asset)}&timeframe=1m&count=90`,
       { cache: "no-store", signal: ctrl.signal },
@@ -63,9 +68,9 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         entryMark: pos.entryMark,
         currentMark: pos.currentMark,
         openSinceMs: pos.openSinceMs,
-        nowMs: Date.now(),
+        nowMs: chartNowMs,
       }),
-    [candles, pos.currentMark, pos.entryMark, pos.openSinceMs],
+    [candles, chartNowMs, pos.currentMark, pos.entryMark, pos.openSinceMs],
   );
   const entryDelta = ((pos.currentMark - pos.entryMark) / pos.entryMark) * 100;
   const profit =

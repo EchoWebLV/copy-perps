@@ -12,6 +12,12 @@ import {
   whalePositionsForTail,
   whaleTailTotalNotional,
 } from "./whale-tail";
+import {
+  whaleTailAutoCloseLabel,
+  whaleTailFollowingText,
+  whaleTailPositionsHeading,
+  whaleTailPrimaryCta,
+} from "./tail-copy-labels";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -428,6 +434,8 @@ export function TailModal({ open, onClose, source }: Props) {
     source.kind === "whale" ? source.avatarUrl : source.avatarImageUrl;
   const sourceAvatarFallback =
     source.kind === "whale" ? source.displayName.slice(0, 1).toUpperCase() : source.avatarEmoji ?? "🤖";
+  const isSingleWhalePosition =
+    source.kind === "whale" && whaleTailPositions.length === 1;
 
   return (
     <div
@@ -455,7 +463,7 @@ export function TailModal({ open, onClose, source }: Props) {
             )}
             <div>
               <div className="text-xs uppercase tracking-widest text-white/40">
-                Tail
+                {isSingleWhalePosition ? "Tail position" : "Tail"}
               </div>
               <div className="text-base font-semibold text-white">
                 {sourceName}
@@ -504,7 +512,7 @@ export function TailModal({ open, onClose, source }: Props) {
             <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
               <div className="text-3xl mb-2">✓</div>
               <div className="text-emerald-300 font-semibold mb-1">
-                Tail opened
+                {isSingleWhalePosition ? "Position copied" : "Tail opened"}
               </div>
               <div className="text-xs text-emerald-200/80">
                 {success.opens.length === 1
@@ -570,53 +578,62 @@ export function TailModal({ open, onClose, source }: Props) {
             {source.kind === "whale" ? (
               <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
                 <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
-                  <span>Current open positions</span>
-                  <span>{copyableWhalePositions.length}/{whaleTailPositions.length}</span>
+                  <span>{whaleTailPositionsHeading(whaleTailPositions)}</span>
+                  {isSingleWhalePosition ? null : (
+                    <span>{copyableWhalePositions.length}/{whaleTailPositions.length}</span>
+                  )}
                 </div>
                 <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
-                  {whaleTailPositions.map((position) => (
-                    <div
-                      key={position.sourcePositionId}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 font-semibold text-white">
-                          <span>{position.asset}</span>
-                          <span
+                  {whaleTailPositions.map((position) => {
+                    const rowMark =
+                      isSingleWhalePosition &&
+                      position.sourcePositionId ===
+                        activeWhalePosition?.sourcePositionId
+                        ? liveMark ?? position.currentMark
+                        : position.currentMark;
+
+                    return (
+                      <div
+                        key={position.sourcePositionId}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 font-semibold text-white">
+                            <span>{position.asset}</span>
+                            <span
+                              className={
+                                position.side === "long"
+                                  ? "text-emerald-400"
+                                  : "text-rose-400"
+                              }
+                            >
+                              {position.side.toUpperCase()}
+                            </span>
+                            <span className="text-white/40">
+                              {position.leverage}×
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-[10px] uppercase tracking-widest text-white/35">
+                            Entry {fmtPrice(position.entryMark)}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-white/70">
+                            {rowMark === null ? "Mark N/A" : fmtPrice(rowMark)}
+                          </div>
+                          <div
                             className={
-                              position.side === "long"
-                                ? "text-emerald-400"
-                                : "text-rose-400"
+                              position.stale
+                                ? "text-[10px] uppercase tracking-widest text-rose-400"
+                                : "text-[10px] uppercase tracking-widest text-emerald-400"
                             }
                           >
-                            {position.side.toUpperCase()}
-                          </span>
-                          <span className="text-white/40">
-                            {position.leverage}×
-                          </span>
-                        </div>
-                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-white/35">
-                          Entry {fmtPrice(position.entryMark)}
+                            {position.stale ? "Stale" : "Will copy"}
+                          </div>
                         </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-white/70">
-                          {position.currentMark === null
-                            ? "Mark N/A"
-                            : fmtPrice(position.currentMark)}
-                        </div>
-                        <div
-                          className={
-                            position.stale
-                              ? "text-[10px] uppercase tracking-widest text-rose-400"
-                              : "text-[10px] uppercase tracking-widest text-emerald-400"
-                          }
-                        >
-                          {position.stale ? "Stale" : "Will copy"}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -628,7 +645,9 @@ export function TailModal({ open, onClose, source }: Props) {
                 <span className="text-white">
                   ${notional.toFixed(2)}{" "}
                   {source.kind === "whale"
-                    ? `($${effectiveStake.toFixed(2)} per copied position)`
+                    ? isSingleWhalePosition
+                      ? `($${effectiveStake.toFixed(2)} stake)`
+                      : `($${effectiveStake.toFixed(2)} per copied position)`
                     : `(${source.leverage}× of $${effectiveStake.toFixed(2)})`}
                 </span>
               </div>
@@ -640,13 +659,17 @@ export function TailModal({ open, onClose, source }: Props) {
                 <span>You're following</span>
                 <span className="text-white">
                   {source.kind === "whale"
-                    ? `${sourceName}'s ${copyableWhalePositions.length} live position${copyableWhalePositions.length === 1 ? "" : "s"}`
+                    ? whaleTailFollowingText({
+                        sourceName,
+                        positions: whaleTailPositions,
+                        copyableCount: copyableWhalePositions.length,
+                      })
                     : `${sourceName}'s ${source.asset} ${sideLabel}`}
                 </span>
               </div>
               {source.kind === "whale" ? (
                 <label className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-[11px] font-black uppercase tracking-widest text-white/80">
-                  <span>Close my copies when whale closes</span>
+                  <span>{whaleTailAutoCloseLabel(whaleTailPositions)}</span>
                   <input
                     type="checkbox"
                     checked={autoCloseOnSourceClose}
@@ -684,7 +707,10 @@ export function TailModal({ open, onClose, source }: Props) {
                 {submitting
                   ? "Working…"
                   : source.kind === "whale"
-                    ? `Tail Whale with $${effectiveStake.toFixed(0)} each`
+                    ? whaleTailPrimaryCta({
+                        positions: whaleTailPositions,
+                        effectiveStake,
+                      })
                     : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (
