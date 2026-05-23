@@ -5,6 +5,7 @@ import { Radio, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { buildWhaleTailSource } from "./whale-tail-source";
 import {
   ACCENT,
   BG,
@@ -115,10 +116,9 @@ function WhaleCard({
   onTail: (source: TailSource) => void;
 }) {
   const p = whale.payload;
-  const best = p.bestPosition ?? p.openPositions[0] ?? null;
-  const primaryTail = p.openPositions.find((position) => !position.stale) ?? null;
+  const copyablePositions = p.openPositions.filter((position) => !position.stale);
   const fresh = !p.stale;
-  const canTail = !!primaryTail;
+  const canTail = copyablePositions.length > 0;
   const totalPnl = p.stats.pnlAllTimeUsdc;
   const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
   const exposureUsd = p.openPositions.reduce(
@@ -196,8 +196,8 @@ function WhaleCard({
         <MiniMetric label="Vol 1D" value={p.stats.volume1dUsdc > 0 ? fmtUsd(p.stats.volume1dUsdc) : "N/A"} active={p.stats.volume1dUsdc > 0} />
       </div>
 
-      {best ? (
-        <BestPositionStrip position={best} />
+      {p.openPositions.length > 0 ? (
+        <OpenPositionsStack positions={p.openPositions} />
       ) : (
         <div className="mt-3 flex items-center gap-2 border-t pt-3 text-[11px] font-black uppercase tracking-widest" style={{ borderColor: FAINT, color: DIM }}>
           <Radio size={14} strokeWidth={2.8} />
@@ -209,8 +209,9 @@ function WhaleCard({
         type="button"
         disabled={!canTail}
         onClick={() => {
-          if (!primaryTail) return;
-          onTail(toTailSource(p, primaryTail));
+          const source = buildWhaleTailSource(p);
+          if (!source) return;
+          onTail(source);
         }}
         className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
         style={{
@@ -222,33 +223,55 @@ function WhaleCard({
         }}
       >
         <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
-        {canTail && primaryTail
-          ? `TAIL ${primaryTail.market} ${primaryTail.side.toUpperCase()}`
+        {canTail
+          ? `TAIL WHALE (${copyablePositions.length})`
           : "TAIL UNAVAILABLE"}
       </button>
     </article>
   );
 }
 
-function BestPositionStrip({
+function OpenPositionsStack({
+  positions,
+}: {
+  positions: WhaleTraderSignal["payload"]["openPositions"];
+}) {
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
+      <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+        <span>Open positions</span>
+        <span>{positions.filter((position) => !position.stale).length}/{positions.length}</span>
+      </div>
+      <div className="space-y-2">
+        {positions.map((position) => (
+          <WhalePositionRow key={position.positionId} position={position} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WhalePositionRow({
   position,
 }: {
-  position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>;
+  position: WhaleTraderSignal["payload"]["openPositions"][number];
 }) {
   const sideColor = position.side === "long" ? GREEN : RED;
   const pnl = position.unrealizedPnlPct;
   const profit = (pnl ?? 0) >= 0;
 
   return (
-    <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
-      <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-        <span>Best live setup</span>
-        <span>{position.stale ? "STALE" : "FRESH"}</span>
-      </div>
+    <div
+      className="rounded-xl px-2.5 py-2"
+      style={{
+        background: PANEL_2,
+        border: `1px solid ${position.stale ? `${RED}40` : FAINT}`,
+      }}
+    >
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-1.5">
-            <BigNum size={24}>{position.market}</BigNum>
+            <BigNum size={21}>{position.market}</BigNum>
             <span className="rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${sideColor}22`, color: sideColor }}>
               {position.side}
             </span>
@@ -260,14 +283,20 @@ function BestPositionStrip({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[12px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
+          <div className="text-[11px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
             {fmtUsd(position.notionalUsd)}
           </div>
           <div
-            className="mt-1 text-[17px] font-black uppercase tracking-widest tabular-nums"
+            className="mt-1 text-[14px] font-black uppercase tracking-widest tabular-nums"
             style={{ color: pnl === null ? DIM : profit ? GREEN : RED }}
           >
             {fmtPct(pnl)}
+          </div>
+          <div
+            className="mt-1 text-[9px] font-black uppercase tracking-widest"
+            style={{ color: position.stale ? RED : GREEN }}
+          >
+            {position.stale ? "STALE" : "COPY READY"}
           </div>
         </div>
       </div>
@@ -292,26 +321,6 @@ function MiniMetric({
       </div>
     </div>
   );
-}
-
-function toTailSource(
-  whale: WhaleTraderSignal["payload"],
-  position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>,
-): TailSource {
-  return {
-    kind: "whale",
-    whaleId: whale.whaleId,
-    displayName: whale.displayName,
-    avatarUrl: whale.avatarUrl,
-    sourceAccount: whale.sourceAccount,
-    sourcePositionId: position.positionId,
-    asset: position.market,
-    side: position.side,
-    leverage: position.leverage,
-    entryMark: position.entryPrice,
-    currentMark: position.currentMark,
-    stale: position.stale,
-  };
 }
 
 function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {

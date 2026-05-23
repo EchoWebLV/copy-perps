@@ -320,6 +320,19 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
     entryMark: position.entryPrice,
     currentMark: position.currentMark,
     stale: position.stale,
+    positions: [
+      {
+        sourcePositionId: position.positionId,
+        asset: position.market,
+        side: position.side,
+        leverage: position.leverage,
+        entryMark: position.entryPrice,
+        currentMark: position.currentMark,
+        stale: position.stale,
+        notionalUsd: position.notionalUsd,
+        unrealizedPnlPct: position.unrealizedPnlPct,
+      },
+    ],
   };
 }
 

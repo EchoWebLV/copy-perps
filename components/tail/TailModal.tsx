@@ -6,6 +6,14 @@ import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana"
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
 import { useLiveMark } from "@/lib/pacifica/live-context";
+import type { TailSource, WhaleTailPosition } from "./tail-types";
+import {
+  copyableWhalePositionsForTail,
+  whalePositionsForTail,
+  whaleTailTotalNotional,
+} from "./whale-tail";
+
+export type { TailSource, WhaleTailPosition } from "./tail-types";
 
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
@@ -13,34 +21,6 @@ const RPC =
 const STAKE_CHIPS = [5, 10, 20, 50] as const;
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
-
-export type TailSource =
-  | {
-      kind: "bot";
-      botId: string;
-      botName: string;
-      avatarEmoji?: string;
-      avatarImageUrl?: string | null;
-      asset: string;
-      side: "long" | "short";
-      leverage: number;
-      entryMark: number;
-      positionId?: string;
-    }
-  | {
-      kind: "whale";
-      whaleId: string;
-      displayName: string;
-      avatarUrl: string | null;
-      sourceAccount: string;
-      sourcePositionId: string;
-      asset: string;
-      side: "long" | "short";
-      leverage: number;
-      entryMark: number;
-      currentMark: number | null;
-      stale: boolean;
-    };
 
 interface Props {
   open: boolean;
@@ -74,12 +54,19 @@ interface OpenResponse {
     side: string;
   };
   source: {
-    botId: string;
-    botName: string;
+    botId?: string;
+    botName?: string;
+    whaleId?: string;
+    displayName?: string;
     asset: string;
     side: "long" | "short";
     leverage: number;
+    autoCloseOnSourceClose?: boolean;
   };
+}
+
+interface TailSuccess {
+  opens: OpenResponse[];
 }
 
 function b64ToBytes(b64: string): Uint8Array {
@@ -118,10 +105,29 @@ export function TailModal({ open, onClose, source }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<null | OpenResponse>(null);
+  const [success, setSuccess] = useState<null | TailSuccess>(null);
   const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
-  const liveMark = useLiveMark(source?.asset ?? "");
   const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  const whaleTailPositions = useMemo(
+    () =>
+      source?.kind === "whale" ? whalePositionsForTail(source) : [],
+    [source],
+  );
+  const copyableWhalePositions = useMemo(
+    () =>
+      source?.kind === "whale"
+        ? copyableWhalePositionsForTail(source)
+        : [],
+    [source],
+  );
+  const activeWhalePosition =
+    copyableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
+  const liveMark = useLiveMark(
+    source?.kind === "whale"
+      ? activeWhalePosition?.asset ?? ""
+      : source?.asset ?? "",
+  );
 
   // Reset modal state every time it opens with a new source.
   useEffect(() => {
@@ -132,12 +138,14 @@ export function TailModal({ open, onClose, source }: Props) {
     setStatus(null);
     setError(null);
     setSuccess(null);
-    setAutoCloseOnSourceClose(false);
+    setAutoCloseOnSourceClose(source?.kind === "whale");
   }, [
     open,
     source?.kind,
     source?.kind === "bot" ? source.botId : source?.whaleId,
-    source?.kind === "bot" ? source.positionId : source?.sourcePositionId,
+    source?.kind === "bot"
+      ? source.positionId
+      : `${source?.sourcePositionId}:${source?.positions.length ?? 0}`,
   ]);
 
   // Esc-to-close + body scroll lock while open.
@@ -163,8 +171,11 @@ export function TailModal({ open, onClose, source }: Props) {
 
   const notional = useMemo(() => {
     if (!source) return 0;
+    if (source.kind === "whale") {
+      return whaleTailTotalNotional(effectiveStake, copyableWhalePositions);
+    }
     return effectiveStake * source.leverage;
-  }, [effectiveStake, source]);
+  }, [copyableWhalePositions, effectiveStake, source]);
 
   const sliceBps = 4; // Pacifica taker, conservative display
   const estFeeUsd = useMemo(
@@ -183,18 +194,25 @@ export function TailModal({ open, onClose, source }: Props) {
     }
     setError(null);
     setSubmitting(true);
-    setStatus("Placing order…");
+    setStatus("Preparing copy…");
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("not authed");
 
-      const requestTail = async () => {
+      const positionsToCopy =
+        source.kind === "whale" ? copyableWhalePositions : [];
+      if (source.kind === "whale" && positionsToCopy.length === 0) {
+        throw new Error("No fresh whale positions are available to copy.");
+      }
+
+      const requestTail = async (copyPosition?: WhaleTailPosition) => {
         const endpoint =
           source.kind === "whale" ? "/api/bet/whale" : "/api/bet/bot";
         const body =
           source.kind === "whale"
             ? {
-                positionId: source.sourcePositionId,
+                positionId:
+                  copyPosition?.sourcePositionId ?? source.sourcePositionId,
                 stakeUsdc: effectiveStake,
                 walletAddress: wallet.address,
                 autoCloseOnSourceClose,
@@ -235,11 +253,13 @@ export function TailModal({ open, onClose, source }: Props) {
             : 2000,
         );
       };
-      const requestTailWithSettlingRetry = async () => {
+      const requestTailWithSettlingRetry = async (
+        copyPosition?: WhaleTailPosition,
+      ) => {
         const deadline = Date.now() + 30_000;
         for (;;) {
           try {
-            return await requestTail();
+            return await requestTail(copyPosition);
           } catch (err) {
             if (
               !(err instanceof TailRequestError) ||
@@ -253,8 +273,6 @@ export function TailModal({ open, onClose, source }: Props) {
           }
         }
       };
-      const first = await requestTailWithSettlingRetry();
-      let result: OnboardResponse | DepositResponse | OpenResponse = first;
 
       const signAndSendDeposit = async (depositTransactionB64: string) => {
         setStatus("Depositing USDC…");
@@ -271,56 +289,86 @@ export function TailModal({ open, onClose, source }: Props) {
         await sleep(1000);
       };
 
-      if (first.phase === "onboard") {
-        setStatus("Authorizing trader…");
-        const bindMsgBytes = new TextEncoder().encode(first.bindMessage);
-        const { signature: bindSig } = (await signMessage({
-          message: bindMsgBytes,
-          wallet,
-        })) as { signature: Uint8Array };
-        const bs58 = (await import("bs58")).default;
-        const bindSigB58 = bs58.encode(bindSig);
-        const parsed = JSON.parse(first.bindMessage) as {
-          timestamp: number;
-          expiry_window: number;
-        };
-        const bindResp = await fetch("/api/users/me/agent/bind", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            agentPubkey: first.bindAgentPubkey,
-            signatureB58: bindSigB58,
-            timestamp: parsed.timestamp,
-            expiryWindow: parsed.expiry_window,
-            walletAddress: wallet.address,
-          }),
-        });
-        if (!bindResp.ok) {
-          const e = await bindResp.json().catch(() => ({}));
-          throw new Error(`bind failed: ${e.error ?? bindResp.status}`);
-        }
-        await signAndSendDeposit(first.depositTransactionB64);
-      }
+      const openOne = async (
+        copyPosition: WhaleTailPosition | undefined,
+        index: number,
+        total: number,
+      ): Promise<OpenResponse> => {
+        const label =
+          source.kind === "whale" && copyPosition
+            ? `${copyPosition.asset} ${copyPosition.side.toUpperCase()}`
+            : `${source.asset} ${source.side.toUpperCase()}`;
+        setStatus(
+          total > 1
+            ? `Copying ${index}/${total}: ${label}…`
+            : `Copying ${label}…`,
+        );
 
-      if (first.phase === "onboard" || first.phase === "deposit") {
-        if (first.phase === "deposit") {
+        const first = await requestTailWithSettlingRetry(copyPosition);
+        let result: OnboardResponse | DepositResponse | OpenResponse = first;
+
+        if (first.phase === "onboard") {
+          setStatus("Authorizing trader…");
+          const bindMsgBytes = new TextEncoder().encode(first.bindMessage);
+          const { signature: bindSig } = (await signMessage({
+            message: bindMsgBytes,
+            wallet,
+          })) as { signature: Uint8Array };
+          const bs58 = (await import("bs58")).default;
+          const bindSigB58 = bs58.encode(bindSig);
+          const parsed = JSON.parse(first.bindMessage) as {
+            timestamp: number;
+            expiry_window: number;
+          };
+          const bindResp = await fetch("/api/users/me/agent/bind", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              agentPubkey: first.bindAgentPubkey,
+              signatureB58: bindSigB58,
+              timestamp: parsed.timestamp,
+              expiryWindow: parsed.expiry_window,
+              walletAddress: wallet.address,
+            }),
+          });
+          if (!bindResp.ok) {
+            const e = await bindResp.json().catch(() => ({}));
+            throw new Error(`bind failed: ${e.error ?? bindResp.status}`);
+          }
           await signAndSendDeposit(first.depositTransactionB64);
         }
-        setStatus("Waiting for Pacifica credit…");
-        result = await requestTailWithSettlingRetry();
+
+        if (first.phase === "onboard" || first.phase === "deposit") {
+          if (first.phase === "deposit") {
+            await signAndSendDeposit(first.depositTransactionB64);
+          }
+          setStatus("Waiting for Pacifica credit…");
+          result = await requestTailWithSettlingRetry(copyPosition);
+        }
+
+        if (result.phase !== "open") {
+          throw new Error(
+            result.phase === "deposit"
+              ? "Deposit confirmed. Pacifica balance is still settling; try again in a few seconds."
+              : "Onboarding needs to be retried.",
+          );
+        }
+        return result;
+      };
+
+      const opens: OpenResponse[] = [];
+      if (source.kind === "whale") {
+        for (const [idx, position] of positionsToCopy.entries()) {
+          opens.push(await openOne(position, idx + 1, positionsToCopy.length));
+        }
+      } else {
+        opens.push(await openOne(undefined, 1, 1));
       }
 
-      if (result.phase !== "open") {
-        throw new Error(
-          result.phase === "deposit"
-            ? "Deposit confirmed. Pacifica balance is still settling; try again in a few seconds."
-            : "Onboarding needs to be retried.",
-        );
-      }
-      setSuccess(result);
+      setSuccess({ opens });
       setStatus(null);
     } catch (err) {
       console.error("[tail] failed:", err);
@@ -336,6 +384,7 @@ export function TailModal({ open, onClose, source }: Props) {
     stakeValid,
     effectiveStake,
     autoCloseOnSourceClose,
+    copyableWhalePositions,
     getAccessToken,
     signMessage,
     signTransaction,
@@ -343,12 +392,35 @@ export function TailModal({ open, onClose, source }: Props) {
 
   if (!open || !source) return null;
 
+  const isWhaleBundle =
+    source.kind === "whale" && whaleTailPositions.length > 1;
+  const displayPosition = activeWhalePosition;
+  const displayAsset =
+    source.kind === "whale"
+      ? isWhaleBundle
+        ? `${copyableWhalePositions.length} live`
+        : displayPosition?.asset ?? source.asset
+      : source.asset;
+  const displaySide =
+    source.kind === "whale"
+      ? isWhaleBundle
+        ? "MIXED"
+        : (displayPosition?.side ?? source.side).toUpperCase()
+      : source.side.toUpperCase();
+  const displayLeverage =
+    source.kind === "whale"
+      ? displayPosition?.leverage ?? source.leverage
+      : source.leverage;
   const sideColor =
-    source.side === "long" ? "text-emerald-400" : "text-rose-400";
+    (displayPosition?.side ?? source.side) === "long"
+      ? "text-emerald-400"
+      : "text-rose-400";
   const sideLabel = source.side.toUpperCase();
   const markValue =
     liveMark ??
-    (source.kind === "whale" ? source.currentMark : null) ??
+    (source.kind === "whale"
+      ? displayPosition?.currentMark ?? source.currentMark
+      : null) ??
     source.entryMark;
   const markText = fmtPrice(markValue);
   const sourceName = source.kind === "whale" ? source.displayName : source.botName;
@@ -407,7 +479,7 @@ export function TailModal({ open, onClose, source }: Props) {
               Asset
             </div>
             <div className="text-sm font-semibold text-white">
-              {source.asset}
+              {displayAsset}
             </div>
           </div>
           <div>
@@ -415,7 +487,7 @@ export function TailModal({ open, onClose, source }: Props) {
               Side
             </div>
             <div className={`text-sm font-semibold ${sideColor}`}>
-              {sideLabel} {source.leverage}×
+              {displaySide} {displayLeverage}×
             </div>
           </div>
           <div>
@@ -435,8 +507,9 @@ export function TailModal({ open, onClose, source }: Props) {
                 Tail opened
               </div>
               <div className="text-xs text-emerald-200/80">
-                {success.fill.filledAmount} {source.asset} @{" "}
-                {fmtPrice(Number(success.fill.avgFillPrice))}
+                {success.opens.length === 1
+                  ? `${success.opens[0]?.fill.filledAmount} ${success.opens[0]?.source.asset ?? source.asset} @ ${fmtPrice(Number(success.opens[0]?.fill.avgFillPrice ?? 0))}`
+                  : `${success.opens.length} open positions copied`}
               </div>
             </div>
             <button
@@ -494,13 +567,69 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
             </div>
 
+            {source.kind === "whale" ? (
+              <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+                <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
+                  <span>Current open positions</span>
+                  <span>{copyableWhalePositions.length}/{whaleTailPositions.length}</span>
+                </div>
+                <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {whaleTailPositions.map((position) => (
+                    <div
+                      key={position.sourcePositionId}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-semibold text-white">
+                          <span>{position.asset}</span>
+                          <span
+                            className={
+                              position.side === "long"
+                                ? "text-emerald-400"
+                                : "text-rose-400"
+                            }
+                          >
+                            {position.side.toUpperCase()}
+                          </span>
+                          <span className="text-white/40">
+                            {position.leverage}×
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-white/35">
+                          Entry {fmtPrice(position.entryMark)}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-white/70">
+                          {position.currentMark === null
+                            ? "Mark N/A"
+                            : fmtPrice(position.currentMark)}
+                        </div>
+                        <div
+                          className={
+                            position.stale
+                              ? "text-[10px] uppercase tracking-widest text-rose-400"
+                              : "text-[10px] uppercase tracking-widest text-emerald-400"
+                          }
+                        >
+                          {position.stale ? "Stale" : "Will copy"}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {/* Order preview */}
             <div className="mx-5 mb-4 rounded-2xl bg-white/[0.02] border border-white/5 p-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-white/60">
                 <span>Notional</span>
                 <span className="text-white">
-                  ${notional.toFixed(2)} ({source.leverage}× of $
-                  {effectiveStake.toFixed(2)})
+                  ${notional.toFixed(2)}{" "}
+                  {source.kind === "whale"
+                    ? `($${effectiveStake.toFixed(2)} per copied position)`
+                    : `(${source.leverage}× of $${effectiveStake.toFixed(2)})`}
                 </span>
               </div>
               <div className="flex justify-between text-white/60">
@@ -510,12 +639,14 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="flex justify-between text-white/60">
                 <span>You're following</span>
                 <span className="text-white">
-                  {sourceName}'s {source.asset} {sideLabel}
+                  {source.kind === "whale"
+                    ? `${sourceName}'s ${copyableWhalePositions.length} live position${copyableWhalePositions.length === 1 ? "" : "s"}`
+                    : `${sourceName}'s ${source.asset} ${sideLabel}`}
                 </span>
               </div>
               {source.kind === "whale" ? (
                 <label className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-[11px] font-black uppercase tracking-widest text-white/80">
-                  <span>Auto-close when whale exits</span>
+                  <span>Close my copies when whale closes</span>
                   <input
                     type="checkbox"
                     checked={autoCloseOnSourceClose}
@@ -552,7 +683,9 @@ export function TailModal({ open, onClose, source }: Props) {
               >
                 {submitting
                   ? "Working…"
-                  : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
+                  : source.kind === "whale"
+                    ? `Tail Whale with $${effectiveStake.toFixed(0)} each`
+                    : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (
                 <div className="mt-2 text-center text-xs text-white/40">
