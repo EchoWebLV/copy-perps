@@ -7,6 +7,7 @@ import { enrichBet } from "@/lib/positions/enrich";
 import { getPositions } from "@/lib/pacifica/client";
 import { getMarksSnapshot } from "@/lib/data/marks";
 import { getBot } from "@/lib/bots";
+import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
   const copyRows = copyBets
     .filter((b) => b.status === "confirmed")
     .map((b) => {
+      const whaleMeta = parseWhaleCopyMeta(b.meta);
       const meta = b.meta as {
         leaderMarket: string;
         leaderSide: "long" | "short";
@@ -110,8 +112,12 @@ export async function GET(request: Request) {
         side: meta.leaderSide,
         leverage: meta.leverage,
         stakeUsdc: b.amountUsdc,
-        leaderAddress: meta.leaderAddress ?? null,
-        leaderUsername: null,
+        leaderAddress: meta.leaderAddress ?? whaleMeta?.sourceAccount ?? null,
+        leaderUsername: whaleMeta?.whaleId ?? null,
+        whaleId: whaleMeta?.whaleId ?? null,
+        whaleName: whaleMeta?.whaleId ?? null,
+        autoCloseOnSourceClose: whaleMeta?.autoCloseOnSourceClose ?? false,
+        closeReason: whaleMeta?.closeReason ?? null,
         botId: meta.botId ?? null,
         botName: meta.botId ? (getBot(meta.botId)?.name ?? meta.botId) : null,
         unrealizedPnlPct,

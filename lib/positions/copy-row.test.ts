@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { formatCopySourceLabel } from "./copy-row";
 
 describe("formatCopySourceLabel", () => {
+  it("uses the whale name before bot and leader metadata", () => {
+    expect(
+      formatCopySourceLabel({
+        whaleName: "Whale Alpha",
+        botName: "Blitz",
+        leaderUsername: "toptrader",
+        leaderAddress: "9Gdmabcd1234efgh4kS",
+      }),
+    ).toBe("Whale Alpha");
+  });
+
   it("uses the bot name for bot-driven tails without a leader address", () => {
     expect(
       formatCopySourceLabel({

@@ -13,6 +13,10 @@ export interface CopyRowData {
   stakeUsdc: number;
   leaderAddress: string | null;
   leaderUsername: string | null;
+  whaleId?: string | null;
+  whaleName?: string | null;
+  autoCloseOnSourceClose?: boolean;
+  closeReason?: "manual" | "source_closed" | "already_flat" | null;
   botId: string | null;
   botName: string | null;
   unrealizedPnlPct: number | null;
@@ -68,7 +72,20 @@ export function CopyRow({ row, onClosed }: Props) {
         <div className="text-xs text-white/60">
           Stake ${row.stakeUsdc} · Copying {formatCopySourceLabel(row)}
         </div>
-        {row.leaderClosedAt && (
+        <div className="mt-1 text-xs font-semibold text-white/50">
+          {row.autoCloseOnSourceClose ? "AUTO-CLOSE ON" : "MANUAL CLOSE"}
+        </div>
+        {row.closeReason === "source_closed" && (
+          <div className="mt-1 text-xs text-amber-300">
+            Closed after whale exited
+          </div>
+        )}
+        {row.closeReason === "already_flat" && (
+          <div className="mt-1 text-xs text-amber-300">
+            Already flat when whale exited
+          </div>
+        )}
+        {row.leaderClosedAt && !row.closeReason && (
           <div className="mt-1 text-xs text-amber-300">
             Leader exited. Close yours to settle.
           </div>

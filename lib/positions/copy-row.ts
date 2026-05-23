@@ -1,4 +1,5 @@
 export interface CopySourceLike {
+  whaleName?: string | null;
   leaderUsername?: string | null;
   leaderAddress?: string | null;
   botName?: string | null;
@@ -11,8 +12,9 @@ function truncateAddress(address: string): string {
 }
 
 export function formatCopySourceLabel(row: CopySourceLike): string {
-  if (row.leaderUsername) return row.leaderUsername;
+  if (row.whaleName) return row.whaleName;
   if (row.botName) return row.botName;
+  if (row.leaderUsername) return row.leaderUsername;
   if (row.leaderAddress) return truncateAddress(row.leaderAddress);
   if (row.botId) return row.botId;
   return "Bot tail";
