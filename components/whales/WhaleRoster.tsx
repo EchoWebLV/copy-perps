@@ -7,6 +7,7 @@ import type { WhaleTraderSignal } from "@/lib/types";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
+import { formatSignedWhaleUsd } from "./whale-money";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import {
   buildWhaleExposureSummary,
@@ -62,8 +63,8 @@ export function WhaleRoster({ initialWhales }: Props) {
     >
       <BalancePill />
 
-      <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-5 pt-[72px] pb-28 lg:px-8 lg:pt-8 lg:pb-8">
-        <header className="flex items-end justify-between gap-4 pb-4">
+      <div className="pointer-events-none absolute top-[72px] right-5 left-5 z-20 flex items-end justify-between gap-4 lg:top-8 lg:right-8 lg:left-8">
+        <header className="flex w-full items-end justify-between gap-4">
           <div>
             <Headline size={42}>{`"WHALES"`}</Headline>
             <p className="mt-1 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
@@ -85,22 +86,27 @@ export function WhaleRoster({ initialWhales }: Props) {
             LIVE
           </div>
         </header>
+      </div>
 
-        <div className="no-scrollbar grid flex-1 auto-rows-max gap-3 overflow-y-auto lg:grid-cols-2 xl:grid-cols-3">
-          {ranked.length === 0 ? (
-            <EmptyRoster />
-          ) : (
-            ranked.map((whale, idx) => (
+      {ranked.length === 0 ? (
+        <EmptyRoster />
+      ) : (
+        <div className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll">
+          {ranked.map((whale, idx) => (
+            <section
+              key={whale.payload.whaleId}
+              className="flex h-full w-full snap-start items-center justify-center px-5 pt-[150px] pb-28 lg:px-8 lg:pt-[118px] lg:pb-8"
+              style={{ scrollSnapStop: "always" }}
+            >
               <WhaleCard
-                key={whale.payload.whaleId}
                 whale={whale}
                 rank={idx + 1}
                 onTail={(source) => setTailSource(source)}
               />
-            ))
-          )}
+            </section>
+          ))}
         </div>
-      </div>
+      )}
 
       <TailModal
         open={!!tailSource}
@@ -129,7 +135,7 @@ function WhaleCard({
 
   return (
     <article
-      className="relative overflow-hidden px-4 pt-4 pb-3"
+      className="relative flex max-h-full w-full max-w-[460px] flex-col overflow-hidden px-4 pt-4 pb-3 lg:max-w-[520px]"
       style={{
         background: PANEL,
         borderRadius: 18,
@@ -172,7 +178,7 @@ function WhaleCard({
             Total P/L
           </div>
           <div className="mt-1 text-[34px] font-black tabular-nums leading-none" style={{ color: totalPnlColor }}>
-            {fmtSignedUsd(totalPnl)}
+            {formatSignedWhaleUsd(totalPnl)}
           </div>
         </div>
         <div className="text-right">
@@ -192,9 +198,9 @@ function WhaleCard({
       />
 
       <div className="mt-3 grid grid-cols-3 overflow-hidden border-y" style={{ borderColor: FAINT }}>
-        <StatCell label="1D" value={fmtSignedUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
-        <StatCell label="7D" value={fmtSignedUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
-        <StatCell label="30D" value={fmtSignedUsd(p.stats.pnl30dUsdc)} color={p.stats.pnl30dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="1D" value={formatSignedWhaleUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="7D" value={formatSignedWhaleUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="30D" value={formatSignedWhaleUsd(p.stats.pnl30dUsdc)} color={p.stats.pnl30dUsdc >= 0 ? GREEN : RED} />
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black uppercase tracking-widest">
@@ -270,7 +276,7 @@ function WhalePnlGraph({
     <div className="mt-3 overflow-hidden rounded-xl px-3 py-2.5" style={{ background: BG, border: `1px solid ${FAINT}` }}>
       <div className="mb-1.5 flex items-center justify-between text-[9px] font-black uppercase tracking-widest">
         <span style={{ color: DIM }}>All time P&L</span>
-        <span style={{ color }}>{fmtSignedUsd(totalPnl)}</span>
+        <span style={{ color }}>{formatSignedWhaleUsd(totalPnl)}</span>
       </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -482,7 +488,7 @@ function StatCell({
 
 function EmptyRoster() {
   return (
-    <div className="col-span-full flex h-full min-h-[360px] flex-col items-center justify-center text-center">
+    <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-5 text-center">
       <Headline size={30}>{`"NO WHALES ONLINE"`}</Headline>
       <p className="mt-3 text-[12px] font-black uppercase tracking-widest" style={{ color: DIM }}>
         Waiting for source accounts to refresh
@@ -498,11 +504,6 @@ function shortAccount(account: string): string {
 
 function fmtUsd(v: number): string {
   return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function fmtSignedUsd(v: number): string {
-  const sign = v >= 0 ? "+" : "-";
-  return `${sign}$${Math.abs(v).toFixed(0)}`;
 }
 
 function fmtPct(v: number | null): string {
