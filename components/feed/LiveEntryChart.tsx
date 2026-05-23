@@ -17,13 +17,19 @@ import {
   type ChartCandle,
 } from "./live-entry-chart";
 
+const CANDLE_CACHE_MS = 30_000;
+const candleCache = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ChartCandle[]> }
+>();
+
 export interface LiveEntryChartPosition {
   positionId: string;
   asset: string;
   side: FlatPosition["side"];
   leverage: number;
   entryMark: number;
-  currentMark: number;
+  currentMark: number | null;
   openSinceMs: number;
 }
 
@@ -36,29 +42,23 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
   );
 
   useEffect(() => {
-    const ctrl = new AbortController();
+    let cancelled = false;
     setStatus("loading");
     setChartNowMs(Date.now());
-    fetch(
-      `/api/markets/candles?asset=${encodeURIComponent(pos.asset)}&timeframe=1m&count=90`,
-      { cache: "no-store", signal: ctrl.signal },
-    )
-      .then(async (res) => {
-        if (!res.ok) return [];
-        const body = (await res.json()) as { candles?: ChartCandle[] };
-        return Array.isArray(body.candles) ? body.candles : [];
-      })
+    getCandlesForAsset(pos.asset)
       .then((next) => {
-        if (ctrl.signal.aborted) return;
+        if (cancelled) return;
         setCandles(next);
         setStatus(next.length > 0 ? "ready" : "empty");
       })
       .catch(() => {
-        if (ctrl.signal.aborted) return;
+        if (cancelled) return;
         setCandles([]);
         setStatus("empty");
       });
-    return () => ctrl.abort();
+    return () => {
+      cancelled = true;
+    };
   }, [pos.asset, pos.positionId]);
 
   const model = useMemo(
@@ -72,7 +72,8 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
       }),
     [candles, chartNowMs, pos.currentMark, pos.entryMark, pos.openSinceMs],
   );
-  const entryDelta = ((pos.currentMark - pos.entryMark) / pos.entryMark) * 100;
+  const currentMark = model.current.price;
+  const entryDelta = ((currentMark - pos.entryMark) / pos.entryMark) * 100;
   const profit =
     pos.side === "long" ? entryDelta >= 0 : entryDelta <= 0;
   const stroke = profit ? GREEN : RED;
@@ -246,7 +247,7 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
           fontSize="13"
           fontWeight="900"
         >
-          NOW {formatPrice(pos.currentMark)}
+          NOW {formatPrice(currentMark)}
         </text>
       </svg>
 
@@ -259,6 +260,27 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
       </div>
     </div>
   );
+}
+
+function getCandlesForAsset(asset: string): Promise<ChartCandle[]> {
+  const key = asset.toUpperCase();
+  const now = Date.now();
+  const cached = candleCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+
+  const promise = fetch(
+    `/api/markets/candles?asset=${encodeURIComponent(asset)}&timeframe=1m&count=90`,
+    { cache: "no-store" },
+  )
+    .then(async (res) => {
+      if (!res.ok) return [];
+      const body = (await res.json()) as { candles?: ChartCandle[] };
+      return Array.isArray(body.candles) ? body.candles : [];
+    })
+    .catch(() => []);
+
+  candleCache.set(key, { expiresAt: now + CANDLE_CACHE_MS, promise });
+  return promise;
 }
 
 function formatPrice(value: number): string {

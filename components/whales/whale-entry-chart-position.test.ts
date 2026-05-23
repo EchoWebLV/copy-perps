@@ -44,8 +44,14 @@ describe("toWhaleEntryChartPosition", () => {
     });
   });
 
-  it("returns null until the whale has a live current mark", () => {
-    expect(toWhaleEntryChartPosition(whalePosition({ currentMark: null }))).toBeNull();
+  it("keeps chart props available when the server has no current mark yet", () => {
+    expect(
+      toWhaleEntryChartPosition(whalePosition({ currentMark: null })),
+    ).toMatchObject({
+      positionId: "pos-1",
+      entryMark: 150,
+      currentMark: null,
+    });
   });
 
   it("uses a websocket live mark when the server snapshot has no mark yet", () => {

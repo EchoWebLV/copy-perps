@@ -75,7 +75,7 @@ export function buildLiveEntryChartModel({
 }: {
   candles: ChartCandle[];
   entryMark: number;
-  currentMark: number;
+  currentMark: number | null;
   openSinceMs: number;
   nowMs?: number;
 }): LiveEntryChartModel {
@@ -91,6 +91,10 @@ export function buildLiveEntryChartModel({
     .sort((a, b) => a.ts - b.ts)
     .slice(-90);
 
+  const effectiveCurrentMark =
+    currentMark !== null && Number.isFinite(currentMark)
+      ? currentMark
+      : cleanCandles.at(-1)?.close ?? entryMark;
   const fallbackStart = Math.max(0, openSinceMs - 30 * 60_000);
   const fallbackEnd = Math.max(fallbackStart + 60_000, nowMs ?? Date.now());
   const minTs = cleanCandles[0]?.ts ?? fallbackStart;
@@ -100,7 +104,7 @@ export function buildLiveEntryChartModel({
 
   const priceValues = [
     entryMark,
-    currentMark,
+    effectiveCurrentMark,
     ...cleanCandles.flatMap((c) => [c.high, c.low, c.open, c.close]),
   ].filter(Number.isFinite);
   const rawMin = Math.min(...priceValues);
@@ -126,8 +130,8 @@ export function buildLiveEntryChartModel({
   }));
   const current: ChartPoint = {
     x: scaleX(currentTs),
-    y: scaleY(currentMark),
-    price: currentMark,
+    y: scaleY(effectiveCurrentMark),
+    price: effectiveCurrentMark,
     ts: currentTs,
   };
   const linePoints = points.length > 0 ? [...points, current] : [

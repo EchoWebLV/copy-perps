@@ -6,7 +6,9 @@ export function toWhaleEntryChartPosition(
   liveMark?: number,
 ): LiveEntryChartPosition | null {
   const currentMark = liveMark ?? position.currentMark;
-  if (currentMark === null || !Number.isFinite(currentMark)) return null;
+  if (!Number.isFinite(position.entryPrice) || position.entryPrice <= 0) {
+    return null;
+  }
 
   return {
     positionId: position.positionId,
@@ -14,7 +16,8 @@ export function toWhaleEntryChartPosition(
     side: position.side,
     leverage: position.leverage,
     entryMark: position.entryPrice,
-    currentMark,
+    currentMark:
+      currentMark !== null && Number.isFinite(currentMark) ? currentMark : null,
     openSinceMs: position.openedAtMs,
   };
 }

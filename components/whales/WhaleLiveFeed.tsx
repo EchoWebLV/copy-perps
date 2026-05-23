@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Zap } from "lucide-react";
+import { ArrowLeft, Zap } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
 import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
@@ -132,7 +132,6 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
                   position={position}
                   slideIndex={i}
                   total={sorted.length}
-                  showChart={i === activeIdx}
                   liveMark={liveMarks[position.payload.market]}
                   onTail={() => setTailSource(toTailSource(position.payload))}
                 />
@@ -179,7 +178,6 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
                 position={selectedPosition}
                 slideIndex={selectedIndex}
                 total={sorted.length}
-                showChart
                 liveMark={liveMarks[selectedPosition.payload.market]}
                 onTail={() =>
                   setTailSource(
@@ -205,14 +203,12 @@ function PositionCard({
   position,
   slideIndex,
   total,
-  showChart,
   liveMark,
   onTail,
 }: {
   position: WhalePositionSignal;
   slideIndex: number;
   total: number;
-  showChart: boolean;
   liveMark?: number;
   onTail: () => void;
 }) {
@@ -241,7 +237,7 @@ function PositionCard({
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-[72px] pb-24 lg:px-8 lg:pt-8 lg:pb-8" style={{ background: BG }}>
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="flex min-h-0 flex-1 flex-col pr-1">
         <div className="flex items-baseline justify-between pl-[80px] lg:pl-0">
           <Stamp
             label="POS"
@@ -277,11 +273,11 @@ function PositionCard({
 
         <div className="mt-4 grid grid-cols-3 overflow-hidden" style={{ background: PANEL, borderRadius: 16, border: `1px solid ${FAINT}` }}>
           <SpecCell label="NOTIONAL" value={fmtUsd(p.notionalUsd)} />
-          <SpecCell label="ENTRY" value={fmtPrice(p.entryPrice)} bordered />
+          <SpecCell label="ENTRY PRICE" value={fmtPrice(p.entryPrice)} bordered />
           <SpecCell label="NOW" value={currentMark === null ? "N/A" : fmtPrice(currentMark)} color={profit ? GREEN : RED} />
         </div>
 
-        {showChart && chartPosition ? (
+        {chartPosition ? (
           <LiveEntryChart pos={chartPosition} />
         ) : null}
 
@@ -299,23 +295,6 @@ function PositionCard({
             <div>SEEN {fmtAge(p.lastSeenAtMs, now)}</div>
           </div>
         </div>
-
-        {p.analysis ? (
-          <div className="mt-3 space-y-2">
-            <AnalysisBlock label="Summary" value={p.analysis.summary} />
-            <AnalysisBlock label="Risk" value={p.analysis.risk} tone="risk" />
-            {p.analysis.entryGapWarning ? (
-              <div className="flex gap-2 rounded-2xl px-3 py-3 text-[12px] leading-snug" style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}45`, color: FG, fontFamily: BODY_FONT }}>
-                <AlertTriangle size={15} strokeWidth={2.8} style={{ color: ACCENT }} />
-                <span>{p.analysis.entryGapWarning}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-2xl px-3 py-3 text-[12px] leading-snug" style={{ background: PANEL, border: `1px solid ${FAINT}`, color: DIM, fontFamily: BODY_FONT }}>
-            Analysis is warming up for this source position.
-          </div>
-        )}
       </div>
 
       <button
@@ -434,27 +413,6 @@ function SpecCell({
       <div className="mt-1 text-[18px] font-black tabular-nums" style={{ color, fontFamily: FONT_DISPLAY }}>
         {value}
       </div>
-    </div>
-  );
-}
-
-function AnalysisBlock({
-  label,
-  value,
-  tone = "normal",
-}: {
-  label: string;
-  value: string;
-  tone?: "normal" | "risk";
-}) {
-  return (
-    <div className="rounded-2xl px-3 py-3" style={{ background: PANEL, border: `1px solid ${tone === "risk" ? `${RED}35` : FAINT}` }}>
-      <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: tone === "risk" ? RED : DIM }}>
-        {label}
-      </div>
-      <p className="mt-1 text-[13px] leading-snug" style={{ color: FG, opacity: 0.92, fontFamily: BODY_FONT }}>
-        {value}
-      </p>
     </div>
   );
 }

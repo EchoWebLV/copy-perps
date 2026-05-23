@@ -45,4 +45,16 @@ describe("buildLiveEntryChartModel", () => {
     expect(model.entry.y).toBeGreaterThanOrEqual(model.plot.top);
     expect(model.entry.y).toBeLessThan(model.current.y);
   });
+
+  it("uses the latest candle close when a live current mark is not available", () => {
+    const model = buildLiveEntryChartModel({
+      candles,
+      entryMark: 106,
+      currentMark: null,
+      openSinceMs: 2_000,
+    });
+
+    expect(model.current.price).toBe(104);
+    expect(model.points.at(-1)?.price).toBe(104);
+  });
 });
