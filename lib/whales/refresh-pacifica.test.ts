@@ -102,4 +102,13 @@ describe("refreshPacificaWhales", () => {
     );
     warn.mockRestore();
   });
+
+  it("rejects unexpected errors while persisting positions", async () => {
+    getPositions.mockResolvedValue([validPosition]);
+    upsertWhalePosition.mockRejectedValue(new Error("db down"));
+
+    const { refreshPacificaWhales } = await import("./refresh-pacifica");
+
+    await expect(refreshPacificaWhales()).rejects.toThrow("db down");
+  });
 });

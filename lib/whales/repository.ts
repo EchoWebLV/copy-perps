@@ -76,6 +76,7 @@ export async function upsertWhalePosition(
         leverage: pos.leverage,
         amountBase: pos.amountBase,
         notionalUsd: pos.notionalUsd,
+        entryPrice: pos.entryPrice,
         currentMark: pos.currentMark,
         unrealizedPnlPct: pos.unrealizedPnlPct,
         raw: pos.raw,
