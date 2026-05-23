@@ -1,7 +1,7 @@
 export type WhaleCopyMeta = {
   sourceType: "whale";
   whaleId: string;
-  source: string;
+  source: "pacifica" | "hyperliquid";
   sourceAccount: string;
   sourcePositionId: string;
   leaderMarket: string;
@@ -11,7 +11,7 @@ export type WhaleCopyMeta = {
   userEntryPrice: number;
   sourceEntryPriceAtCopy: number;
   pacificaOrderId: string;
-  closeReason: string | null;
+  closeReason: "manual" | "source_closed" | "already_flat" | null;
 };
 
 type BuildWhaleCopyMetaArgs = Omit<WhaleCopyMeta, "sourceType" | "closeReason">;
@@ -36,11 +36,26 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isWhaleSource(value: unknown): value is WhaleCopyMeta["source"] {
+  return value === "pacifica" || value === "hyperliquid";
+}
+
+function isWhaleCloseReason(
+  value: unknown,
+): value is WhaleCopyMeta["closeReason"] {
+  return (
+    value === null ||
+    value === "manual" ||
+    value === "source_closed" ||
+    value === "already_flat"
+  );
+}
+
 export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
   if (!isRecord(value)) return null;
   if (value.sourceType !== "whale") return null;
   if (!isString(value.whaleId)) return null;
-  if (!isString(value.source)) return null;
+  if (!isWhaleSource(value.source)) return null;
   if (!isString(value.sourceAccount)) return null;
   if (!isString(value.sourcePositionId)) return null;
   if (!isString(value.leaderMarket)) return null;
@@ -50,9 +65,7 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
   if (!isNumber(value.userEntryPrice)) return null;
   if (!isNumber(value.sourceEntryPriceAtCopy)) return null;
   if (!isString(value.pacificaOrderId)) return null;
-  if (value.closeReason !== null && typeof value.closeReason !== "string") {
-    return null;
-  }
+  if (!isWhaleCloseReason(value.closeReason)) return null;
 
   return {
     sourceType: "whale",
