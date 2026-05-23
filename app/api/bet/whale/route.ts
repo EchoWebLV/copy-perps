@@ -256,6 +256,9 @@ export async function POST(request: Request) {
         }),
       })
       .returning();
+    if (!pendingBet) {
+      throw new Error("pending bet insert returned no row");
+    }
   } catch (err) {
     await releaseReservationBestEffort(user.id, position.market);
     console.error("[bet/whale] pending ledger insert failed:", err);
@@ -305,6 +308,9 @@ export async function POST(request: Request) {
       })
       .where(eq(bets.id, pendingBet.id))
       .returning();
+    if (!bet) {
+      throw new Error("confirmed bet update returned no row");
+    }
   } catch (err) {
     await releaseReservationBestEffort(user.id, position.market);
     console.error("[bet/whale] ledger update failed:", err);

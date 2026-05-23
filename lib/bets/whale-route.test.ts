@@ -400,6 +400,60 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
   });
 
+  it("returns prepare error when pending ledger insert returns no row", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.insertReturning.mockResolvedValue([]);
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "Could not prepare whale copy bet",
+      });
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+      expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("returns confirm error when confirmed ledger update returns no row", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.updateReturning.mockResolvedValue([]);
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "Could not confirm whale copy bet",
+      });
+      expect(mocks.openCopyOrder).toHaveBeenCalled();
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("releases the tail reservation when Pacifica order opening fails", async () => {
     const consoleError = vi
       .spyOn(console, "error")
