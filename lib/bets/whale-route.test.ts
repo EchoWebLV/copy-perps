@@ -294,6 +294,65 @@ describe("POST /api/bet/whale", () => {
     });
   });
 
+  it("opens a whale copy with a requested leverage below the source leverage", async () => {
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        leverage: 3,
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.clampLeverageForNotional).toHaveBeenCalledWith("ETH", 30);
+    expect(mocks.openCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ETH",
+        side: "long",
+        amountBase: "0.015",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          leverage: 3,
+        }),
+      }),
+    );
+    expect(mocks.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          leverage: 3,
+        }),
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      source: {
+        leverage: 3,
+      },
+    });
+  });
+
+  it("rejects whale copy leverage above the source leverage", async () => {
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        leverage: 9,
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "leverage must be between 1x and source leverage 7x",
+    });
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+  });
+
   it("sizes the copy from current mark when it is available", async () => {
     mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ currentMark: 2500 }),

@@ -5,6 +5,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
+import { Minus, Plus } from "lucide-react";
 import { useLiveMark } from "@/lib/pacifica/live-context";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
@@ -91,6 +92,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function clampTailLeverage(value: number, max: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(Math.max(Math.round(value), 1), Math.max(1, max));
+}
+
 class TailRequestError extends Error {
   constructor(
     message: string,
@@ -115,6 +121,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<null | TailSuccess>(null);
   const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
+  const [whaleLeverage, setWhaleLeverage] = useState(1);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   const whaleTailPositions = useMemo(
@@ -131,6 +138,21 @@ export function TailModal({ open, onClose, source }: Props) {
   );
   const activeWhalePosition =
     copyableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
+  const isSingleWhalePosition =
+    source?.kind === "whale" && whaleTailPositions.length === 1;
+  const maxWhaleLeverage =
+    source?.kind === "whale"
+      ? Math.max(1, activeWhalePosition?.leverage ?? source.leverage)
+      : 1;
+  const boundedWhaleLeverage = clampTailLeverage(
+    whaleLeverage,
+    maxWhaleLeverage,
+  );
+  const showWhaleLeverageControl =
+    source?.kind === "whale" && isSingleWhalePosition;
+  const copyLeverage = showWhaleLeverageControl
+    ? boundedWhaleLeverage
+    : undefined;
   const liveMark = useLiveMark(
     source?.kind === "whale"
       ? activeWhalePosition?.asset ?? ""
@@ -147,6 +169,11 @@ export function TailModal({ open, onClose, source }: Props) {
     setError(null);
     setSuccess(null);
     setAutoCloseOnSourceClose(source?.kind === "whale");
+    setWhaleLeverage(
+      source?.kind === "whale"
+        ? Math.max(1, source.positions[0]?.leverage ?? source.leverage)
+        : 1,
+    );
   }, [
     open,
     source?.kind,
@@ -180,10 +207,19 @@ export function TailModal({ open, onClose, source }: Props) {
   const notional = useMemo(() => {
     if (!source) return 0;
     if (source.kind === "whale") {
+      if (showWhaleLeverageControl) {
+        return effectiveStake * boundedWhaleLeverage;
+      }
       return whaleTailTotalNotional(effectiveStake, copyableWhalePositions);
     }
     return effectiveStake * source.leverage;
-  }, [copyableWhalePositions, effectiveStake, source]);
+  }, [
+    boundedWhaleLeverage,
+    copyableWhalePositions,
+    effectiveStake,
+    showWhaleLeverageControl,
+    source,
+  ]);
 
   const sliceBps = 4; // Pacifica taker, conservative display
   const estFeeUsd = useMemo(
@@ -225,6 +261,7 @@ export function TailModal({ open, onClose, source }: Props) {
                   copyPosition?.sourcePositionId ?? source.sourcePositionId,
                 stakeUsdc: effectiveStake,
                 walletAddress: wallet.address,
+                leverage: copyLeverage,
                 autoCloseOnSourceClose,
               }
             : {
@@ -393,6 +430,7 @@ export function TailModal({ open, onClose, source }: Props) {
     submitting,
     stakeValid,
     effectiveStake,
+    copyLeverage,
     autoCloseOnSourceClose,
     copyableWhalePositions,
     getAccessToken,
@@ -419,7 +457,9 @@ export function TailModal({ open, onClose, source }: Props) {
       : source.side.toUpperCase();
   const displayLeverage =
     source.kind === "whale"
-      ? displayPosition?.leverage ?? source.leverage
+      ? showWhaleLeverageControl
+        ? boundedWhaleLeverage
+        : displayPosition?.leverage ?? source.leverage
       : source.leverage;
   const sideColor =
     (displayPosition?.side ?? source.side) === "long"
@@ -433,11 +473,11 @@ export function TailModal({ open, onClose, source }: Props) {
       : null) ??
     source.entryMark;
   const markText = fmtPrice(markValue);
-  const sourceName = source.kind === "whale" ? source.displayName : source.botName;
+  const sourceName =
+    source.kind === "whale" ? source.displayName : source.botName;
   const sourceAvatarUrl = source.kind === "bot" ? source.avatarImageUrl : null;
-  const sourceAvatarFallback = source.kind === "bot" ? source.avatarEmoji ?? "🤖" : null;
-  const isSingleWhalePosition =
-    source.kind === "whale" && whaleTailPositions.length === 1;
+  const sourceAvatarFallback =
+    source.kind === "bot" ? source.avatarEmoji ?? "🤖" : null;
 
   return (
     <div
@@ -585,12 +625,76 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
             </div>
 
+            {showWhaleLeverageControl ? (
+              <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+                <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
+                  <span>Tail leverage</span>
+                  <span className="text-white">{boundedWhaleLeverage}x</span>
+                </div>
+                <div className="mb-3 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Decrease leverage"
+                    disabled={submitting || boundedWhaleLeverage <= 1}
+                    onClick={() => {
+                      setWhaleLeverage((value) =>
+                        clampTailLeverage(value - 1, maxWhaleLeverage),
+                      );
+                      setError(null);
+                    }}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white transition disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <Minus size={16} strokeWidth={3} />
+                  </button>
+                  <div className="text-center text-2xl font-black tabular-nums text-white">
+                    {boundedWhaleLeverage}x
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Increase leverage"
+                    disabled={
+                      submitting || boundedWhaleLeverage >= maxWhaleLeverage
+                    }
+                    onClick={() => {
+                      setWhaleLeverage((value) =>
+                        clampTailLeverage(value + 1, maxWhaleLeverage),
+                      );
+                      setError(null);
+                    }}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white transition disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <Plus size={16} strokeWidth={3} />
+                  </button>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={maxWhaleLeverage}
+                  step={1}
+                  value={boundedWhaleLeverage}
+                  onChange={(e) => {
+                    setWhaleLeverage(Number(e.target.value));
+                    setError(null);
+                  }}
+                  disabled={submitting || maxWhaleLeverage <= 1}
+                  aria-label="Tail leverage"
+                  className="w-full accent-emerald-400"
+                />
+                <div className="mt-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/35">
+                  <span>1x</span>
+                  <span>Source {maxWhaleLeverage}x</span>
+                </div>
+              </div>
+            ) : null}
+
             {source.kind === "whale" ? (
               <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
                 <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
                   <span>{whaleTailPositionsHeading(whaleTailPositions)}</span>
                   {isSingleWhalePosition ? null : (
-                    <span>{copyableWhalePositions.length}/{whaleTailPositions.length}</span>
+                    <span>
+                      {copyableWhalePositions.length}/{whaleTailPositions.length}
+                    </span>
                   )}
                 </div>
                 <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
@@ -665,7 +769,7 @@ export function TailModal({ open, onClose, source }: Props) {
                   ${notional.toFixed(2)}{" "}
                   {source.kind === "whale"
                     ? isSingleWhalePosition
-                      ? `($${effectiveStake.toFixed(2)} stake)`
+                      ? `(${boundedWhaleLeverage}× of $${effectiveStake.toFixed(2)})`
                       : `($${effectiveStake.toFixed(2)} per copied position)`
                     : `(${source.leverage}× of $${effectiveStake.toFixed(2)})`}
                 </span>

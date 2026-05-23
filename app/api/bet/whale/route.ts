@@ -38,6 +38,7 @@ interface Body {
   positionId?: string;
   stakeUsdc?: number;
   walletAddress?: string;
+  leverage?: number;
   autoCloseOnSourceClose?: boolean;
 }
 
@@ -163,15 +164,28 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+  const requestedLeverage = body.leverage ?? position.leverage;
+  if (
+    !Number.isFinite(requestedLeverage) ||
+    requestedLeverage < 1 ||
+    requestedLeverage > position.leverage
+  ) {
+    return NextResponse.json(
+      {
+        error: `leverage must be between 1x and source leverage ${position.leverage}x`,
+      },
+      { status: 400 },
+    );
+  }
 
   const user = await ensureUser(claims.userId, body.walletAddress);
   if (!user.solanaPubkey) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
-  const userNotional = body.stakeUsdc * position.leverage;
+  const userNotional = body.stakeUsdc * requestedLeverage;
   const clamped = await clampLeverageForNotional(position.market, userNotional);
-  const effectiveLeverage = Math.min(position.leverage, clamped);
+  const effectiveLeverage = Math.min(requestedLeverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const marketInfo = await getMarketBySymbol(position.market);
   if (!marketInfo) {
