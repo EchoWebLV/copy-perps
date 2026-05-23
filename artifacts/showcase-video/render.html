@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #070707; }
+  body { font-family: Impact, "Arial Black", "Arial Bold", system-ui, sans-serif; letter-spacing: 0.02em; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: radial-gradient(circle at 50% 18%, #24210a 0, #080809 38%, #030304 100%); }
+  #stage::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255,230,0,.08), transparent 18%, transparent 82%, rgba(255,230,0,.08)); mix-blend-mode: screen; opacity: .8; z-index: 2; pointer-events: none; }
+  #stage::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 180px rgba(0,0,0,.9); z-index: 4; pointer-events: none; }
+  .shot { position: absolute; top: 0; left: 50%; height: 1920px; width: auto; transform-origin: center center; filter: contrast(1.06) saturate(1.12); z-index: 1; }
+  #prev { opacity: 0; }
+  .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 5px); opacity: .22; z-index: 3; pointer-events: none; }
+  .noise { position: absolute; inset: -20%; background-image: radial-gradient(circle at 20% 30%, rgba(255,230,0,.16), transparent 20%), radial-gradient(circle at 80% 20%, rgba(35,255,151,.10), transparent 18%), radial-gradient(circle at 60% 90%, rgba(255,53,92,.10), transparent 20%); filter: blur(38px); opacity: .75; z-index: 0; }
+  #sweep { position: absolute; top: 0; left: 0; width: 22%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,230,0,.42), transparent); transform: translateX(-120%) skewX(-16deg); z-index: 6; pointer-events: none; }
+  .top { position: absolute; top: 34px; left: 54px; right: 54px; display: flex; justify-content: space-between; align-items: center; z-index: 8; font-family: "Arial Bold", system-ui, sans-serif; font-weight: 900; letter-spacing: .22em; color: rgba(250,250,242,.78); font-size: 20px; text-transform: uppercase; }
+  .dot { display: inline-block; width: 18px; height: 18px; border-radius: 5px; margin-right: 12px; vertical-align: -3px; background: #ffe600; box-shadow: 0 0 34px rgba(255,230,0,.55); }
+  #progress { position: absolute; left: 0; top: 0; height: 7px; background: #ffe600; box-shadow: 0 0 30px rgba(255,230,0,.8); z-index: 10; }
+  #caption { position: absolute; left: 54px; right: 54px; bottom: 260px; z-index: 9; color: #fafaf2; text-transform: uppercase; text-shadow: 0 12px 40px rgba(0,0,0,.94); }
+  #eyebrow { font-family: "Arial Bold", system-ui, sans-serif; font-size: 21px; letter-spacing: .28em; color: #ffe600; margin-bottom: 14px; }
+  #title { white-space: pre-line; font-size: 62px; line-height: .92; font-weight: 900; letter-spacing: 0; }
+  #subtitle { margin-top: 18px; max-width: 880px; font-family: Arial, system-ui, sans-serif; font-weight: 800; font-size: 27px; line-height: 1.22; letter-spacing: .03em; color: rgba(250,250,242,.78); text-transform: none; }
+  #outro { position: absolute; inset: 0; opacity: 0; z-index: 7; background: radial-gradient(circle at 50% 40%, rgba(255,230,0,.24), transparent 25%), #060606; }
+  #outroMark { position: absolute; left: 54px; right: 54px; top: 660px; font-size: 132px; line-height: .9; color: #ffe600; text-align: left; text-transform: uppercase; text-shadow: 0 0 60px rgba(255,230,0,.3); white-space: pre-line; }
+  #outroSub { position: absolute; left: 58px; bottom: 420px; font-family: Arial, system-ui, sans-serif; font-size: 38px; color: rgba(250,250,242,.84); letter-spacing: .16em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="noise"></div>
+  <img id="prev" class="shot" />
+  <img id="current" class="shot" />
+  <div id="outro"><div id="outroMark"></div><div id="outroSub"></div></div>
+  <div class="scan"></div>
+  <div id="sweep"></div>
+  <div id="progress"></div>
+  <div class="top"><span><span class="dot"></span>BREACH</span><span>LIVE PAPER</span></div>
+  <div id="caption"><div id="eyebrow"></div><div id="title"></div><div id="subtitle"></div></div>
+</div>
+<script>
+const scenes = [{"image":"00-intro.png","duration":2.6,"pan":12,"eyebrow":"GWAK.GG","title":"PAPER PERPS\nWITH PERSONALITY","subtitle":"AI bots mirror live market signals and fight with real-time P/L."},{"image":"01-feed.png","duration":3.4,"pan":-46,"eyebrow":"LIVE ROSTER","title":"EVERY BOT\nHAS A BANKROLL","subtitle":"Ranked operators, open positions, live equity, and one-tap tailing."},{"image":"02-live.png","duration":3.5,"pan":24,"eyebrow":"POSITION VIEW","title":"THE TRADE\nHAS A THESIS","subtitle":"Direction, leverage, entry, mark price, and live P/L in one screen."},{"image":"06-chatter.png","duration":3.3,"pan":-36,"eyebrow":"CHATTER","title":"THE FEED\nTALKS BACK","subtitle":"Every open and close lands in the bot's own voice."},{"image":"08-tail-modal.png","duration":3.6,"pan":18,"eyebrow":"TAIL FLOW","title":"COPY THE\nSIGNAL FAST","subtitle":"Pick a stake, see notional, follow the trade, stay in control."},{"outro":true,"duration":2.5,"eyebrow":"BREACH","title":"WATCH THE BOTS.\nTAIL THE SIGNAL.","subtitle":"gwak.gg"}];
+const total = 18.900000000000002;
+const base = "file:///Users/yordanlasonov/Documents/GitHub/perps-maxxing-paper-bots/artifacts/showcase-video/stills/";
+function smooth(a,b,x){ x=Math.max(0,Math.min(1,(x-a)/(b-a))); return x*x*(3-2*x); }
+function sceneAt(t){ let acc=0; for(let i=0;i<scenes.length;i++){ const s=scenes[i]; if(t < acc+s.duration || i === scenes.length-1) return {s,i,local:t-acc,p:Math.max(0,Math.min(1,(t-acc)/s.duration)),acc}; acc += s.duration; } }
+window.renderFrame = (t) => {
+  const {s,i,p} = sceneAt(t);
+  const prev = document.getElementById('prev');
+  const cur = document.getElementById('current');
+  const cap = document.getElementById('caption');
+  const outro = document.getElementById('outro');
+  const sweep = document.getElementById('sweep');
+  document.querySelector('.top').style.opacity = s.image === '00-intro.png' ? 0 : 1;
+  document.getElementById('progress').style.width = Math.round((1080) * Math.max(0, Math.min(1, t / total))) + 'px';
+  document.getElementById('eyebrow').textContent = s.eyebrow || '';
+  document.getElementById('title').textContent = s.title || '';
+  document.getElementById('subtitle').textContent = s.subtitle || '';
+  const capIn = s.image === '00-intro.png'
+    ? 0
+    : smooth(0.05,0.22,p) * (1 - smooth(0.84,0.98,p));
+  cap.style.opacity = capIn;
+  cap.style.transform = 'translateY(' + (38 * (1-capIn)).toFixed(1) + 'px)';
+  sweep.style.opacity = 1 - smooth(0.0,0.18,p);
+  sweep.style.transform = 'translateX(' + (-120 + 760*smooth(0,0.22,p)).toFixed(1) + '%) skewX(-16deg)';
+  if (s.outro) {
+    cur.style.opacity = 0; prev.style.opacity = 0; outro.style.opacity = smooth(0.02,0.22,p);
+    document.getElementById('outroMark').textContent = s.title || '';
+    document.getElementById('outroSub').textContent = s.subtitle || '';
+    document.getElementById('outroMark').style.transform = 'translateY(' + (28 - 44*smooth(0.05,0.8,p)).toFixed(1) + 'px)';
+    return;
+  }
+  outro.style.opacity = 0;
+  cur.src = base + s.image;
+  if (i > 0 && !scenes[i-1].outro) prev.src = base + scenes[i-1].image;
+  const fade = smooth(0.0,0.16,p);
+  prev.style.opacity = i > 0 ? (1 - fade) : 0;
+  cur.style.opacity = fade;
+  const scale = 1.015 + 0.045*p;
+  const y = (s.pan || 0) * (p - .5);
+  cur.style.transform = 'translateX(-50%) translateY(' + y.toFixed(1) + 'px) scale(' + scale.toFixed(5) + ')';
+  prev.style.transform = 'translateX(-50%) scale(1.055)';
+};
+</script>
+</body>
+</html>
