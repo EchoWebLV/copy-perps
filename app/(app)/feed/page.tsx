@@ -1,23 +1,22 @@
 import { BotRoster } from "@/components/feed/BotRoster";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
-import { WhaleRoster } from "@/components/whales/WhaleRoster";
+import { WhaleLiveFeed } from "@/components/whales/WhaleLiveFeed";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildBotSignals } from "@/lib/signals/bot-signals";
-import { buildWhaleTraderSignals } from "@/lib/signals/whale-signals";
+import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 
 export const dynamic = "force-dynamic";
 
-// /feed is now the alpha-arena ROSTER - a birdeye view of every paper
-// bot. The TikTok-style per-position feed lives on /live, opened
-// via the elevated ⚡ button in the bottom nav.
+// /feed is the primary social surface: live whale source positions with
+// tail actions and generated commentary.
 export default async function FeedPage() {
   if (whaleSocialEnabled()) {
-    const whales = await buildWhaleTraderSignals();
+    const positions = await buildWhalePositionSignals();
 
     return (
-      <AppShell railTitle="Whale Roster">
-        <WhaleRoster initialWhales={whales} />
+      <AppShell railTitle="Live Positions">
+        <WhaleLiveFeed initialPositions={positions} />
         <BottomNav />
       </AppShell>
     );

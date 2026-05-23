@@ -13,6 +13,17 @@ describe("desktop shell nav contract", () => {
     ]);
   });
 
+  it("labels the main whale trading surfaces without legacy bot roster copy", () => {
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
+      "Positions",
+      "Swipe",
+      "Chatter",
+      "Portfolio",
+      "Settings",
+      "Wins",
+    ]);
+  });
+
   it("marks feed and live nested paths active", () => {
     expect(isShellNavActive("/feed", "/feed")).toBe(true);
     expect(isShellNavActive("/feed", "/feed?bot=whale")).toBe(true);

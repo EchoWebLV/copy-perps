@@ -8,7 +8,7 @@ import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
 // "LIVE" CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
-  { href: "/feed", icon: Flame, label: "Feed" },
+  { href: "/feed", icon: Flame, label: "Positions" },
   { href: "/chatter", icon: Radio, label: "Chatter" },
 ];
 const RIGHT_TABS = [
@@ -47,7 +47,7 @@ export function BottomNav() {
         <Link
           href="/live"
           className="relative flex flex-1 items-center justify-center"
-          aria-label="Live positions"
+          aria-label="Swipe open positions"
         >
           <span
             className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-full"
@@ -67,7 +67,7 @@ export function BottomNav() {
             className="pt-6 text-[10px] font-black uppercase tracking-widest"
             style={{ color: FG, opacity: liveActive ? 1 : 0.55 }}
           >
-            Live
+            Swipe
           </span>
         </Link>
 

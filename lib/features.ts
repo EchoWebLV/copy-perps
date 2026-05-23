@@ -15,5 +15,5 @@ export function casinoModeEnabled(): boolean {
 }
 
 export function whaleSocialEnabled(): boolean {
-  return process.env.FEATURE_WHALE_SOCIAL === "true";
+  return process.env.FEATURE_WHALE_SOCIAL !== "false";
 }
