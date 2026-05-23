@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Zap } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
+import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
+import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
@@ -22,6 +24,10 @@ import {
   Stamp,
   StoryAvatar,
 } from "@/components/v2/ui";
+import {
+  computeWhalePositionPnlPct,
+  toWhaleEntryChartPosition,
+} from "./whale-entry-chart-position";
 
 const POLL_MS = 4_000;
 const BODY_FONT = "system-ui, -apple-system, 'Inter', sans-serif";
@@ -37,6 +43,7 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const liveMarks = useLiveMarks();
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +62,9 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
     () => [...positions].sort((a, b) => b.payload.openedAtMs - a.payload.openedAtMs),
     [positions],
   );
+  const selectedIndex =
+    sorted.length === 0 ? 0 : Math.min(activeIdx, sorted.length - 1);
+  const selectedPosition = sorted[selectedIndex];
 
   useEffect(() => {
     const els = itemRefs.current.filter((el): el is HTMLDivElement => !!el);
@@ -121,6 +131,8 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
                   position={position}
                   slideIndex={i}
                   total={sorted.length}
+                  showChart={i === activeIdx}
+                  liveMark={liveMarks[position.payload.market]}
                   onTail={() => setTailSource(toTailSource(position.payload))}
                 />
               </div>
@@ -163,12 +175,14 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
 
             <section className="min-h-0 overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
               <PositionCard
-                position={sorted[Math.min(activeIdx, sorted.length - 1)]}
-                slideIndex={Math.min(activeIdx, sorted.length - 1)}
+                position={selectedPosition}
+                slideIndex={selectedIndex}
                 total={sorted.length}
+                showChart
+                liveMark={liveMarks[selectedPosition.payload.market]}
                 onTail={() =>
                   setTailSource(
-                    toTailSource(sorted[Math.min(activeIdx, sorted.length - 1)].payload),
+                    toTailSource(selectedPosition.payload),
                   )
                 }
               />
@@ -190,19 +204,33 @@ function PositionCard({
   position,
   slideIndex,
   total,
+  showChart,
+  liveMark,
   onTail,
 }: {
   position: WhalePositionSignal;
   slideIndex: number;
   total: number;
+  showChart: boolean;
+  liveMark?: number;
   onTail: () => void;
 }) {
   const [now, setNow] = useState(0);
   const p = position.payload;
   const isLong = p.side === "long";
   const sideColor = isLong ? GREEN : RED;
-  const pnl = p.unrealizedPnlPct;
+  const currentMark = liveMark ?? p.currentMark;
+  const pnl =
+    currentMark === null
+      ? p.unrealizedPnlPct
+      : computeWhalePositionPnlPct({
+          side: p.side,
+          leverage: p.leverage,
+          entryMark: p.entryPrice,
+          currentMark,
+        });
   const profit = (pnl ?? 0) >= 0;
+  const chartPosition = toWhaleEntryChartPosition(p, liveMark);
 
   useEffect(() => {
     setNow(Date.now());
@@ -249,8 +277,12 @@ function PositionCard({
         <div className="mt-4 grid grid-cols-3 overflow-hidden" style={{ background: PANEL, borderRadius: 16, border: `1px solid ${FAINT}` }}>
           <SpecCell label="NOTIONAL" value={fmtUsd(p.notionalUsd)} />
           <SpecCell label="ENTRY" value={fmtPrice(p.entryPrice)} bordered />
-          <SpecCell label="NOW" value={p.currentMark === null ? "N/A" : fmtPrice(p.currentMark)} color={profit ? GREEN : RED} />
+          <SpecCell label="NOW" value={currentMark === null ? "N/A" : fmtPrice(currentMark)} color={profit ? GREEN : RED} />
         </div>
+
+        {showChart && chartPosition ? (
+          <LiveEntryChart pos={chartPosition} />
+        ) : null}
 
         <div className="mt-3 flex items-center justify-between gap-3">
           <div>

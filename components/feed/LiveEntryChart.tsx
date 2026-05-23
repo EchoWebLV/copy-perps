@@ -16,7 +16,17 @@ import {
   type ChartCandle,
 } from "./live-entry-chart";
 
-export function LiveEntryChart({ pos }: { pos: FlatPosition }) {
+export interface LiveEntryChartPosition {
+  positionId: string;
+  asset: string;
+  side: FlatPosition["side"];
+  leverage: number;
+  entryMark: number;
+  currentMark: number;
+  openSinceMs: number;
+}
+
+export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
   const id = useId().replace(/:/g, "");
   const [candles, setCandles] = useState<ChartCandle[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "empty">("loading");
@@ -57,9 +67,10 @@ export function LiveEntryChart({ pos }: { pos: FlatPosition }) {
       }),
     [candles, pos.currentMark, pos.entryMark, pos.openSinceMs],
   );
-  const profit = pos.livePaperPnlPct >= 0;
-  const stroke = profit ? GREEN : RED;
   const entryDelta = ((pos.currentMark - pos.entryMark) / pos.entryMark) * 100;
+  const profit =
+    pos.side === "long" ? entryDelta >= 0 : entryDelta <= 0;
+  const stroke = profit ? GREEN : RED;
   const moveLabel = `${entryDelta >= 0 ? "+" : ""}${entryDelta.toFixed(2)}%`;
   const fillId = `live-entry-fill-${id}`;
   const glowId = `entry-glow-${id}`;
