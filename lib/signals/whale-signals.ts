@@ -7,6 +7,8 @@ import {
 import { isSourceFresh } from "@/lib/whales/identity";
 import { and, desc, eq } from "drizzle-orm";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
+import { getLeaderboard } from "@/lib/pacifica/client";
+import type { PacificaLeaderboardEntry } from "@/lib/pacifica/types";
 
 function heatForPosition(args: {
   notionalUsd: number;
@@ -17,6 +19,25 @@ function heatForPosition(args: {
   const notional = Math.min(300, args.notionalUsd / 1000);
   const pnl = Math.max(-100, Math.min(100, args.unrealizedPnlPct ?? 0));
   return Math.round(500 + fresh + notional + pnl);
+}
+
+function parseStat(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function statsForLeaderboardEntry(entry: PacificaLeaderboardEntry | undefined) {
+  return {
+    equityUsdc: parseStat(entry?.equity_current),
+    openInterestUsdc: parseStat(entry?.oi_current),
+    pnl1dUsdc: parseStat(entry?.pnl_1d),
+    pnl7dUsdc: parseStat(entry?.pnl_7d),
+    pnl30dUsdc: parseStat(entry?.pnl_30d),
+    pnlAllTimeUsdc: parseStat(entry?.pnl_all_time),
+    winRatePct1d: null,
+    totalCloses1d: 0,
+    volume1dUsdc: parseStat(entry?.volume_1d),
+  };
 }
 
 export async function buildWhalePositionSignals(
@@ -90,12 +111,18 @@ export async function buildWhalePositionSignals(
 }
 
 export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
-  const positions = await buildWhalePositionSignals(1000);
-  const activeWhales = await db
-    .select()
-    .from(whales)
-    .where(eq(whales.status, "active"))
-    .limit(500);
+  const [positions, activeWhales, leaderboard] = await Promise.all([
+    buildWhalePositionSignals(1000),
+    db
+      .select()
+      .from(whales)
+      .where(eq(whales.status, "active"))
+      .limit(500),
+    getLeaderboard().catch(() => [] as PacificaLeaderboardEntry[]),
+  ]);
+  const leaderboardByAccount = new Map(
+    leaderboard.map((entry) => [entry.address, entry]),
+  );
 
   const byWhale = new Map<string, WhalePositionSignal[]>();
 
@@ -133,14 +160,11 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         openPositionsCount: list.length,
         openPositions: sortedPositions.map((position) => position.payload),
         bestPosition: best?.payload ?? null,
-        stats: {
-          pnl1dUsdc: 0,
-          pnl7dUsdc: 0,
-          pnl30dUsdc: 0,
-          winRatePct1d: null,
-          totalCloses1d: 0,
-          volume1dUsdc: 0,
-        },
+        stats: statsForLeaderboardEntry(
+          whale.source === "pacifica"
+            ? leaderboardByAccount.get(whale.sourceAccount)
+            : undefined,
+        ),
         lastSeenAt:
           lastSeenAtMs === null ? null : new Date(lastSeenAtMs).toISOString(),
         stale:

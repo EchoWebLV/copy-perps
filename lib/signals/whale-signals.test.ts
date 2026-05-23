@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
     db: {
       select: vi.fn(),
     },
+    getLeaderboard: vi.fn(),
     rows: [] as unknown[],
     resultSets: [] as unknown[][],
   };
@@ -21,6 +22,10 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({
   db: mocks.db,
+}));
+
+vi.mock("@/lib/pacifica/client", () => ({
+  getLeaderboard: mocks.getLeaderboard,
 }));
 
 vi.mock("@/lib/db/schema", () => ({
@@ -54,6 +59,7 @@ describe("whale signals", () => {
 
     mocks.rows = [];
     mocks.resultSets = [];
+    mocks.getLeaderboard.mockResolvedValue([]);
     mocks.query.from.mockReturnValue(mocks.query);
     mocks.query.innerJoin.mockReturnValue(mocks.query);
     mocks.query.leftJoin.mockReturnValue(mocks.query);
@@ -308,6 +314,22 @@ describe("whale signals", () => {
         },
       ],
     ];
+    mocks.getLeaderboard.mockResolvedValue([
+      {
+        address: "acct-1",
+        username: "Alpha",
+        pnl_1d: "1234.56",
+        pnl_7d: "-50",
+        pnl_30d: "9000",
+        pnl_all_time: "42000",
+        equity_current: "250000",
+        oi_current: "460000",
+        volume_1d: "1500000",
+        volume_7d: "7000000",
+        volume_30d: "25000000",
+        volume_all_time: "100000000",
+      },
+    ]);
 
     const { buildWhaleTraderSignals } = await import("./whale-signals");
 
@@ -334,12 +356,15 @@ describe("whale signals", () => {
         lastSeenAt: "2026-05-23T11:59:30.000Z",
         stale: false,
         stats: {
-          pnl1dUsdc: 0,
-          pnl7dUsdc: 0,
-          pnl30dUsdc: 0,
+          equityUsdc: 250000,
+          openInterestUsdc: 460000,
+          pnl1dUsdc: 1234.56,
+          pnl7dUsdc: -50,
+          pnl30dUsdc: 9000,
+          pnlAllTimeUsdc: 42000,
           winRatePct1d: null,
           totalCloses1d: 0,
-          volume1dUsdc: 0,
+          volume1dUsdc: 1500000,
         },
       },
     });
@@ -357,6 +382,15 @@ describe("whale signals", () => {
         openPositionsCount: 1,
         lastSeenAt: "2026-05-23T11:57:00.000Z",
         stale: true,
+        stats: {
+          equityUsdc: 0,
+          openInterestUsdc: 0,
+          pnl1dUsdc: 0,
+          pnl7dUsdc: 0,
+          pnl30dUsdc: 0,
+          pnlAllTimeUsdc: 0,
+          volume1dUsdc: 0,
+        },
       },
     });
   });
@@ -397,9 +431,12 @@ describe("whale signals", () => {
           openPositionsCount: 0,
           bestPosition: null,
           stats: {
+            equityUsdc: 0,
+            openInterestUsdc: 0,
             pnl1dUsdc: 0,
             pnl7dUsdc: 0,
             pnl30dUsdc: 0,
+            pnlAllTimeUsdc: 0,
             winRatePct1d: null,
             totalCloses1d: 0,
             volume1dUsdc: 0,

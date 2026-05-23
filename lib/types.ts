@@ -145,9 +145,12 @@ export interface WhaleTraderSignal extends BaseSignal {
     openPositions: WhalePositionSignal["payload"][];
     bestPosition: WhalePositionSignal["payload"] | null;
     stats: {
+      equityUsdc: number;
+      openInterestUsdc: number;
       pnl1dUsdc: number;
       pnl7dUsdc: number;
       pnl30dUsdc: number;
+      pnlAllTimeUsdc: number;
       winRatePct1d: number | null;
       totalCloses1d: number;
       volume1dUsdc: number;

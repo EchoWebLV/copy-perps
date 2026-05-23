@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Radio, Zap } from "lucide-react";
+import { Radio, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
@@ -115,29 +115,28 @@ function WhaleCard({
   onTail: (source: TailSource) => void;
 }) {
   const p = whale.payload;
-  const best = p.bestPosition;
-  const openPositions =
-    p.openPositions.length > 0 ? p.openPositions : best ? [best] : [];
-  const visiblePositions = openPositions.slice(0, 4);
-  const hiddenPositions = Math.max(
-    0,
-    p.openPositionsCount - visiblePositions.length,
-  );
-  const primaryTail = visiblePositions.find((position) => !position.stale);
+  const best = p.bestPosition ?? p.openPositions[0] ?? null;
+  const primaryTail = p.openPositions.find((position) => !position.stale) ?? null;
   const fresh = !p.stale;
   const canTail = !!primaryTail;
+  const totalPnl = p.stats.pnlAllTimeUsdc;
+  const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
+  const exposureUsd = p.openPositions.reduce(
+    (sum, position) => sum + position.notionalUsd,
+    0,
+  );
 
   return (
     <article
-      className="relative overflow-hidden"
+      className="relative overflow-hidden px-4 pt-4 pb-3"
       style={{
         background: PANEL,
-        borderRadius: 22,
+        borderRadius: 18,
         border: `1px solid ${fresh ? FAINT : `${RED}55`}`,
       }}
     >
       <div
-        className="absolute top-0 left-0 rounded-tl-[22px] rounded-br-2xl px-2.5 py-1 text-[10px] font-black uppercase tracking-widest"
+        className="absolute top-0 left-0 rounded-br-xl px-2.5 py-1 text-[10px] font-black uppercase tracking-widest"
         style={{
           background: rank === 1 ? ACCENT : PANEL_2,
           color: rank === 1 ? BG : FG,
@@ -146,189 +145,152 @@ function WhaleCard({
         #{rank}
       </div>
 
-      <div className="px-3 pt-3.5 pb-3">
-        <div className="flex items-center gap-3 pl-9">
-          <StoryAvatar
-            emoji={p.displayName.slice(0, 1).toUpperCase()}
-            imageUrl={p.avatarUrl}
-            mood={fresh ? "HUNTING" : "WOUNDED"}
-            size={52}
-            pulse={fresh && p.openPositionsCount > 0}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate">
-              <Headline size={26}>{p.displayName.toUpperCase()}</Headline>
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-              <span>{p.source}</span>
-              <span>{shortAccount(p.sourceAccount)}</span>
-              <FreshnessBadge stale={p.stale} />
-            </div>
+      <div className="flex items-center gap-3 pl-8">
+        <StoryAvatar
+          emoji={p.displayName.slice(0, 1).toUpperCase()}
+          imageUrl={p.avatarUrl}
+          mood={fresh ? "HUNTING" : "WOUNDED"}
+          size={48}
+          pulse={fresh && p.openPositionsCount > 0}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate">
+            <Headline size={24}>{p.displayName.toUpperCase()}</Headline>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+            <span>{p.source}</span>
+            <span>{shortAccount(p.sourceAccount)}</span>
+            <FreshnessBadge stale={p.stale} />
           </div>
         </div>
-
-        <div className="mt-3 grid grid-cols-4 overflow-hidden" style={{ background: PANEL_2, borderRadius: 12, border: `1px solid ${FAINT}` }}>
-          <StatCell label="OPEN" value={String(p.openPositionsCount)} color={p.openPositionsCount > 0 ? FG : DIM} />
-          <StatCell label="1D" value={fmtSignedUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
-          <StatCell label="7D" value={fmtSignedUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
-          <StatCell label="WR" value={p.stats.winRatePct1d === null ? "N/A" : `${p.stats.winRatePct1d.toFixed(0)}%`} />
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {p.tags.length > 0 ? (
-            p.tags.slice(0, 4).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider"
-                style={{ background: PANEL_2, border: `1px solid ${FAINT}`, color: FG }}
-              >
-                {tag}
-              </span>
-            ))
-          ) : (
-            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-              No tags yet
-            </span>
-          )}
-        </div>
-
-        {visiblePositions.length > 0 ? (
-          <div className="mt-3 rounded-2xl px-3 py-3" style={{ background: BG, border: `1px solid ${FAINT}` }}>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                Open positions
-              </span>
-              <span className="text-[9px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
-                {visiblePositions.length}/{p.openPositionsCount}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {visiblePositions.map((position) => (
-                <PositionPreviewRow
-                  key={position.positionId}
-                  position={position}
-                  onTail={(sourcePosition) =>
-                    onTail(toTailSource(p, sourcePosition))
-                  }
-                />
-              ))}
-            </div>
-            {hiddenPositions > 0 ? (
-              <div
-                className="mt-2 rounded-xl px-2.5 py-2 text-[10px] font-black uppercase tracking-widest"
-                style={{ background: PANEL_2, border: `1px solid ${FAINT}`, color: DIM }}
-              >
-                +{hiddenPositions} more live position{hiddenPositions === 1 ? "" : "s"}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-3 flex items-center gap-2 rounded-2xl px-3 py-3 text-[11px] font-black uppercase tracking-widest" style={{ background: BG, border: `1px solid ${FAINT}`, color: DIM }}>
-            <Radio size={14} strokeWidth={2.8} />
-            Watching for next open position
-          </div>
-        )}
-
-        <button
-          type="button"
-          disabled={!canTail}
-          onClick={() => {
-            if (!primaryTail) return;
-            onTail(toTailSource(p, primaryTail));
-          }}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
-          style={{
-            background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
-            color: canTail ? BG : DIM,
-            boxShadow: canTail
-              ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
-              : "none",
-          }}
-        >
-          <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
-          {canTail ? `TAIL ${p.displayName.toUpperCase()}` : "TAIL UNAVAILABLE"}
-        </button>
       </div>
+
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+            Total P/L
+          </div>
+          <div className="mt-1 text-[34px] font-black tabular-nums leading-none" style={{ color: totalPnlColor }}>
+            {fmtSignedUsd(totalPnl)}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+            Equity
+          </div>
+          <div className="mt-1 text-[18px] font-black tabular-nums" style={{ color: p.stats.equityUsdc > 0 ? FG : DIM }}>
+            {p.stats.equityUsdc > 0 ? fmtUsd(p.stats.equityUsdc) : "N/A"}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 overflow-hidden border-y" style={{ borderColor: FAINT }}>
+        <StatCell label="1D" value={fmtSignedUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="7D" value={fmtSignedUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="30D" value={fmtSignedUsd(p.stats.pnl30dUsdc)} color={p.stats.pnl30dUsdc >= 0 ? GREEN : RED} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black uppercase tracking-widest">
+        <MiniMetric label="Open" value={String(p.openPositionsCount)} active={p.openPositionsCount > 0} />
+        <MiniMetric label="Exposure" value={exposureUsd > 0 ? fmtUsd(exposureUsd) : "N/A"} active={exposureUsd > 0} />
+        <MiniMetric label="Vol 1D" value={p.stats.volume1dUsdc > 0 ? fmtUsd(p.stats.volume1dUsdc) : "N/A"} active={p.stats.volume1dUsdc > 0} />
+      </div>
+
+      {best ? (
+        <BestPositionStrip position={best} />
+      ) : (
+        <div className="mt-3 flex items-center gap-2 border-t pt-3 text-[11px] font-black uppercase tracking-widest" style={{ borderColor: FAINT, color: DIM }}>
+          <Radio size={14} strokeWidth={2.8} />
+          Watching for next open position
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={!canTail}
+        onClick={() => {
+          if (!primaryTail) return;
+          onTail(toTailSource(p, primaryTail));
+        }}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
+        style={{
+          background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
+          color: canTail ? BG : DIM,
+          boxShadow: canTail
+            ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
+            : "none",
+        }}
+      >
+        <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
+        {canTail && primaryTail
+          ? `TAIL ${primaryTail.market} ${primaryTail.side.toUpperCase()}`
+          : "TAIL UNAVAILABLE"}
+      </button>
     </article>
   );
 }
 
-function PositionPreviewRow({
+function BestPositionStrip({
   position,
-  onTail,
 }: {
   position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>;
-  onTail: (
-    position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>,
-  ) => void;
 }) {
   const sideColor = position.side === "long" ? GREEN : RED;
   const pnl = position.unrealizedPnlPct;
   const profit = (pnl ?? 0) >= 0;
-  const actionColor = position.stale ? RED : ACCENT;
 
   return (
-    <button
-      type="button"
-      disabled={position.stale}
-      onClick={() => onTail(position)}
-      className="w-full rounded-xl px-2.5 py-2 text-left transition active:scale-[0.98] disabled:cursor-not-allowed"
-      style={{
-        background: PANEL_2,
-        border: `1px solid ${position.stale ? `${RED}40` : FAINT}`,
-      }}
-    >
-      <div className="flex items-start justify-between gap-2">
+    <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
+      <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+        <span>Best live setup</span>
+        <span>{position.stale ? "STALE" : "FRESH"}</span>
+      </div>
+      <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <BigNum size={22}>{position.market}</BigNum>
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide"
-              style={{ background: `${sideColor}22`, color: sideColor }}
-            >
+          <div className="flex flex-wrap items-baseline gap-1.5">
+            <BigNum size={24}>{position.market}</BigNum>
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${sideColor}22`, color: sideColor }}>
               {position.side}
             </span>
-            <span className="text-[11px] font-black" style={{ color: DIM }}>
-              {position.leverage}x
-            </span>
+            <span className="text-[11px] font-black" style={{ color: DIM }}>{position.leverage}x</span>
           </div>
-          <div
-            className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
             <span>Entry {fmtPrice(position.entryPrice)}</span>
-            <span>
-              Mark{" "}
-              {position.currentMark === null
-                ? "N/A"
-                : fmtPrice(position.currentMark)}
-            </span>
+            <span>Mark {position.currentMark === null ? "N/A" : fmtPrice(position.currentMark)}</span>
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[11px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
+          <div className="text-[12px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
             {fmtUsd(position.notionalUsd)}
           </div>
           <div
-            className="mt-1 text-[10px] font-black uppercase tracking-widest tabular-nums"
+            className="mt-1 text-[17px] font-black uppercase tracking-widest tabular-nums"
             style={{ color: pnl === null ? DIM : profit ? GREEN : RED }}
           >
             {fmtPct(pnl)}
           </div>
-          <div
-            className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest"
-            style={{ color: actionColor }}
-          >
-            {position.stale ? (
-              <AlertTriangle size={10} strokeWidth={3} />
-            ) : (
-              <Zap size={10} strokeWidth={3} fill={ACCENT} />
-            )}
-            {position.stale ? "STALE" : "TAIL"}
-          </div>
         </div>
       </div>
-    </button>
+    </div>
+  );
+}
+
+function MiniMetric({
+  label,
+  value,
+  active,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <div style={{ color: DIM }}>{label}</div>
+      <div className="mt-0.5 truncate tabular-nums" style={{ color: active ? FG : DIM }}>
+        {value}
+      </div>
+    </div>
   );
 }
 

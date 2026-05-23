@@ -6,9 +6,9 @@ import { Flame, Settings, PieChart, Radio, Zap } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
-// "LIVE" CTA elevates above the bar like the camera button in Snapchat.
+// swipe CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
-  { href: "/feed", icon: Flame, label: "Positions" },
+  { href: "/feed", icon: Flame, label: "Whales" },
   { href: "/chatter", icon: Radio, label: "Chatter" },
 ];
 const RIGHT_TABS = [
@@ -43,7 +43,7 @@ export function BottomNav() {
           <NavTab key={t.href} {...t} active={isActive(t.href)} />
         ))}
 
-        {/* Elevated center LIVE shortcut → per-position feed */}
+        {/* Elevated center swipe shortcut to the per-position feed. */}
         <Link
           href="/live"
           className="relative flex flex-1 items-center justify-center"

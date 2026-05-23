@@ -1,22 +1,22 @@
 import { BotRoster } from "@/components/feed/BotRoster";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
-import { WhaleLiveFeed } from "@/components/whales/WhaleLiveFeed";
+import { WhaleRoster } from "@/components/whales/WhaleRoster";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildBotSignals } from "@/lib/signals/bot-signals";
-import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
+import { buildWhaleTraderSignals } from "@/lib/signals/whale-signals";
 
 export const dynamic = "force-dynamic";
 
-// /feed is the primary social surface: live whale source positions with
-// tail actions and generated commentary.
+// /feed is the primary whale list: source accounts, total P/L, open
+// positions, and tail actions. The swipeable per-position view lives on /live.
 export default async function FeedPage() {
   if (whaleSocialEnabled()) {
-    const positions = await buildWhalePositionSignals();
+    const whales = await buildWhaleTraderSignals();
 
     return (
-      <AppShell railTitle="Live Positions">
-        <WhaleLiveFeed initialPositions={positions} />
+      <AppShell railTitle="Whales">
+        <WhaleRoster initialWhales={whales} />
         <BottomNav />
       </AppShell>
     );

@@ -18,7 +18,7 @@ export function DesktopNav() {
         href="/feed"
         className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl text-[12px] font-black"
         style={{ background: ACCENT, color: BG }}
-        aria-label="Breach positions"
+        aria-label="Breach whales"
       >
         B
       </Link>

@@ -15,7 +15,7 @@ describe("desktop shell nav contract", () => {
 
   it("labels the main whale trading surfaces without legacy bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Positions",
+      "Whales",
       "Swipe",
       "Chatter",
       "Portfolio",
