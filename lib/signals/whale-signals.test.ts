@@ -79,6 +79,9 @@ describe("whale signals", () => {
           lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
         },
         whale: {
+          id: "joined-whale-1",
+          source: "hyperliquid",
+          sourceAccount: "joined-acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
         },
@@ -108,6 +111,9 @@ describe("whale signals", () => {
           lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
         },
         whale: {
+          id: "whale-2",
+          source: "hyperliquid",
+          sourceAccount: "acct-2",
           displayName: "Beta",
           avatarUrl: null,
         },
@@ -129,9 +135,9 @@ describe("whale signals", () => {
         chips: [],
         payload: {
           positionId: "pos-1",
-          whaleId: "whale-1",
-          source: "pacifica",
-          sourceAccount: "acct-1",
+          whaleId: "joined-whale-1",
+          source: "hyperliquid",
+          sourceAccount: "joined-acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
           market: "BTC",
@@ -204,6 +210,9 @@ describe("whale signals", () => {
           lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
         },
         whale: {
+          id: "whale-1",
+          source: "pacifica",
+          sourceAccount: "acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
         },
@@ -227,6 +236,9 @@ describe("whale signals", () => {
           lastSeenAt: new Date("2026-05-23T11:58:45.000Z"),
         },
         whale: {
+          id: "whale-1",
+          source: "pacifica",
+          sourceAccount: "acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
         },
@@ -250,6 +262,9 @@ describe("whale signals", () => {
           lastSeenAt: new Date("2026-05-23T11:57:00.000Z"),
         },
         whale: {
+          id: "whale-2",
+          source: "hyperliquid",
+          sourceAccount: "acct-2",
           displayName: "Beta",
           avatarUrl: null,
         },

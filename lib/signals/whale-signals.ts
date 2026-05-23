@@ -57,9 +57,9 @@ export async function buildWhalePositionSignals(
       chips: [],
       payload: {
         positionId: position.id,
-        whaleId: position.whaleId,
-        source: position.source as "pacifica" | "hyperliquid",
-        sourceAccount: position.sourceAccount,
+        whaleId: whale.id,
+        source: whale.source as "pacifica" | "hyperliquid",
+        sourceAccount: whale.sourceAccount,
         displayName: whale.displayName,
         avatarUrl: whale.avatarUrl,
         market: position.market,
