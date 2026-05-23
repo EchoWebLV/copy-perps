@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 type RedisConfig = {
   url: string;
   token: string;
@@ -9,6 +13,7 @@ type MemoryValue = {
 };
 
 const memoryCache = new Map<string, MemoryValue>();
+const localCacheDir = join(process.cwd(), ".next", "cache", "local-redis");
 
 function redisConfig(): RedisConfig | null {
   if (process.env.NODE_ENV === "test") return null;
@@ -63,6 +68,51 @@ function memoryGet(key: string): string | null {
   return hit.value;
 }
 
+function localCachePath(key: string): string {
+  const safeKey = createHash("sha256").update(key).digest("hex");
+  return join(localCacheDir, `${safeKey}.json`);
+}
+
+async function fileGet(key: string): Promise<string | null> {
+  const path = localCachePath(key);
+  try {
+    const hit = JSON.parse(await readFile(path, "utf8")) as MemoryValue;
+    if (hit.expiresAtMs !== null && hit.expiresAtMs <= Date.now()) {
+      memoryCache.delete(key);
+      await rm(path, { force: true });
+      return null;
+    }
+    memoryCache.set(key, hit);
+    return hit.value;
+  } catch (err) {
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      err.code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function fileSet(key: string, hit: MemoryValue): Promise<void> {
+  await mkdir(localCacheDir, { recursive: true });
+  const path = localCachePath(key);
+  const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tmpPath, JSON.stringify(hit), "utf8");
+  await rename(tmpPath, path);
+}
+
+async function fileDelete(key: string): Promise<void> {
+  await rm(localCachePath(key), { force: true });
+}
+
+function shouldUseFileFallback(): boolean {
+  return process.env.NODE_ENV !== "test";
+}
+
 export async function cacheGetJson<T>(key: string): Promise<T | null> {
   if (redisConfig()) {
     const value = await redisCommand<string>(["GET", key]);
@@ -70,7 +120,10 @@ export async function cacheGetJson<T>(key: string): Promise<T | null> {
     return JSON.parse(value) as T;
   }
 
-  const value = memoryGet(key);
+  let value = memoryGet(key);
+  if (value === null && shouldUseFileFallback()) {
+    value = await fileGet(key);
+  }
   return value === null ? null : (JSON.parse(value) as T);
 }
 
@@ -90,13 +143,17 @@ export async function cacheSetJson(
     return;
   }
 
-  memoryCache.set(key, {
+  const hit = {
     value: serialized,
     expiresAtMs:
       options.ttlSeconds && options.ttlSeconds > 0
         ? Date.now() + Math.ceil(options.ttlSeconds) * 1000
         : null,
-  });
+  };
+  memoryCache.set(key, hit);
+  if (shouldUseFileFallback()) {
+    await fileSet(key, hit);
+  }
 }
 
 export async function cacheDelete(key: string): Promise<void> {
@@ -105,4 +162,7 @@ export async function cacheDelete(key: string): Promise<void> {
     return;
   }
   memoryCache.delete(key);
+  if (shouldUseFileFallback()) {
+    await fileDelete(key);
+  }
 }

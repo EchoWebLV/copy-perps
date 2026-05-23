@@ -139,7 +139,7 @@ describe("whale signals", () => {
           }),
           position({
             id: "stale-pos",
-            lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:56:00.000Z"),
           }),
         ],
       }),
@@ -480,7 +480,7 @@ describe("whale signals", () => {
             id: "active-stale-pos",
             whaleId: "active-whale",
             sourceAccount: "active-acct",
-            lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:56:00.000Z"),
           }),
         ],
       }),

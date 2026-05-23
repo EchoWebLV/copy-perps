@@ -642,7 +642,7 @@ describe("POST /api/bet/whale", () => {
   it("rejects stale whale positions before trading", async () => {
     mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({
-        lastSeenAt: new Date("2026-05-23T11:58:00.000Z"),
+        lastSeenAt: new Date("2026-05-23T11:56:00.000Z"),
       }),
     );
 

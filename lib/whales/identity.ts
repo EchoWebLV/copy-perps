@@ -1,6 +1,6 @@
 import type { WhaleSide, WhaleSource } from "./types";
 
-export const WHALE_SOURCE_MAX_AGE_MS = 60_000;
+export const WHALE_SOURCE_MAX_AGE_MS = 180_000;
 
 export function makeWhaleId(source: WhaleSource, sourceAccount: string): string {
   return `${source}:${sourceAccount}`;
