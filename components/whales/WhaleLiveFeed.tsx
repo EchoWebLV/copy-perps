@@ -92,6 +92,13 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
         </Link>
       </div>
 
+      <div
+        className="pointer-events-none absolute top-[18px] right-3 z-30 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest lg:hidden"
+        style={{ background: PANEL, color: FG, border: `1px solid ${FAINT}` }}
+      >
+        LIVE POSITIONS
+      </div>
+
       {sorted.length === 0 ? (
         <EmptyLive />
       ) : (
@@ -123,7 +130,7 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
           <div className="hidden h-full min-h-0 grid-cols-[360px_minmax(0,1fr)] gap-4 p-6 lg:grid">
             <aside className="min-h-0 overflow-hidden rounded-2xl p-4" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
               <div className="mb-4">
-                <Headline size={28}>{`"LIVE WHALES"`}</Headline>
+                <Headline size={28}>{`"LIVE POSITIONS"`}</Headline>
                 <p className="mt-1 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
                   Open source positions
                 </p>

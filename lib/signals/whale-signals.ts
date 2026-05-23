@@ -90,7 +90,7 @@ export async function buildWhalePositionSignals(
 }
 
 export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
-  const positions = await buildWhalePositionSignals(200);
+  const positions = await buildWhalePositionSignals(1000);
   const activeWhales = await db
     .select()
     .from(whales)
@@ -110,7 +110,8 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
 
   for (const whale of activeWhales) {
     const list = byWhale.get(whale.id) ?? [];
-    const best = [...list].sort((a, b) => b.heatScore - a.heatScore)[0];
+    const sortedPositions = [...list].sort((a, b) => b.heatScore - a.heatScore);
+    const best = sortedPositions[0];
     const lastSeenAtMs =
       list.length > 0
         ? Math.max(...list.map((position) => position.payload.lastSeenAtMs))
@@ -130,6 +131,7 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         avatarUrl: whale.avatarUrl,
         tags: whale.tags,
         openPositionsCount: list.length,
+        openPositions: sortedPositions.map((position) => position.payload),
         bestPosition: best?.payload ?? null,
         stats: {
           pnl1dUsdc: 0,

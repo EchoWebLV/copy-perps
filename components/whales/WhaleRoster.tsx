@@ -116,10 +116,16 @@ function WhaleCard({
 }) {
   const p = whale.payload;
   const best = p.bestPosition;
+  const openPositions =
+    p.openPositions.length > 0 ? p.openPositions : best ? [best] : [];
+  const visiblePositions = openPositions.slice(0, 4);
+  const hiddenPositions = Math.max(
+    0,
+    p.openPositionsCount - visiblePositions.length,
+  );
+  const primaryTail = visiblePositions.find((position) => !position.stale);
   const fresh = !p.stale;
-  const canTail = !!best && !best.stale;
-  const side = best?.side ?? "long";
-  const sideColor = side === "long" ? GREEN : RED;
+  const canTail = !!primaryTail;
 
   return (
     <article
@@ -186,40 +192,35 @@ function WhaleCard({
           )}
         </div>
 
-        {best ? (
+        {visiblePositions.length > 0 ? (
           <div className="mt-3 rounded-2xl px-3 py-3" style={{ background: BG, border: `1px solid ${FAINT}` }}>
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                Best open position
+                Open positions
               </span>
-              {best.stale ? (
-                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest" style={{ color: RED }}>
-                  <AlertTriangle size={11} strokeWidth={3} />
-                  STALE
-                </span>
-              ) : null}
+              <span className="text-[9px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
+                {visiblePositions.length}/{p.openPositionsCount}
+              </span>
             </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="flex items-baseline gap-2">
-                <BigNum size={28}>{best.market}</BigNum>
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wide" style={{ background: `${sideColor}22`, color: sideColor }}>
-                  {best.side}
-                </span>
-                <span className="text-[12px] font-black" style={{ color: DIM }}>
-                  {best.leverage}x
-                </span>
+            <div className="space-y-2">
+              {visiblePositions.map((position) => (
+                <PositionPreviewRow
+                  key={position.positionId}
+                  position={position}
+                  onTail={(sourcePosition) =>
+                    onTail(toTailSource(p, sourcePosition))
+                  }
+                />
+              ))}
+            </div>
+            {hiddenPositions > 0 ? (
+              <div
+                className="mt-2 rounded-xl px-2.5 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={{ background: PANEL_2, border: `1px solid ${FAINT}`, color: DIM }}
+              >
+                +{hiddenPositions} more live position{hiddenPositions === 1 ? "" : "s"}
               </div>
-              <div className="text-right text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                {fmtUsd(best.notionalUsd)}
-              </div>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-              <MiniMetric label="Entry" value={fmtPrice(best.entryPrice)} />
-              <MiniMetric
-                label="Mark"
-                value={best.currentMark === null ? "N/A" : fmtPrice(best.currentMark)}
-              />
-            </div>
+            ) : null}
           </div>
         ) : (
           <div className="mt-3 flex items-center gap-2 rounded-2xl px-3 py-3 text-[11px] font-black uppercase tracking-widest" style={{ background: BG, border: `1px solid ${FAINT}`, color: DIM }}>
@@ -232,8 +233,8 @@ function WhaleCard({
           type="button"
           disabled={!canTail}
           onClick={() => {
-            if (!best || best.stale) return;
-            onTail(toTailSource(p, best));
+            if (!primaryTail) return;
+            onTail(toTailSource(p, primaryTail));
           }}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
           style={{
@@ -249,6 +250,85 @@ function WhaleCard({
         </button>
       </div>
     </article>
+  );
+}
+
+function PositionPreviewRow({
+  position,
+  onTail,
+}: {
+  position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>;
+  onTail: (
+    position: NonNullable<WhaleTraderSignal["payload"]["bestPosition"]>,
+  ) => void;
+}) {
+  const sideColor = position.side === "long" ? GREEN : RED;
+  const pnl = position.unrealizedPnlPct;
+  const profit = (pnl ?? 0) >= 0;
+  const actionColor = position.stale ? RED : ACCENT;
+
+  return (
+    <button
+      type="button"
+      disabled={position.stale}
+      onClick={() => onTail(position)}
+      className="w-full rounded-xl px-2.5 py-2 text-left transition active:scale-[0.98] disabled:cursor-not-allowed"
+      style={{
+        background: PANEL_2,
+        border: `1px solid ${position.stale ? `${RED}40` : FAINT}`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <BigNum size={22}>{position.market}</BigNum>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide"
+              style={{ background: `${sideColor}22`, color: sideColor }}
+            >
+              {position.side}
+            </span>
+            <span className="text-[11px] font-black" style={{ color: DIM }}>
+              {position.leverage}x
+            </span>
+          </div>
+          <div
+            className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            <span>Entry {fmtPrice(position.entryPrice)}</span>
+            <span>
+              Mark{" "}
+              {position.currentMark === null
+                ? "N/A"
+                : fmtPrice(position.currentMark)}
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[11px] font-black uppercase tracking-widest tabular-nums" style={{ color: DIM }}>
+            {fmtUsd(position.notionalUsd)}
+          </div>
+          <div
+            className="mt-1 text-[10px] font-black uppercase tracking-widest tabular-nums"
+            style={{ color: pnl === null ? DIM : profit ? GREEN : RED }}
+          >
+            {fmtPct(pnl)}
+          </div>
+          <div
+            className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest"
+            style={{ color: actionColor }}
+          >
+            {position.stale ? (
+              <AlertTriangle size={10} strokeWidth={3} />
+            ) : (
+              <Zap size={10} strokeWidth={3} fill={ACCENT} />
+            )}
+            {position.stale ? "STALE" : "TAIL"}
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -337,19 +417,6 @@ function StatCell({
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl px-2.5 py-2" style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}>
-      <div className="text-[8px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-        {label}
-      </div>
-      <div className="mt-0.5 text-[13px] font-black tabular-nums" style={{ color: FG }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function EmptyRoster() {
   return (
     <div className="col-span-full flex h-full min-h-[360px] flex-col items-center justify-center text-center">
@@ -373,6 +440,11 @@ function fmtUsd(v: number): string {
 function fmtSignedUsd(v: number): string {
   const sign = v >= 0 ? "+" : "-";
   return `${sign}$${Math.abs(v).toFixed(0)}`;
+}
+
+function fmtPct(v: number | null): string {
+  if (v === null) return "P/L N/A";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 }
 
 function fmtPrice(v: number): string {

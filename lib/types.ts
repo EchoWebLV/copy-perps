@@ -142,6 +142,7 @@ export interface WhaleTraderSignal extends BaseSignal {
     avatarUrl: string | null;
     tags: string[];
     openPositionsCount: number;
+    openPositions: WhalePositionSignal["payload"][];
     bestPosition: WhalePositionSignal["payload"] | null;
     stats: {
       pnl1dUsdc: number;

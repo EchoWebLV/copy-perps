@@ -24,7 +24,7 @@ export default async function LivePage({
     const positions = await buildWhalePositionSignals();
 
     return (
-      <AppShell railTitle="Whale Live">
+      <AppShell railTitle="Live Positions">
         <WhaleLiveFeed initialPositions={positions} />
         <BottomNav />
       </AppShell>

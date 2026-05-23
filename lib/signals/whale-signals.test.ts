@@ -313,7 +313,7 @@ describe("whale signals", () => {
 
     const signals = await buildWhaleTraderSignals();
 
-    expect(mocks.query.limit).toHaveBeenCalledWith(200);
+    expect(mocks.query.limit).toHaveBeenCalledWith(1000);
     expect(signals.map((signal) => signal.id)).toEqual([
       "whale_trader:whale-1",
       "whale_trader:whale-2",
@@ -344,6 +344,12 @@ describe("whale signals", () => {
       },
     });
     expect(signals[0]?.payload.bestPosition?.positionId).toBe("pos-1");
+    expect(
+      signals[0]?.payload.openPositions.map((position) => position.positionId),
+    ).toEqual(["pos-1", "pos-2"]);
+    expect(
+      signals[1]?.payload.openPositions.map((position) => position.positionId),
+    ).toEqual(["pos-3"]);
     expect(signals[1]).toMatchObject({
       heatScore: 298,
       payload: {
@@ -399,6 +405,7 @@ describe("whale signals", () => {
             volume1dUsdc: 0,
           },
           lastSeenAt: null,
+          openPositions: [],
           stale: true,
         },
       },
