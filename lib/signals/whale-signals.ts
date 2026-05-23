@@ -5,7 +5,7 @@ import {
   whalePositions,
 } from "@/lib/db/schema";
 import { isSourceFresh } from "@/lib/whales/identity";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 
 function heatForPosition(args: {
@@ -34,61 +34,69 @@ export async function buildWhalePositionSignals(
       whalePositionAnalysis,
       eq(whalePositionAnalysis.positionId, whalePositions.id),
     )
-    .where(eq(whalePositions.status, "open"))
+    .where(and(eq(whalePositions.status, "open"), eq(whales.status, "active")))
     .orderBy(desc(whalePositions.lastSeenAt))
     .limit(limit);
 
   const stamp = new Date().toISOString();
 
-  return rows.map(({ position, whale, analysis }) => {
-    const openedAtMs = position.openedAt.getTime();
-    const lastSeenAtMs = position.lastSeenAt.getTime();
-    const stale = !isSourceFresh(lastSeenAtMs);
+  return rows
+    .filter(({ whale }) => whale.status === "active")
+    .map(({ position, whale, analysis }) => {
+      const openedAtMs = position.openedAt.getTime();
+      const lastSeenAtMs = position.lastSeenAt.getTime();
+      const stale = !isSourceFresh(lastSeenAtMs);
 
-    return {
-      id: `whale_position:${position.id}`,
-      type: "whale_position",
-      heatScore: heatForPosition({
-        notionalUsd: position.notionalUsd,
-        unrealizedPnlPct: position.unrealizedPnlPct,
-        lastSeenAtMs,
-      }),
-      createdAt: stamp,
-      chips: [],
-      payload: {
-        positionId: position.id,
-        whaleId: whale.id,
-        source: whale.source as "pacifica" | "hyperliquid",
-        sourceAccount: whale.sourceAccount,
-        displayName: whale.displayName,
-        avatarUrl: whale.avatarUrl,
-        market: position.market,
-        side: position.side as "long" | "short",
-        leverage: position.leverage,
-        amountBase: position.amountBase,
-        notionalUsd: position.notionalUsd,
-        entryPrice: position.entryPrice,
-        currentMark: position.currentMark,
-        unrealizedPnlPct: position.unrealizedPnlPct,
-        openedAtMs,
-        lastSeenAtMs,
-        stale,
-        analysis: analysis
-          ? {
-              summary: analysis.summary,
-              thesis: analysis.thesis,
-              risk: analysis.risk,
-              entryGapWarning: analysis.entryGapWarning,
-              confidence: analysis.confidence,
-            }
-          : null,
-      },
-    } satisfies WhalePositionSignal;
-  });
+      return {
+        id: `whale_position:${position.id}`,
+        type: "whale_position",
+        heatScore: heatForPosition({
+          notionalUsd: position.notionalUsd,
+          unrealizedPnlPct: position.unrealizedPnlPct,
+          lastSeenAtMs,
+        }),
+        createdAt: stamp,
+        chips: [],
+        payload: {
+          positionId: position.id,
+          whaleId: whale.id,
+          source: whale.source as "pacifica" | "hyperliquid",
+          sourceAccount: whale.sourceAccount,
+          displayName: whale.displayName,
+          avatarUrl: whale.avatarUrl,
+          market: position.market,
+          side: position.side as "long" | "short",
+          leverage: position.leverage,
+          amountBase: position.amountBase,
+          notionalUsd: position.notionalUsd,
+          entryPrice: position.entryPrice,
+          currentMark: position.currentMark,
+          unrealizedPnlPct: position.unrealizedPnlPct,
+          openedAtMs,
+          lastSeenAtMs,
+          stale,
+          analysis: analysis
+            ? {
+                summary: analysis.summary,
+                thesis: analysis.thesis,
+                risk: analysis.risk,
+                entryGapWarning: analysis.entryGapWarning,
+                confidence: analysis.confidence,
+              }
+            : null,
+        },
+      } satisfies WhalePositionSignal;
+    });
 }
 
 export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   const positions = await buildWhalePositionSignals(200);
+  const activeWhales = await db
+    .select()
+    .from(whales)
+    .where(eq(whales.status, "active"))
+    .limit(500);
+
   const byWhale = new Map<string, WhalePositionSignal[]>();
 
   for (const position of positions) {
@@ -100,29 +108,29 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   const signals: WhaleTraderSignal[] = [];
   const stamp = new Date().toISOString();
 
-  for (const [whaleId, list] of byWhale) {
+  for (const whale of activeWhales) {
+    const list = byWhale.get(whale.id) ?? [];
     const best = [...list].sort((a, b) => b.heatScore - a.heatScore)[0];
-    if (!best) continue;
-
-    const lastSeenAtMs = Math.max(
-      ...list.map((position) => position.payload.lastSeenAtMs),
-    );
+    const lastSeenAtMs =
+      list.length > 0
+        ? Math.max(...list.map((position) => position.payload.lastSeenAtMs))
+        : null;
 
     signals.push({
-      id: `whale_trader:${whaleId}`,
+      id: `whale_trader:${whale.id}`,
       type: "whale_trader",
-      heatScore: best.heatScore + list.length * 25,
+      heatScore: best ? best.heatScore + list.length * 25 : 100,
       createdAt: stamp,
       chips: [],
       payload: {
-        whaleId,
-        source: best.payload.source,
-        sourceAccount: best.payload.sourceAccount,
-        displayName: best.payload.displayName,
-        avatarUrl: best.payload.avatarUrl,
-        tags: [],
+        whaleId: whale.id,
+        source: whale.source as "pacifica" | "hyperliquid",
+        sourceAccount: whale.sourceAccount,
+        displayName: whale.displayName,
+        avatarUrl: whale.avatarUrl,
+        tags: whale.tags,
         openPositionsCount: list.length,
-        bestPosition: best.payload,
+        bestPosition: best?.payload ?? null,
         stats: {
           pnl1dUsdc: 0,
           pnl7dUsdc: 0,
@@ -131,8 +139,10 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
           totalCloses1d: 0,
           volume1dUsdc: 0,
         },
-        lastSeenAt: new Date(lastSeenAtMs).toISOString(),
-        stale: list.every((position) => position.payload.stale),
+        lastSeenAt:
+          lastSeenAtMs === null ? null : new Date(lastSeenAtMs).toISOString(),
+        stale:
+          list.length === 0 || list.every((position) => position.payload.stale),
       },
     });
   }

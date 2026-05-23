@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
       select: vi.fn(),
     },
     rows: [] as unknown[],
+    resultSets: [] as unknown[][],
   };
 });
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/db/schema", () => ({
     id: "whales.id",
     source: "whales.source",
     sourceAccount: "whales.sourceAccount",
+    status: "whales.status",
   },
   whalePositions: {
     id: "whalePositions.id",
@@ -40,6 +42,7 @@ vi.mock("@/lib/db/schema", () => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
+  and: vi.fn((...conditions: unknown[]) => ({ and: conditions })),
   desc: vi.fn((column: unknown) => ({ desc: column })),
   eq: vi.fn((left: unknown, right: unknown) => ({ eq: [left, right] })),
 }));
@@ -50,12 +53,15 @@ describe("whale signals", () => {
     vi.setSystemTime(new Date("2026-05-23T12:00:00.000Z"));
 
     mocks.rows = [];
+    mocks.resultSets = [];
     mocks.query.from.mockReturnValue(mocks.query);
     mocks.query.innerJoin.mockReturnValue(mocks.query);
     mocks.query.leftJoin.mockReturnValue(mocks.query);
     mocks.query.where.mockReturnValue(mocks.query);
     mocks.query.orderBy.mockReturnValue(mocks.query);
-    mocks.query.limit.mockImplementation(async () => mocks.rows);
+    mocks.query.limit.mockImplementation(async () => {
+      return mocks.resultSets.length > 0 ? mocks.resultSets.shift() : mocks.rows;
+    });
     mocks.db.select.mockReturnValue(mocks.query);
   });
 
@@ -84,6 +90,8 @@ describe("whale signals", () => {
           sourceAccount: "joined-acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
+          status: "active",
+          tags: [],
         },
         analysis: {
           summary: "Momentum long",
@@ -116,6 +124,8 @@ describe("whale signals", () => {
           sourceAccount: "acct-2",
           displayName: "Beta",
           avatarUrl: null,
+          status: "active",
+          tags: [],
         },
         analysis: null,
       },
@@ -215,6 +225,8 @@ describe("whale signals", () => {
           sourceAccount: "acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
+          status: "active",
+          tags: ["leader"],
         },
         analysis: null,
       },
@@ -241,6 +253,8 @@ describe("whale signals", () => {
           sourceAccount: "acct-1",
           displayName: "Alpha",
           avatarUrl: "https://example.com/alpha.png",
+          status: "active",
+          tags: ["leader"],
         },
         analysis: null,
       },
@@ -267,9 +281,32 @@ describe("whale signals", () => {
           sourceAccount: "acct-2",
           displayName: "Beta",
           avatarUrl: null,
+          status: "active",
+          tags: [],
         },
         analysis: null,
       },
+    ];
+    mocks.resultSets = [
+      mocks.rows,
+      [
+        {
+          id: "whale-1",
+          source: "pacifica",
+          sourceAccount: "acct-1",
+          displayName: "Alpha",
+          avatarUrl: "https://example.com/alpha.png",
+          tags: ["leader"],
+        },
+        {
+          id: "whale-2",
+          source: "hyperliquid",
+          sourceAccount: "acct-2",
+          displayName: "Beta",
+          avatarUrl: null,
+          tags: [],
+        },
+      ],
     ];
 
     const { buildWhaleTraderSignals } = await import("./whale-signals");
@@ -292,7 +329,7 @@ describe("whale signals", () => {
         sourceAccount: "acct-1",
         displayName: "Alpha",
         avatarUrl: "https://example.com/alpha.png",
-        tags: [],
+        tags: ["leader"],
         openPositionsCount: 2,
         lastSeenAt: "2026-05-23T11:59:30.000Z",
         stale: false,
@@ -316,5 +353,171 @@ describe("whale signals", () => {
         stale: true,
       },
     });
+  });
+
+  it("includes active whales without open positions in trader signals", async () => {
+    mocks.resultSets = [
+      [],
+      [
+        {
+          id: "idle-whale",
+          source: "pacifica",
+          sourceAccount: "idle-acct",
+          displayName: "Idle Alpha",
+          avatarUrl: null,
+          tags: ["steady", "watchlist"],
+        },
+      ],
+    ];
+
+    const { buildWhaleTraderSignals } = await import("./whale-signals");
+
+    const signals = await buildWhaleTraderSignals();
+
+    expect(signals).toEqual([
+      {
+        id: "whale_trader:idle-whale",
+        type: "whale_trader",
+        heatScore: 100,
+        createdAt: "2026-05-23T12:00:00.000Z",
+        chips: [],
+        payload: {
+          whaleId: "idle-whale",
+          source: "pacifica",
+          sourceAccount: "idle-acct",
+          displayName: "Idle Alpha",
+          avatarUrl: null,
+          tags: ["steady", "watchlist"],
+          openPositionsCount: 0,
+          bestPosition: null,
+          stats: {
+            pnl1dUsdc: 0,
+            pnl7dUsdc: 0,
+            pnl30dUsdc: 0,
+            winRatePct1d: null,
+            totalCloses1d: 0,
+            volume1dUsdc: 0,
+          },
+          lastSeenAt: null,
+          stale: true,
+        },
+      },
+    ]);
+  });
+
+  it("filters hidden and retired whales out of position and trader signals", async () => {
+    const positionRows = [
+      {
+        position: {
+          id: "hidden-pos",
+          whaleId: "hidden-whale",
+          source: "pacifica",
+          sourceAccount: "hidden-acct",
+          market: "BTC",
+          side: "long",
+          leverage: 10,
+          amountBase: 0.5,
+          notionalUsd: 450_000,
+          entryPrice: 60_000,
+          currentMark: 63_000,
+          unrealizedPnlPct: 12,
+          openedAt: new Date("2026-05-23T11:00:00.000Z"),
+          lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
+        },
+        whale: {
+          id: "hidden-whale",
+          source: "pacifica",
+          sourceAccount: "hidden-acct",
+          displayName: "Hidden",
+          avatarUrl: null,
+          status: "hidden",
+          tags: [],
+        },
+        analysis: null,
+      },
+      {
+        position: {
+          id: "retired-pos",
+          whaleId: "retired-whale",
+          source: "hyperliquid",
+          sourceAccount: "retired-acct",
+          market: "ETH",
+          side: "short",
+          leverage: 5,
+          amountBase: 2,
+          notionalUsd: 50_000,
+          entryPrice: 3_200,
+          currentMark: null,
+          unrealizedPnlPct: null,
+          openedAt: new Date("2026-05-23T10:00:00.000Z"),
+          lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
+        },
+        whale: {
+          id: "retired-whale",
+          source: "hyperliquid",
+          sourceAccount: "retired-acct",
+          displayName: "Retired",
+          avatarUrl: null,
+          status: "retired",
+          tags: [],
+        },
+        analysis: null,
+      },
+      {
+        position: {
+          id: "active-pos",
+          whaleId: "active-whale",
+          source: "pacifica",
+          sourceAccount: "active-acct",
+          market: "SOL",
+          side: "long",
+          leverage: 3,
+          amountBase: 20,
+          notionalUsd: 20_000,
+          entryPrice: 150,
+          currentMark: 155,
+          unrealizedPnlPct: 3,
+          openedAt: new Date("2026-05-23T09:00:00.000Z"),
+          lastSeenAt: new Date("2026-05-23T11:59:00.000Z"),
+        },
+        whale: {
+          id: "active-whale",
+          source: "pacifica",
+          sourceAccount: "active-acct",
+          displayName: "Active",
+          avatarUrl: null,
+          status: "active",
+          tags: ["copyable"],
+        },
+        analysis: null,
+      },
+    ];
+    const activeWhaleRows = [
+      {
+        id: "active-whale",
+        source: "pacifica",
+        sourceAccount: "active-acct",
+        displayName: "Active",
+        avatarUrl: null,
+        tags: ["copyable"],
+      },
+    ];
+
+    const { buildWhalePositionSignals, buildWhaleTraderSignals } = await import(
+      "./whale-signals"
+    );
+
+    mocks.resultSets = [positionRows];
+    const positions = await buildWhalePositionSignals();
+    mocks.resultSets = [positionRows, activeWhaleRows];
+    const traders = await buildWhaleTraderSignals();
+
+    expect(positions.map((position) => position.payload.whaleId)).toEqual([
+      "active-whale",
+    ]);
+    expect(traders.map((trader) => trader.payload.whaleId)).toEqual([
+      "active-whale",
+    ]);
+    expect(traders[0]?.payload.tags).toEqual(["copyable"]);
   });
 });
