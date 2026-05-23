@@ -2,6 +2,13 @@ import type { PacificaPosition } from "@/lib/pacifica/types";
 import { makeWhaleId, makeWhalePositionId } from "./identity";
 import type { WhalePositionRecord, WhaleSide } from "./types";
 
+export class InvalidPacificaPositionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPacificaPositionError";
+  }
+}
+
 export function pacificaSideToWhaleSide(
   side: PacificaPosition["side"],
 ): WhaleSide {
@@ -20,6 +27,46 @@ export function leverageFromPacificaPosition(args: {
   return Math.max(1, Math.min(args.marketMaxLeverage, Math.round(raw)));
 }
 
+function requireFiniteNumber(
+  value: number,
+  field: string,
+): number {
+  if (!Number.isFinite(value)) {
+    throw new InvalidPacificaPositionError(`Invalid Pacifica position ${field}`);
+  }
+  return value;
+}
+
+function requirePositiveNumber(
+  value: number,
+  field: string,
+): number {
+  const parsed = requireFiniteNumber(value, field);
+  if (parsed <= 0) {
+    throw new InvalidPacificaPositionError(`Invalid Pacifica position ${field}`);
+  }
+  return parsed;
+}
+
+function requireNonNegativeNumber(
+  value: number,
+  field: string,
+): number {
+  const parsed = requireFiniteNumber(value, field);
+  if (parsed < 0) {
+    throw new InvalidPacificaPositionError(`Invalid Pacifica position ${field}`);
+  }
+  return parsed;
+}
+
+function requireValidTimestamp(value: number, field: string): number {
+  const parsed = requireFiniteNumber(value, field);
+  if (Number.isNaN(new Date(parsed).getTime())) {
+    throw new InvalidPacificaPositionError(`Invalid Pacifica position ${field}`);
+  }
+  return parsed;
+}
+
 export function mapPacificaPosition(args: {
   sourceAccount: string;
   position: PacificaPosition;
@@ -28,24 +75,45 @@ export function mapPacificaPosition(args: {
   now?: Date;
 }): WhalePositionRecord {
   const side = pacificaSideToWhaleSide(args.position.side);
-  const amountBase = Math.abs(Number(args.position.amount));
-  const entryPrice = Number(args.position.entry_price);
-  const marginUsd = Number(args.position.margin);
+  const amountBase = requirePositiveNumber(Number(args.position.amount), "amount");
+  const entryPrice = requirePositiveNumber(
+    Number(args.position.entry_price),
+    "entry_price",
+  );
+  const marginUsd = requireNonNegativeNumber(
+    Number(args.position.margin),
+    "margin",
+  );
+  const marketMaxLeverage = requireFiniteNumber(
+    args.marketMaxLeverage,
+    "marketMaxLeverage",
+  );
+  if (marketMaxLeverage < 1) {
+    throw new InvalidPacificaPositionError(
+      "Invalid Pacifica position marketMaxLeverage",
+    );
+  }
   const notionalUsd = amountBase * entryPrice;
   const leverage = leverageFromPacificaPosition({
     amountBase,
     entryPrice,
     marginUsd,
-    marketMaxLeverage: args.marketMaxLeverage,
+    marketMaxLeverage,
   });
-  const mark = args.currentMark;
+  const mark =
+    args.currentMark == null
+      ? null
+      : requirePositiveNumber(args.currentMark, "currentMark");
   const directional =
     mark == null ? null : side === "long" ? mark - entryPrice : entryPrice - mark;
   const unrealizedPnlPct =
     directional == null || notionalUsd <= 0
       ? null
       : (directional / entryPrice) * leverage * 100;
-  const openedAtMs = Number(args.position.created_at);
+  const openedAtMs = requireValidTimestamp(
+    Number(args.position.created_at),
+    "created_at",
+  );
   const source = "pacifica";
   const whaleId = makeWhaleId(source, args.sourceAccount);
 
