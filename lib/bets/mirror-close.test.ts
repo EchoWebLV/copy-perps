@@ -1,6 +1,7 @@
 import { createCipheriv, randomBytes } from "crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { makeWhalePositionId } from "@/lib/whales/identity";
 import type { WhaleCopyMeta } from "./whale-meta";
 
 const mocks = vi.hoisted(() => ({
@@ -55,7 +56,13 @@ const whaleMeta: WhaleCopyMeta = {
   whaleId: "pacifica:source-1",
   source: "pacifica",
   sourceAccount: "source-1",
-  sourcePositionId: "pos-1",
+  sourcePositionId: makeWhalePositionId({
+    source: "pacifica",
+    sourceAccount: "source-1",
+    market: "BTC",
+    side: "long",
+    openedAtMs: 1_000,
+  }),
   leaderMarket: "BTC",
   leaderSide: "long",
   leverage: 10,
@@ -88,6 +95,16 @@ function openWhaleBet(meta: WhaleCopyMeta = whaleMeta) {
     userMainPubkey: "user-main-1",
     agentPubkey: "agent-1",
     agentSecretEnc: encryptedSeed(),
+  };
+}
+
+function sourcePosition(overrides: Record<string, unknown> = {}) {
+  return {
+    symbol: "BTC",
+    side: "bid",
+    amount: "0.5",
+    created_at: 1_000,
+    ...overrides,
   };
 }
 
@@ -164,5 +181,84 @@ describe("runMirrorCloseSweep whale source closes", () => {
       closeReason: "already_flat",
       leaderClosedAt: expect.any(String),
     });
+  });
+
+  it("does not close a whale copy twice when legacy leader metadata is present", async () => {
+    mocks.openBets = [
+      openWhaleBet({
+        ...whaleMeta,
+        leaderAddress: "legacy-leader-1",
+      } as WhaleCopyMeta & { leaderAddress: string }),
+    ];
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "legacy-leader-1") {
+        return [];
+      }
+      if (account === "source-1") {
+        return [];
+      }
+      if (account === "user-main-1") {
+        return [sourcePosition({ amount: "0.25" })];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.closeCopyOrder).toHaveBeenCalledTimes(1);
+    expect(mocks.updates).toHaveLength(1);
+    expect(mocks.updates[0]?.meta).toMatchObject({
+      sourceType: "whale",
+      closeReason: "source_closed",
+    });
+  });
+
+  it("closes when the source reopened the same market and side with a new position id", async () => {
+    mocks.openBets = [openWhaleBet()];
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "source-1") {
+        return [sourcePosition({ created_at: 2_000 })];
+      }
+      if (account === "user-main-1") {
+        return [sourcePosition({ amount: "0.25" })];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.closeCopyOrder).toHaveBeenCalledTimes(1);
+    expect(mocks.updates[0]?.meta).toMatchObject({
+      closeReason: "source_closed",
+    });
+  });
+
+  it("fetches each whale source account once for multiple followers", async () => {
+    mocks.openBets = [
+      openWhaleBet(),
+      {
+        ...openWhaleBet(),
+        betId: "bet-2",
+        userId: "user-2",
+        userMainPubkey: "user-main-2",
+      },
+    ];
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "source-1") {
+        return [sourcePosition()];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(0);
+    expect(result.scannedLeaders).toBe(1);
+    expect(mocks.getPositions).toHaveBeenCalledTimes(1);
+    expect(mocks.getPositions).toHaveBeenCalledWith("source-1");
   });
 });

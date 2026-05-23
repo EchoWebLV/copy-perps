@@ -7,8 +7,11 @@ import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
+import { makeWhalePositionId } from "@/lib/whales/identity";
+import { pacificaSideToWhaleSide } from "@/lib/whales/pacifica-source";
 import type { AgentWalletRecord } from "@/lib/wallets/agent";
 import type { WhaleCopyMeta } from "@/lib/bets/whale-meta";
+import type { PacificaPosition } from "@/lib/pacifica/types";
 import { createDecipheriv } from "crypto";
 
 interface BetMeta {
@@ -168,6 +171,7 @@ async function closeLeaderFollowers(
   // Group by leaderAddress so we only fetch each leader's positions once.
   const byLeader = new Map<string, OpenBetRow[]>();
   for (const row of openBets) {
+    if (parseWhaleCopyMeta(row.meta) !== null) continue;
     const meta = row.meta as BetMeta | null;
     if (!meta?.leaderAddress) continue;
     const list = byLeader.get(meta.leaderAddress) ?? [];
@@ -214,6 +218,7 @@ async function closeBotFollowers(
 ): Promise<void> {
   const byBot = new Map<string, OpenBetRow[]>();
   for (const row of openBets) {
+    if (parseWhaleCopyMeta(row.meta) !== null) continue;
     const meta = row.meta as BetMeta | null;
     if (!meta?.botId) continue;
     const arr = byBot.get(meta.botId) ?? [];
@@ -255,42 +260,79 @@ async function closeBotFollowers(
   }
 }
 
+function pacificaSourcePositionId(
+  sourceAccount: string,
+  position: PacificaPosition,
+): string | null {
+  const openedAtMs = Number(position.created_at);
+  if (!Number.isFinite(openedAtMs)) return null;
+  return makeWhalePositionId({
+    source: "pacifica",
+    sourceAccount,
+    market: position.symbol,
+    side: pacificaSideToWhaleSide(position.side),
+    openedAtMs,
+  });
+}
+
+function isWhaleSourcePositionStillOpen(
+  meta: WhaleCopyMeta,
+  sourcePositions: PacificaPosition[],
+): boolean {
+  return sourcePositions.some(
+    (position) =>
+      pacificaSourcePositionId(meta.sourceAccount, position) ===
+      meta.sourcePositionId,
+  );
+}
+
 /** Whale-source close path: if the copied source position has disappeared and
  *  the user opted into source-close listening, close the follower position. */
 async function closeWhaleFollowers(
   openBets: OpenBetRow[],
   result: MirrorResult,
 ): Promise<void> {
+  const bySourceAccount = new Map<
+    string,
+    Array<{ row: OpenBetRow; meta: WhaleCopyMeta }>
+  >();
   for (const row of openBets) {
     const meta = parseWhaleCopyMeta(row.meta);
     if (meta === null) continue;
     if (meta.source !== "pacifica") continue;
     if (meta.autoCloseOnSourceClose === false) continue;
+    const followers = bySourceAccount.get(meta.sourceAccount) ?? [];
+    followers.push({ row, meta });
+    bySourceAccount.set(meta.sourceAccount, followers);
+  }
 
+  for (const [sourceAccount, followers] of bySourceAccount.entries()) {
     let sourcePositions;
     try {
       result.scannedLeaders++;
-      sourcePositions = await getPositions(meta.sourceAccount);
+      sourcePositions = await getPositions(sourceAccount);
     } catch (err) {
-      result.errors.push({
-        betId: row.betId,
-        message: `source fetch: ${err}`,
-      });
+      for (const follower of followers) {
+        result.errors.push({
+          betId: follower.row.betId,
+          message: `source fetch: ${err}`,
+        });
+      }
       continue;
     }
 
-    const sourceStillOpen = sourcePositions.some(
-      (p) =>
-        p.symbol === meta.leaderMarket &&
-        ((meta.leaderSide === "long" && p.side === "bid") ||
-          (meta.leaderSide === "short" && p.side === "ask")),
-    );
-    if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
+    for (const { row, meta } of followers) {
+      const sourceStillOpen = isWhaleSourcePositionStillOpen(
+        meta,
+        sourcePositions,
+      );
+      if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
 
-    await closeFollowerBet(row, meta, result, {
-      closeReason: "source_closed",
-      alreadyFlatCloseReason: "already_flat",
-    });
+      await closeFollowerBet(row, meta, result, {
+        closeReason: "source_closed",
+        alreadyFlatCloseReason: "already_flat",
+      });
+    }
   }
 }
 
