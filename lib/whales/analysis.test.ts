@@ -68,6 +68,30 @@ describe("whale analysis helpers", () => {
     ).toBeNull();
   });
 
+  it("does not warn when the current mark is zero", async () => {
+    const { whaleEntryGapWarning } = await import("./analysis");
+
+    expect(
+      whaleEntryGapWarning({
+        side: "long",
+        sourceEntry: 100,
+        currentMark: 0,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not warn when the current mark is negative", async () => {
+    const { whaleEntryGapWarning } = await import("./analysis");
+
+    expect(
+      whaleEntryGapWarning({
+        side: "long",
+        sourceEntry: 100,
+        currentMark: -5,
+      }),
+    ).toBeNull();
+  });
+
   it("does not warn when the entry gap is under 1%", async () => {
     const { whaleEntryGapWarning } = await import("./analysis");
 

@@ -41,6 +41,7 @@ export function whaleEntryGapWarning(args: {
   if (
     args.currentMark == null ||
     !Number.isFinite(args.currentMark) ||
+    args.currentMark <= 0 ||
     !Number.isFinite(args.sourceEntry) ||
     args.sourceEntry <= 0
   ) {
