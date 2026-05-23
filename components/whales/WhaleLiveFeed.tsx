@@ -8,10 +8,10 @@ import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
   ACCENT,
   BG,
-  BigNum,
   DIM,
   FAINT,
   FG,
@@ -22,7 +22,6 @@ import {
   PANEL_2,
   RED,
   Stamp,
-  StoryAvatar,
 } from "@/components/v2/ui";
 import {
   computeWhalePositionPnlPct,
@@ -225,9 +224,9 @@ function PositionCard({
         </div>
 
         <div className="mt-3 flex items-center gap-3">
-          <StoryAvatar
-            emoji={p.displayName.slice(0, 1).toUpperCase()}
-            imageUrl={p.avatarUrl}
+          <WhaleFingerprintAvatar
+            sourceAccount={p.sourceAccount}
+            label={p.displayName}
             mood={p.stale ? "WOUNDED" : "HUNTING"}
             size={56}
             pulse={!p.stale}

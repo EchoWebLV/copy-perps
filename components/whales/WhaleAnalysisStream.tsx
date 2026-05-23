@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Radio } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
+import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
   ACCENT,
   BG,
@@ -15,7 +16,6 @@ import {
   PANEL,
   PANEL_2,
   RED,
-  StoryAvatar,
 } from "@/components/v2/ui";
 
 const POLL_MS = 10_000;
@@ -113,9 +113,9 @@ function AnalysisRow({ position }: { position: WhalePositionSignal }) {
   return (
     <li className="px-5 py-4" style={{ borderBottom: `1px solid ${FAINT}` }}>
       <div className="flex items-start gap-3">
-        <StoryAvatar
-          emoji={p.displayName.slice(0, 1).toUpperCase()}
-          imageUrl={p.avatarUrl}
+        <WhaleFingerprintAvatar
+          sourceAccount={p.sourceAccount}
+          label={p.displayName}
           mood={p.stale ? "WOUNDED" : "HUNTING"}
           size={42}
           pulse={!p.stale}

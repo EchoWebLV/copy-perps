@@ -6,6 +6,7 @@ import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana"
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
 import { useLiveMark } from "@/lib/pacifica/live-context";
+import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
 import {
   copyableWhalePositionsForTail,
@@ -433,10 +434,8 @@ export function TailModal({ open, onClose, source }: Props) {
     source.entryMark;
   const markText = fmtPrice(markValue);
   const sourceName = source.kind === "whale" ? source.displayName : source.botName;
-  const sourceAvatarUrl =
-    source.kind === "whale" ? source.avatarUrl : source.avatarImageUrl;
-  const sourceAvatarFallback =
-    source.kind === "whale" ? source.displayName.slice(0, 1).toUpperCase() : source.avatarEmoji ?? "🤖";
+  const sourceAvatarUrl = source.kind === "bot" ? source.avatarImageUrl : null;
+  const sourceAvatarFallback = source.kind === "bot" ? source.avatarEmoji ?? "🤖" : null;
   const isSingleWhalePosition =
     source.kind === "whale" && whaleTailPositions.length === 1;
 
@@ -452,7 +451,15 @@ export function TailModal({ open, onClose, source }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <div className="flex items-center gap-3">
-            {sourceAvatarUrl ? (
+            {source.kind === "whale" ? (
+              <WhaleFingerprintAvatar
+                sourceAccount={source.sourceAccount}
+                label={sourceName}
+                mood={source.stale ? "WOUNDED" : "HUNTING"}
+                size={40}
+                pulse={!source.stale}
+              />
+            ) : sourceAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={sourceAvatarUrl}

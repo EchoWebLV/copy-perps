@@ -9,6 +9,7 @@ import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
 import { formatSignedWhaleUsd } from "./whale-money";
 import { buildWhaleTailSource } from "./whale-tail-source";
+import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
   buildWhaleExposureSummary,
   type WhaleExposureSummary,
@@ -25,7 +26,6 @@ import {
   PANEL,
   PANEL_2,
   RED,
-  StoryAvatar,
 } from "@/components/v2/ui";
 
 const POLL_MS = 4_000;
@@ -128,9 +128,9 @@ function WhaleCard({
       </div>
 
       <div className="flex items-center gap-3 pl-8">
-        <StoryAvatar
-          emoji={p.displayName.slice(0, 1).toUpperCase()}
-          imageUrl={p.avatarUrl}
+        <WhaleFingerprintAvatar
+          sourceAccount={p.sourceAccount}
+          label={p.displayName}
           mood={fresh ? "HUNTING" : "WOUNDED"}
           size={48}
           pulse={fresh && p.openPositionsCount > 0}
