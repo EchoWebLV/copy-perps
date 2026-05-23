@@ -24,4 +24,14 @@ describe("WhaleLiveFeed position card contract", () => {
     expect(source).not.toContain("<AnalysisBlock");
     expect(source).not.toContain("Analysis is warming up");
   });
+
+  it("does not show watcher last-seen recency on the position card", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("SEEN {");
+    expect(source).toContain("OPENED {formatWhalePositionAge");
+  });
 });

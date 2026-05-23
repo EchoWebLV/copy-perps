@@ -29,6 +29,7 @@ import {
   toWhaleEntryChartPosition,
 } from "./whale-entry-chart-position";
 import { buildWhaleLiveTailButtonLabel } from "./whale-live-tail-label";
+import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 4_000;
 const BODY_FONT = "system-ui, -apple-system, 'Inter', sans-serif";
@@ -291,8 +292,7 @@ function PositionCard({
             </div>
           </div>
           <div className="text-right text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            <div>OPENED {fmtAge(p.openedAtMs, now)}</div>
-            <div>SEEN {fmtAge(p.lastSeenAtMs, now)}</div>
+            <div>OPENED {formatWhalePositionAge(p.openedAtMs, now)}</div>
           </div>
         </div>
       </div>
@@ -440,15 +440,4 @@ function fmtPrice(v: number): string {
   if (v >= 1000) return `$${v.toFixed(0)}`;
   if (v >= 1) return `$${v.toFixed(2)}`;
   return `$${v.toPrecision(4)}`;
-}
-
-function fmtAge(ms: number, now: number): string {
-  if (now === 0) return "JUST NOW";
-  const diff = Math.max(0, now - ms);
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "JUST NOW";
-  if (minutes < 60) return `${minutes}M AGO`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}H AGO`;
-  return `${Math.floor(hours / 24)}D AGO`;
 }
