@@ -10,7 +10,11 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { releaseTailReservation, reserveTailOnMarket } from "./tail-reservation";
+import {
+  blockTailReservation,
+  releaseTailReservation,
+  reserveTailOnMarket,
+} from "./tail-reservation";
 
 describe("tail reservation", () => {
   beforeEach(() => {
@@ -38,5 +42,19 @@ describe("tail reservation", () => {
 
     await expect(releaseTailReservation("user-1", "ETH")).resolves.toBeUndefined();
     expect(mocks.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("blocks a reservation until manual review", async () => {
+    mocks.execute.mockResolvedValue({ rows: [] });
+
+    await expect(blockTailReservation("user-1", "ETH")).resolves.toBeUndefined();
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
+    const blockQuery = mocks.execute.mock.calls[1][0] as {
+      queryChunks: Array<{ value?: string[] }>;
+    };
+    const sqlText = blockQuery.queryChunks
+      .flatMap((chunk) => chunk.value ?? [])
+      .join(" ");
+    expect(sqlText).toContain("infinity");
   });
 });

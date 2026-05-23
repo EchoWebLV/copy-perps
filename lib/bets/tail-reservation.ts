@@ -45,3 +45,17 @@ export async function releaseTailReservation(
       AND market = ${market}
   `);
 }
+
+export async function blockTailReservation(
+  userId: string,
+  market: string,
+): Promise<void> {
+  await ensureTailReservationTable();
+  await db.execute(sql`
+    INSERT INTO tail_reservations (user_id, market, expires_at)
+    VALUES (${userId}, ${market}, 'infinity'::timestamptz)
+    ON CONFLICT (user_id, market) DO UPDATE
+      SET expires_at = 'infinity'::timestamptz,
+          created_at = now()
+  `);
+}

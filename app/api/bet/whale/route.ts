@@ -7,6 +7,7 @@ import {
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
 import {
+  blockTailReservation,
   releaseTailReservation,
   reserveTailOnMarket,
 } from "@/lib/bets/tail-reservation";
@@ -68,6 +69,14 @@ async function markBetFailedBestEffort(betId: string) {
     await db.update(bets).set({ status: "failed" }).where(eq(bets.id, betId));
   } catch (err) {
     console.warn("[bet/whale] failed bet update failed:", err);
+  }
+}
+
+async function blockReservationBestEffort(userId: string, market: string) {
+  try {
+    await blockTailReservation(userId, market);
+  } catch (err) {
+    console.warn("[bet/whale] reservation block failed:", err);
   }
 }
 
@@ -322,6 +331,7 @@ export async function POST(request: Request) {
       });
     } catch (closeErr) {
       console.error("[bet/whale] compensation close failed:", closeErr);
+      await blockReservationBestEffort(user.id, position.market);
       return NextResponse.json(
         {
           error:

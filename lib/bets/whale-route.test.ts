@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => {
     planPacificaDepositTopUp: vi.fn(),
     hasOpenTailOnMarket: vi.fn(),
     reserveTailOnMarket: vi.fn(),
+    blockTailReservation: vi.fn(),
     releaseTailReservation: vi.fn(),
     selectChain,
     selectLimit,
@@ -87,6 +88,7 @@ vi.mock("@/lib/bets/copy-guard", () => ({
 }));
 vi.mock("@/lib/bets/tail-reservation", () => ({
   reserveTailOnMarket: mocks.reserveTailOnMarket,
+  blockTailReservation: mocks.blockTailReservation,
   releaseTailReservation: mocks.releaseTailReservation,
 }));
 vi.mock("@/lib/db", () => ({
@@ -172,6 +174,7 @@ describe("POST /api/bet/whale", () => {
     });
     mocks.planPacificaDepositTopUp.mockResolvedValue(null);
     mocks.reserveTailOnMarket.mockResolvedValue(true);
+    mocks.blockTailReservation.mockResolvedValue(undefined);
     mocks.releaseTailReservation.mockResolvedValue(undefined);
     mocks.openCopyOrder.mockResolvedValue({
       order_id: "order-1",
@@ -542,6 +545,7 @@ describe("POST /api/bet/whale", () => {
           amountBase: "0.025",
         }),
       );
+      expect(mocks.blockTailReservation).toHaveBeenCalledWith("user-1", "ETH");
       expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(
         "[bet/whale] compensation close failed:",
