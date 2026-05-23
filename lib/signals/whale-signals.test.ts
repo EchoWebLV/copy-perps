@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
       select: vi.fn(),
     },
     getLeaderboard: vi.fn(),
+    getPositionsHistory: vi.fn(),
     rows: [] as unknown[],
     resultSets: [] as unknown[][],
   };
@@ -26,6 +27,7 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/pacifica/client", () => ({
   getLeaderboard: mocks.getLeaderboard,
+  getPositionsHistory: mocks.getPositionsHistory,
 }));
 
 vi.mock("@/lib/db/schema", () => ({
@@ -60,6 +62,7 @@ describe("whale signals", () => {
     mocks.rows = [];
     mocks.resultSets = [];
     mocks.getLeaderboard.mockResolvedValue([]);
+    mocks.getPositionsHistory.mockResolvedValue([]);
     mocks.query.from.mockReturnValue(mocks.query);
     mocks.query.innerJoin.mockReturnValue(mocks.query);
     mocks.query.leftJoin.mockReturnValue(mocks.query);
@@ -330,6 +333,24 @@ describe("whale signals", () => {
         volume_all_time: "100000000",
       },
     ]);
+    mocks.getPositionsHistory.mockResolvedValue([
+      {
+        history_id: 1,
+        order_id: 1,
+        client_order_id: null,
+        symbol: "SOL",
+        amount: "1",
+        price: "100",
+        entry_price: "90",
+        fee: "2",
+        spot_fee: null,
+        pnl: "10",
+        event_type: "fulfill_taker",
+        side: "close_long",
+        created_at: Date.parse("2026-05-22T12:00:00.000Z"),
+        cause: "filled",
+      },
+    ]);
 
     const { buildWhaleTraderSignals } = await import("./whale-signals");
 
@@ -362,6 +383,10 @@ describe("whale signals", () => {
           pnl7dUsdc: -50,
           pnl30dUsdc: 9000,
           pnlAllTimeUsdc: 42000,
+          pnlCurve: [
+            { t: Date.parse("2026-05-22T12:00:00.000Z") - 1, v: 41992 },
+            { t: Date.parse("2026-05-22T12:00:00.000Z"), v: 42000 },
+          ],
           winRatePct1d: null,
           totalCloses1d: 0,
           volume1dUsdc: 1500000,
@@ -389,6 +414,7 @@ describe("whale signals", () => {
           pnl7dUsdc: 0,
           pnl30dUsdc: 0,
           pnlAllTimeUsdc: 0,
+          pnlCurve: [],
           volume1dUsdc: 0,
         },
       },
@@ -437,6 +463,12 @@ describe("whale signals", () => {
             pnl7dUsdc: 0,
             pnl30dUsdc: 0,
             pnlAllTimeUsdc: 0,
+            pnlCurve: [
+              { t: Date.parse("2026-04-23T12:00:00.000Z"), v: 0 },
+              { t: Date.parse("2026-05-16T12:00:00.000Z"), v: 0 },
+              { t: Date.parse("2026-05-22T12:00:00.000Z"), v: 0 },
+              { t: Date.parse("2026-05-23T12:00:00.000Z"), v: 0 },
+            ],
             winRatePct1d: null,
             totalCloses1d: 0,
             volume1dUsdc: 0,

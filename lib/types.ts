@@ -151,6 +151,7 @@ export interface WhaleTraderSignal extends BaseSignal {
       pnl7dUsdc: number;
       pnl30dUsdc: number;
       pnlAllTimeUsdc: number;
+      pnlCurve: Array<{ t: number; v: number }>;
       winRatePct1d: number | null;
       totalCloses1d: number;
       volume1dUsdc: number;

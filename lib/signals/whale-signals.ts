@@ -7,8 +7,39 @@ import {
 import { isSourceFresh } from "@/lib/whales/identity";
 import { and, desc, eq } from "drizzle-orm";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
-import { getLeaderboard } from "@/lib/pacifica/client";
+import { getLeaderboard, getPositionsHistory } from "@/lib/pacifica/client";
 import type { PacificaLeaderboardEntry } from "@/lib/pacifica/types";
+import {
+  buildWhalePnlCurve,
+  type WhalePnlPoint,
+} from "@/lib/whales/pnl-curve";
+
+const PNL_HISTORY_LIMIT = 500;
+const PNL_HISTORY_CACHE_MS = 5 * 60_000;
+const PNL_HISTORY_CONCURRENCY = 4;
+
+const pnlHistoryCache = new Map<
+  string,
+  { expiresAt: number; curve: WhalePnlPoint[] }
+>();
+
+async function forEachWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item === undefined) return;
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
 
 function heatForPosition(args: {
   notionalUsd: number;
@@ -24,6 +55,37 @@ function heatForPosition(args: {
 function parseStat(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function getCachedPnlCurve(
+  account: string,
+  stats: {
+    pnlAllTimeUsdc: number;
+    pnl30dUsdc: number;
+    pnl7dUsdc: number;
+    pnl1dUsdc: number;
+  },
+): Promise<WhalePnlPoint[]> {
+  const now = Date.now();
+  const cached = pnlHistoryCache.get(account);
+  if (cached && cached.expiresAt > now) return cached.curve;
+
+  const history = await getPositionsHistory(account, PNL_HISTORY_LIMIT).catch(
+    () => [],
+  );
+  const curve = buildWhalePnlCurve({
+    history,
+    pnlAllTimeUsdc: stats.pnlAllTimeUsdc,
+    pnl30dUsdc: stats.pnl30dUsdc,
+    pnl7dUsdc: stats.pnl7dUsdc,
+    pnl1dUsdc: stats.pnl1dUsdc,
+    nowMs: now,
+  });
+  pnlHistoryCache.set(account, {
+    expiresAt: now + PNL_HISTORY_CACHE_MS,
+    curve,
+  });
+  return curve;
 }
 
 function statsForLeaderboardEntry(entry: PacificaLeaderboardEntry | undefined) {
@@ -123,6 +185,22 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   const leaderboardByAccount = new Map(
     leaderboard.map((entry) => [entry.address, entry]),
   );
+  const pnlCurveByAccount = new Map<string, WhalePnlPoint[]>();
+
+  await forEachWithConcurrency(
+    activeWhales,
+    PNL_HISTORY_CONCURRENCY,
+    async (whale) => {
+      if (whale.source !== "pacifica") return;
+      const stats = statsForLeaderboardEntry(
+        leaderboardByAccount.get(whale.sourceAccount),
+      );
+      pnlCurveByAccount.set(
+        whale.sourceAccount,
+        await getCachedPnlCurve(whale.sourceAccount, stats),
+      );
+    },
+  );
 
   const byWhale = new Map<string, WhalePositionSignal[]>();
 
@@ -160,11 +238,14 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         openPositionsCount: list.length,
         openPositions: sortedPositions.map((position) => position.payload),
         bestPosition: best?.payload ?? null,
-        stats: statsForLeaderboardEntry(
-          whale.source === "pacifica"
-            ? leaderboardByAccount.get(whale.sourceAccount)
-            : undefined,
-        ),
+        stats: {
+          ...statsForLeaderboardEntry(
+            whale.source === "pacifica"
+              ? leaderboardByAccount.get(whale.sourceAccount)
+              : undefined,
+          ),
+          pnlCurve: pnlCurveByAccount.get(whale.sourceAccount) ?? [],
+        },
         lastSeenAt:
           lastSeenAtMs === null ? null : new Date(lastSeenAtMs).toISOString(),
         stale:

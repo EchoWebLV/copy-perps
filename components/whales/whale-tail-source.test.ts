@@ -50,6 +50,7 @@ describe("buildWhaleTailSource", () => {
         pnl7dUsdc: 200,
         pnl30dUsdc: 300,
         pnlAllTimeUsdc: 400,
+        pnlCurve: [],
         winRatePct1d: null,
         totalCloses1d: 0,
         volume1dUsdc: 500000,

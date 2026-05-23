@@ -5,6 +5,7 @@ import { Radio, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { buildPnlChartPath } from "./pnl-chart";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import {
   ACCENT,
@@ -184,6 +185,12 @@ function WhaleCard({
         </div>
       </div>
 
+      <WhalePnlGraph
+        points={p.stats.pnlCurve}
+        totalPnl={totalPnl}
+        positive={totalPnl >= 0}
+      />
+
       <div className="mt-3 grid grid-cols-3 overflow-hidden border-y" style={{ borderColor: FAINT }}>
         <StatCell label="1D" value={fmtSignedUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
         <StatCell label="7D" value={fmtSignedUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
@@ -228,6 +235,87 @@ function WhaleCard({
           : "TAIL UNAVAILABLE"}
       </button>
     </article>
+  );
+}
+
+function WhalePnlGraph({
+  points,
+  totalPnl,
+  positive,
+}: {
+  points: WhaleTraderSignal["payload"]["stats"]["pnlCurve"];
+  totalPnl: number;
+  positive: boolean;
+}) {
+  const width = 320;
+  const height = 86;
+  const path = buildPnlChartPath(points, width, height);
+  const minValue = points.length > 0 ? Math.min(...points.map((p) => p.v)) : 0;
+  const maxValue = points.length > 0 ? Math.max(...points.map((p) => p.v)) : 0;
+  const valueSpan = Math.max(1, maxValue - minValue);
+  const zeroY =
+    minValue < 0 && maxValue > 0
+      ? height - ((0 - minValue) / valueSpan) * height
+      : null;
+  const color = positive ? GREEN : RED;
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl px-3 py-2.5" style={{ background: BG, border: `1px solid ${FAINT}` }}>
+      <div className="mb-1.5 flex items-center justify-between text-[9px] font-black uppercase tracking-widest">
+        <span style={{ color: DIM }}>All time P&L</span>
+        <span style={{ color }}>{fmtSignedUsd(totalPnl)}</span>
+      </div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="block h-[86px] w-full"
+        role="img"
+        aria-label="All time P&L graph"
+        preserveAspectRatio="none"
+      >
+        <rect x="0" y="0" width={width} height={height} fill="transparent" />
+        {zeroY !== null ? (
+          <line
+            x1="0"
+            x2={width}
+            y1={zeroY}
+            y2={zeroY}
+            stroke={FAINT}
+            strokeDasharray="4 4"
+            strokeWidth="1"
+          />
+        ) : null}
+        {path ? (
+          <>
+            <path
+              d={`${path} L ${width.toFixed(2)} ${height.toFixed(2)} L 0.00 ${height.toFixed(2)} Z`}
+              fill={color}
+              opacity="0.12"
+            />
+            <path
+              d={path}
+              fill="none"
+              stroke={color}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="3"
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
+        ) : (
+          <text
+            x={width / 2}
+            y={height / 2}
+            dominantBaseline="middle"
+            textAnchor="middle"
+            fill={DIM}
+            fontSize="22"
+            fontWeight="900"
+          >
+            P&L HISTORY WARMING UP
+          </text>
+        )}
+      </svg>
+    </div>
   );
 }
 
