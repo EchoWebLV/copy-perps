@@ -545,6 +545,11 @@ describe("POST /api/bet/whale", () => {
           amountBase: "0.025",
         }),
       );
+      expect(mocks.updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "manual_review",
+        }),
+      );
       expect(mocks.blockTailReservation).toHaveBeenCalledWith("user-1", "ETH");
       expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(

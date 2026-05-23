@@ -1,9 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets } from "@/lib/db/schema";
 
+const BLOCKING_COPY_STATUSES = ["confirmed", "pending", "manual_review"];
+
 /**
- * True if the user already holds an open (confirmed) copy tail on `market`.
+ * True if the user already holds an open or unresolved copy tail on `market`.
  *
  * Pacifica nets positions by (account, symbol): a second tail on the same
  * market merges into one on-chain position, so closing or auto-closing one
@@ -16,17 +18,18 @@ export async function hasOpenTailOnMarket(
   market: string,
 ): Promise<boolean> {
   const rows = await db
-    .select({ meta: bets.meta })
+    .select({ status: bets.status, meta: bets.meta })
     .from(bets)
     .where(
       and(
         eq(bets.userId, userId),
         eq(bets.type, "copy"),
-        eq(bets.status, "confirmed"),
+        inArray(bets.status, BLOCKING_COPY_STATUSES),
       ),
     );
   return rows.some(
     (r) =>
+      BLOCKING_COPY_STATUSES.includes(r.status) &&
       (r.meta as { leaderMarket?: string } | null)?.leaderMarket === market,
   );
 }

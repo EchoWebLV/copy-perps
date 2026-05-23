@@ -72,6 +72,17 @@ async function markBetFailedBestEffort(betId: string) {
   }
 }
 
+async function markBetManualReviewBestEffort(betId: string) {
+  try {
+    await db
+      .update(bets)
+      .set({ status: "manual_review" })
+      .where(eq(bets.id, betId));
+  } catch (err) {
+    console.warn("[bet/whale] manual review bet update failed:", err);
+  }
+}
+
 async function blockReservationBestEffort(userId: string, market: string) {
   try {
     await blockTailReservation(userId, market);
@@ -331,6 +342,7 @@ export async function POST(request: Request) {
       });
     } catch (closeErr) {
       console.error("[bet/whale] compensation close failed:", closeErr);
+      await markBetManualReviewBestEffort(pendingBet.id);
       await blockReservationBestEffort(user.id, position.market);
       return NextResponse.json(
         {
