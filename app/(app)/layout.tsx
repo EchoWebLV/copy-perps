@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { UserEnsure } from "@/components/auth/UserEnsure";
 import { PreferencesProvider } from "@/components/onboarding/PreferencesProvider";
-import { WelcomeIntro } from "@/components/welcome/WelcomeIntro";
 import { PacificaLiveProvider } from "@/lib/pacifica/live-context";
 
 // Pages inside this route group render inside the app-frame: full-screen on
@@ -20,7 +19,6 @@ export default function ContainedLayout({ children }: { children: ReactNode }) {
       <PreferencesProvider>
         <PacificaLiveProvider>{children}</PacificaLiveProvider>
       </PreferencesProvider>
-      <WelcomeIntro />
     </div>
   );
 }
