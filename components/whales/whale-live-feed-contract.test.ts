@@ -32,7 +32,7 @@ describe("WhaleLiveFeed position card contract", () => {
     );
 
     expect(source).not.toContain("SEEN {");
-    expect(source).toContain("OPENED {formatWhalePositionAge");
+    expect(source).toContain("HOLDING {formatWhalePositionAge");
   });
 
   it("does not reserve title space above live position cards", () => {

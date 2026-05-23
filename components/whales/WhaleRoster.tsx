@@ -8,6 +8,7 @@ import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
 import { formatSignedWhaleUsd } from "./whale-money";
+import { formatWhalePositionAge } from "./whale-position-age";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
@@ -107,11 +108,18 @@ function WhaleCard({
   onTail: (source: TailSource) => void;
 }) {
   const p = whale.payload;
+  const [now, setNow] = useState(0);
   const exposureSummary = buildWhaleExposureSummary(p.openPositions);
   const fresh = !p.stale;
   const canTail = exposureSummary.copyableCount > 0;
   const totalPnl = p.stats.pnlAllTimeUsdc;
   const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
+
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <article
@@ -189,7 +197,7 @@ function WhaleCard({
         <MiniMetric label="Vol 1D" value={p.stats.volume1dUsdc > 0 ? fmtUsd(p.stats.volume1dUsdc) : "N/A"} active={p.stats.volume1dUsdc > 0} />
       </div>
 
-      <WhaleExposurePanel summary={exposureSummary} />
+      <WhaleExposurePanel summary={exposureSummary} now={now} />
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Link
@@ -312,7 +320,13 @@ function WhalePnlGraph({
   );
 }
 
-function WhaleExposurePanel({ summary }: { summary: WhaleExposureSummary }) {
+function WhaleExposurePanel({
+  summary,
+  now,
+}: {
+  summary: WhaleExposureSummary;
+  now: number;
+}) {
   const largest = summary.largestPosition;
   const largestSideColor = largest?.side === "long" ? GREEN : RED;
   const largestPnl = largest?.unrealizedPnlPct ?? null;
@@ -361,6 +375,9 @@ function WhaleExposurePanel({ summary }: { summary: WhaleExposureSummary }) {
                   <span>{largest.market}</span>
                   <span style={{ color: largestSideColor }}>{largest.side}</span>
                   <span style={{ color: DIM }}>{largest.leverage}x</span>
+                </div>
+                <div className="mt-1 text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                  Held {formatWhalePositionAge(largest.openedAtMs, now)}
                 </div>
               </div>
               <div className="shrink-0 text-right">

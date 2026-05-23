@@ -268,7 +268,7 @@ function PositionCard({
             </div>
           </div>
           <div className="text-right text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            <div>OPENED {formatWhalePositionAge(p.openedAtMs, now)}</div>
+            <div>HOLDING {formatWhalePositionAge(p.openedAtMs, now)}</div>
           </div>
         </div>
       </div>

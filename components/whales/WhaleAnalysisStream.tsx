@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Radio } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
+import { formatWhalePositionAge } from "./whale-position-age";
 import {
   ACCENT,
   BG,
@@ -137,14 +138,13 @@ function AnalysisRow({ position }: { position: WhalePositionSignal }) {
               <span style={{ color: DIM }}>{p.leverage}x</span>
             </div>
             <span className="shrink-0 text-[11px]" style={{ color: DIM, fontFamily: BODY_FONT }}>
-              {fmtAge(p.openedAtMs, now)}
+              HOLDING {formatWhalePositionAge(p.openedAtMs, now)}
             </span>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest" style={{ fontFamily: FONT_DISPLAY }}>
             <FreshnessBadge stale={p.stale} />
             <span style={{ color: DIM }}>{p.source}</span>
-            <span style={{ color: DIM }}>seen {fmtAge(p.lastSeenAtMs, now)}</span>
             <span style={{ color: DIM }}>{fmtUsd(p.notionalUsd)}</span>
           </div>
 
@@ -253,16 +253,4 @@ function EmptyStream() {
 
 function fmtUsd(v: number): string {
   return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function fmtAge(ms: number, now: number): string {
-  if (now === 0) return "just now";
-  const diff = Math.max(0, now - ms);
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
 }

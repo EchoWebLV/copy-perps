@@ -37,4 +37,15 @@ describe("WhaleRoster feed layout", () => {
     expect(source).toContain("setLoaded(true)");
     expect(source).toContain("run();");
   });
+
+  it("shows hold duration for the position surfaced on the whale card", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("formatWhalePositionAge");
+    expect(source).toContain("Held");
+    expect(source).toContain("largest.openedAtMs");
+  });
 });
