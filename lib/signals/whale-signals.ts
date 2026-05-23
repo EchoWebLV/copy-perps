@@ -8,6 +8,10 @@ import type { HLPortfolio, HLPortfolioWindow } from "@/lib/hyperliquid/client";
 import { getLeaderboard, getPositionsHistory } from "@/lib/pacifica/client";
 import type { PacificaLeaderboardEntry } from "@/lib/pacifica/types";
 import {
+  fallbackWhaleAnalysis,
+  whaleEntryGapWarning,
+} from "@/lib/whales/analysis";
+import {
   buildWhalePnlCurve,
   type WhalePnlPoint,
 } from "@/lib/whales/pnl-curve";
@@ -232,6 +236,32 @@ async function buildWhalePositionSignalsFromSnapshot(
     const openedAtMs = position.openedAt.getTime();
     const lastSeenAtMs = position.lastSeenAt.getTime();
     const stale = !isSourceFresh(lastSeenAtMs);
+    const positionAnalysis = analysis
+      ? {
+          summary: analysis.summary,
+          thesis: analysis.thesis,
+          risk: analysis.risk,
+          entryGapWarning: analysis.entryGapWarning,
+          confidence: analysis.confidence,
+        }
+      : {
+          ...fallbackWhaleAnalysis({
+            displayName: whale.displayName,
+            source: whale.source,
+            market: position.market,
+            side: position.side,
+            leverage: position.leverage,
+            entryPrice: position.entryPrice,
+            currentMark: position.currentMark,
+            notionalUsd: position.notionalUsd,
+            openedAtMs,
+          }),
+          entryGapWarning: whaleEntryGapWarning({
+            side: position.side,
+            sourceEntry: position.entryPrice,
+            currentMark: position.currentMark,
+          }),
+        };
 
     return {
       id: `whale_position:${position.id}`,
@@ -262,15 +292,7 @@ async function buildWhalePositionSignalsFromSnapshot(
         lastSeenAtMs,
         stale,
         copyableOnPacifica: isCopyableOnPacifica(position),
-        analysis: analysis
-          ? {
-              summary: analysis.summary,
-              thesis: analysis.thesis,
-              risk: analysis.risk,
-              entryGapWarning: analysis.entryGapWarning,
-              confidence: analysis.confidence,
-            }
-          : null,
+        analysis: positionAnalysis,
       },
     } satisfies WhalePositionSignal;
   });

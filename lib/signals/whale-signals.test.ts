@@ -130,10 +130,17 @@ describe("whale signals", () => {
     mocks.db.select.mockReturnValue(mocks.query);
   });
 
-  it("maps cached live positions with heat and optional analysis", async () => {
+  it("maps cached live positions with heat and fallback analysis", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(
       snapshot({
-        whales: [whale(), whale({ id: "whale-2", sourceAccount: "acct-2" })],
+        whales: [
+          whale(),
+          whale({
+            id: "whale-2",
+            sourceAccount: "acct-2",
+            displayName: "Beta",
+          }),
+        ],
         accounts: ["acct-1", "acct-2"],
         positions: [
           position(),
@@ -223,7 +230,15 @@ describe("whale signals", () => {
         market: "ETH",
         stale: false,
         copyableOnPacifica: false,
-        analysis: null,
+        analysis: {
+          summary: "Beta is carrying a 5x short on ETH with about $50K live.",
+          thesis:
+            "Current mark is unavailable, so the useful signal is exposure: a live short on ETH, not confirmed momentum from price.",
+          risk:
+            "5x leverage makes entry timing matter. Followers enter at the live mark, may not share the whale's margin, and can be forced out before the whale closes.",
+          entryGapWarning: null,
+          confidence: 0.25,
+        },
       },
     });
   });

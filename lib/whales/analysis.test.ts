@@ -133,11 +133,12 @@ describe("whale analysis helpers", () => {
     const { fallbackWhaleAnalysis } = await import("./analysis");
 
     expect(fallbackWhaleAnalysis(baseArgs)).toEqual({
-      summary: "Whale One is long BTC at 10x.",
+      summary:
+        "Whale One is carrying a 10x long on BTC with about $25K live.",
       thesis:
-        "The position is live and recently verified, but no AI analysis is cached yet.",
+        "The mark is 6.0% above entry, so the trade is already working. Tailing now means buying after the whale's fill and relying on continued upside.",
       risk:
-        "Followers enter at the current market price and may not match the whale's original entry.",
+        "10x leverage makes entry timing matter. Followers enter at the live mark, may not share the whale's margin, and can be forced out before the whale closes.",
       confidence: 0.25,
     });
   });
@@ -180,7 +181,8 @@ describe("whale analysis helpers", () => {
     const result = await generateWhaleAnalysis(baseArgs);
 
     expect(result).toMatchObject({
-      summary: "Whale One is long BTC at 10x.",
+      summary:
+        "Whale One is carrying a 10x long on BTC with about $25K live.",
       confidence: 0.25,
       entryGapWarning:
         "Current mark is 6.0% above the whale entry. Followers enter at the live price, not the whale entry.",
