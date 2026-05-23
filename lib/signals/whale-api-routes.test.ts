@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   whaleSocialEnabled: vi.fn(),
   buildWhalePositionSignals: vi.fn(),
   buildWhaleTraderSignals: vi.fn(),
+  buildCachedWhaleTraderSignals: vi.fn(),
 }));
 
 vi.mock("@/lib/features", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/features", () => ({
 vi.mock("@/lib/signals/whale-signals", () => ({
   buildWhalePositionSignals: mocks.buildWhalePositionSignals,
   buildWhaleTraderSignals: mocks.buildWhaleTraderSignals,
+  buildCachedWhaleTraderSignals: mocks.buildCachedWhaleTraderSignals,
 }));
 
 describe("whale API routes", () => {
@@ -21,6 +23,7 @@ describe("whale API routes", () => {
     mocks.whaleSocialEnabled.mockReturnValue(true);
     mocks.buildWhalePositionSignals.mockResolvedValue([]);
     mocks.buildWhaleTraderSignals.mockResolvedValue([]);
+    mocks.buildCachedWhaleTraderSignals.mockResolvedValue([]);
   });
 
   it("returns 404 from roster when whale social is disabled", async () => {
@@ -30,18 +33,19 @@ describe("whale API routes", () => {
     const response = await GET();
 
     expect(response.status).toBe(404);
-    expect(mocks.buildWhaleTraderSignals).not.toHaveBeenCalled();
+    expect(mocks.buildCachedWhaleTraderSignals).not.toHaveBeenCalled();
   });
 
   it("returns roster signals when whale social is enabled", async () => {
     const whale = { id: "whale_trader:one" };
-    mocks.buildWhaleTraderSignals.mockResolvedValue([whale]);
+    mocks.buildCachedWhaleTraderSignals.mockResolvedValue([whale]);
     const { GET } = await import("@/app/api/whales/roster/route");
 
     const response = await GET();
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ whales: [whale] });
+    expect(mocks.buildCachedWhaleTraderSignals).toHaveBeenCalledTimes(1);
   });
 
   it("returns 404 from live positions when whale social is disabled", async () => {

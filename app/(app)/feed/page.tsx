@@ -4,7 +4,6 @@ import { BottomNav } from "@/components/shell/BottomNav";
 import { WhaleRoster } from "@/components/whales/WhaleRoster";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildBotSignals } from "@/lib/signals/bot-signals";
-import { buildWhaleTraderSignals } from "@/lib/signals/whale-signals";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +11,9 @@ export const dynamic = "force-dynamic";
 // positions, and tail actions. The swipeable per-position view lives on /live.
 export default async function FeedPage() {
   if (whaleSocialEnabled()) {
-    const whales = await buildWhaleTraderSignals();
-
     return (
       <AppShell railTitle="Whales">
-        <WhaleRoster initialWhales={whales} />
+        <WhaleRoster initialWhales={[]} />
         <BottomNav />
       </AppShell>
     );

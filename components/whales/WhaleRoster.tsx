@@ -36,6 +36,7 @@ interface Props {
 
 export function WhaleRoster({ initialWhales }: Props) {
   const [whales, setWhales] = useState<WhaleTraderSignal[]>(initialWhales);
+  const [loaded, setLoaded] = useState(initialWhales.length > 0);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
 
   const load = useCallback(async () => {
@@ -46,6 +47,8 @@ export function WhaleRoster({ initialWhales }: Props) {
       setWhales(data.whales);
     } catch {
       // Keep the last good roster if the poll misses.
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -63,7 +66,9 @@ export function WhaleRoster({ initialWhales }: Props) {
     >
       <BalancePill />
 
-      {ranked.length === 0 ? (
+      {!loaded && ranked.length === 0 ? (
+        <LoadingRoster />
+      ) : ranked.length === 0 ? (
         <EmptyRoster />
       ) : (
         <div className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll">
@@ -409,6 +414,7 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
     };
     const start = () => {
       if (timer) return;
+      if (typeof document === "undefined" || !document.hidden) run();
       timer = setInterval(() => {
         if (typeof document !== "undefined" && document.hidden) return;
         run();
@@ -467,6 +473,17 @@ function EmptyRoster() {
       <Headline size={30}>{`"NO WHALES ONLINE"`}</Headline>
       <p className="mt-3 text-[12px] font-black uppercase tracking-widest" style={{ color: DIM }}>
         Waiting for source accounts to refresh
+      </p>
+    </div>
+  );
+}
+
+function LoadingRoster() {
+  return (
+    <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-5 text-center">
+      <Headline size={30}>{`"LOADING WHALES"`}</Headline>
+      <p className="mt-3 text-[12px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+        Pulling live source accounts
       </p>
     </div>
   );

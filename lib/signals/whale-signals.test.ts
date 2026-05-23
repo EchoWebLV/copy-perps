@@ -444,6 +444,40 @@ describe("whale signals", () => {
     });
   });
 
+  it("caches trader signals for roster API callers", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
+    mocks.getLeaderboard.mockResolvedValue([
+      {
+        address: "acct-1",
+        username: "Alpha",
+        pnl_1d: "10",
+        pnl_7d: "20",
+        pnl_30d: "30",
+        pnl_all_time: "40",
+        equity_current: "500",
+        oi_current: "450",
+        volume_1d: "1000",
+        volume_7d: "2000",
+        volume_30d: "3000",
+        volume_all_time: "4000",
+      },
+    ]);
+
+    const {
+      buildCachedWhaleTraderSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    clearWhaleSignalCachesForTests();
+    const first = await buildCachedWhaleTraderSignals();
+    const second = await buildCachedWhaleTraderSignals();
+
+    expect(first.map((signal) => signal.id)).toEqual(["whale_trader:whale-1"]);
+    expect(second).toEqual(first);
+    expect(mocks.getLeaderboard).toHaveBeenCalledTimes(1);
+    expect(mocks.getPositionsHistory).toHaveBeenCalledTimes(1);
+  });
+
   it("includes active whales without open positions in trader signals", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(
       snapshot({

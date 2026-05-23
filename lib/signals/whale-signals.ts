@@ -24,12 +24,22 @@ import { refreshWhales } from "@/lib/whales/refresh";
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
 const PNL_HISTORY_CONCURRENCY = 4;
+const TRADER_SIGNALS_CACHE_MS = 30_000;
+const TRADER_SIGNALS_STALE_MS = 5 * 60_000;
 
 const pnlHistoryCache = new Map<
   string,
   { expiresAt: number; curve: WhalePnlPoint[] }
 >();
 let liveRefreshInFlight: Promise<void> | null = null;
+let traderSignalsCache:
+  | {
+      signals: WhaleTraderSignal[];
+      expiresAt: number;
+      staleUntil: number;
+    }
+  | null = null;
+let traderSignalsInFlight: Promise<WhaleTraderSignal[]> | null = null;
 
 async function refreshLiveSnapshotOnce(): Promise<void> {
   if (!liveRefreshInFlight) {
@@ -409,4 +419,54 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   }
 
   return signals.sort((a, b) => b.heatScore - a.heatScore);
+}
+
+async function refreshCachedWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
+  if (!traderSignalsInFlight) {
+    traderSignalsInFlight = buildWhaleTraderSignals()
+      .then((signals) => {
+        const now = Date.now();
+        traderSignalsCache = {
+          signals,
+          expiresAt: now + TRADER_SIGNALS_CACHE_MS,
+          staleUntil: now + TRADER_SIGNALS_STALE_MS,
+        };
+        return signals;
+      })
+      .finally(() => {
+        traderSignalsInFlight = null;
+      });
+  }
+
+  return traderSignalsInFlight;
+}
+
+export async function buildCachedWhaleTraderSignals(): Promise<
+  WhaleTraderSignal[]
+> {
+  const now = Date.now();
+  if (traderSignalsCache && traderSignalsCache.expiresAt > now) {
+    return traderSignalsCache.signals;
+  }
+
+  if (traderSignalsCache && traderSignalsCache.staleUntil > now) {
+    void refreshCachedWhaleTraderSignals().catch((err) => {
+      console.warn("[whales] roster cache refresh failed:", err);
+    });
+    return traderSignalsCache.signals;
+  }
+
+  try {
+    return await refreshCachedWhaleTraderSignals();
+  } catch (err) {
+    if (traderSignalsCache) return traderSignalsCache.signals;
+    throw err;
+  }
+}
+
+export function clearWhaleSignalCachesForTests(): void {
+  pnlHistoryCache.clear();
+  traderSignalsCache = null;
+  traderSignalsInFlight = null;
+  liveRefreshInFlight = null;
 }

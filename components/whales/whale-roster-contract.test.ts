@@ -26,4 +26,15 @@ describe("WhaleRoster feed layout", () => {
     expect(source).not.toContain("pt-[150px]");
     expect(source).not.toContain("lg:pt-[118px]");
   });
+
+  it("renders a loading shell and starts the roster fetch immediately", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("<LoadingRoster />");
+    expect(source).toContain("setLoaded(true)");
+    expect(source).toContain("run();");
+  });
 });

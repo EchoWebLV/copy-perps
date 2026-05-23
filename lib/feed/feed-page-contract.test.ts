@@ -10,7 +10,8 @@ describe("feed page contract", () => {
     );
 
     expect(source).toContain("WhaleRoster");
-    expect(source).toContain("buildWhaleTraderSignals");
+    expect(source).toContain("initialWhales={[]}");
+    expect(source).not.toContain("buildWhaleTraderSignals");
     expect(source).not.toContain("WhaleLiveFeed");
     expect(source).not.toContain("buildWhalePositionSignals");
   });
