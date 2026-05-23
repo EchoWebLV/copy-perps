@@ -14,18 +14,33 @@ const STAKE_CHIPS = [5, 10, 20, 50] as const;
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
 
-export interface TailSource {
-  kind: "bot";
-  botId: string;
-  botName: string;
-  avatarEmoji?: string;
-  avatarImageUrl?: string | null;
-  asset: string;
-  side: "long" | "short";
-  leverage: number;
-  entryMark: number;
-  positionId?: string;
-}
+export type TailSource =
+  | {
+      kind: "bot";
+      botId: string;
+      botName: string;
+      avatarEmoji?: string;
+      avatarImageUrl?: string | null;
+      asset: string;
+      side: "long" | "short";
+      leverage: number;
+      entryMark: number;
+      positionId?: string;
+    }
+  | {
+      kind: "whale";
+      whaleId: string;
+      displayName: string;
+      avatarUrl: string | null;
+      sourceAccount: string;
+      sourcePositionId: string;
+      asset: string;
+      side: "long" | "short";
+      leverage: number;
+      entryMark: number;
+      currentMark: number | null;
+      stale: boolean;
+    };
 
 interface Props {
   open: boolean;
@@ -104,6 +119,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<null | OpenResponse>(null);
+  const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
   const liveMark = useLiveMark(source?.asset ?? "");
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,7 +132,13 @@ export function TailModal({ open, onClose, source }: Props) {
     setStatus(null);
     setError(null);
     setSuccess(null);
-  }, [open, source?.botId, source?.positionId]);
+    setAutoCloseOnSourceClose(false);
+  }, [
+    open,
+    source?.kind,
+    source?.kind === "bot" ? source.botId : source?.whaleId,
+    source?.kind === "bot" ? source.positionId : source?.sourcePositionId,
+  ]);
 
   // Esc-to-close + body scroll lock while open.
   useEffect(() => {
@@ -166,17 +188,27 @@ export function TailModal({ open, onClose, source }: Props) {
       const token = await getAccessToken();
       if (!token) throw new Error("not authed");
 
-      const body = {
-        botId: source.botId,
-        positionId: source.positionId,
-        market: source.asset,
-        side: source.side,
-        leverage: source.leverage,
-        stakeUsdc: effectiveStake,
-        walletAddress: wallet.address,
-      };
       const requestTail = async () => {
-        const resp = await fetch("/api/bet/bot", {
+        const endpoint =
+          source.kind === "whale" ? "/api/bet/whale" : "/api/bet/bot";
+        const body =
+          source.kind === "whale"
+            ? {
+                positionId: source.sourcePositionId,
+                stakeUsdc: effectiveStake,
+                walletAddress: wallet.address,
+                autoCloseOnSourceClose,
+              }
+            : {
+                botId: source.botId,
+                positionId: source.positionId,
+                market: source.asset,
+                side: source.side,
+                leverage: source.leverage,
+                stakeUsdc: effectiveStake,
+                walletAddress: wallet.address,
+              };
+        const resp = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -303,6 +335,7 @@ export function TailModal({ open, onClose, source }: Props) {
     submitting,
     stakeValid,
     effectiveStake,
+    autoCloseOnSourceClose,
     getAccessToken,
     signMessage,
     signTransaction,
@@ -313,7 +346,16 @@ export function TailModal({ open, onClose, source }: Props) {
   const sideColor =
     source.side === "long" ? "text-emerald-400" : "text-rose-400";
   const sideLabel = source.side.toUpperCase();
-  const markText = liveMark ? fmtPrice(liveMark) : fmtPrice(source.entryMark);
+  const markValue =
+    liveMark ??
+    (source.kind === "whale" ? source.currentMark : null) ??
+    source.entryMark;
+  const markText = fmtPrice(markValue);
+  const sourceName = source.kind === "whale" ? source.displayName : source.botName;
+  const sourceAvatarUrl =
+    source.kind === "whale" ? source.avatarUrl : source.avatarImageUrl;
+  const sourceAvatarFallback =
+    source.kind === "whale" ? source.displayName.slice(0, 1).toUpperCase() : source.avatarEmoji ?? "🤖";
 
   return (
     <div
@@ -327,16 +369,16 @@ export function TailModal({ open, onClose, source }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <div className="flex items-center gap-3">
-            {source.avatarImageUrl ? (
+            {sourceAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={source.avatarImageUrl}
-                alt={source.botName}
+                src={sourceAvatarUrl}
+                alt={sourceName}
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
               <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xl">
-                {source.avatarEmoji ?? "🤖"}
+                {sourceAvatarFallback}
               </div>
             )}
             <div>
@@ -344,7 +386,7 @@ export function TailModal({ open, onClose, source }: Props) {
                 Tail
               </div>
               <div className="text-base font-semibold text-white">
-                {source.botName}
+                {sourceName}
               </div>
             </div>
           </div>
@@ -468,9 +510,23 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="flex justify-between text-white/60">
                 <span>You're following</span>
                 <span className="text-white">
-                  {source.botName}'s {source.asset} {sideLabel}
+                  {sourceName}'s {source.asset} {sideLabel}
                 </span>
               </div>
+              {source.kind === "whale" ? (
+                <label className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-[11px] font-black uppercase tracking-widest text-white/80">
+                  <span>Auto-close when whale exits</span>
+                  <input
+                    type="checkbox"
+                    checked={autoCloseOnSourceClose}
+                    onChange={(e) =>
+                      setAutoCloseOnSourceClose(e.target.checked)
+                    }
+                    disabled={submitting}
+                    className="h-4 w-4 accent-emerald-400"
+                  />
+                </label>
+              ) : null}
             </div>
 
             {/* Status / error */}
@@ -496,7 +552,7 @@ export function TailModal({ open, onClose, source }: Props) {
               >
                 {submitting
                   ? "Working…"
-                  : `Tail ${source.botName} with $${effectiveStake.toFixed(0)}`}
+                  : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (
                 <div className="mt-2 text-center text-xs text-white/40">

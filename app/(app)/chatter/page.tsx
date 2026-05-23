@@ -1,6 +1,9 @@
 import { getChatterEvents, type ChatterEvent } from "@/lib/bots/chatter";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
+import { WhaleAnalysisStream } from "@/components/whales/WhaleAnalysisStream";
+import { whaleSocialEnabled } from "@/lib/features";
+import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 import {
   BG,
   FG,
@@ -124,6 +127,17 @@ function EventRow({ ev }: { ev: ChatterEvent }) {
 }
 
 export default async function ChatterPage() {
+  if (whaleSocialEnabled()) {
+    const positions = await buildWhalePositionSignals();
+
+    return (
+      <>
+        <WhaleAnalysisStream initialPositions={positions} />
+        <BottomNav />
+      </>
+    );
+  }
+
   const events = await getChatterEvents(EVENT_LIMIT);
 
   return (
@@ -147,7 +161,7 @@ export default async function ChatterPage() {
           color: FG,
         }}
       >
-        {/* Header — hypebeast styling reserved for the page title */}
+        {/* Header - hypebeast styling reserved for the page title */}
         <header
           className="sticky top-0 z-10 border-b-2 px-5 pt-5 pb-3"
           style={{ background: BG, borderColor: FAINT, fontFamily: FONT_DISPLAY }}

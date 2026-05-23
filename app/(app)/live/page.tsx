@@ -1,10 +1,13 @@
 import { LiveFeed } from "@/components/feed/LiveFeed";
 import { BottomNav } from "@/components/shell/BottomNav";
+import { WhaleLiveFeed } from "@/components/whales/WhaleLiveFeed";
+import { whaleSocialEnabled } from "@/lib/features";
 import { buildBotSignals } from "@/lib/signals/bot-signals";
+import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 
 export const dynamic = "force-dynamic";
 
-// /live is the scrollable per-position feed — every open paper position
+// /live is the scrollable per-position feed - every open paper position
 // across the entire roster becomes its own snap-scroll card with the
 // $5 / $10 / $20 / $50 stake buttons. Lives behind the elevated ⚡
 // button in the bottom nav, and behind the "TAIL <bot>" CTA on /feed.
@@ -16,6 +19,17 @@ export default async function LivePage({
 }: {
   searchParams: Promise<{ bot?: string }>;
 }) {
+  if (whaleSocialEnabled()) {
+    const positions = await buildWhalePositionSignals();
+
+    return (
+      <>
+        <WhaleLiveFeed initialPositions={positions} />
+        <BottomNav />
+      </>
+    );
+  }
+
   const [bots, params] = await Promise.all([
     buildBotSignals(),
     searchParams,
