@@ -349,6 +349,37 @@ describe("POST /api/bet/whale", () => {
     }
   });
 
+  it("still returns open when post-insert reservation release fails", async () => {
+    const consoleWarn = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    mocks.releaseTailReservation.mockRejectedValue(new Error("cleanup failed"));
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        phase: "open",
+        betId: "bet-1",
+      });
+      expect(mocks.insertReturning).toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledWith(
+        "[bet/whale] reservation cleanup failed:",
+        expect.any(Error),
+      );
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
   it("rejects stale whale positions before trading", async () => {
     mocks.selectLimit.mockResolvedValue([
       openPacificaSource({

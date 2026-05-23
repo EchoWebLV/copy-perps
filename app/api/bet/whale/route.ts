@@ -253,7 +253,11 @@ export async function POST(request: Request) {
     );
   }
 
-  await releaseTailReservation(user.id, position.market);
+  try {
+    await releaseTailReservation(user.id, position.market);
+  } catch (err) {
+    console.warn("[bet/whale] reservation cleanup failed:", err);
+  }
 
   return NextResponse.json({
     phase: "open",
