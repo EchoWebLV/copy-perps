@@ -16,14 +16,21 @@ export function whalePositionsForTail(
       entryMark: source.entryMark,
       currentMark: source.currentMark,
       stale: source.stale,
+      copyableOnPacifica: true,
     },
   ];
+}
+
+export function isWhaleTailPositionCopyable(
+  position: WhaleTailPosition,
+): boolean {
+  return !position.stale && position.copyableOnPacifica !== false;
 }
 
 export function copyableWhalePositionsForTail(
   source: WhaleTailSource,
 ): WhaleTailPosition[] {
-  return whalePositionsForTail(source).filter((position) => !position.stale);
+  return whalePositionsForTail(source).filter(isWhaleTailPositionCopyable);
 }
 
 export function whaleTailTotalNotional(

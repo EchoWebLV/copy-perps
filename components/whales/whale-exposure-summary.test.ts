@@ -36,16 +36,17 @@ describe("buildWhaleExposureSummary", () => {
       position({ positionId: "sol", market: "SOL", side: "long", notionalUsd: 70_000 }),
       position({ positionId: "eth", market: "ETH", side: "short", notionalUsd: 40_000, stale: true }),
       position({ positionId: "btc", market: "BTC", side: "short", leverage: 50, notionalUsd: 120_000, unrealizedPnlPct: -2 }),
+      position({ positionId: "hype", market: "HYPE", side: "long", notionalUsd: 30_000, copyableOnPacifica: false }),
     ]);
 
     expect(summary).toMatchObject({
-      totalCount: 3,
+      totalCount: 4,
       copyableCount: 2,
-      staleCount: 1,
-      longCount: 1,
+      staleCount: 2,
+      longCount: 2,
       shortCount: 2,
-      exposureUsd: 230_000,
-      stanceLabel: "1 LONG / 2 SHORT",
+      exposureUsd: 260_000,
+      stanceLabel: "2 LONG / 2 SHORT",
     });
     expect(summary.largestPosition).toMatchObject({
       market: "BTC",

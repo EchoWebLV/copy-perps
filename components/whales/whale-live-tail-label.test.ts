@@ -17,4 +17,13 @@ describe("buildWhaleLiveTailButtonLabel", () => {
       }),
     ).toBe("TAIL DISABLED");
   });
+
+  it("shows when a Hyperliquid source market cannot route through Pacifica", () => {
+    expect(
+      buildWhaleLiveTailButtonLabel({
+        stale: false,
+        copyableOnPacifica: false,
+      }),
+    ).toBe("PACIFICA UNAVAILABLE");
+  });
 });

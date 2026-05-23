@@ -151,12 +151,6 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
-  if (position.source !== "pacifica" || whale.source !== "pacifica") {
-    return NextResponse.json(
-      { error: "only Pacifica whale copying is supported" },
-      { status: 409 },
-    );
-  }
   if (!isSourceFresh(position.lastSeenAt.getTime())) {
     return NextResponse.json(
       { error: "whale position is stale" },
@@ -181,8 +175,12 @@ export async function POST(request: Request) {
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const marketInfo = await getMarketBySymbol(position.market);
   if (!marketInfo) {
+    const error =
+      position.source === "hyperliquid"
+        ? `${position.market} is not available on Pacifica for copy trading`
+        : `unknown Pacifica market: ${position.market}`;
     return NextResponse.json(
-      { error: `unknown Pacifica market: ${position.market}` },
+      { error },
       { status: 409 },
     );
   }

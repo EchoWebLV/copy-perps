@@ -229,6 +229,7 @@ function PositionCard({
         });
   const profit = (pnl ?? 0) >= 0;
   const chartPosition = toWhaleEntryChartPosition(p, liveMark);
+  const canTail = !p.stale && p.copyableOnPacifica !== false;
 
   useEffect(() => {
     setNow(Date.now());
@@ -300,20 +301,21 @@ function PositionCard({
       <button
         type="button"
         onClick={onTail}
-        disabled={p.stale}
+        disabled={!canTail}
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 font-black uppercase tracking-wide transition active:scale-[0.97] disabled:cursor-not-allowed"
         style={{
-          background: p.stale ? "rgba(250,250,242,0.08)" : ACCENT,
-          color: p.stale ? DIM : BG,
+          background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
+          color: canTail ? BG : DIM,
           fontSize: "15px",
-          boxShadow: p.stale
-            ? "none"
-            : `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+          boxShadow: canTail
+            ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
+            : "none",
         }}
       >
-        <Zap size={14} strokeWidth={3} fill={p.stale ? "none" : BG} />
+        <Zap size={14} strokeWidth={3} fill={canTail ? BG : "none"} />
         {buildWhaleLiveTailButtonLabel({
           stale: p.stale,
+          copyableOnPacifica: p.copyableOnPacifica,
         })}
       </button>
     </div>
@@ -343,6 +345,7 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
         entryMark: position.entryPrice,
         currentMark: position.currentMark,
         stale: position.stale,
+        copyableOnPacifica: position.copyableOnPacifica,
         notionalUsd: position.notionalUsd,
         unrealizedPnlPct: position.unrealizedPnlPct,
       },

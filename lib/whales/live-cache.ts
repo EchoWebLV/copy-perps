@@ -4,14 +4,14 @@ import {
   cacheSetJson,
 } from "@/lib/cache/redis";
 import { WHALE_SOURCE_MAX_AGE_MS } from "./identity";
-import type { WhalePositionRecord, WhaleRecord } from "./types";
+import type { WhalePositionRecord, WhaleRecord, WhaleSource } from "./types";
 
 export const WHALE_LIVE_CACHE_KEY = "copy-perps:whales:pacifica:live:v1";
 export const WHALE_LIVE_CACHE_TTL_SECONDS =
   Math.ceil(WHALE_SOURCE_MAX_AGE_MS / 1000) + 15;
 
 export interface WhaleLiveSnapshot {
-  source: "pacifica";
+  source: WhaleSource | "multi";
   observedAt: Date;
   accounts: string[];
   whales: WhaleRecord[];
@@ -97,11 +97,51 @@ function deserializeSnapshot(
   };
 }
 
+function uniqueAccounts(whales: WhaleRecord[]): string[] {
+  return [...new Set(whales.map((whale) => whale.sourceAccount))];
+}
+
+function sourceLabelForWhales(whales: WhaleRecord[]): WhaleLiveSnapshot["source"] {
+  const sources = new Set(whales.map((whale) => whale.source));
+  if (sources.size === 1) return [...sources][0] ?? "pacifica";
+  return "multi";
+}
+
+function mergeSnapshot(
+  current: WhaleLiveSnapshot | null,
+  next: WhaleLiveSnapshot,
+): WhaleLiveSnapshot {
+  if (current === null || next.source === "multi") return next;
+
+  const source = next.source;
+  const whales = [
+    ...current.whales.filter((whale) => whale.source !== source),
+    ...next.whales,
+  ];
+  const positions = [
+    ...current.positions.filter((position) => position.source !== source),
+    ...next.positions,
+  ];
+
+  return {
+    source: sourceLabelForWhales(whales),
+    observedAt:
+      current.observedAt.getTime() > next.observedAt.getTime()
+        ? current.observedAt
+        : next.observedAt,
+    accounts: uniqueAccounts(whales),
+    whales,
+    positions,
+  };
+}
+
 export async function writeWhaleLiveSnapshot(
   snapshot: WhaleLiveSnapshot,
   ttlSeconds = WHALE_LIVE_CACHE_TTL_SECONDS,
 ): Promise<void> {
-  await cacheSetJson(WHALE_LIVE_CACHE_KEY, serializeSnapshot(snapshot), {
+  const current = await getWhaleLiveSnapshot();
+  const merged = mergeSnapshot(current, snapshot);
+  await cacheSetJson(WHALE_LIVE_CACHE_KEY, serializeSnapshot(merged), {
     ttlSeconds,
   });
 }
@@ -120,12 +160,20 @@ export async function getWhaleLiveSnapshot(): Promise<WhaleLiveSnapshot | null> 
 
 export async function getWhaleLivePositionsForAccount(
   sourceAccount: string,
+  source?: WhaleSource,
 ): Promise<WhalePositionRecord[] | null> {
   const snapshot = await getWhaleLiveSnapshot();
   if (snapshot === null) return null;
-  if (!snapshot.accounts.includes(sourceAccount)) return null;
+  const accountSeen = snapshot.whales.some(
+    (whale) =>
+      whale.sourceAccount === sourceAccount &&
+      (source === undefined || whale.source === source),
+  );
+  if (!accountSeen) return null;
   return snapshot.positions.filter(
-    (position) => position.sourceAccount === sourceAccount,
+    (position) =>
+      position.sourceAccount === sourceAccount &&
+      (source === undefined || position.source === source),
   );
 }
 

@@ -87,7 +87,8 @@ export async function upsertWhalePosition(
     });
 }
 
-export async function markMissingPacificaPositionsClosed(args: {
+export async function markMissingWhalePositionsClosed(args: {
+  source: WhaleSource;
   sourceAccount: string;
   openPositionIds: string[];
   graceCutoff: Date;
@@ -100,13 +101,24 @@ export async function markMissingPacificaPositionsClosed(args: {
     })
     .where(
       and(
-        eq(whalePositions.source, "pacifica"),
+        eq(whalePositions.source, args.source),
         eq(whalePositions.sourceAccount, args.sourceAccount),
         eq(whalePositions.status, "open"),
         lt(whalePositions.lastSeenAt, args.graceCutoff),
         not(inArray(whalePositions.id, args.openPositionIds)),
       ),
     );
+}
+
+export async function markMissingPacificaPositionsClosed(args: {
+  sourceAccount: string;
+  openPositionIds: string[];
+  graceCutoff: Date;
+}): Promise<void> {
+  await markMissingWhalePositionsClosed({
+    source: "pacifica",
+    ...args,
+  });
 }
 
 export async function getOpenWhalePositions(
@@ -118,6 +130,23 @@ export async function getOpenWhalePositions(
     .where(eq(whalePositions.status, "open"))
     .orderBy(desc(whalePositions.lastSeenAt))
     .limit(limit);
+  return rows.map(mapWhalePosition);
+}
+
+export async function getOpenWhalePositionsForSource(args: {
+  source: WhaleSource;
+  sourceAccount: string;
+}): Promise<WhalePositionRecord[]> {
+  const rows = await db
+    .select()
+    .from(whalePositions)
+    .where(
+      and(
+        eq(whalePositions.source, args.source),
+        eq(whalePositions.sourceAccount, args.sourceAccount),
+        eq(whalePositions.status, "open"),
+      ),
+    );
   return rows.map(mapWhalePosition);
 }
 

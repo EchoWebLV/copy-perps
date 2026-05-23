@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bets, users, agentWallets, paperPositions } from "@/lib/db/schema";
 import { Keypair } from "@solana/web3.js";
+import { getClearinghouseState } from "@/lib/hyperliquid/client";
 import { getPositions } from "@/lib/pacifica/client";
 import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
@@ -9,6 +10,10 @@ import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { makeWhalePositionId } from "@/lib/whales/identity";
 import { getWhaleLivePositionsForAccount } from "@/lib/whales/live-cache";
+import {
+  hyperliquidSideToWhaleSide,
+  makeHyperliquidPositionId,
+} from "@/lib/whales/hyperliquid-source";
 import { pacificaSideToWhaleSide } from "@/lib/whales/pacifica-source";
 import type { AgentWalletRecord } from "@/lib/wallets/agent";
 import type { WhaleCopyMeta } from "@/lib/bets/whale-meta";
@@ -288,6 +293,30 @@ function isWhaleSourcePositionStillOpen(
   );
 }
 
+async function getHyperliquidOpenPositionIds(
+  sourceAccount: string,
+): Promise<Set<string>> {
+  const state = await getClearinghouseState(sourceAccount);
+  return new Set((state.assetPositions ?? []).flatMap((assetPosition) => {
+    try {
+      const position = assetPosition.position;
+      const entryPrice = Number(position.entryPx);
+      if (!Number.isFinite(entryPrice) || entryPrice <= 0) return [];
+      const side = hyperliquidSideToWhaleSide(position.szi);
+      return [
+        makeHyperliquidPositionId({
+          sourceAccount,
+          market: position.coin,
+          side,
+          entryPrice,
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  }));
+}
+
 function isCachedWhaleSourcePositionStillOpen(
   meta: WhaleCopyMeta,
   sourcePositions: WhalePositionRecord[],
@@ -311,24 +340,53 @@ async function closeWhaleFollowers(
   for (const row of openBets) {
     const meta = parseWhaleCopyMeta(row.meta);
     if (meta === null) continue;
-    if (meta.source !== "pacifica") continue;
     if (meta.autoCloseOnSourceClose === false) continue;
-    const followers = bySourceAccount.get(meta.sourceAccount) ?? [];
+    const key = `${meta.source}:${meta.sourceAccount}`;
+    const followers = bySourceAccount.get(key) ?? [];
     followers.push({ row, meta });
-    bySourceAccount.set(meta.sourceAccount, followers);
+    bySourceAccount.set(key, followers);
   }
 
-  for (const [sourceAccount, followers] of bySourceAccount.entries()) {
+  for (const [, followers] of bySourceAccount.entries()) {
     result.scannedLeaders++;
+    const first = followers[0];
+    if (!first) continue;
+    const { source, sourceAccount } = first.meta;
 
     const cachedSourcePositions =
-      await getWhaleLivePositionsForAccount(sourceAccount);
+      await getWhaleLivePositionsForAccount(sourceAccount, source);
     if (cachedSourcePositions !== null) {
       for (const { row, meta } of followers) {
         const sourceStillOpen = isCachedWhaleSourcePositionStillOpen(
           meta,
           cachedSourcePositions,
         );
+        if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
+
+        await closeFollowerBet(row, meta, result, {
+          closeReason: "source_closed",
+          alreadyFlatCloseReason: "already_flat",
+        });
+      }
+      continue;
+    }
+
+    if (source === "hyperliquid") {
+      let openPositionIds: Set<string>;
+      try {
+        openPositionIds = await getHyperliquidOpenPositionIds(sourceAccount);
+      } catch (err) {
+        for (const follower of followers) {
+          result.errors.push({
+            betId: follower.row.betId,
+            message: `source fetch: ${err}`,
+          });
+        }
+        continue;
+      }
+
+      for (const { row, meta } of followers) {
+        const sourceStillOpen = openPositionIds.has(meta.sourcePositionId);
         if (!shouldAutoCloseWhaleCopy({ meta, sourceStillOpen })) continue;
 
         await closeFollowerBet(row, meta, result, {

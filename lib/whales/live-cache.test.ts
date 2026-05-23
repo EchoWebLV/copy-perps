@@ -109,6 +109,64 @@ describe("whale live cache", () => {
     );
   });
 
+  it("merges source-specific snapshots without dropping the other source", async () => {
+    const {
+      getWhaleLiveSnapshot,
+      getWhaleLivePositionsForAccount,
+      writeWhaleLiveSnapshot,
+    } = await import("./live-cache");
+
+    await writeWhaleLiveSnapshot({
+      source: "pacifica",
+      observedAt: new Date("2026-05-23T11:59:40.000Z"),
+      accounts: ["acct-1"],
+      whales: [whale()],
+      positions: [position()],
+    });
+    await writeWhaleLiveSnapshot({
+      source: "hyperliquid",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["0xabc"],
+      whales: [
+        whale({
+          id: "hyperliquid:0xabc",
+          source: "hyperliquid",
+          sourceAccount: "0xabc",
+          displayName: "HL Alpha",
+        }),
+      ],
+      positions: [
+        position({
+          id: "hyperliquid:0xabc:ETH:long:2000000000",
+          whaleId: "hyperliquid:0xabc",
+          source: "hyperliquid",
+          sourceAccount: "0xabc",
+          market: "ETH",
+        }),
+      ],
+    });
+
+    const snapshot = await getWhaleLiveSnapshot();
+
+    expect(snapshot?.source).toBe("multi");
+    expect(snapshot?.accounts).toEqual(["acct-1", "0xabc"]);
+    expect(snapshot?.positions.map((item) => item.id)).toEqual([
+      "pacifica:acct-1:BTC:long:1779543000000",
+      "hyperliquid:0xabc:ETH:long:2000000000",
+    ]);
+    await expect(
+      getWhaleLivePositionsForAccount("0xabc", "hyperliquid"),
+    ).resolves.toEqual([
+      position({
+        id: "hyperliquid:0xabc:ETH:long:2000000000",
+        whaleId: "hyperliquid:0xabc",
+        source: "hyperliquid",
+        sourceAccount: "0xabc",
+        market: "ETH",
+      }),
+    ]);
+  });
+
   it("finds a cached live position with its whale", async () => {
     const {
       getWhaleLivePositionById,

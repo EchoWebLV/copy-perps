@@ -48,6 +48,16 @@ describe("whale tail helpers", () => {
           currentMark: 70500,
           stale: false,
         },
+        {
+          sourcePositionId: "hyper-only",
+          asset: "HYPE",
+          side: "long",
+          leverage: 2,
+          entryMark: 20,
+          currentMark: 21,
+          stale: false,
+          copyableOnPacifica: false,
+        },
       ],
     };
 

@@ -14,8 +14,9 @@ const mocks = vi.hoisted(() => {
     },
     getLeaderboard: vi.fn(),
     getPositionsHistory: vi.fn(),
+    getPortfolio: vi.fn(),
     getWhaleLiveSnapshot: vi.fn(),
-    refreshPacificaWhales: vi.fn(),
+    refreshWhales: vi.fn(),
     analysisRows: [] as unknown[],
   };
 });
@@ -29,12 +30,16 @@ vi.mock("@/lib/pacifica/client", () => ({
   getPositionsHistory: mocks.getPositionsHistory,
 }));
 
+vi.mock("@/lib/hyperliquid/client", () => ({
+  getPortfolio: mocks.getPortfolio,
+}));
+
 vi.mock("@/lib/whales/live-cache", () => ({
   getWhaleLiveSnapshot: mocks.getWhaleLiveSnapshot,
 }));
 
-vi.mock("@/lib/whales/refresh-pacifica", () => ({
-  refreshPacificaWhales: mocks.refreshPacificaWhales,
+vi.mock("@/lib/whales/refresh", () => ({
+  refreshWhales: mocks.refreshWhales,
 }));
 
 vi.mock("@/lib/db/schema", () => ({
@@ -113,8 +118,9 @@ describe("whale signals", () => {
     mocks.analysisRows = [];
     mocks.getLeaderboard.mockResolvedValue([]);
     mocks.getPositionsHistory.mockResolvedValue([]);
+    mocks.getPortfolio.mockResolvedValue([]);
     mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
-    mocks.refreshPacificaWhales.mockResolvedValue({
+    mocks.refreshWhales.mockResolvedValue({
       whalesSeen: 1,
       positionsSeen: 1,
     });
@@ -145,6 +151,7 @@ describe("whale signals", () => {
             unrealizedPnlPct: null,
             openedAt: new Date("2026-05-23T10:00:00.000Z"),
             lastSeenAt: new Date("2026-05-23T11:59:10.000Z"),
+            raw: { copyableOnPacifica: false },
           }),
           position({
             id: "stale-pos",
@@ -197,6 +204,7 @@ describe("whale signals", () => {
         openedAtMs: 1779534000000,
         lastSeenAtMs: 1779537570000,
         stale: false,
+        copyableOnPacifica: true,
         analysis: {
           summary: "Momentum long",
           thesis: "Breakout continuation",
@@ -214,6 +222,7 @@ describe("whale signals", () => {
         whaleId: "whale-2",
         market: "ETH",
         stale: false,
+        copyableOnPacifica: false,
         analysis: null,
       },
     });
@@ -352,7 +361,51 @@ describe("whale signals", () => {
     expect(
       signals[1]?.payload.openPositions.map((position) => position.positionId),
     ).toEqual(["pos-3"]);
-    expect(signals[1]).toMatchObject({
+    mocks.getPortfolio.mockResolvedValueOnce([
+      [
+        "day",
+        {
+          accountValueHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "50000"]],
+          pnlHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "250"]],
+          vlm: "90000",
+        },
+      ],
+      [
+        "week",
+        {
+          accountValueHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "50000"]],
+          pnlHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "700"]],
+          vlm: "300000",
+        },
+      ],
+      [
+        "month",
+        {
+          accountValueHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "50000"]],
+          pnlHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "1200"]],
+          vlm: "800000",
+        },
+      ],
+      [
+        "allTime",
+        {
+          accountValueHistory: [
+            [Date.parse("2026-05-22T12:00:00.000Z"), "49000"],
+            [Date.parse("2026-05-23T12:00:00.000Z"), "50000"],
+          ],
+          pnlHistory: [
+            [Date.parse("2026-05-22T12:00:00.000Z"), "900"],
+            [Date.parse("2026-05-23T12:00:00.000Z"), "1500"],
+          ],
+          vlm: "1000000",
+        },
+      ],
+    ]);
+
+    const withHlStats = await buildWhaleTraderSignals();
+
+    expect(mocks.getPortfolio).toHaveBeenCalledWith("acct-2");
+    expect(withHlStats[1]).toMatchObject({
       heatScore: 648,
       payload: {
         whaleId: "whale-2",
@@ -360,14 +413,17 @@ describe("whale signals", () => {
         lastSeenAt: "2026-05-23T11:59:00.000Z",
         stale: false,
         stats: {
-          equityUsdc: 0,
-          openInterestUsdc: 0,
-          pnl1dUsdc: 0,
-          pnl7dUsdc: 0,
-          pnl30dUsdc: 0,
-          pnlAllTimeUsdc: 0,
-          pnlCurve: [],
-          volume1dUsdc: 0,
+          equityUsdc: 50000,
+          openInterestUsdc: 20000,
+          pnl1dUsdc: 250,
+          pnl7dUsdc: 700,
+          pnl30dUsdc: 1200,
+          pnlAllTimeUsdc: 1500,
+          pnlCurve: [
+            { t: Date.parse("2026-05-22T12:00:00.000Z"), v: 900 },
+            { t: Date.parse("2026-05-23T12:00:00.000Z"), v: 1500 },
+          ],
+          volume1dUsdc: 90000,
         },
       },
     });
@@ -523,7 +579,7 @@ describe("whale signals", () => {
 
     const signals = await buildWhalePositionSignals();
 
-    expect(mocks.refreshPacificaWhales).toHaveBeenCalledTimes(1);
+    expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
     expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
   });
 
@@ -545,7 +601,7 @@ describe("whale signals", () => {
 
     const signals = await buildWhalePositionSignals();
 
-    expect(mocks.refreshPacificaWhales).toHaveBeenCalledTimes(1);
+    expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
     expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
   });
 

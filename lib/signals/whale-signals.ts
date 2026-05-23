@@ -3,6 +3,8 @@ import { whalePositionAnalysis } from "@/lib/db/schema";
 import { isSourceFresh } from "@/lib/whales/identity";
 import { inArray } from "drizzle-orm";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
+import { getPortfolio } from "@/lib/hyperliquid/client";
+import type { HLPortfolio, HLPortfolioWindow } from "@/lib/hyperliquid/client";
 import { getLeaderboard, getPositionsHistory } from "@/lib/pacifica/client";
 import type { PacificaLeaderboardEntry } from "@/lib/pacifica/types";
 import {
@@ -13,7 +15,7 @@ import {
   getWhaleLiveSnapshot,
   type WhaleLiveSnapshot,
 } from "@/lib/whales/live-cache";
-import { refreshPacificaWhales } from "@/lib/whales/refresh-pacifica";
+import { refreshWhales } from "@/lib/whales/refresh";
 
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
@@ -27,7 +29,7 @@ let liveRefreshInFlight: Promise<void> | null = null;
 
 async function refreshLiveSnapshotOnce(): Promise<void> {
   if (!liveRefreshInFlight) {
-    liveRefreshInFlight = refreshPacificaWhales()
+    liveRefreshInFlight = refreshWhales()
       .then(() => undefined)
       .finally(() => {
         liveRefreshInFlight = null;
@@ -87,6 +89,12 @@ function parseStat(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function isCopyableOnPacifica(
+  position: WhaleLiveSnapshot["positions"][number],
+): boolean {
+  return position.raw.copyableOnPacifica !== false;
+}
+
 async function getCachedPnlCurve(
   account: string,
   stats: {
@@ -129,6 +137,60 @@ function statsForLeaderboardEntry(entry: PacificaLeaderboardEntry | undefined) {
     winRatePct1d: null,
     totalCloses1d: 0,
     volume1dUsdc: parseStat(entry?.volume_1d),
+  };
+}
+
+function lastHistoryNumber(
+  history: Array<[number, string]> | undefined,
+): number {
+  const last = history?.[history.length - 1];
+  if (!last) return 0;
+  return parseStat(last[1]);
+}
+
+function portfolioWindow(
+  portfolio: HLPortfolio,
+  key: string,
+): HLPortfolioWindow | undefined {
+  return portfolio.find(([window]) => window === key)?.[1];
+}
+
+function curveFromPortfolioWindow(
+  window: HLPortfolioWindow | undefined,
+): WhalePnlPoint[] {
+  if (!window) return [];
+  return window.pnlHistory
+    .map(([t, value]) => ({ t: Number(t), v: parseStat(value) }))
+    .filter((point) => Number.isFinite(point.t));
+}
+
+function statsForHyperliquidPortfolio(
+  portfolio: HLPortfolio | undefined,
+  openPositions: WhalePositionSignal[],
+) {
+  const day = portfolioWindow(portfolio ?? [], "day");
+  const week = portfolioWindow(portfolio ?? [], "week");
+  const month = portfolioWindow(portfolio ?? [], "month");
+  const allTime =
+    portfolioWindow(portfolio ?? [], "allTime") ??
+    portfolioWindow(portfolio ?? [], "all");
+
+  return {
+    equityUsdc:
+      lastHistoryNumber(allTime?.accountValueHistory) ||
+      lastHistoryNumber(day?.accountValueHistory),
+    openInterestUsdc: openPositions.reduce(
+      (sum, position) => sum + position.payload.notionalUsd,
+      0,
+    ),
+    pnl1dUsdc: lastHistoryNumber(day?.pnlHistory),
+    pnl7dUsdc: lastHistoryNumber(week?.pnlHistory),
+    pnl30dUsdc: lastHistoryNumber(month?.pnlHistory),
+    pnlAllTimeUsdc: lastHistoryNumber(allTime?.pnlHistory),
+    winRatePct1d: null,
+    totalCloses1d: 0,
+    volume1dUsdc: parseStat(day?.vlm),
+    pnlCurve: curveFromPortfolioWindow(allTime),
   };
 }
 
@@ -199,6 +261,7 @@ async function buildWhalePositionSignalsFromSnapshot(
         openedAtMs,
         lastSeenAtMs,
         stale,
+        copyableOnPacifica: isCopyableOnPacifica(position),
         analysis: analysis
           ? {
               summary: analysis.summary,
@@ -236,6 +299,7 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
     leaderboard.map((entry) => [entry.address, entry]),
   );
   const pnlCurveByAccount = new Map<string, WhalePnlPoint[]>();
+  const portfolioByAccount = new Map<string, HLPortfolio>();
 
   await forEachWithConcurrency(
     activeWhales,
@@ -248,6 +312,18 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
       pnlCurveByAccount.set(
         whale.sourceAccount,
         await getCachedPnlCurve(whale.sourceAccount, stats),
+      );
+    },
+  );
+
+  await forEachWithConcurrency(
+    activeWhales,
+    PNL_HISTORY_CONCURRENCY,
+    async (whale) => {
+      if (whale.source !== "hyperliquid") return;
+      portfolioByAccount.set(
+        whale.sourceAccount,
+        await getPortfolio(whale.sourceAccount).catch(() => []),
       );
     },
   );
@@ -272,6 +348,19 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         ? Math.max(...list.map((position) => position.payload.lastSeenAtMs))
         : null;
 
+    const stats =
+      whale.source === "hyperliquid"
+        ? statsForHyperliquidPortfolio(
+            portfolioByAccount.get(whale.sourceAccount),
+            sortedPositions,
+          )
+        : {
+            ...statsForLeaderboardEntry(
+              leaderboardByAccount.get(whale.sourceAccount),
+            ),
+            pnlCurve: pnlCurveByAccount.get(whale.sourceAccount) ?? [],
+          };
+
     signals.push({
       id: `whale_trader:${whale.id}`,
       type: "whale_trader",
@@ -288,14 +377,7 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         openPositionsCount: list.length,
         openPositions: sortedPositions.map((position) => position.payload),
         bestPosition: best?.payload ?? null,
-        stats: {
-          ...statsForLeaderboardEntry(
-            whale.source === "pacifica"
-              ? leaderboardByAccount.get(whale.sourceAccount)
-              : undefined,
-          ),
-          pnlCurve: pnlCurveByAccount.get(whale.sourceAccount) ?? [],
-        },
+        stats,
         lastSeenAt:
           lastSeenAtMs === null ? null : new Date(lastSeenAtMs).toISOString(),
         stale:

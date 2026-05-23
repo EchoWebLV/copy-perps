@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
-import { refreshPacificaWhales } from "./refresh-pacifica";
+import { refreshWhales } from "./refresh";
 import { whaleSocialEnabled } from "@/lib/features";
 import {
   acquireWhaleTickerLease,
@@ -65,7 +65,7 @@ async function loop(): Promise<void> {
 
     const started = Date.now();
     try {
-      const result = await refreshPacificaWhales();
+      const result = await refreshWhales();
       console.log(
         `[whales] refresh: ${result.whalesSeen} whales, ${result.positionsSeen} positions in ${Date.now() - started}ms`,
       );

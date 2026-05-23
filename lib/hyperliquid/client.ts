@@ -11,6 +11,11 @@ export interface HLPosition {
   liquidationPx: string | null;
   marginUsed: string;
   maxLeverage: number;
+  cumFunding?: {
+    allTime: string;
+    sinceOpen: string;
+    sinceChange: string;
+  };
 }
 
 export interface HLAssetPosition {
@@ -45,6 +50,28 @@ export async function getClearinghouseState(
     throw new Error(`Hyperliquid clearinghouseState ${r.status}: ${txt}`);
   }
   return (await r.json()) as HLClearinghouseState;
+}
+
+export interface HLPortfolioWindow {
+  accountValueHistory: Array<[number, string]>;
+  pnlHistory: Array<[number, string]>;
+  vlm: string;
+}
+
+export type HLPortfolio = Array<[string, HLPortfolioWindow]>;
+
+export async function getPortfolio(user: string): Promise<HLPortfolio> {
+  const r = await fetch(BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "portfolio", user }),
+    cache: "no-store",
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Hyperliquid portfolio ${r.status}: ${txt}`);
+  }
+  return (await r.json()) as HLPortfolio;
 }
 
 export async function getAllMids(): Promise<Record<string, string>> {

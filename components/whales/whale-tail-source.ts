@@ -1,4 +1,5 @@
 import type { TailSource, WhaleTailPosition } from "@/components/tail/tail-types";
+import { isWhaleTailPositionCopyable } from "@/components/tail/whale-tail";
 import type { WhaleTraderSignal } from "@/lib/types";
 
 type WhalePayload = WhaleTraderSignal["payload"];
@@ -13,6 +14,7 @@ function toTailPosition(position: WhalePosition): WhaleTailPosition {
     entryMark: position.entryPrice,
     currentMark: position.currentMark,
     stale: position.stale,
+    copyableOnPacifica: position.copyableOnPacifica ?? true,
     notionalUsd: position.notionalUsd,
     unrealizedPnlPct: position.unrealizedPnlPct,
   };
@@ -26,7 +28,10 @@ export function buildWhaleTailSource(whale: WhalePayload): Extract<
 
   const positions = whale.openPositions.map(toTailPosition);
   const primary =
-    positions.find((position) => !position.stale) ?? positions[0] ?? null;
+    positions.find(isWhaleTailPositionCopyable) ??
+    positions.find((position) => !position.stale) ??
+    positions[0] ??
+    null;
   if (!primary) return null;
 
   return {

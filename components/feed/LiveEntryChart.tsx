@@ -80,6 +80,22 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
   const moveLabel = `${entryDelta >= 0 ? "+" : ""}${entryDelta.toFixed(2)}%`;
   const fillId = `live-entry-fill-${id}`;
   const glowId = `entry-glow-${id}`;
+  const entryX = svgCoord(model.entry.x);
+  const entryY = svgCoord(model.entry.y);
+  const entryLabelX = svgCoord(
+    Math.min(model.entry.x + 12, model.plot.right - 92),
+  );
+  const entryLabelY = svgCoord(
+    Math.max(model.entry.y - 10, model.plot.top + 14),
+  );
+  const currentX = svgCoord(model.current.x);
+  const currentY = svgCoord(model.current.y);
+  const currentLabelX = svgCoord(
+    Math.max(model.current.x - 102, model.plot.left + 8),
+  );
+  const currentLabelY = svgCoord(
+    Math.min(model.current.y + 22, model.plot.bottom - 4),
+  );
 
   return (
     <div
@@ -134,17 +150,17 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         {model.yTicks.map((tick) => (
           <g key={tick.price}>
             <line
-              x1={model.plot.left}
-              x2={model.plot.right}
-              y1={tick.y}
-              y2={tick.y}
+              x1={svgCoord(model.plot.left)}
+              x2={svgCoord(model.plot.right)}
+              y1={svgCoord(tick.y)}
+              y2={svgCoord(tick.y)}
               stroke={FAINT}
               strokeDasharray="4 8"
               strokeOpacity="0.8"
             />
             <text
-              x={10}
-              y={tick.y + 4}
+              x={svgCoord(10)}
+              y={svgCoord(tick.y + 4)}
               fill={DIM}
               fontSize="11"
               fontWeight="900"
@@ -157,19 +173,19 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         {model.rangeBars.map((bar, index) => (
           <g key={index} opacity="0.52">
             <line
-              x1={bar.x}
-              x2={bar.x}
-              y1={bar.yHigh}
-              y2={bar.yLow}
+              x1={svgCoord(bar.x)}
+              x2={svgCoord(bar.x)}
+              y1={svgCoord(bar.yHigh)}
+              y2={svgCoord(bar.yLow)}
               stroke={bar.up ? GREEN : RED}
               strokeWidth="2"
               strokeLinecap="round"
             />
             <line
-              x1={bar.x - 4}
-              x2={bar.x + 4}
-              y1={bar.yClose}
-              y2={bar.yClose}
+              x1={svgCoord(bar.x - 4)}
+              x2={svgCoord(bar.x + 4)}
+              y1={svgCoord(bar.yClose)}
+              y2={svgCoord(bar.yClose)}
               stroke={bar.up ? GREEN : RED}
               strokeWidth="2"
               strokeLinecap="round"
@@ -180,10 +196,10 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         {model.volumeBars.map((bar, index) => (
           <rect
             key={index}
-            x={bar.x - 2}
-            y={bar.y}
+            x={svgCoord(bar.x - 2)}
+            y={svgCoord(bar.y)}
             width="4"
-            height={bar.height}
+            height={svgCoord(bar.height)}
             rx="2"
             fill={bar.up ? GREEN : RED}
             opacity="0.22"
@@ -204,18 +220,18 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         />
 
         <line
-          x1={model.plot.left}
-          x2={model.plot.right}
-          y1={model.entry.y}
-          y2={model.entry.y}
+          x1={svgCoord(model.plot.left)}
+          x2={svgCoord(model.plot.right)}
+          y1={entryY}
+          y2={entryY}
           stroke={ACCENT}
           strokeDasharray="7 7"
           strokeWidth="2"
           opacity="0.85"
         />
         <circle
-          cx={model.entry.x}
-          cy={model.entry.y}
+          cx={entryX}
+          cy={entryY}
           r="8"
           fill={ACCENT}
           stroke="#0a0a0a"
@@ -223,8 +239,8 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
           filter={`url(#${glowId})`}
         />
         <text
-          x={Math.min(model.entry.x + 12, model.plot.right - 92)}
-          y={Math.max(model.entry.y - 10, model.plot.top + 14)}
+          x={entryLabelX}
+          y={entryLabelY}
           fill={ACCENT}
           fontSize="13"
           fontWeight="900"
@@ -233,16 +249,16 @@ export function LiveEntryChart({ pos }: { pos: LiveEntryChartPosition }) {
         </text>
 
         <circle
-          cx={model.current.x}
-          cy={model.current.y}
+          cx={currentX}
+          cy={currentY}
           r="7"
           fill={stroke}
           stroke="#0a0a0a"
           strokeWidth="4"
         />
         <text
-          x={Math.max(model.current.x - 102, model.plot.left + 8)}
-          y={Math.min(model.current.y + 22, model.plot.bottom - 4)}
+          x={currentLabelX}
+          y={currentLabelY}
           fill={FG}
           fontSize="13"
           fontWeight="900"
@@ -287,4 +303,8 @@ function formatPrice(value: number): string {
   if (Math.abs(value) >= 1000) return `$${value.toFixed(0)}`;
   if (Math.abs(value) >= 1) return `$${value.toFixed(2)}`;
   return `$${value.toPrecision(4)}`;
+}
+
+function svgCoord(value: number): string {
+  return value.toFixed(2);
 }

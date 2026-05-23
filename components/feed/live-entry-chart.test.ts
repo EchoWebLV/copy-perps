@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildLiveEntryChartModel,
   initialLiveEntryChartNowMs,
   type ChartCandle,
 } from "./live-entry-chart";
+import { LiveEntryChart } from "./LiveEntryChart";
 
 const candles: ChartCandle[] = [
   { ts: 1_000, open: 100, high: 104, low: 99, close: 102, volume: 10 },
@@ -56,5 +59,23 @@ describe("buildLiveEntryChartModel", () => {
 
     expect(model.current.price).toBe(104);
     expect(model.points.at(-1)?.price).toBe(104);
+  });
+
+  it("rounds SVG coordinate attributes for stable hydration", () => {
+    const html = renderToStaticMarkup(
+      createElement(LiveEntryChart, {
+        pos: {
+          positionId: "pos-1",
+          asset: "ETH",
+          side: "long",
+          leverage: 10,
+          entryMark: 106,
+          currentMark: 104,
+          openSinceMs: Date.parse("2026-05-23T12:00:00.000Z"),
+        },
+      }),
+    );
+
+    expect(html).not.toMatch(/\b(?:cx|cy|x|y|x1|x2|y1|y2)="[^"]*\.\d{3,}"/);
   });
 });

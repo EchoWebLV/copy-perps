@@ -9,6 +9,7 @@ import { useLiveMark } from "@/lib/pacifica/live-context";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
 import {
   copyableWhalePositionsForTail,
+  isWhaleTailPositionCopyable,
   whalePositionsForTail,
   whaleTailTotalNotional,
 } from "./whale-tail";
@@ -191,6 +192,8 @@ export function TailModal({ open, onClose, source }: Props) {
 
   const stakeValid =
     effectiveStake >= MIN_USDC && effectiveStake <= MAX_USDC;
+  const hasCopyableSource =
+    source?.kind !== "whale" || copyableWhalePositions.length > 0;
 
   const submit = useCallback(async () => {
     if (!source || !wallet || submitting) return;
@@ -592,6 +595,13 @@ export function TailModal({ open, onClose, source }: Props) {
                         ? liveMark ?? position.currentMark
                         : position.currentMark;
 
+                    const copyable = isWhaleTailPositionCopyable(position);
+                    const statusLabel = position.stale
+                      ? "Stale"
+                      : position.copyableOnPacifica === false
+                        ? "Pacifica N/A"
+                        : "Will copy";
+
                     return (
                       <div
                         key={position.sourcePositionId}
@@ -623,12 +633,14 @@ export function TailModal({ open, onClose, source }: Props) {
                           </div>
                           <div
                             className={
-                              position.stale
+                              copyable
+                                ? "text-[10px] uppercase tracking-widest text-emerald-400"
+                                : position.stale
                                 ? "text-[10px] uppercase tracking-widest text-rose-400"
-                                : "text-[10px] uppercase tracking-widest text-emerald-400"
+                                : "text-[10px] uppercase tracking-widest text-amber-300"
                             }
                           >
-                            {position.stale ? "Stale" : "Will copy"}
+                            {statusLabel}
                           </div>
                         </div>
                       </div>
@@ -697,9 +709,9 @@ export function TailModal({ open, onClose, source }: Props) {
             <div className="px-5 pb-5 pt-1">
               <button
                 onClick={submit}
-                disabled={submitting || !stakeValid || !wallet}
+                disabled={submitting || !stakeValid || !wallet || !hasCopyableSource}
                 className={`w-full py-4 rounded-2xl font-semibold text-base transition ${
-                  submitting || !stakeValid || !wallet
+                  submitting || !stakeValid || !wallet || !hasCopyableSource
                     ? "bg-white/10 text-white/40 cursor-not-allowed"
                     : "bg-emerald-500 text-black hover:bg-emerald-400"
                 }`}
@@ -707,10 +719,12 @@ export function TailModal({ open, onClose, source }: Props) {
                 {submitting
                   ? "Working…"
                   : source.kind === "whale"
-                    ? whaleTailPrimaryCta({
-                        positions: whaleTailPositions,
-                        effectiveStake,
-                      })
+                    ? hasCopyableSource
+                      ? whaleTailPrimaryCta({
+                          positions: whaleTailPositions,
+                          effectiveStake,
+                        })
+                      : "No Pacifica-copyable positions"
                     : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (

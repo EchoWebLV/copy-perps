@@ -6,6 +6,7 @@ export type WhaleTailPosition = {
   entryMark: number;
   currentMark: number | null;
   stale: boolean;
+  copyableOnPacifica?: boolean;
   notionalUsd?: number;
   unrealizedPnlPct?: number | null;
 };

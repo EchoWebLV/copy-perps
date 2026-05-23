@@ -6,6 +6,7 @@ const position = (
   id: string,
   market: string,
   stale = false,
+  copyableOnPacifica = true,
 ): WhaleTraderSignal["payload"]["openPositions"][number] => ({
   positionId: id,
   whaleId: "whale-1",
@@ -24,6 +25,7 @@ const position = (
   openedAtMs: 1779540000000,
   lastSeenAtMs: 1779540300000,
   stale,
+  copyableOnPacifica,
   analysis: null,
 });
 
@@ -39,6 +41,7 @@ describe("buildWhaleTailSource", () => {
       openPositionsCount: 3,
       openPositions: [
         position("stale-btc", "BTC", true),
+        position("fresh-hype", "HYPE", false, false),
         position("fresh-sol", "SOL"),
         position("fresh-eth", "ETH"),
       ],
@@ -64,8 +67,10 @@ describe("buildWhaleTailSource", () => {
     expect(source?.asset).toBe("SOL");
     expect(source?.positions.map((p) => p.sourcePositionId)).toEqual([
       "stale-btc",
+      "fresh-hype",
       "fresh-sol",
       "fresh-eth",
     ]);
+    expect(source?.positions[1]?.copyableOnPacifica).toBe(false);
   });
 });

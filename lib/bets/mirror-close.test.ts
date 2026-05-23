@@ -6,6 +6,7 @@ import type { WhaleCopyMeta } from "./whale-meta";
 
 const mocks = vi.hoisted(() => ({
   closeCopyOrder: vi.fn(),
+  getClearinghouseState: vi.fn(),
   getPositions: vi.fn(),
   getWhaleLivePositionsForAccount: vi.fn(),
   openBets: [] as Array<Record<string, unknown>>,
@@ -15,6 +16,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/pacifica/client", () => ({
   getPositions: mocks.getPositions,
+}));
+
+vi.mock("@/lib/hyperliquid/client", () => ({
+  getClearinghouseState: mocks.getClearinghouseState,
 }));
 
 vi.mock("@/lib/whales/live-cache", () => ({
@@ -119,6 +124,17 @@ describe("runMirrorCloseSweep whale source closes", () => {
     mocks.openBets = [];
     mocks.updates = [];
     mocks.getWhaleLivePositionsForAccount.mockResolvedValue(null);
+    mocks.getClearinghouseState.mockResolvedValue({
+      marginSummary: {
+        accountValue: "100000",
+        totalNtlPos: "0",
+        totalRawUsd: "100000",
+        totalMarginUsed: "0",
+      },
+      assetPositions: [],
+      withdrawable: "100000",
+      time: Date.parse("2026-05-23T12:00:00.000Z"),
+    });
     mocks.closeCopyOrder.mockResolvedValue({ order_id: "close-order-1" });
     mocks.realizedPnlForOrder.mockResolvedValue(2);
   });
@@ -284,6 +300,7 @@ describe("runMirrorCloseSweep whale source closes", () => {
     expect(result.closesSucceeded).toBe(1);
     expect(mocks.getWhaleLivePositionsForAccount).toHaveBeenCalledWith(
       "source-1",
+      "pacifica",
     );
     expect(mocks.getPositions).not.toHaveBeenCalledWith("source-1");
     expect(mocks.getPositions).toHaveBeenCalledWith("user-main-1");
@@ -294,5 +311,43 @@ describe("runMirrorCloseSweep whale source closes", () => {
         amountBase: "0.25",
       }),
     );
+  });
+
+  it("closes a Hyperliquid whale follower when the source position is closed", async () => {
+    const meta: WhaleCopyMeta = {
+      ...whaleMeta,
+      whaleId: "hyperliquid:0xabc",
+      source: "hyperliquid",
+      sourceAccount: "0xabc",
+      sourcePositionId: "hyperliquid:0xabc:ETH:long:2000000000",
+      leaderMarket: "ETH",
+      leaderSide: "long",
+    };
+    mocks.openBets = [openWhaleBet(meta)];
+    mocks.getWhaleLivePositionsForAccount.mockResolvedValue(null);
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "user-main-1") {
+        return [{ symbol: "ETH", side: "bid", amount: "0.25" }];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.getClearinghouseState).toHaveBeenCalledWith("0xabc");
+    expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ETH",
+        positionSide: "long",
+        amountBase: "0.25",
+      }),
+    );
+    expect(mocks.updates[0]?.meta).toMatchObject({
+      sourceType: "whale",
+      source: "hyperliquid",
+      closeReason: "source_closed",
+    });
   });
 });

@@ -23,7 +23,9 @@ export function buildWhaleExposureSummary(
   let largestPosition: WhaleOpenPosition | null = null;
 
   for (const position of positions) {
-    if (!position.stale) copyableCount += 1;
+    if (!position.stale && position.copyableOnPacifica !== false) {
+      copyableCount += 1;
+    }
     if (position.side === "long") longCount += 1;
     else shortCount += 1;
     exposureUsd += position.notionalUsd;

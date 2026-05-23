@@ -181,6 +181,7 @@ export interface WhalePositionSignal extends BaseSignal {
     openedAtMs: number;
     lastSeenAtMs: number;
     stale: boolean;
+    copyableOnPacifica?: boolean;
     analysis: {
       summary: string;
       thesis: string;

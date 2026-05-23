@@ -662,7 +662,7 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 
-  it("rejects non-Pacifica whale sources", async () => {
+  it("opens a Hyperliquid whale copy through Pacifica and stores source metadata", async () => {
     mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ source: "hyperliquid" }),
     );
@@ -676,9 +676,50 @@ describe("POST /api/bet/whale", () => {
       }),
     );
 
+    expect(response.status).toBe(200);
+    expect(mocks.getMarketBySymbol).toHaveBeenCalledWith("ETH");
+    expect(mocks.openCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ETH",
+        side: "long",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          sourceType: "whale",
+          whaleId: "hyperliquid:abc",
+          source: "hyperliquid",
+          sourceAccount: "abc",
+          sourcePositionId: "source-pos-1",
+          leaderMarket: "ETH",
+        }),
+      }),
+    );
+  });
+
+  it("rejects Hyperliquid positions that cannot be routed to Pacifica", async () => {
+    mocks.getWhaleLivePositionById.mockResolvedValue({
+      ...openPacificaSource({ source: "hyperliquid" }),
+      position: {
+        ...openPacificaSource({ source: "hyperliquid" }).position,
+        market: "HYPE",
+      },
+    });
+    mocks.getMarketBySymbol.mockResolvedValue(null);
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
-      error: "only Pacifica whale copying is supported",
+      error: "HYPE is not available on Pacifica for copy trading",
     });
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
