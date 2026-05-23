@@ -1,4 +1,5 @@
 import { BotRoster } from "@/components/feed/BotRoster";
+import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { WhaleRoster } from "@/components/whales/WhaleRoster";
 import { whaleSocialEnabled } from "@/lib/features";
@@ -15,10 +16,10 @@ export default async function FeedPage() {
     const whales = await buildWhaleTraderSignals();
 
     return (
-      <>
+      <AppShell railTitle="Whale Roster">
         <WhaleRoster initialWhales={whales} />
         <BottomNav />
-      </>
+      </AppShell>
     );
   }
 

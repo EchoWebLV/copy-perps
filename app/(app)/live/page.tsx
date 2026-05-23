@@ -1,4 +1,5 @@
 import { LiveFeed } from "@/components/feed/LiveFeed";
+import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { WhaleLiveFeed } from "@/components/whales/WhaleLiveFeed";
 import { whaleSocialEnabled } from "@/lib/features";
@@ -23,10 +24,10 @@ export default async function LivePage({
     const positions = await buildWhalePositionSignals();
 
     return (
-      <>
+      <AppShell railTitle="Whale Live">
         <WhaleLiveFeed initialPositions={positions} />
         <BottomNav />
-      </>
+      </AppShell>
     );
   }
 

@@ -131,10 +131,10 @@ export default async function ChatterPage() {
     const positions = await buildWhalePositionSignals();
 
     return (
-      <>
+      <AppShell railTitle="Whale Chatter">
         <WhaleAnalysisStream initialPositions={positions} />
         <BottomNav />
-      </>
+      </AppShell>
     );
   }
 

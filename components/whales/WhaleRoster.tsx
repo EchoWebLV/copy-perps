@@ -275,11 +275,19 @@ function toTailSource(
 function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
+    let inFlight = false;
+    const run = () => {
+      if (inFlight) return;
+      inFlight = true;
+      void load().finally(() => {
+        inFlight = false;
+      });
+    };
     const start = () => {
       if (timer) return;
       timer = setInterval(() => {
         if (typeof document !== "undefined" && document.hidden) return;
-        void load();
+        run();
       }, intervalMs);
     };
     const stop = () => {
