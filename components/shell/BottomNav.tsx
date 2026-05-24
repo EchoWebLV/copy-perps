@@ -9,7 +9,7 @@ import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 // swipe CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Whales" },
-  { href: "/chatter", icon: Radio, label: "Chatter" },
+  { href: "/chatter", icon: Radio, label: "Pulse" },
 ];
 const RIGHT_TABS = [
   { href: "/portfolio", icon: PieChart, label: "Folio" },

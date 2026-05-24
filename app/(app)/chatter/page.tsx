@@ -1,7 +1,7 @@
 import { getChatterEvents, type ChatterEvent } from "@/lib/bots/chatter";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
-import { WhaleAnalysisStream } from "@/components/whales/WhaleAnalysisStream";
+import { WhalePulseFeed } from "@/components/whales/WhalePulseFeed";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 import {
@@ -131,8 +131,8 @@ export default async function ChatterPage() {
     const positions = await buildWhalePositionSignals();
 
     return (
-      <AppShell railTitle="Whale Chatter">
-        <WhaleAnalysisStream initialPositions={positions} />
+      <AppShell railTitle="Pulse">
+        <WhalePulseFeed initialPositions={positions} />
         <BottomNav />
       </AppShell>
     );

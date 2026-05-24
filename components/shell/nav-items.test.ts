@@ -17,11 +17,14 @@ describe("desktop shell nav contract", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Whales",
       "Swipe",
-      "Chatter",
+      "Pulse",
       "Portfolio",
       "Settings",
       "Wins",
     ]);
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).not.toContain(
+      "Chatter",
+    );
   });
 
   it("marks feed and live nested paths active", () => {
