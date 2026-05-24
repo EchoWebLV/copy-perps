@@ -283,3 +283,60 @@ export const whalePositionAnalysis = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
 );
+
+export const pulseReactions = pgTable(
+  "pulse_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    positionId: text("position_id")
+      .notNull()
+      .references(() => whalePositions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reaction: text("reaction").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    positionUserIdx: uniqueIndex("pulse_reactions_position_user_idx").on(
+      t.positionId,
+      t.userId,
+    ),
+    positionReactionIdx: index("pulse_reactions_position_reaction_idx").on(
+      t.positionId,
+      t.reaction,
+    ),
+  }),
+);
+
+export const pulseComments = pgTable(
+  "pulse_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    positionId: text("position_id")
+      .notNull()
+      .references(() => whalePositions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    positionCreatedIdx: index("pulse_comments_position_created_idx").on(
+      t.positionId,
+      t.createdAt,
+    ),
+    userCreatedIdx: index("pulse_comments_user_created_idx").on(
+      t.userId,
+      t.createdAt,
+    ),
+  }),
+);
