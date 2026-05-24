@@ -26,6 +26,7 @@ import {
   buildPulseSocialStats,
   PULSE_REACTIONS,
   type PulseComment,
+  type PulseCommentProfile,
   type PulseReaction,
 } from "./pulse-social";
 import { formatWhalePositionAge } from "./whale-position-age";
@@ -39,8 +40,14 @@ interface Props {
 interface PulseApiComment {
   id: string;
   author: string;
+  profile?: PulseCommentProfile;
   body: string;
   createdAt: string;
+}
+
+interface PulseApiRecentReactor {
+  reaction: PulseReaction;
+  profile: PulseCommentProfile;
 }
 
 interface PulseApiSocialRecord {
@@ -48,6 +55,7 @@ interface PulseApiSocialRecord {
   commentsCount: number;
   myReaction: PulseReaction | null;
   comments: PulseApiComment[];
+  recentReactors: PulseApiRecentReactor[];
 }
 
 type PulseApiSocial = Record<string, PulseApiSocialRecord>;
@@ -322,6 +330,7 @@ function PulsePost({
     (persistedSocial?.commentsCount ?? 0) +
     localComments.length;
   const aiLine = buildAiLine(item);
+  const recentReactors = persistedSocial?.recentReactors ?? [];
 
   return (
     <li className="px-5 py-4">
@@ -473,6 +482,10 @@ function PulsePost({
             </button>
           </div>
 
+          {recentReactors.length > 0 ? (
+            <RecentReactions reactors={recentReactors} />
+          ) : null}
+
           {commentsOpen ? (
             <CommentsPanel
               comments={comments}
@@ -572,20 +585,28 @@ function CommentsPanel({
     >
       <div className="space-y-3">
         {comments.map((comment) => (
-          <div key={comment.id}>
-            <div
-              className="flex items-center gap-2 text-[10px] font-black uppercase"
-              style={{ color: DIM }}
-            >
-              <span style={{ color: FG }}>{comment.author}</span>
-              <span>{comment.age}</span>
+          <div key={comment.id} className="flex items-start gap-2">
+            <CommentAvatar profile={comment.profile} label={comment.author} />
+            <div className="min-w-0 flex-1">
+              <div
+                className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-black uppercase"
+                style={{ color: DIM }}
+              >
+                <span className="truncate" style={{ color: FG }}>
+                  {comment.author}
+                </span>
+                {comment.profile?.handle ? (
+                  <span className="truncate">@{comment.profile.handle}</span>
+                ) : null}
+                <span>{comment.age}</span>
+              </div>
+              <p
+                className="mt-0.5 text-[12px] leading-snug"
+                style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
+              >
+                {comment.body}
+              </p>
             </div>
-            <p
-              className="mt-0.5 text-[12px] leading-snug"
-              style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
-            >
-              {comment.body}
-            </p>
           </div>
         ))}
       </div>
@@ -617,6 +638,60 @@ function CommentsPanel({
         </button>
       </form>
     </div>
+  );
+}
+
+function RecentReactions({ reactors }: { reactors: PulseApiRecentReactor[] }) {
+  const line = reactors
+    .slice(0, 3)
+    .map((reactor) => `${reactor.profile.handle} ${reactionVerb(reactor.reaction)}`)
+    .join(" | ");
+
+  return (
+    <div
+      className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2"
+      style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+    >
+      <div className="flex -space-x-1">
+        {reactors.slice(0, 3).map((reactor) => (
+          <CommentAvatar
+            key={`${reactor.profile.handle}:${reactor.reaction}`}
+            profile={reactor.profile}
+            label={reactor.profile.displayName}
+          />
+        ))}
+      </div>
+      <div
+        className="min-w-0 truncate text-[10px] font-black uppercase"
+        style={{ color: DIM }}
+      >
+        {line}
+      </div>
+    </div>
+  );
+}
+
+function CommentAvatar({
+  profile,
+  label,
+}: {
+  profile?: PulseCommentProfile;
+  label: string;
+}) {
+  const seed = profile?.avatarSeed ?? label;
+  const colors = avatarColors(seed);
+  return (
+    <span
+      aria-hidden="true"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[9px] font-black uppercase"
+      style={{
+        background: colors.background,
+        color: colors.foreground,
+        border: `1px solid ${colors.border}`,
+      }}
+    >
+      {avatarLabel(profile?.displayName ?? label)}
+    </span>
   );
 }
 
@@ -705,7 +780,8 @@ function mergeSocialCounts(
 function apiCommentToPulseComment(comment: PulseApiComment): PulseComment {
   return {
     id: comment.id,
-    author: comment.author,
+    author: comment.profile?.displayName ?? comment.author,
+    profile: comment.profile,
     body: comment.body,
     age: formatCommentAge(comment.createdAt),
   };
@@ -812,6 +888,41 @@ function fmtPrice(value: number): string {
 function formatPct(value: number | null): string {
   if (value === null) return "N/A";
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function reactionVerb(reaction: PulseReaction): string {
+  if (reaction === "Tailing") return "is tailing";
+  if (reaction === "Bullish") return "is bullish";
+  return "is bearish";
+}
+
+function avatarLabel(value: string): string {
+  const cleaned = value.replace(/[^a-zA-Z0-9]/g, "");
+  return (cleaned || "U").slice(0, 2);
+}
+
+function avatarColors(seed: string): {
+  background: string;
+  foreground: string;
+  border: string;
+} {
+  const hash = hashString(seed);
+  const hue = hash % 360;
+  const accentHue = (hue + 48) % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 72% 42%), hsl(${accentHue} 76% 54%))`,
+    foreground: "#fffdf0",
+    border: `hsl(${hue} 70% 64% / 0.75)`,
+  };
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function shorten(value: string, maxLength: number): string {

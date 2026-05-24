@@ -21,6 +21,9 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   privyId: text("privy_id").notNull().unique(),
   solanaPubkey: text("solana_pubkey"),
+  displayName: text("display_name"),
+  handle: text("handle"),
+  avatarSeed: text("avatar_seed"),
   // Feed rail toggles. JSONB so adding future rails (e.g. sports)
   // doesn't need a migration. Null = user hasn't completed the
   // onboarding wizard yet → show all rails by default.
@@ -29,6 +32,7 @@ export const users = pgTable("users", {
     withTimezone: true,
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const bets = pgTable(

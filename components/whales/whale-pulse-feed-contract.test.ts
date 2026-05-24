@@ -34,6 +34,8 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("/api/pulse/social");
     expect(componentSource).toContain("getAccessToken");
     expect(componentSource).toContain("TailModal");
+    expect(componentSource).toContain("recentReactors");
+    expect(componentSource).toContain("CommentAvatar");
     expect(componentSource).not.toContain("SUMMARY");
     expect(componentSource).not.toContain("THESIS");
     expect(componentSource).not.toContain("RISK");

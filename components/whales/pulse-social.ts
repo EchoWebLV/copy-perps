@@ -12,8 +12,15 @@ export const PULSE_REACTIONS: PulseReaction[] = [
 export interface PulseComment {
   id: string;
   author: string;
+  profile?: PulseCommentProfile;
   body: string;
   age: string;
+}
+
+export interface PulseCommentProfile {
+  displayName: string;
+  handle: string;
+  avatarSeed: string;
 }
 
 export function buildPulseSocialStats(

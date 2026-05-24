@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   normalizePulseCommentBody,
   normalizePulseReaction,
@@ -19,5 +21,18 @@ describe("Pulse social store helpers", () => {
     expect(normalizePulseCommentBody("  good tail?  ")).toBe("good tail?");
     expect(normalizePulseCommentBody("   ")).toBeNull();
     expect(normalizePulseCommentBody("x".repeat(281))).toBeNull();
+  });
+
+  it("hydrates comments and recent reactions with real user profiles", () => {
+    const source = readFileSync(
+      join(process.cwd(), "lib/pulse/social-store.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("buildPublicUserProfile");
+    expect(source).toContain("recentReactors");
+    expect(source).toContain("users");
+    expect(source).not.toContain("traderAlias");
+    expect(source).not.toContain("Trader ${");
   });
 });
