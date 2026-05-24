@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
@@ -20,11 +20,16 @@ import {
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import { buildPulseItems, type PulseItem } from "./pulse-items";
+import {
+  buildPulseSeedComments,
+  buildPulseSocialStats,
+  PULSE_REACTIONS,
+  type PulseComment,
+  type PulseReaction,
+} from "./pulse-social";
 import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
-type Reaction = "Watching" | "Bullish" | "Fading";
-const REACTIONS: Reaction[] = ["Watching", "Bullish", "Fading"];
 
 interface Props {
   initialPositions: WhalePositionSignal[];
@@ -34,9 +39,14 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
-  const [reactions, setReactions] = useState<Record<string, Reaction | undefined>>(
-    {},
-  );
+  const [reactions, setReactions] = useState<
+    Record<string, PulseReaction | undefined>
+  >({});
+  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [localComments, setLocalComments] = useState<
+    Record<string, PulseComment[]>
+  >({});
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -116,12 +126,51 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 item={item}
                 now={now}
                 selectedReaction={reactions[item.id]}
+                commentsOpen={openComments[item.id] === true}
+                commentDraft={commentDrafts[item.id] ?? ""}
+                localComments={localComments[item.id] ?? []}
                 onReact={(reaction) =>
                   setReactions((current) => ({
                     ...current,
                     [item.id]: current[item.id] === reaction ? undefined : reaction,
                   }))
                 }
+                onToggleComments={() =>
+                  setOpenComments((current) => ({
+                    ...current,
+                    [item.id]: current[item.id] !== true,
+                  }))
+                }
+                onCommentDraftChange={(value) =>
+                  setCommentDrafts((current) => ({
+                    ...current,
+                    [item.id]: value,
+                  }))
+                }
+                onAddComment={() => {
+                  const body = (commentDrafts[item.id] ?? "").trim();
+                  if (!body) return;
+                  setLocalComments((current) => ({
+                    ...current,
+                    [item.id]: [
+                      {
+                        id: `${item.id}:local:${Date.now()}`,
+                        author: "You",
+                        body,
+                        age: "now",
+                      },
+                      ...(current[item.id] ?? []),
+                    ],
+                  }));
+                  setCommentDrafts((current) => ({
+                    ...current,
+                    [item.id]: "",
+                  }));
+                  setOpenComments((current) => ({
+                    ...current,
+                    [item.id]: true,
+                  }));
+                }}
                 onTail={() => setTailSource(toTailSource(item.position))}
               />
             ))}
@@ -142,19 +191,34 @@ function PulsePost({
   item,
   now,
   selectedReaction,
+  commentsOpen,
+  commentDraft,
+  localComments,
   onReact,
+  onToggleComments,
+  onCommentDraftChange,
+  onAddComment,
   onTail,
 }: {
   item: PulseItem;
   now: number;
-  selectedReaction?: Reaction;
-  onReact: (reaction: Reaction) => void;
+  selectedReaction?: PulseReaction;
+  commentsOpen: boolean;
+  commentDraft: string;
+  localComments: PulseComment[];
+  onReact: (reaction: PulseReaction) => void;
+  onToggleComments: () => void;
+  onCommentDraftChange: (value: string) => void;
+  onAddComment: () => void;
   onTail: () => void;
 }) {
   const p = item.position;
   const sideColor = p.side === "long" ? GREEN : RED;
   const profit = (p.unrealizedPnlPct ?? 0) >= 0;
-  const counts = reactionCounts(item.reactionSeed);
+  const counts = buildPulseSocialStats(item);
+  const seedComments = useMemo(() => buildPulseSeedComments(item), [item]);
+  const comments = [...localComments, ...seedComments];
+  const commentCount = counts.Comments + localComments.length;
   const aiLine = buildAiLine(item);
 
   return (
@@ -271,7 +335,7 @@ function PulsePost({
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap gap-2">
-              {REACTIONS.map((reaction) => (
+              {PULSE_REACTIONS.map((reaction) => (
                 <ReactionButton
                   key={reaction}
                   label={reaction}
@@ -280,6 +344,11 @@ function PulsePost({
                   onClick={() => onReact(reaction)}
                 />
               ))}
+              <CommentsButton
+                count={commentCount}
+                active={commentsOpen}
+                onClick={onToggleComments}
+              />
             </div>
 
             <button
@@ -301,6 +370,15 @@ function PulsePost({
               {item.canTail ? "Tail" : "Watch only"}
             </button>
           </div>
+
+          {commentsOpen ? (
+            <CommentsPanel
+              comments={comments}
+              draft={commentDraft}
+              onDraftChange={onCommentDraftChange}
+              onAddComment={onAddComment}
+            />
+          ) : null}
         </div>
       </article>
     </li>
@@ -313,7 +391,7 @@ function ReactionButton({
   active,
   onClick,
 }: {
-  label: Reaction;
+  label: PulseReaction;
   count: number;
   active: boolean;
   onClick: () => void;
@@ -331,14 +409,112 @@ function ReactionButton({
     >
       {label === "Bullish" ? (
         <Flame size={12} strokeWidth={3} />
-      ) : label === "Watching" ? (
-        <Eye size={12} strokeWidth={3} />
-      ) : (
+      ) : label === "Bearish" ? (
         <TrendingDown size={12} strokeWidth={3} style={{ color: RED }} />
+      ) : (
+        <Zap size={12} strokeWidth={3} fill={active ? ACCENT : "none"} />
       )}
       <span>{label}</span>
       <span style={{ color: active ? ACCENT : DIM }}>{count}</span>
     </button>
+  );
+}
+
+function CommentsButton({
+  count,
+  active,
+  onClick,
+}: {
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase transition active:scale-[0.97]"
+      style={{
+        background: active ? `${ACCENT}24` : PANEL_2,
+        color: active ? ACCENT : FG,
+        border: `1px solid ${active ? `${ACCENT}70` : FAINT}`,
+      }}
+    >
+      <MessageCircle size={12} strokeWidth={3} />
+      <span>Comments</span>
+      <span style={{ color: active ? ACCENT : DIM }}>{count}</span>
+    </button>
+  );
+}
+
+function CommentsPanel({
+  comments,
+  draft,
+  onDraftChange,
+  onAddComment,
+}: {
+  comments: PulseComment[];
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onAddComment: () => void;
+}) {
+  function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onAddComment();
+  }
+
+  return (
+    <div
+      className="mt-3 rounded-lg px-3 py-3"
+      style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+    >
+      <div className="space-y-3">
+        {comments.map((comment) => (
+          <div key={comment.id}>
+            <div
+              className="flex items-center gap-2 text-[10px] font-black uppercase"
+              style={{ color: DIM }}
+            >
+              <span style={{ color: FG }}>{comment.author}</span>
+              <span>{comment.age}</span>
+            </div>
+            <p
+              className="mt-0.5 text-[12px] leading-snug"
+              style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
+            >
+              {comment.body}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={submit} className="mt-3 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => onDraftChange(e.target.value)}
+          placeholder="Add comment"
+          className="min-w-0 flex-1 rounded-full border px-3 py-2 text-[12px] outline-none"
+          style={{
+            background: BG,
+            borderColor: FAINT,
+            color: FG,
+            fontFamily: FONT_BODY,
+          }}
+        />
+        <button
+          type="submit"
+          disabled={draft.trim().length === 0}
+          className="rounded-full px-4 py-2 text-[10px] font-black uppercase disabled:cursor-not-allowed"
+          style={{
+            background: draft.trim().length > 0 ? ACCENT : "rgba(250,250,242,0.08)",
+            color: draft.trim().length > 0 ? BG : DIM,
+            border: `1px solid ${draft.trim().length > 0 ? ACCENT : FAINT}`,
+          }}
+        >
+          Post
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -421,14 +597,6 @@ function buildAiLine(item: PulseItem): string | null {
     return shorten(analysis.entryGapWarning, 148);
   }
   return shorten(analysis.thesis || analysis.summary, 148);
-}
-
-function reactionCounts(seed: number): Record<Reaction, number> {
-  return {
-    Watching: 18 + (seed % 37),
-    Bullish: 6 + ((seed >>> 3) % 29),
-    Fading: 2 + ((seed >>> 7) % 19),
-  };
 }
 
 function toTailSource(position: WhalePositionSignal["payload"]): TailSource {

@@ -18,11 +18,18 @@ describe("WhalePulseFeed route contract", () => {
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
+    const socialSource = readFileSync(
+      join(process.cwd(), "components/whales/pulse-social.ts"),
+      "utf8",
+    );
 
     expect(componentSource).toContain("PULSE");
-    expect(componentSource).toContain("Watching");
-    expect(componentSource).toContain("Bullish");
-    expect(componentSource).toContain("Fading");
+    expect(socialSource).toContain("Tailing");
+    expect(socialSource).toContain("Bullish");
+    expect(socialSource).toContain("Bearish");
+    expect(componentSource).toContain("Comments");
+    expect(componentSource).toContain("buildPulseSeedComments");
+    expect(componentSource).toContain("buildPulseSocialStats");
     expect(componentSource).toContain("buildPulseItems");
     expect(componentSource).toContain("TailModal");
     expect(componentSource).not.toContain("SUMMARY");
