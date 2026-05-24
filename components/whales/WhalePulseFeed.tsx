@@ -70,7 +70,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     >
       <div className="no-scrollbar mx-auto h-full w-full max-w-2xl overflow-y-auto pb-32 lg:max-w-4xl lg:px-6 lg:pb-8">
         <header
-          className="sticky top-0 z-10 border-b-2 px-5 pt-5 pb-3"
+          className="border-b-2 px-5 pt-5 pb-3"
           style={{ background: BG, borderColor: FAINT }}
         >
           <div className="flex items-center justify-between gap-3">
