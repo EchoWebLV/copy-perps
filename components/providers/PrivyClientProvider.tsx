@@ -46,7 +46,7 @@ export function PrivyClientProvider({ children }: { children: ReactNode }) {
           solana: { connectors: toSolanaWalletConnectors() },
         },
         embeddedWallets: {
-          solana: { createOnLogin: "users-without-wallets" },
+          solana: { createOnLogin: "all-users" },
         },
         solana: {
           rpcs: buildRpcs(),

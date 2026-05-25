@@ -1,8 +1,12 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { useFundWallet } from "@privy-io/react-auth/solana";
-import { useState } from "react";
+import {
+  useCreateWallet,
+  useFundWallet,
+  useWallets,
+} from "@privy-io/react-auth/solana";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check, LogOut, CreditCard, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
@@ -30,14 +34,54 @@ const DEFAULT_FUND_AMOUNT_USD = "25";
 export default function DepositPage() {
   const { ready, authenticated, login, logout } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
+  const { ready: walletsReady } = useWallets();
+  const { createWallet } = useCreateWallet();
   const { prefs, setPrefs } = usePreferences();
   const { fundWallet } = useFundWallet();
   const [copied, setCopied] = useState(false);
   const [funding, setFunding] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const autoCreateAttemptedRef = useRef(false);
+
+  const createAppWallet = useCallback(async () => {
+    if (wallet || creatingWallet) return;
+    setWalletError(null);
+    setCreatingWallet(true);
+    try {
+      await createWallet();
+    } catch (err) {
+      console.error("[deposit] create wallet error:", err);
+      setWalletError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingWallet(false);
+    }
+  }, [createWallet, creatingWallet, wallet]);
+
+  useEffect(() => {
+    if (
+      !ready ||
+      !authenticated ||
+      !walletsReady ||
+      wallet ||
+      autoCreateAttemptedRef.current
+    ) {
+      return;
+    }
+    autoCreateAttemptedRef.current = true;
+    void createAppWallet();
+  }, [authenticated, createAppWallet, ready, wallet, walletsReady]);
 
   const togglePref = (key: keyof FeedPrefs) => {
     setPrefs({ ...prefs, [key]: !prefs[key] });
   };
+
+  const walletStatusText = useMemo(() => {
+    if (wallet?.address) return wallet.address;
+    if (!walletsReady || creatingWallet) return "CREATING APP WALLET...";
+    if (walletError) return "APP WALLET NEEDS SETUP";
+    return "APP WALLET NOT READY";
+  }, [creatingWallet, wallet?.address, walletError, walletsReady]);
 
   const copy = async () => {
     if (!wallet?.address) return;
@@ -88,8 +132,26 @@ export default function DepositPage() {
             className="mt-3 break-all font-mono text-[11px]"
             style={{ color: wallet?.address ? FG : DIM }}
           >
-            {wallet?.address ?? "GENERATING WALLET..."}
+            {walletStatusText}
           </div>
+          {!wallet?.address && walletsReady ? (
+            <button
+              onClick={createAppWallet}
+              disabled={creatingWallet}
+              className="mt-3 w-full rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest active:scale-[0.97] disabled:opacity-40"
+              style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+            >
+              {creatingWallet ? "CREATING..." : "CREATE APP WALLET"}
+            </button>
+          ) : null}
+          {walletError ? (
+            <p
+              className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
+              style={{ color: "#fb7185" }}
+            >
+              {walletError.slice(0, 120)}
+            </p>
+          ) : null}
         </div>
 
         <div
@@ -210,8 +272,18 @@ export default function DepositPage() {
                 className="mt-1 break-all font-mono text-[12px]"
                 style={{ color: FG, opacity: 0.85 }}
               >
-                {wallet?.address ?? "GENERATING WALLET…"}
+                {walletStatusText}
               </div>
+              {!wallet?.address && walletsReady ? (
+                <button
+                  onClick={createAppWallet}
+                  disabled={creatingWallet}
+                  className="mt-3 flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
+                  style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+                >
+                  {creatingWallet ? "CREATING..." : "CREATE APP WALLET"}
+                </button>
+              ) : null}
               <button
                 onClick={copy}
                 disabled={!wallet?.address}

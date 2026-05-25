@@ -1,10 +1,26 @@
 "use client";
 
-import { useWallets } from "@privy-io/react-auth/solana";
+import {
+  type ConnectedStandardSolanaWallet,
+  useWallets,
+} from "@privy-io/react-auth/solana";
+
+export function isPrivySolanaWallet(
+  wallet: ConnectedStandardSolanaWallet,
+): boolean {
+  const standardWallet = wallet.standardWallet as typeof wallet.standardWallet & {
+    isPrivyWallet?: boolean;
+  };
+  return (
+    standardWallet.isPrivyWallet === true ||
+    standardWallet.name === "Privy" ||
+    "privy:" in standardWallet.features
+  );
+}
 
 export function useEmbeddedSolanaWallet() {
   const { wallets } = useWallets();
-  const wallet = wallets.find((w) => w.standardWallet?.name === "Privy");
+  const wallet = wallets.find(isPrivySolanaWallet);
   return wallet;
 }
 
