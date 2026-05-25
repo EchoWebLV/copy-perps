@@ -51,6 +51,10 @@ interface MirrorResult {
   errors: Array<{ betId: string; message: string }>;
 }
 
+export interface MirrorCloseSweepOptions {
+  forceSourceFetch?: boolean;
+}
+
 type OpenBetRow = {
   betId: string;
   userId: string;
@@ -332,6 +336,7 @@ function isCachedWhaleSourcePositionStillOpen(
 async function closeWhaleFollowers(
   openBets: OpenBetRow[],
   result: MirrorResult,
+  options: MirrorCloseSweepOptions = {},
 ): Promise<void> {
   const bySourceAccount = new Map<
     string,
@@ -353,8 +358,9 @@ async function closeWhaleFollowers(
     if (!first) continue;
     const { source, sourceAccount } = first.meta;
 
-    const cachedSourcePositions =
-      await getWhaleLivePositionsForAccount(sourceAccount, source);
+    const cachedSourcePositions = options.forceSourceFetch
+      ? null
+      : await getWhaleLivePositionsForAccount(sourceAccount, source);
     if (cachedSourcePositions !== null) {
       for (const { row, meta } of followers) {
         const sourceStillOpen = isCachedWhaleSourcePositionStillOpen(
@@ -425,7 +431,9 @@ async function closeWhaleFollowers(
   }
 }
 
-export async function runMirrorCloseSweep(): Promise<MirrorResult> {
+export async function runMirrorCloseSweep(
+  options: MirrorCloseSweepOptions = {},
+): Promise<MirrorResult> {
   const result: MirrorResult = {
     scannedLeaders: 0,
     closesAttempted: 0,
@@ -462,7 +470,7 @@ export async function runMirrorCloseSweep(): Promise<MirrorResult> {
   await closeBotFollowers(openBets, result);
 
   // Whale-source close path.
-  await closeWhaleFollowers(openBets, result);
+  await closeWhaleFollowers(openBets, result, options);
 
   return result;
 }

@@ -313,6 +313,39 @@ describe("runMirrorCloseSweep whale source closes", () => {
     );
   });
 
+  it("can force a source fetch when a websocket event makes the cache suspect", async () => {
+    mocks.openBets = [openWhaleBet()];
+    mocks.getWhaleLivePositionsForAccount.mockResolvedValue([
+      {
+        id: whaleMeta.sourcePositionId,
+        status: "open",
+      },
+    ]);
+    mocks.getPositions.mockImplementation(async (account: string) => {
+      if (account === "source-1") {
+        return [];
+      }
+      if (account === "user-main-1") {
+        return [sourcePosition({ amount: "0.25" })];
+      }
+      return [];
+    });
+
+    const result = await runMirrorCloseSweep({ forceSourceFetch: true });
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.getWhaleLivePositionsForAccount).not.toHaveBeenCalled();
+    expect(mocks.getPositions).toHaveBeenCalledWith("source-1");
+    expect(mocks.closeCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "BTC",
+        positionSide: "long",
+        amountBase: "0.25",
+      }),
+    );
+  });
+
   it("closes a Hyperliquid whale follower when the source position is closed", async () => {
     const meta: WhaleCopyMeta = {
       ...whaleMeta,

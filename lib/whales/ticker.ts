@@ -6,6 +6,10 @@ import {
   acquireWhaleTickerLease,
   ensureWhaleLeaseTable,
 } from "./ticker-lease";
+import {
+  startWhaleSourceMonitor,
+  type SourceMonitorHandle,
+} from "./source-monitor";
 
 const REFRESH_GAP_MS = Number(process.env.WHALE_REFRESH_GAP_MS ?? 15_000);
 const LEASE_RECHECK_MS = 30_000;
@@ -29,6 +33,7 @@ async function loop(): Promise<void> {
 
   let tableReady = false;
   let wasHolder = false;
+  let sourceMonitor: SourceMonitorHandle | null = null;
 
   for (;;) {
     if (!tableReady) {
@@ -50,6 +55,10 @@ async function loop(): Promise<void> {
     }
 
     if (!holder) {
+      if (sourceMonitor !== null) {
+        sourceMonitor.stop();
+        sourceMonitor = null;
+      }
       if (wasHolder) {
         console.log("[whales] lost the lease, another process is refreshing");
         wasHolder = false;
@@ -61,6 +70,7 @@ async function loop(): Promise<void> {
     if (!wasHolder) {
       console.log("[whales] acquired the lease, this process is refreshing");
       wasHolder = true;
+      sourceMonitor = startWhaleSourceMonitor();
     }
 
     const started = Date.now();
