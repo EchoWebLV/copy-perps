@@ -4,10 +4,12 @@ import { usePrivy } from "@privy-io/react-auth";
 import {
   useCreateWallet,
   useFundWallet,
+  useSignTransaction,
   useWallets,
 } from "@privy-io/react-auth/solana";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check, LogOut, CreditCard, Zap } from "lucide-react";
+import { Connection } from "@solana/web3.js";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
@@ -15,6 +17,11 @@ import { usePreferences } from "@/components/onboarding/PreferencesProvider";
 import { RAILS } from "@/lib/feed/rails";
 import type { FeedPrefs } from "@/lib/feed/preferences";
 import { ev } from "@/lib/analytics";
+import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
+import {
+  decodeBase64Tx,
+  signAndSubmitTx,
+} from "@/lib/bets/post-with-consolidation";
 import {
   BG,
   FG,
@@ -30,16 +37,24 @@ import {
 } from "@/components/v2/ui";
 
 const DEFAULT_FUND_AMOUNT_USD = "25";
+const RPC_URL =
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+const showDevTools = process.env.NODE_ENV !== "production";
 
 export default function DepositPage() {
-  const { ready, authenticated, login, logout } = usePrivy();
+  const { ready, authenticated, getAccessToken, login, logout } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
   const { ready: walletsReady } = useWallets();
   const { createWallet } = useCreateWallet();
+  const { signTransaction } = useSignTransaction();
+  const { usdc, jupUsd, refresh } = useWalletBalance(wallet?.address);
   const { prefs, setPrefs } = usePreferences();
   const { fundWallet } = useFundWallet();
   const [copied, setCopied] = useState(false);
   const [funding, setFunding] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const autoCreateAttemptedRef = useRef(false);
@@ -113,6 +128,58 @@ export default function DepositPage() {
       });
     } finally {
       setFunding(false);
+    }
+  };
+
+  const convertJupUsdToUsdc = async () => {
+    if (!wallet?.address || converting) return;
+    setConverting(true);
+    setConvertError(null);
+    setConvertSuccess(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not signed in");
+
+      const resp = await fetch("/api/dev/convert-jupusd", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ walletAddress: wallet.address }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${resp.status}`);
+      }
+      const data = (await resp.json()) as {
+        swapTransaction: string;
+        jupUsdAmount: number;
+        expectedUsdcOut: number;
+      };
+      const txBytes = decodeBase64Tx(
+        data.swapTransaction,
+        "jupUSD conversion tx",
+      );
+      const sig = await signAndSubmitTx(txBytes, wallet, signTransaction, {
+        skipPreflight: true,
+      });
+      const conn = new Connection(RPC_URL, "confirmed");
+      const result = await conn.confirmTransaction(sig, "confirmed");
+      if (result.value.err) {
+        throw new Error(
+          `Conversion failed on chain: ${JSON.stringify(result.value.err)}`,
+        );
+      }
+      setConvertSuccess(
+        `Converted $${data.jupUsdAmount.toFixed(2)} jupUSD to about $${data.expectedUsdcOut.toFixed(2)} USDC.`,
+      );
+      setTimeout(() => void refresh(), 1500);
+    } catch (err) {
+      console.error("[deposit] convert jupUSD error:", err);
+      setConvertError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -304,6 +371,52 @@ export default function DepositPage() {
               </button>
             </div>
           </div>
+
+          {showDevTools ? (
+            <div className="mt-5">
+              <Stamp label="DEV" />
+              <div
+                className="mt-2 p-4"
+                style={{
+                  background: PANEL,
+                  borderRadius: 18,
+                  border: `1px solid ${FAINT}`,
+                }}
+              >
+                <div
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  USDC {usdc == null ? "..." : `$${usdc.toFixed(2)}`} · jupUSD{" "}
+                  {jupUsd == null ? "..." : `$${jupUsd.toFixed(2)}`}
+                </div>
+                <button
+                  onClick={convertJupUsdToUsdc}
+                  disabled={!wallet?.address || converting || !jupUsd || jupUsd <= 0}
+                  className="mt-3 flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
+                  style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+                >
+                  {converting ? "CONVERTING..." : "CONVERT JUPUSD TO USDC"}
+                </button>
+                {convertError ? (
+                  <p
+                    className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
+                    style={{ color: "#fb7185" }}
+                  >
+                    {convertError.slice(0, 160)}
+                  </p>
+                ) : null}
+                {convertSuccess ? (
+                  <p
+                    className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
+                    style={{ color: GREEN }}
+                  >
+                    {convertSuccess}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           {/* Feed prefs */}
           <div className="mt-6">
