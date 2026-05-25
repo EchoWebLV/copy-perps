@@ -11,6 +11,7 @@ interface SendDepositArgs {
   wallet: ConnectedStandardSolanaWallet;
   signAndSendTransaction: SignAndSendTransaction;
   onSponsorFallback?: (err: unknown) => void;
+  preferSponsored?: boolean;
 }
 
 function collectErrorText(value: unknown, seen = new Set<unknown>()): string {
@@ -68,10 +69,19 @@ export async function sendDepositWithSponsorFallback({
   wallet,
   signAndSendTransaction,
   onSponsorFallback,
+  preferSponsored = false,
 }: SendDepositArgs): Promise<{
   signature: Uint8Array | string;
   sponsored: boolean;
 }> {
+  if (!preferSponsored) {
+    const result = await signAndSendTransaction({
+      transaction,
+      wallet,
+    });
+    return { signature: result.signature, sponsored: false };
+  }
+
   try {
     const result = await signAndSendTransaction({
       transaction,

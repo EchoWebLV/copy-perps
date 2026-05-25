@@ -8,9 +8,9 @@ export type WhaleCopyMeta = {
   leaderSide: "long" | "short";
   leverage: number;
   autoCloseOnSourceClose: boolean;
-  userEntryPrice: number;
+  userEntryPrice: number | null;
   sourceEntryPriceAtCopy: number;
-  pacificaOrderId: string;
+  pacificaOrderId: string | number;
   closeReason: "manual" | "source_closed" | "already_flat" | null;
 };
 
@@ -34,6 +34,14 @@ function isString(value: unknown): value is string {
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNumberOrNull(value: unknown): value is number | null {
+  return value === null || isNumber(value);
+}
+
+function isStringOrNumber(value: unknown): value is string | number {
+  return isString(value) || isNumber(value);
 }
 
 function isWhaleSource(value: unknown): value is WhaleCopyMeta["source"] {
@@ -62,9 +70,9 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
   if (value.leaderSide !== "long" && value.leaderSide !== "short") return null;
   if (!isNumber(value.leverage)) return null;
   if (typeof value.autoCloseOnSourceClose !== "boolean") return null;
-  if (!isNumber(value.userEntryPrice)) return null;
+  if (!isNumberOrNull(value.userEntryPrice)) return null;
   if (!isNumber(value.sourceEntryPriceAtCopy)) return null;
-  if (!isString(value.pacificaOrderId)) return null;
+  if (!isStringOrNumber(value.pacificaOrderId)) return null;
   if (!isWhaleCloseReason(value.closeReason)) return null;
 
   return {

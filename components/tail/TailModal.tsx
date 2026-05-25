@@ -335,6 +335,7 @@ export function TailModal({ open, onClose, source }: Props) {
           transaction: txBytes,
           wallet,
           signAndSendTransaction,
+          preferSponsored: false,
           onSponsorFallback: (err) => {
             console.warn("[tail] sponsored deposit send failed:", err);
             setStatus("Gasless send failed. Retrying with wallet gas…");

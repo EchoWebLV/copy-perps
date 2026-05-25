@@ -144,15 +144,25 @@ export default function PortfolioPage() {
   // in "In positions" either; counting them double-counts. Stats now reflect
   // only currently-held (confirmed) positions.
   const openPositions =
-    positions?.filter((p) => p.status === "confirmed") ?? [];
+    positions?.filter((p) => p.status === "confirmed" && p.type !== "copy") ??
+    [];
   const closedPositions =
-    positions?.filter((p) => p.status === "closed") ?? [];
+    positions?.filter((p) => p.status === "closed" && p.type !== "copy") ?? [];
 
-  const totalCost = openPositions.reduce((sum, p) => sum + p.amountUsdc, 0);
+  const copyRowsValue = copyRows.reduce((sum, row) => {
+    const liveMultiplier =
+      row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
+    return sum + Math.max(0, row.stakeUsdc * liveMultiplier);
+  }, 0);
+  const openHoldingCount = openPositions.length + copyRows.length;
+
+  const totalCost =
+    openPositions.reduce((sum, p) => sum + p.amountUsdc, 0) +
+    copyRows.reduce((sum, row) => sum + row.stakeUsdc, 0);
   const positionsValue = openPositions.reduce(
     (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
     0,
-  );
+  ) + copyRowsValue;
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
   const totalNetWorth = positionsValue + (walletUsd ?? 0);
@@ -386,7 +396,7 @@ export default function PortfolioPage() {
                     OPEN
                   </div>
                   <div className="mt-0.5">
-                    <BigNum size={18}>{openPositions.length}</BigNum>
+                    <BigNum size={18}>{openHoldingCount}</BigNum>
                   </div>
                 </div>
                 <div
@@ -415,7 +425,7 @@ export default function PortfolioPage() {
                   </span>
                   <span>·</span>
                   <span>
-                    {openPositions.length} OPEN · {closedPositions.length} CLOSED
+                    {openHoldingCount} OPEN · {closedPositions.length} CLOSED
                   </span>
                 </div>
                 {!isXl && (
@@ -434,7 +444,7 @@ export default function PortfolioPage() {
               >
                 {(
                   [
-                    ["open", "Open", openPositions.length],
+                    ["open", "Open", openHoldingCount],
                     ["closed", "Closed", closedPositions.length],
                   ] as const
                 ).map(([key, label, count]) => {
@@ -478,7 +488,9 @@ export default function PortfolioPage() {
                     LOADING POSITIONS…
                   </div>
                 )}
-                {positions && visiblePositions.length === 0 && (
+                {positions &&
+                  visiblePositions.length === 0 &&
+                  !(tab === "open" && copyRows.length > 0) && (
                   <div className="py-12 text-center lg:col-span-2">
                     <Headline size={22}>
                       {tab === "open"
@@ -495,17 +507,9 @@ export default function PortfolioPage() {
                     </p>
                   </div>
                 )}
-                {visiblePositions.map((p) => (
-                  <PositionRow
-                    key={p.id}
-                    position={p}
-                    onClosed={load}
-                    onShared={load}
-                  />
-                ))}
                 {tab === "open" && copyRows.length > 0 && (
-                  <section className="mt-4 space-y-2 lg:col-span-2">
-                    <Stamp label="COPIES" value={`${copyRows.length}`} />
+                  <section className="space-y-2 lg:col-span-2">
+                    <Stamp label="OPEN TAILS" value={`${copyRows.length}`} />
                     {copyRows.map((row) => (
                       <CopyRow
                         key={row.betId}
@@ -515,6 +519,14 @@ export default function PortfolioPage() {
                     ))}
                   </section>
                 )}
+                {visiblePositions.map((p) => (
+                  <PositionRow
+                    key={p.id}
+                    position={p}
+                    onClosed={load}
+                    onShared={load}
+                  />
+                ))}
                 <button
                   onClick={logout}
                   className="mt-6 flex items-center justify-center gap-2 self-center text-[10px] font-black uppercase tracking-widest transition hover:opacity-100 lg:col-span-2"

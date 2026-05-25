@@ -13,6 +13,28 @@ function privySponsorError() {
 }
 
 describe("sendDepositWithSponsorFallback", () => {
+  it("sends without sponsorship by default", async () => {
+    const signAndSendTransaction = vi
+      .fn()
+      .mockResolvedValueOnce({ signature: "wallet-gas-signature" });
+
+    const result = await sendDepositWithSponsorFallback({
+      transaction: new Uint8Array([7, 8, 9]),
+      wallet: { address: "wallet-1" } as ConnectedStandardSolanaWallet,
+      signAndSendTransaction,
+    });
+
+    expect(result).toEqual({
+      signature: "wallet-gas-signature",
+      sponsored: false,
+    });
+    expect(signAndSendTransaction).toHaveBeenCalledOnce();
+    expect(signAndSendTransaction).toHaveBeenCalledWith({
+      transaction: new Uint8Array([7, 8, 9]),
+      wallet: { address: "wallet-1" },
+    });
+  });
+
   it("retries an unsupported sponsored send without sponsorship", async () => {
     const signAndSendTransaction = vi
       .fn()
@@ -25,6 +47,7 @@ describe("sendDepositWithSponsorFallback", () => {
       wallet: { address: "wallet-1" } as ConnectedStandardSolanaWallet,
       signAndSendTransaction,
       onSponsorFallback,
+      preferSponsored: true,
     });
 
     expect(result).toEqual({
@@ -53,6 +76,7 @@ describe("sendDepositWithSponsorFallback", () => {
       transaction: new Uint8Array([4, 5, 6]),
       wallet: { address: "wallet-1" } as ConnectedStandardSolanaWallet,
       signAndSendTransaction,
+      preferSponsored: true,
     });
 
     expect(result).toEqual({

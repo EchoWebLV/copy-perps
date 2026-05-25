@@ -65,8 +65,8 @@ async function getAtaUsdcBalance(
   }
 }
 
-// Returns a base64-encoded unsigned v0 tx. The client sends it through
-// Privy's sponsored Solana flow, so no server fee-payer key is needed.
+// Returns a base64-encoded unsigned v0 tx. The user's wallet is the fee payer;
+// the client signs and sends it before retrying the Pacifica order.
 export async function buildDepositTx(params: {
   userPubkey: PublicKey;
   amountUsdc: number;

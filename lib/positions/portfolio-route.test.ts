@@ -122,4 +122,52 @@ describe("GET /api/portfolio", () => {
       copyRows: [],
     });
   });
+
+  it("emits whale copy rows when the fill price was not returned", async () => {
+    mocks.selectBetsOrderBy.mockResolvedValue([
+      {
+        id: "copy-live",
+        userId: "user-1",
+        type: "copy",
+        amountUsdc: 5,
+        status: "confirmed",
+        meta: {
+          sourceType: "whale",
+          whaleId: "hyperliquid:0xf28e",
+          source: "hyperliquid",
+          sourceAccount: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
+          sourcePositionId: "hyperliquid:0xf28e:MON:short:30593",
+          leaderMarket: "MON",
+          leaderSide: "short",
+          leverage: 3,
+          autoCloseOnSourceClose: true,
+          userEntryPrice: null,
+          sourceEntryPriceAtCopy: 0.030593,
+          pacificaOrderId: 8894267526,
+          closeReason: null,
+        },
+        createdAt: new Date("2026-05-25T17:37:23.573Z"),
+      },
+    ]);
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      copyRows: [
+        {
+          betId: "copy-live",
+          market: "MON",
+          side: "short",
+          leverage: 3,
+          stakeUsdc: 5,
+          leaderAddress: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
+          whaleId: "hyperliquid:0xf28e",
+          autoCloseOnSourceClose: true,
+          botId: null,
+          botName: null,
+        },
+      ],
+    });
+  });
 });

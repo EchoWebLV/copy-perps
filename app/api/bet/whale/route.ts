@@ -331,6 +331,7 @@ export async function POST(request: Request) {
 
   let bet: typeof bets.$inferSelect;
   try {
+    const avgFillPrice = Number(fill.avg_fill_price);
     [bet] = await db
       .update(bets)
       .set({
@@ -344,9 +345,11 @@ export async function POST(request: Request) {
           leaderSide: position.side,
           leverage: effectiveLeverage,
           autoCloseOnSourceClose: body.autoCloseOnSourceClose,
-          userEntryPrice: Number(fill.avg_fill_price),
+          userEntryPrice: Number.isFinite(avgFillPrice)
+            ? avgFillPrice
+            : sizingPrice,
           sourceEntryPriceAtCopy: position.entryPrice,
-          pacificaOrderId: fill.order_id,
+          pacificaOrderId: fill.order_id ?? "unknown",
         }),
       })
       .where(eq(bets.id, pendingBet.id))

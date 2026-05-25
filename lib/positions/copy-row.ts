@@ -8,6 +8,9 @@ export interface CopySourceLike {
 
 function truncateAddress(address: string): string {
   if (address.length <= 8) return address;
+  if (address.startsWith("0x") && address.length > 10) {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 
@@ -17,5 +20,5 @@ export function formatCopySourceLabel(row: CopySourceLike): string {
   if (row.leaderUsername) return row.leaderUsername;
   if (row.leaderAddress) return truncateAddress(row.leaderAddress);
   if (row.botId) return row.botId;
-  return "Bot tail";
+  return "Copy tail";
 }

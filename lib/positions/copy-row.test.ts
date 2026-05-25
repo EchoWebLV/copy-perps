@@ -41,7 +41,15 @@ describe("formatCopySourceLabel", () => {
     ).toBe("9Gdm...h4kS");
   });
 
+  it("keeps the 0x prefix readable for Hyperliquid leader addresses", () => {
+    expect(
+      formatCopySourceLabel({
+        leaderAddress: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
+      }),
+    ).toBe("0xf28e...085f");
+  });
+
   it("falls back safely when old rows are missing source metadata", () => {
-    expect(formatCopySourceLabel({})).toBe("Bot tail");
+    expect(formatCopySourceLabel({})).toBe("Copy tail");
   });
 });

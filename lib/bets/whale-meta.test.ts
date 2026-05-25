@@ -64,6 +64,31 @@ describe("whale copy metadata", () => {
     ).toBeNull();
   });
 
+  it("parses live Pacifica order metadata with missing fill price", () => {
+    expect(
+      parseWhaleCopyMeta({
+        sourceType: "whale",
+        whaleId: "hyperliquid:0xf28e",
+        source: "hyperliquid",
+        sourceAccount: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
+        sourcePositionId: "hyperliquid:0xf28e:MON:short:30593",
+        leaderMarket: "MON",
+        leaderSide: "short",
+        leverage: 3,
+        autoCloseOnSourceClose: true,
+        userEntryPrice: null,
+        sourceEntryPriceAtCopy: 0.030593,
+        pacificaOrderId: 8894267526,
+        closeReason: null,
+      }),
+    ).toMatchObject({
+      leaderMarket: "MON",
+      autoCloseOnSourceClose: true,
+      userEntryPrice: null,
+      pacificaOrderId: 8894267526,
+    });
+  });
+
   it("returns null for unsupported whale sources", () => {
     expect(
       parseWhaleCopyMeta({
