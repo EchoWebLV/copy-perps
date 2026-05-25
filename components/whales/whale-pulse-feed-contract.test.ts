@@ -50,4 +50,15 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain("THESIS");
     expect(componentSource).not.toContain("RISK");
   });
+
+  it("keeps the mobile reaction controls on one row", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("flex-nowrap");
+    expect(componentSource).toContain("sm:flex-wrap");
+    expect(componentSource).toContain("sm:inline");
+  });
 });

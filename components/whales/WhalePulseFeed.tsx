@@ -436,7 +436,7 @@ function PulsePost({
           </div>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-wrap gap-2">
+            <div className="flex min-w-0 flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
               {PULSE_REACTIONS.map((reaction) => (
                 <ReactionButton
                   key={reaction}
@@ -528,7 +528,7 @@ function ReactionButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase transition active:scale-[0.97]"
+      className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
       style={{
         background: active ? `${color}24` : PANEL_2,
         color: active || label !== "Tailing" ? color : FG,
@@ -536,11 +536,21 @@ function ReactionButton({
       }}
     >
       {label === "Bullish" ? (
-        <Flame size={12} strokeWidth={3} style={{ color }} />
+        <Flame className="hidden sm:inline" size={12} strokeWidth={3} style={{ color }} />
       ) : label === "Bearish" ? (
-        <TrendingDown size={12} strokeWidth={3} style={{ color }} />
+        <TrendingDown
+          className="hidden sm:inline"
+          size={12}
+          strokeWidth={3}
+          style={{ color }}
+        />
       ) : (
-        <Zap size={12} strokeWidth={3} fill={active ? ACCENT : "none"} />
+        <Zap
+          className="hidden sm:inline"
+          size={12}
+          strokeWidth={3}
+          fill={active ? ACCENT : "none"}
+        />
       )}
       <span>{label}</span>
       <span style={{ color: active ? color : mutedColor }}>{count}</span>
@@ -568,14 +578,14 @@ function CommentsButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase transition active:scale-[0.97]"
+      className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
       style={{
         background: active ? `${ACCENT}24` : PANEL_2,
         color: active ? ACCENT : FG,
         border: `1px solid ${active ? `${ACCENT}70` : FAINT}`,
       }}
     >
-      <MessageCircle size={12} strokeWidth={3} />
+      <MessageCircle className="hidden sm:inline" size={12} strokeWidth={3} />
       <span>Comments</span>
       <span style={{ color: active ? ACCENT : DIM }}>{count}</span>
     </button>
