@@ -19,6 +19,7 @@ vi.mock("@/lib/solana/balance", () => ({
 import {
   PACIFICA_MIN_DEPOSIT_USDC,
   PacificaDepositSettlingError,
+  PacificaFundingRateLimitError,
   classifyRecentPacificaDeposit,
   planPacificaDepositTopUp,
   requiredPacificaDepositUsdc,
@@ -70,6 +71,13 @@ function mockRecentDeposit(amountUsdc: number) {
         ],
       },
     }),
+  });
+}
+
+function mockNoRecentDeposit() {
+  mocks.getConnection.mockReturnValue({
+    getSignaturesForAddress: vi.fn().mockResolvedValue([]),
+    getParsedTransaction: vi.fn(),
   });
 }
 
@@ -130,6 +138,24 @@ describe("Pacifica funding math", () => {
         leverage: 10,
       }),
     ).rejects.toBeInstanceOf(PacificaDepositSettlingError);
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+  });
+
+  it("does not request another deposit when Pacifica account reads are rate-limited", async () => {
+    mocks.getAccountInfo.mockRejectedValue(
+      new Error(
+        `Pacifica GET /account?account=${ACCOUNT} failed: HTTP 429`,
+      ),
+    );
+    mockNoRecentDeposit();
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 5,
+        leverage: 10,
+      }),
+    ).rejects.toBeInstanceOf(PacificaFundingRateLimitError);
     expect(mocks.buildDepositTx).not.toHaveBeenCalled();
   });
 });

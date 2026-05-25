@@ -12,6 +12,8 @@ import { planOnboarding } from "@/lib/bets/onboard";
 import {
   PacificaDepositPendingError,
   PacificaDepositSettlingError,
+  PacificaFundingRateLimitError,
+  isPacificaFundingRateLimitError,
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
 import { fetchOpenPositionForBot } from "@/lib/bots/paper";
@@ -45,6 +47,17 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
   if (err instanceof PacificaDepositSettlingError) {
     return NextResponse.json(
       { error: err.message, retryable: true, retryAfterMs: err.retryAfterMs },
+      { status: 409 },
+    );
+  }
+  if (isPacificaFundingRateLimitError(err)) {
+    return NextResponse.json(
+      {
+        error: "Pacifica is rate limiting balance checks. Retrying shortly.",
+        retryable: true,
+        retryAfterMs:
+          err instanceof PacificaFundingRateLimitError ? err.retryAfterMs : 5000,
+      },
       { status: 409 },
     );
   }

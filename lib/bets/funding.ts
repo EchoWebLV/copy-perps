@@ -30,6 +30,24 @@ export class PacificaDepositSettlingError extends Error {
   }
 }
 
+export class PacificaFundingRateLimitError extends Error {
+  retryAfterMs = 5000;
+
+  constructor(public cause: unknown) {
+    super(
+      "Pacifica is rate limiting balance checks. Waiting before retrying.",
+    );
+    this.name = "PacificaFundingRateLimitError";
+  }
+}
+
+export function isPacificaFundingRateLimitError(err: unknown): boolean {
+  if (err instanceof PacificaFundingRateLimitError) return true;
+  return /Pacifica GET \/[^\s]+ failed: HTTP 429|HTTP 429|rate.?limit/i.test(
+    String(err),
+  );
+}
+
 function roundUpCents(value: number): number {
   if (value <= 0) return 0;
   return Math.ceil((value - 1e-9) * 100) / 100;
@@ -132,6 +150,11 @@ export async function getPacificaAvailableToSpendUsdc(
     return Number.isFinite(available) ? Math.max(0, available) : 0;
   } catch (err) {
     if (/account not found/i.test(String(err))) return null;
+    if (isPacificaFundingRateLimitError(err)) {
+      throw err instanceof PacificaFundingRateLimitError
+        ? err
+        : new PacificaFundingRateLimitError(err);
+    }
     throw err;
   }
 }

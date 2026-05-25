@@ -15,6 +15,17 @@ const mocks = vi.hoisted(() => ({
       this.name = "PacificaDepositSettlingError";
     }
   },
+  PacificaFundingRateLimitError: class PacificaFundingRateLimitError extends Error {
+    retryAfterMs = 5000;
+
+    constructor(public cause: unknown) {
+      super("rate limited");
+      this.name = "PacificaFundingRateLimitError";
+    }
+  },
+  isPacificaFundingRateLimitError: vi.fn((err: unknown) =>
+    /HTTP 429|rate.?limit/i.test(String(err)),
+  ),
   verifyPrivyRequest: vi.fn(),
   ensureUser: vi.fn(),
   getAgentWallet: vi.fn(),
@@ -49,6 +60,8 @@ vi.mock("@/lib/bets/onboard", () => ({
 vi.mock("@/lib/bets/funding", () => ({
   PacificaDepositPendingError: mocks.PacificaDepositPendingError,
   PacificaDepositSettlingError: mocks.PacificaDepositSettlingError,
+  PacificaFundingRateLimitError: mocks.PacificaFundingRateLimitError,
+  isPacificaFundingRateLimitError: mocks.isPacificaFundingRateLimitError,
   planPacificaDepositTopUp: mocks.planPacificaDepositTopUp,
 }));
 vi.mock("@/lib/bots/paper", () => ({

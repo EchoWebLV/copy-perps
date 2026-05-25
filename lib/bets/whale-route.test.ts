@@ -29,6 +29,17 @@ const mocks = vi.hoisted(() => {
         this.name = "PacificaDepositSettlingError";
       }
     },
+    PacificaFundingRateLimitError: class PacificaFundingRateLimitError extends Error {
+      retryAfterMs = 5000;
+
+      constructor(public cause: unknown) {
+        super("rate limited");
+        this.name = "PacificaFundingRateLimitError";
+      }
+    },
+    isPacificaFundingRateLimitError: vi.fn((err: unknown) =>
+      /HTTP 429|rate.?limit/i.test(String(err)),
+    ),
     whaleSocialEnabled: vi.fn(),
     verifyPrivyRequest: vi.fn(),
     ensureUser: vi.fn(),
@@ -82,6 +93,8 @@ vi.mock("@/lib/bets/onboard", () => ({
 vi.mock("@/lib/bets/funding", () => ({
   PacificaDepositPendingError: mocks.PacificaDepositPendingError,
   PacificaDepositSettlingError: mocks.PacificaDepositSettlingError,
+  PacificaFundingRateLimitError: mocks.PacificaFundingRateLimitError,
+  isPacificaFundingRateLimitError: mocks.isPacificaFundingRateLimitError,
   planPacificaDepositTopUp: mocks.planPacificaDepositTopUp,
 }));
 vi.mock("@/lib/bets/copy-guard", () => ({
@@ -474,6 +487,31 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
     expect(mocks.releaseTailReservation).not.toHaveBeenCalled();
+  });
+
+  it("treats Pacifica funding 429s as retryable instead of hard failing", async () => {
+    mocks.planPacificaDepositTopUp.mockRejectedValue(
+      new Error(
+        "Pacifica GET /account?account=wallet-1 failed: HTTP 429",
+      ),
+    );
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      retryable: true,
+      retryAfterMs: expect.any(Number),
+    });
+    expect(mocks.reserveTailOnMarket).not.toHaveBeenCalled();
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 
   it("returns prepare error when pending ledger insert returns no row", async () => {
