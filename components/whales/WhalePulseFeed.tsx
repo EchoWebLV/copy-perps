@@ -20,6 +20,10 @@ import {
   RED,
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
+import {
+  splitPulseHeadline,
+  type PulseHeadlineTone,
+} from "./pulse-headline";
 import { buildPulseItems, type PulseItem } from "./pulse-items";
 import {
   getPulseReactionTone,
@@ -361,7 +365,7 @@ function PulsePost({
             className="mt-2 text-[18px] font-black uppercase leading-tight"
             style={{ color: FG }}
           >
-            {item.headline}
+            <PulseHeadlineText headline={item.headline} />
           </h2>
 
           <p
@@ -485,6 +489,25 @@ function PulsePost({
       </article>
     </li>
   );
+}
+
+function PulseHeadlineText({ headline }: { headline: string }) {
+  return (
+    <>
+      {splitPulseHeadline(headline).map((part, index) => (
+        <span
+          key={`${part.text}:${index}`}
+          style={part.tone ? { color: pulseHeadlineColor(part.tone) } : undefined}
+        >
+          {part.text}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function pulseHeadlineColor(tone: PulseHeadlineTone): string {
+  return tone === "green" ? GREEN : RED;
 }
 
 function ReactionButton({
