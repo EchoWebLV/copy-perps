@@ -115,18 +115,32 @@ describe("buildPulseItems", () => {
     );
   });
 
-  it("sorts items by descending pulse score", () => {
+  it("sorts items by newest opened position before pulse score", () => {
     const items = buildPulseItems(
       [
-        position({ positionId: "small", notionalUsd: 80_000, openedAtMs: NOW - 50 * 60_000 }),
-        position({ positionId: "large", notionalUsd: 5_000_000, openedAtMs: NOW - 2 * 60_000 }),
+        position({
+          positionId: "older-hot",
+          leverage: 40,
+          notionalUsd: 5_000_000,
+          openedAtMs: NOW - 4 * 60 * 60_000,
+          unrealizedPnlPct: 300,
+        }),
+        position({
+          positionId: "newer-cool",
+          notionalUsd: 80_000,
+          openedAtMs: NOW - 5 * 60_000,
+          unrealizedPnlPct: 26,
+        }),
       ],
       NOW,
     );
 
     expect(items.length).toBeGreaterThan(1);
+    expect(items[0]?.position.positionId).toBe("newer-cool");
     for (let i = 1; i < items.length; i += 1) {
-      expect(items[i - 1]?.score).toBeGreaterThanOrEqual(items[i]?.score ?? 0);
+      const previous = items[i - 1]?.position.openedAtMs ?? 0;
+      const current = items[i]?.position.openedAtMs ?? 0;
+      expect(previous).toBeGreaterThanOrEqual(current);
     }
   });
 

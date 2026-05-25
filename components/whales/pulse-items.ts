@@ -33,8 +33,16 @@ export function buildPulseItems(
 ): PulseItem[] {
   return positions
     .flatMap((signal) => itemsForPosition(signal.payload, nowMs))
-    .sort((a, b) => b.score - a.score)
+    .sort(comparePulseItems)
     .slice(0, MAX_ITEMS);
+}
+
+function comparePulseItems(a: PulseItem, b: PulseItem): number {
+  const openedDelta = b.position.openedAtMs - a.position.openedAtMs;
+  if (openedDelta !== 0) return openedDelta;
+  const scoreDelta = b.score - a.score;
+  if (scoreDelta !== 0) return scoreDelta;
+  return a.id.localeCompare(b.id);
 }
 
 function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[] {
