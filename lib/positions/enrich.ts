@@ -76,6 +76,20 @@ export async function enrichBet(
     base.leverage = meta.whaleLeverage as number | undefined;
     base.notionalUsd = meta.notionalUsd as number | undefined;
     base.whaleAddress = meta.whaleAddress as string | undefined;
+  } else if (bet.type === "copy") {
+    const asset = meta.leaderMarket as string | undefined;
+    const leverage =
+      typeof meta.leverage === "number" && Number.isFinite(meta.leverage)
+        ? meta.leverage
+        : undefined;
+    base.asset = asset;
+    base.ticker = asset;
+    base.side = meta.leaderSide as "long" | "short" | undefined;
+    base.leverage = leverage;
+    base.notionalUsd = leverage == null ? undefined : bet.amountUsdc * leverage;
+    base.whaleAddress =
+      (meta.leaderAddress as string | undefined) ??
+      (meta.sourceAccount as string | undefined);
   } else if (bet.type === "prediction") {
     base.question = meta.question as string | undefined;
     base.outcome = meta.outcome as "yes" | "no" | undefined;

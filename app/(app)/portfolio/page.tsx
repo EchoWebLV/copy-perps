@@ -32,6 +32,7 @@ import {
 } from "@/lib/privy/use-solana-wallet";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
+import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -153,15 +154,9 @@ export default function PortfolioPage() {
     };
   }, [authenticated, load]);
 
-  // Pending and failed bets don't represent a real position — exclude entirely.
-  // Closed bets' proceeds are already back in the wallet, so they don't belong
-  // in "In positions" either; counting them double-counts. Stats now reflect
-  // only currently-held (confirmed) positions.
-  const openPositions =
-    positions?.filter((p) => p.status === "confirmed" && p.type !== "copy") ??
-    [];
-  const closedPositions =
-    positions?.filter((p) => p.status === "closed" && p.type !== "copy") ?? [];
+  // Open copy trades render through the live copy card; closed copy trades
+  // still belong in the closed ledger.
+  const { openPositions, closedPositions } = splitPortfolioPositions(positions);
 
   const legacyPositionsValue = openPositions.reduce(
     (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),

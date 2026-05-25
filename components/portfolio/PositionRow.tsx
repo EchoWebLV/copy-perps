@@ -73,13 +73,15 @@ export function PositionRow({
   const isMeme = position.type === "meme";
   const isPrediction = position.type === "prediction";
   const isPerp = position.type === "perp";
+  const isCopy = position.type === "copy";
+  const isPerpLike = isPerp || isCopy;
 
   const title = isMeme
     ? (position.ticker ?? position.type)
     : isPrediction
       ? (position.question ?? "")
-      : isPerp
-        ? `${position.asset} ${position.leverage ?? 1}×`
+      : isPerpLike
+        ? `${position.asset ?? position.ticker ?? "Position"} ${position.leverage ?? 1}x`
         : position.type;
 
   const subtitleEl = isMeme ? (
@@ -99,7 +101,7 @@ export function PositionRow({
       {position.outcome.toUpperCase()}
       {position.contracts ? ` · ${position.contracts}` : ""}
     </span>
-  ) : isPerp && position.side ? (
+  ) : isPerpLike && position.side ? (
     <span
       className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
         position.side === "long"
