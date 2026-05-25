@@ -22,6 +22,7 @@ import {
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import { buildPulseItems, type PulseItem } from "./pulse-items";
 import {
+  getPulseReactionTone,
   PULSE_REACTIONS,
   type PulseComment,
   type PulseCommentProfile,
@@ -497,28 +498,38 @@ function ReactionButton({
   active: boolean;
   onClick: () => void;
 }) {
+  const color = pulseReactionColor(label);
+  const mutedColor = label === "Tailing" ? DIM : `${color}cc`;
+
   return (
     <button
       type="button"
       onClick={onClick}
       className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase transition active:scale-[0.97]"
       style={{
-        background: active ? `${ACCENT}24` : PANEL_2,
-        color: active ? ACCENT : FG,
-        border: `1px solid ${active ? `${ACCENT}70` : FAINT}`,
+        background: active ? `${color}24` : PANEL_2,
+        color: active || label !== "Tailing" ? color : FG,
+        border: `1px solid ${active ? `${color}70` : label === "Tailing" ? FAINT : `${color}55`}`,
       }}
     >
       {label === "Bullish" ? (
-        <Flame size={12} strokeWidth={3} />
+        <Flame size={12} strokeWidth={3} style={{ color }} />
       ) : label === "Bearish" ? (
-        <TrendingDown size={12} strokeWidth={3} style={{ color: RED }} />
+        <TrendingDown size={12} strokeWidth={3} style={{ color }} />
       ) : (
         <Zap size={12} strokeWidth={3} fill={active ? ACCENT : "none"} />
       )}
       <span>{label}</span>
-      <span style={{ color: active ? ACCENT : DIM }}>{count}</span>
+      <span style={{ color: active ? color : mutedColor }}>{count}</span>
     </button>
   );
+}
+
+function pulseReactionColor(reaction: PulseReaction): string {
+  const tone = getPulseReactionTone(reaction);
+  if (tone === "green") return GREEN;
+  if (tone === "red") return RED;
+  return ACCENT;
 }
 
 function CommentsButton({

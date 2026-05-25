@@ -6,6 +6,16 @@ export const PULSE_REACTIONS: PulseReaction[] = [
   "Bearish",
 ];
 
+export type PulseReactionTone = "accent" | "green" | "red";
+
+export function getPulseReactionTone(
+  reaction: PulseReaction,
+): PulseReactionTone {
+  if (reaction === "Bullish") return "green";
+  if (reaction === "Bearish") return "red";
+  return "accent";
+}
+
 export interface PulseComment {
   id: string;
   author: string;
