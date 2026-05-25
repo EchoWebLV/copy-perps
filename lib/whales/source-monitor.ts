@@ -1,5 +1,10 @@
 import { CURATED_WHALES } from "@/lib/hyperliquid/whales";
 import type { MirrorCloseSweepOptions } from "@/lib/bets/mirror-close";
+import {
+  patchMonitorStatus,
+  recordMonitorError,
+} from "@/lib/ops/monitor-store";
+import type { MonitorSocketStatus } from "@/lib/ops/monitor-status";
 import { CURATED_PACIFICA_WHALES } from "./curated";
 
 const HYPERLIQUID_WS_URL =
@@ -26,6 +31,20 @@ export interface SourceMonitorHandle {
 }
 
 type WebSocketCtor = new (url: string) => WebSocket;
+
+function writeMonitorPatchBestEffort(
+  patch: Parameters<typeof patchMonitorStatus>[0],
+): void {
+  void patchMonitorStatus(patch).catch((err) => {
+    console.warn("[whale-source-ws] monitor status write failed:", err);
+  });
+}
+
+function recordMonitorErrorBestEffort(component: string, message: string): void {
+  void recordMonitorError({ component, message }).catch((err) => {
+    console.warn("[whale-source-ws] monitor error write failed:", err);
+  });
+}
 
 export function hyperliquidUserFillsSubscription(user: string): JsonRecord {
   return {
@@ -143,7 +162,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function managedSocket(args: {
   name: string;
+  source: MonitorSocketStatus["source"];
   url: string;
+  accounts: number;
   websocketCtor: WebSocketCtor;
   onOpen: (socket: WebSocket) => void;
   onMessage: (message: unknown) => void;
@@ -186,6 +207,21 @@ function managedSocket(args: {
     socket.onopen = () => {
       attempts = 0;
       console.log(`[whale-source-ws] ${args.name} connected`);
+      writeMonitorPatchBestEffort({
+        websockets: {
+          sockets: [
+            {
+              name: args.name,
+              source: args.source,
+              connected: true,
+              accounts: args.accounts,
+              connectedAt: new Date().toISOString(),
+              reconnects: attempts,
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      });
       args.onOpen(socket!);
       if (args.heartbeat) {
         heartbeatTimer = setInterval(() => {
@@ -198,10 +234,44 @@ function managedSocket(args: {
     };
     socket.onerror = (event) => {
       console.warn(`[whale-source-ws] ${args.name} error:`, event);
+      recordMonitorErrorBestEffort(
+        "source-websocket",
+        `${args.name} websocket error`,
+      );
+      writeMonitorPatchBestEffort({
+        websockets: {
+          sockets: [
+            {
+              name: args.name,
+              source: args.source,
+              connected: socket?.readyState === 1,
+              accounts: args.accounts,
+              lastError: "websocket error",
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      });
     };
     socket.onclose = () => {
       clearTimers();
       socket = null;
+      const at = new Date().toISOString();
+      writeMonitorPatchBestEffort({
+        websockets: {
+          sockets: [
+            {
+              name: args.name,
+              source: args.source,
+              connected: false,
+              accounts: args.accounts,
+              disconnectedAt: at,
+              reconnects: attempts,
+              updatedAt: at,
+            },
+          ],
+        },
+      });
       if (!stopped) {
         console.warn(`[whale-source-ws] ${args.name} closed, reconnecting`);
         scheduleReconnect();
@@ -227,7 +297,10 @@ async function defaultReconcile(args: ReconcileArgs): Promise<void> {
     import("./refresh"),
   ]);
   const [sweep, refresh] = await Promise.allSettled([
-    runMirrorCloseSweep({ forceSourceFetch: args.forceSourceFetch }),
+    runMirrorCloseSweep({
+      forceSourceFetch: args.forceSourceFetch,
+      reason: args.reason,
+    }),
     refreshWhales(),
   ]);
 
@@ -241,10 +314,18 @@ async function defaultReconcile(args: ReconcileArgs): Promise<void> {
     }
   } else {
     console.error("[whale-source-ws] close sweep failed:", sweep.reason);
+    await recordMonitorError({
+      component: "source-reconcile",
+      message: `close sweep failed: ${String(sweep.reason)}`,
+    }).catch(() => undefined);
   }
 
   if (refresh.status === "rejected") {
     console.warn("[whale-source-ws] refresh after source event failed:", refresh.reason);
+    await recordMonitorError({
+      component: "source-reconcile",
+      message: `refresh failed: ${String(refresh.reason)}`,
+    }).catch(() => undefined);
   }
 }
 
@@ -282,7 +363,9 @@ export function startWhaleSourceMonitor(args: {
     handles.push(
       managedSocket({
         name: `hyperliquid:${index + 1}`,
+        source: "hyperliquid",
         url: HYPERLIQUID_WS_URL,
+        accounts: accounts.length,
         websocketCtor,
         onOpen: (socket) => {
           for (const account of accounts) {
@@ -291,6 +374,23 @@ export function startWhaleSourceMonitor(args: {
         },
         onMessage: (message) => {
           if (isHyperliquidPositionEvent(message)) {
+            const at = new Date().toISOString();
+            writeMonitorPatchBestEffort({
+              websockets: {
+                lastSourceEventAt: at,
+                lastSourceEventReason: "hyperliquid userFills",
+                sockets: [
+                  {
+                    name: `hyperliquid:${index + 1}`,
+                    source: "hyperliquid",
+                    connected: true,
+                    accounts: accounts.length,
+                    lastEventAt: at,
+                    updatedAt: at,
+                  },
+                ],
+              },
+            });
             trigger(`hyperliquid userFills`);
           }
         },
@@ -309,7 +409,9 @@ export function startWhaleSourceMonitor(args: {
     handles.push(
       managedSocket({
         name: `pacifica:${index + 1}`,
+        source: "pacifica",
         url: PACIFICA_WS_URL,
+        accounts: accounts.length,
         websocketCtor,
         onOpen: (socket) => {
           for (const account of accounts) {
@@ -318,6 +420,23 @@ export function startWhaleSourceMonitor(args: {
         },
         onMessage: (message) => {
           if (isPacificaPositionEvent(message)) {
+            const at = new Date().toISOString();
+            writeMonitorPatchBestEffort({
+              websockets: {
+                lastSourceEventAt: at,
+                lastSourceEventReason: "pacifica account_positions",
+                sockets: [
+                  {
+                    name: `pacifica:${index + 1}`,
+                    source: "pacifica",
+                    connected: true,
+                    accounts: accounts.length,
+                    lastEventAt: at,
+                    updatedAt: at,
+                  },
+                ],
+              },
+            });
             trigger(`pacifica account_positions`);
           }
         },

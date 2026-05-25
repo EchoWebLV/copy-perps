@@ -35,6 +35,12 @@ export default function AdminLayout({
               All bots
             </Link>
             <Link
+              href="/admin/monitor"
+              className="text-zinc-300 hover:text-white"
+            >
+              Monitor
+            </Link>
+            <Link
               href="/admin/bots/new"
               className="text-emerald-400 hover:text-emerald-300"
             >

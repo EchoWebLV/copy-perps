@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getPositions: vi.fn(),
   getWhaleLivePositionsForAccount: vi.fn(),
   openBets: [] as Array<Record<string, unknown>>,
+  patchMonitorStatus: vi.fn(),
   realizedPnlForOrder: vi.fn(),
   updates: [] as Array<Record<string, unknown>>,
 }));
@@ -32,6 +33,10 @@ vi.mock("@/lib/pacifica/orders", () => ({
 
 vi.mock("@/lib/bets/copy-pnl", () => ({
   realizedPnlForOrder: mocks.realizedPnlForOrder,
+}));
+
+vi.mock("@/lib/ops/monitor-store", () => ({
+  patchMonitorStatus: mocks.patchMonitorStatus,
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -136,6 +141,7 @@ describe("runMirrorCloseSweep whale source closes", () => {
       time: Date.parse("2026-05-23T12:00:00.000Z"),
     });
     mocks.closeCopyOrder.mockResolvedValue({ order_id: "close-order-1" });
+    mocks.patchMonitorStatus.mockResolvedValue({});
     mocks.realizedPnlForOrder.mockResolvedValue(2);
   });
 
@@ -342,6 +348,18 @@ describe("runMirrorCloseSweep whale source closes", () => {
         symbol: "BTC",
         positionSide: "long",
         amountBase: "0.25",
+      }),
+    );
+    expect(mocks.patchMonitorStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoClose: expect.objectContaining({
+          lastResult: expect.objectContaining({
+            reason: "scheduled sweep",
+            forceSourceFetch: true,
+            closesAttempted: 1,
+            closesSucceeded: 1,
+          }),
+        }),
       }),
     );
   });

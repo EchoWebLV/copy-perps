@@ -8,6 +8,7 @@ import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
+import { patchMonitorStatus } from "@/lib/ops/monitor-store";
 import { makeWhalePositionId } from "@/lib/whales/identity";
 import { getWhaleLivePositionsForAccount } from "@/lib/whales/live-cache";
 import {
@@ -53,6 +54,7 @@ interface MirrorResult {
 
 export interface MirrorCloseSweepOptions {
   forceSourceFetch?: boolean;
+  reason?: string;
 }
 
 type OpenBetRow = {
@@ -471,6 +473,27 @@ export async function runMirrorCloseSweep(
 
   // Whale-source close path.
   await closeWhaleFollowers(openBets, result, options);
+
+  await patchMonitorStatus({
+    autoClose: {
+      lastSweepAt: new Date().toISOString(),
+      lastResult: {
+        reason: options.reason ?? "scheduled sweep",
+        forceSourceFetch: options.forceSourceFetch === true,
+        scannedLeaders: result.scannedLeaders,
+        closesAttempted: result.closesAttempted,
+        closesSucceeded: result.closesSucceeded,
+        errors: result.errors,
+      },
+    },
+    recentErrors: result.errors.map((error) => ({
+      component: "auto-close",
+      message: `bet ${error.betId}: ${error.message}`,
+      at: new Date().toISOString(),
+    })),
+  }).catch((err) => {
+    console.warn("[mirror-close] monitor status write failed:", err);
+  });
 
   return result;
 }
