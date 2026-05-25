@@ -173,6 +173,7 @@ export interface WhalePositionSignal extends BaseSignal {
     market: string;
     side: "long" | "short";
     leverage: number;
+    maxLeverage?: number | null;
     amountBase: number;
     notionalUsd: number;
     entryPrice: number;

@@ -177,15 +177,32 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
-  const requestedLeverage = body.leverage ?? position.leverage;
+  const marketInfo = await getMarketBySymbol(position.market);
+  if (!marketInfo) {
+    const error =
+      position.source === "hyperliquid"
+        ? `${position.market} is not available on Pacifica for copy trading`
+        : `unknown Pacifica market: ${position.market}`;
+    return NextResponse.json(
+      { error },
+      { status: 409 },
+    );
+  }
+  const parsedMarketMaxLeverage = Number(marketInfo.max_leverage);
+  const marketMaxLeverage =
+    Number.isFinite(parsedMarketMaxLeverage) && parsedMarketMaxLeverage >= 1
+      ? Math.floor(parsedMarketMaxLeverage)
+      : 1;
+  const requestedLeverage =
+    body.leverage ?? Math.min(position.leverage, marketMaxLeverage);
   if (
     !Number.isFinite(requestedLeverage) ||
     requestedLeverage < 1 ||
-    requestedLeverage > position.leverage
+    requestedLeverage > marketMaxLeverage
   ) {
     return NextResponse.json(
       {
-        error: `leverage must be between 1x and source leverage ${position.leverage}x`,
+        error: `leverage must be between 1x and market max ${marketMaxLeverage}x`,
       },
       { status: 400 },
     );
@@ -200,17 +217,6 @@ export async function POST(request: Request) {
   const clamped = await clampLeverageForNotional(position.market, userNotional);
   const effectiveLeverage = Math.min(requestedLeverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
-  const marketInfo = await getMarketBySymbol(position.market);
-  if (!marketInfo) {
-    const error =
-      position.source === "hyperliquid"
-        ? `${position.market} is not available on Pacifica for copy trading`
-        : `unknown Pacifica market: ${position.market}`;
-    return NextResponse.json(
-      { error },
-      { status: 409 },
-    );
-  }
   const sizingPrice = await resolveSizingPrice(position);
   if (!sizingPrice) {
     return NextResponse.json(

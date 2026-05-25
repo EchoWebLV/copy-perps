@@ -184,10 +184,11 @@ describe("POST /api/bet/whale", () => {
     mocks.getWhaleLivePositionById.mockResolvedValue(openPacificaSource());
     mocks.hasOpenTailOnMarket.mockResolvedValue(false);
     mocks.getMark.mockResolvedValue(2000);
-    mocks.clampLeverageForNotional.mockResolvedValue(5);
+    mocks.clampLeverageForNotional.mockResolvedValue(50);
     mocks.getMarketBySymbol.mockResolvedValue({
       symbol: "ETH",
       lot_size: "0.001",
+      max_leverage: 50,
     });
     mocks.planPacificaDepositTopUp.mockResolvedValue(null);
     mocks.reserveTailOnMarket.mockResolvedValue(true);
@@ -196,13 +197,13 @@ describe("POST /api/bet/whale", () => {
     mocks.openCopyOrder.mockResolvedValue({
       order_id: "order-1",
       avg_fill_price: "2010.50",
-      filled_amount: "0.025",
+      filled_amount: "0.035",
       side: "bid",
     });
     mocks.closeCopyOrder.mockResolvedValue({
       order_id: "close-order-1",
       avg_fill_price: "2009.50",
-      filled_amount: "0.025",
+      filled_amount: "0.035",
       side: "ask",
     });
     mocks.insertValues.mockReturnValue({
@@ -252,7 +253,7 @@ describe("POST /api/bet/whale", () => {
       expect.objectContaining({
         symbol: "ETH",
         side: "long",
-        amountBase: "0.025",
+        amountBase: "0.035",
       }),
     );
     expect(mocks.insertValues).toHaveBeenCalledTimes(1);
@@ -293,7 +294,7 @@ describe("POST /api/bet/whale", () => {
       fill: {
         orderId: "order-1",
         avgFillPrice: "2010.50",
-        filledAmount: "0.025",
+        filledAmount: "0.035",
         side: "bid",
       },
       source: {
@@ -301,7 +302,7 @@ describe("POST /api/bet/whale", () => {
         displayName: "Whale ABC",
         asset: "ETH",
         side: "long",
-        leverage: 5,
+        leverage: 7,
         autoCloseOnSourceClose: true,
       },
     });
@@ -348,7 +349,45 @@ describe("POST /api/bet/whale", () => {
     });
   });
 
-  it("rejects whale copy leverage above the source leverage", async () => {
+  it("opens a whale copy with requested leverage above source up to market max", async () => {
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        leverage: 9,
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.clampLeverageForNotional).toHaveBeenCalledWith("ETH", 90);
+    expect(mocks.openCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountBase: "0.045",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          leverage: 9,
+        }),
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      source: {
+        leverage: 9,
+      },
+    });
+  });
+
+  it("rejects whale copy leverage above the Pacifica market max", async () => {
+    mocks.getMarketBySymbol.mockResolvedValue({
+      symbol: "ETH",
+      lot_size: "0.001",
+      max_leverage: 8,
+    });
+
     const response = await POST(
       whaleRequest({
         positionId: "source-pos-1",
@@ -361,8 +400,9 @@ describe("POST /api/bet/whale", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: "leverage must be between 1x and source leverage 7x",
+      error: "leverage must be between 1x and market max 8x",
     });
+    expect(mocks.clampLeverageForNotional).not.toHaveBeenCalled();
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 
@@ -385,7 +425,7 @@ describe("POST /api/bet/whale", () => {
       expect.objectContaining({
         symbol: "ETH",
         side: "long",
-        amountBase: "0.020",
+        amountBase: "0.028",
       }),
     );
     expect(mocks.insertValues).toHaveBeenCalledWith(
@@ -416,7 +456,7 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.getMark).toHaveBeenCalledWith("ETH");
     expect(mocks.openCopyOrder).toHaveBeenCalledWith(
       expect.objectContaining({
-        amountBase: "0.020",
+        amountBase: "0.028",
       }),
     );
   });
@@ -566,7 +606,7 @@ describe("POST /api/bet/whale", () => {
         expect.objectContaining({
           symbol: "ETH",
           positionSide: "long",
-          amountBase: "0.025",
+          amountBase: "0.035",
         }),
       );
       expect(mocks.updateSet).toHaveBeenCalledWith(
@@ -605,7 +645,7 @@ describe("POST /api/bet/whale", () => {
         expect.objectContaining({
           symbol: "ETH",
           positionSide: "long",
-          amountBase: "0.025",
+          amountBase: "0.035",
         }),
       );
       expect(mocks.updateSet).toHaveBeenCalledWith(
@@ -645,7 +685,7 @@ describe("POST /api/bet/whale", () => {
         expect.objectContaining({
           symbol: "ETH",
           positionSide: "long",
-          amountBase: "0.025",
+          amountBase: "0.035",
         }),
       );
       expect(mocks.updateSet).toHaveBeenCalledWith(

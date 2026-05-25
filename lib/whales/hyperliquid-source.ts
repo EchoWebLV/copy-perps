@@ -64,6 +64,7 @@ export function mapHyperliquidPosition(args: {
   currentMark: number | null;
   now?: Date;
   copyableOnPacifica?: boolean;
+  pacificaMaxLeverage?: number | null;
 }): WhalePositionRecord {
   const position = args.assetPosition.position;
   const side = hyperliquidSideToWhaleSide(position.szi);
@@ -124,6 +125,8 @@ export function mapHyperliquidPosition(args: {
       ...args.assetPosition,
       sourceKind: "hyperliquid",
       copyableOnPacifica: args.copyableOnPacifica ?? true,
+      maxLeverage: args.pacificaMaxLeverage ?? null,
+      pacificaMaxLeverage: args.pacificaMaxLeverage ?? null,
     } as unknown as Record<string, unknown>,
     lastSeenAt: now,
   };

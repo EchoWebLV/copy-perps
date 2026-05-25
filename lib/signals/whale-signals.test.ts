@@ -203,6 +203,7 @@ describe("whale signals", () => {
         market: "BTC",
         side: "long",
         leverage: 10,
+        maxLeverage: 10,
         amountBase: 0.5,
         notionalUsd: 450_000,
         entryPrice: 60_000,
@@ -241,6 +242,24 @@ describe("whale signals", () => {
         },
       },
     });
+  });
+
+  it("passes Pacifica market max leverage through whale position payloads", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        positions: [
+          position({
+            raw: { pacificaMaxLeverage: 50 },
+          }),
+        ],
+      }),
+    );
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const signals = await buildWhalePositionSignals();
+
+    expect(signals[0]?.payload.maxLeverage).toBe(50);
   });
 
   it("groups position signals into sorted trader signals", async () => {

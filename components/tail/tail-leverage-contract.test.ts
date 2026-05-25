@@ -15,6 +15,8 @@ describe("TailModal single whale leverage control", () => {
     expect(source).toContain("Decrease leverage");
     expect(source).toContain("Increase leverage");
     expect(source).toContain("setWhaleLeverage");
+    expect(source).toContain("tailLeverageBounds");
+    expect(source).toContain("Max {maxWhaleLeverage}x");
   });
 
   it("sends the selected leverage only with whale copy requests", () => {

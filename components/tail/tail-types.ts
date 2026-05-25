@@ -3,6 +3,7 @@ export type WhaleTailPosition = {
   asset: string;
   side: "long" | "short";
   leverage: number;
+  maxLeverage?: number | null;
   entryMark: number;
   currentMark: number | null;
   stale: boolean;
@@ -21,6 +22,7 @@ export type TailSource =
       asset: string;
       side: "long" | "short";
       leverage: number;
+      maxLeverage?: number | null;
       entryMark: number;
       positionId?: string;
     }
@@ -34,6 +36,7 @@ export type TailSource =
       asset: string;
       side: "long" | "short";
       leverage: number;
+      maxLeverage?: number | null;
       entryMark: number;
       currentMark: number | null;
       stale: boolean;

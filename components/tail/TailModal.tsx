@@ -28,6 +28,7 @@ import {
   formatTailSigningError,
   sendDepositWithSponsorFallback,
 } from "./deposit-signing";
+import { clampTailLeverage, tailLeverageBounds } from "./tail-leverage";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -99,11 +100,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function clampTailLeverage(value: number, max: number): number {
-  if (!Number.isFinite(value)) return 1;
-  return Math.min(Math.max(Math.round(value), 1), Math.max(1, max));
-}
-
 class TailRequestError extends Error {
   constructor(
     message: string,
@@ -147,10 +143,18 @@ export function TailModal({ open, onClose, source }: Props) {
     copyableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
   const isSingleWhalePosition =
     source?.kind === "whale" && whaleTailPositions.length === 1;
-  const maxWhaleLeverage =
+  const sourceWhaleLeverage =
     source?.kind === "whale"
       ? Math.max(1, activeWhalePosition?.leverage ?? source.leverage)
       : 1;
+  const whaleLeverageBounds = tailLeverageBounds({
+    sourceLeverage: sourceWhaleLeverage,
+    marketMaxLeverage:
+      source?.kind === "whale"
+        ? activeWhalePosition?.maxLeverage ?? source.maxLeverage
+        : null,
+  });
+  const maxWhaleLeverage = whaleLeverageBounds.maxLeverage;
   const boundedWhaleLeverage = clampTailLeverage(
     whaleLeverage,
     maxWhaleLeverage,
@@ -178,7 +182,11 @@ export function TailModal({ open, onClose, source }: Props) {
     setAutoCloseOnSourceClose(source?.kind === "whale");
     setWhaleLeverage(
       source?.kind === "whale"
-        ? Math.max(1, source.positions[0]?.leverage ?? source.leverage)
+        ? tailLeverageBounds({
+            sourceLeverage: source.positions[0]?.leverage ?? source.leverage,
+            marketMaxLeverage:
+              source.positions[0]?.maxLeverage ?? source.maxLeverage,
+          }).initialLeverage
         : 1,
     );
   }, [
@@ -695,7 +703,8 @@ export function TailModal({ open, onClose, source }: Props) {
                 />
                 <div className="mt-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/35">
                   <span>1x</span>
-                  <span>Source {maxWhaleLeverage}x</span>
+                  <span>Source {sourceWhaleLeverage}x</span>
+                  <span>Max {maxWhaleLeverage}x</span>
                 </div>
               </div>
             ) : null}

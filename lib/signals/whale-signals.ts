@@ -109,6 +109,31 @@ function isCopyableOnPacifica(
   return position.raw.copyableOnPacifica !== false;
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function positiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+}
+
+function maxLeverageForCopy(
+  position: WhaleLiveSnapshot["positions"][number],
+): number {
+  const rawPosition = record(position.raw.position);
+  const rawLeverage = record(rawPosition?.leverage);
+  return (
+    positiveNumber(position.raw.pacificaMaxLeverage) ??
+    positiveNumber(position.raw.maxLeverage) ??
+    positiveNumber(rawPosition?.maxLeverage) ??
+    positiveNumber(rawLeverage?.maxLeverage) ??
+    Math.max(1, position.leverage)
+  );
+}
+
 async function getCachedPnlCurve(
   account: string,
   stats: {
@@ -293,6 +318,7 @@ async function buildWhalePositionSignalsFromSnapshot(
         market: position.market,
         side: position.side,
         leverage: position.leverage,
+        maxLeverage: maxLeverageForCopy(position),
         amountBase: position.amountBase,
         notionalUsd: position.notionalUsd,
         entryPrice: position.entryPrice,

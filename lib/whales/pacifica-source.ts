@@ -139,7 +139,11 @@ export function mapPacificaPosition(args: {
     openedAt: new Date(openedAtMs),
     closedAt: null,
     status: "open",
-    raw: args.position as unknown as Record<string, unknown>,
+    raw: {
+      ...args.position,
+      maxLeverage: marketMaxLeverage,
+      pacificaMaxLeverage: marketMaxLeverage,
+    } as unknown as Record<string, unknown>,
     lastSeenAt: args.now ?? new Date(),
   };
 }

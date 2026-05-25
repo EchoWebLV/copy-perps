@@ -64,6 +64,16 @@ export async function refreshHyperliquidWhales(): Promise<{
   const copyableMarkets = pacificaMarkets
     ? new Set(pacificaMarkets.map((market) => market.symbol))
     : null;
+  const pacificaMaxLeverageByMarket = pacificaMarkets
+    ? new Map(
+        pacificaMarkets.map((market) => [
+          market.symbol,
+          Number.isFinite(Number(market.max_leverage))
+            ? Number(market.max_leverage)
+            : null,
+        ]),
+      )
+    : null;
 
   let positionsSeen = 0;
   const snapshotObservedAt = new Date();
@@ -130,6 +140,9 @@ export async function refreshHyperliquidWhales(): Promise<{
               copyableMarkets === null
                 ? true
                 : copyableMarkets.has(assetPosition.position.coin),
+            pacificaMaxLeverage:
+              pacificaMaxLeverageByMarket?.get(assetPosition.position.coin) ??
+              null,
           });
           const existing = existingOpenById.get(mapped.id);
           if (existing) {

@@ -75,7 +75,7 @@ describe("refreshHyperliquidWhales", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAllMids.mockResolvedValue({ ETH: "2100" });
-    getMarketsCached.mockResolvedValue([{ symbol: "ETH" }]);
+    getMarketsCached.mockResolvedValue([{ symbol: "ETH", max_leverage: 20 }]);
     getClearinghouseState.mockImplementation(async (account: string) =>
       account === "0xempty"
         ? clearinghouseState({ assetPositions: [] })
@@ -111,6 +111,8 @@ describe("refreshHyperliquidWhales", () => {
         currentMark: 2100,
         raw: expect.objectContaining({
           copyableOnPacifica: true,
+          maxLeverage: 20,
+          pacificaMaxLeverage: 20,
         }),
       }),
     );
