@@ -24,6 +24,10 @@ import {
   whaleTailPositionsHeading,
   whaleTailPrimaryCta,
 } from "./tail-copy-labels";
+import {
+  formatTailSigningError,
+  sendDepositWithSponsorFallback,
+} from "./deposit-signing";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -327,11 +331,15 @@ export function TailModal({ open, onClose, source }: Props) {
       const signAndSendDeposit = async (depositTransactionB64: string) => {
         setStatus("Depositing USDC…");
         const txBytes = b64ToBytes(depositTransactionB64);
-        const { signature } = (await signAndSendTransaction({
+        const { signature } = await sendDepositWithSponsorFallback({
           transaction: txBytes,
           wallet,
-          options: { sponsor: true },
-        })) as { signature: Uint8Array | string };
+          signAndSendTransaction,
+          onSponsorFallback: (err) => {
+            console.warn("[tail] sponsored deposit send failed:", err);
+            setStatus("Gasless send failed. Retrying with wallet gas…");
+          },
+        });
         const bs58 = (await import("bs58")).default;
         const sig =
           typeof signature === "string" ? signature : bs58.encode(signature);
@@ -423,7 +431,7 @@ export function TailModal({ open, onClose, source }: Props) {
       setStatus(null);
     } catch (err) {
       console.error("[tail] failed:", err);
-      setError(String(err instanceof Error ? err.message : err).slice(0, 200));
+      setError(formatTailSigningError(err).slice(0, 220));
       setStatus(null);
     } finally {
       setSubmitting(false);

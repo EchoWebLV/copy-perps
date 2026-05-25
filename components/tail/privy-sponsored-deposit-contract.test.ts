@@ -12,10 +12,15 @@ describe("TailModal Privy sponsored deposit send", () => {
       source.indexOf("const signAndSendDeposit"),
       source.indexOf("const openOne"),
     );
+    const helper = readFileSync(
+      join(process.cwd(), "components/tail/deposit-signing.ts"),
+      "utf8",
+    );
 
     expect(source).toContain("useSignAndSendTransaction");
-    expect(depositFlow).toContain("signAndSendTransaction({");
-    expect(depositFlow).toContain("sponsor: true");
+    expect(depositFlow).toContain("sendDepositWithSponsorFallback");
+    expect(helper).toContain("signAndSendTransaction({");
+    expect(helper).toContain("sponsor: true");
     expect(depositFlow).not.toContain("signTransaction({");
     expect(depositFlow).not.toContain("sendRawTransaction");
   });
