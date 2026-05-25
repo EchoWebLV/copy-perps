@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     dbSelect: vi.fn(),
     enrichBet: vi.fn(),
     getPositions: vi.fn(),
+    getAccountInfo: vi.fn(),
     getMarksSnapshot: vi.fn(),
     getMark: vi.fn(),
     getBot: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock("@/lib/positions/enrich", () => ({
 }));
 vi.mock("@/lib/pacifica/client", () => ({
   getPositions: mocks.getPositions,
+  getAccountInfo: mocks.getAccountInfo,
 }));
 vi.mock("@/lib/data/marks", () => ({
   getMarksSnapshot: mocks.getMarksSnapshot,
@@ -79,6 +81,14 @@ describe("GET /api/portfolio", () => {
     mocks.updateWhere.mockResolvedValue(undefined);
     mocks.enrichBet.mockImplementation(async (bet) => ({ id: bet.id }));
     mocks.getPositions.mockResolvedValue([]);
+    mocks.getAccountInfo.mockResolvedValue({
+      balance: "0",
+      account_equity: "0",
+      available_to_spend: "0",
+      available_to_withdraw: "0",
+      total_margin_used: "0",
+      updated_at: 0,
+    });
     mocks.getMarksSnapshot.mockResolvedValue(new Map());
     mocks.getMark.mockResolvedValue(null);
     mocks.getBot.mockReturnValue(null);
@@ -257,6 +267,41 @@ describe("GET /api/portfolio", () => {
       unrealizedPnlPct: null,
       openedAt: "2026-05-25T17:26:40.000Z",
       positionUpdatedAt: "2026-05-25T17:35:00.000Z",
+    });
+  });
+
+  it("returns flat Pacifica account cash after positions are closed", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.getAccountInfo.mockResolvedValue({
+      balance: "9.954257",
+      account_equity: "9.954257",
+      available_to_spend: "9.954257",
+      available_to_withdraw: "9.954257",
+      total_margin_used: "0",
+      updated_at: 1779731922548,
+    });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      copyRows: [],
+      pacificaAccount: {
+        balanceUsd: 9.954257,
+        equityUsd: 9.954257,
+        availableToSpendUsd: 9.954257,
+        availableToWithdrawUsd: 9.954257,
+        totalMarginUsedUsd: 0,
+        updatedAt: "2026-05-25T17:58:42.548Z",
+      },
     });
   });
 });

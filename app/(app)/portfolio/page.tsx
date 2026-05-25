@@ -48,6 +48,15 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
+interface PacificaAccountData {
+  balanceUsd: number | null;
+  equityUsd: number | null;
+  availableToSpendUsd: number | null;
+  availableToWithdrawUsd: number | null;
+  totalMarginUsedUsd: number | null;
+  updatedAt: string | null;
+}
+
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
@@ -55,6 +64,8 @@ export default function PortfolioPage() {
     useWalletBalance(wallet?.address);
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [copyRows, setCopyRows] = useState<CopyRowData[]>([]);
+  const [pacificaAccount, setPacificaAccount] =
+    useState<PacificaAccountData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"open" | "closed">("open");
@@ -79,6 +90,9 @@ export default function PortfolioPage() {
         const data = await r.json();
         setPositions(data.positions);
         setCopyRows((data.copyRows as CopyRowData[]) ?? []);
+        setPacificaAccount(
+          (data.pacificaAccount as PacificaAccountData | null) ?? null,
+        );
         void refreshBalance();
       } catch (e) {
         if (!silent) {
@@ -149,6 +163,10 @@ export default function PortfolioPage() {
   const closedPositions =
     positions?.filter((p) => p.status === "closed" && p.type !== "copy") ?? [];
 
+  const legacyPositionsValue = openPositions.reduce(
+    (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
+    0,
+  );
   const copyRowsValue = copyRows.reduce((sum, row) => {
     if (row.stakeUsdc === null) {
       const marginValue =
@@ -164,13 +182,18 @@ export default function PortfolioPage() {
   const totalCost =
     openPositions.reduce((sum, p) => sum + p.amountUsdc, 0) +
     copyRows.reduce((sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0), 0);
-  const positionsValue = openPositions.reduce(
-    (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
-    0,
-  ) + copyRowsValue;
+  const positionsValue = legacyPositionsValue + copyRowsValue;
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
-  const totalNetWorth = positionsValue + (walletUsd ?? 0);
+  const pacificaEquityUsd = pacificaAccount?.equityUsd ?? null;
+  const pacificaAvailableUsd = pacificaAccount?.availableToSpendUsd ?? null;
+  const pacificaPortfolioValue = pacificaEquityUsd ?? copyRowsValue;
+  const availableCashUsd =
+    walletUsd == null && pacificaAvailableUsd == null
+      ? null
+      : (walletUsd ?? 0) + (pacificaAvailableUsd ?? 0);
+  const totalNetWorth =
+    (walletUsd ?? 0) + pacificaPortfolioValue + legacyPositionsValue;
 
   // Realized PnL summary for the Closed tab. Only positions with known
   // proceeds count — a closed position whose proceeds haven't been
@@ -243,9 +266,18 @@ export default function PortfolioPage() {
         </div>
         <div className="mt-1">
           <BigNum size={26}>
-            {walletUsd == null ? "-" : `$${walletUsd.toFixed(2)}`}
+            {availableCashUsd == null ? "-" : `$${availableCashUsd.toFixed(2)}`}
           </BigNum>
         </div>
+        {pacificaAvailableUsd != null && (
+          <div
+            className="mt-2 space-y-0.5 text-[10px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            <div>WALLET ${(walletUsd ?? 0).toFixed(2)}</div>
+            <div>PACIFICA ${pacificaAvailableUsd.toFixed(2)}</div>
+          </div>
+        )}
       </div>
 
       <div
@@ -349,9 +381,20 @@ export default function PortfolioPage() {
                   </div>
                   <div className="mt-0.5">
                     <BigNum size={18}>
-                      {walletUsd == null ? "—" : `$${walletUsd.toFixed(2)}`}
+                      {availableCashUsd == null
+                        ? "-"
+                        : `$${availableCashUsd.toFixed(2)}`}
                     </BigNum>
                   </div>
+                  {pacificaAvailableUsd != null && (
+                    <div
+                      className="text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      Wallet ${(walletUsd ?? 0).toFixed(2)} · Pacifica $
+                      {pacificaAvailableUsd.toFixed(2)}
+                    </div>
+                  )}
                   {walletSol != null && (
                     <div
                       className="text-[10px] font-black uppercase tracking-widest"

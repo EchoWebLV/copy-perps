@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
-import { getPositions } from "@/lib/pacifica/client";
+import { getAccountInfo, getPositions } from "@/lib/pacifica/client";
 import { getMark, getMarksSnapshot } from "@/lib/data/marks";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
@@ -57,6 +57,11 @@ function parseCopyRowMeta(value: unknown): CopyRowMeta | null {
 function finiteNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function isoFromMillis(value: unknown): string | null {
+  const n = finiteNumber(value);
+  return n == null || n <= 0 ? null : new Date(n).toISOString();
 }
 
 function sideFromPacifica(side: PacificaPosition["side"]): "long" | "short" {
@@ -127,6 +132,14 @@ export async function GET(request: Request) {
   let userPositions: PacificaPosition[] | null = null;
   let positionsUnavailable = false;
   let marks: Map<string, number> | null = null;
+  let pacificaAccount: {
+    balanceUsd: number | null;
+    equityUsd: number | null;
+    availableToSpendUsd: number | null;
+    availableToWithdrawUsd: number | null;
+    totalMarginUsedUsd: number | null;
+    updatedAt: string | null;
+  } | null = null;
   if (user.solanaPubkey) {
     try {
       userPositions = await getPositions(user.solanaPubkey);
@@ -138,6 +151,19 @@ export async function GET(request: Request) {
       marks = await getMarksSnapshot();
     } catch (err) {
       console.warn("[portfolio] marks snapshot failed:", err);
+    }
+    try {
+      const account = await getAccountInfo(user.solanaPubkey);
+      pacificaAccount = {
+        balanceUsd: finiteNumber(account.balance),
+        equityUsd: finiteNumber(account.account_equity),
+        availableToSpendUsd: finiteNumber(account.available_to_spend),
+        availableToWithdrawUsd: finiteNumber(account.available_to_withdraw),
+        totalMarginUsedUsd: finiteNumber(account.total_margin_used),
+        updatedAt: isoFromMillis(account.updated_at),
+      };
+    } catch (err) {
+      console.warn("[portfolio] pacifica account fetch failed:", err);
     }
   }
   const copyRows = (
@@ -271,5 +297,9 @@ export async function GET(request: Request) {
       }),
   );
 
-  return NextResponse.json({ positions, copyRows: [...copyRows, ...walletRows] });
+  return NextResponse.json({
+    positions,
+    copyRows: [...copyRows, ...walletRows],
+    pacificaAccount,
+  });
 }
