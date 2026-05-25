@@ -150,6 +150,11 @@ export default function PortfolioPage() {
     positions?.filter((p) => p.status === "closed" && p.type !== "copy") ?? [];
 
   const copyRowsValue = copyRows.reduce((sum, row) => {
+    if (row.stakeUsdc === null) {
+      const marginValue =
+        row.marginUsd === null ? 0 : row.marginUsd + (row.pnlUsd ?? 0);
+      return sum + Math.max(0, marginValue);
+    }
     const liveMultiplier =
       row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
     return sum + Math.max(0, row.stakeUsdc * liveMultiplier);
@@ -158,7 +163,7 @@ export default function PortfolioPage() {
 
   const totalCost =
     openPositions.reduce((sum, p) => sum + p.amountUsdc, 0) +
-    copyRows.reduce((sum, row) => sum + row.stakeUsdc, 0);
+    copyRows.reduce((sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0), 0);
   const positionsValue = openPositions.reduce(
     (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
     0,
@@ -273,7 +278,7 @@ export default function PortfolioPage() {
               className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
               style={{ color: DIM }}
             >
-              YOUR TAIL TRADES
+              YOUR LIVE TRADES
             </p>
           </div>
           {authenticated && (
@@ -509,10 +514,10 @@ export default function PortfolioPage() {
                 )}
                 {tab === "open" && copyRows.length > 0 && (
                   <section className="space-y-2 lg:col-span-2">
-                    <Stamp label="OPEN TAILS" value={`${copyRows.length}`} />
+                    <Stamp label="LIVE POSITIONS" value={`${copyRows.length}`} />
                     {copyRows.map((row) => (
                       <CopyRow
-                        key={row.betId}
+                        key={row.betId ?? `${row.market}:${row.side}`}
                         row={row}
                         onClosed={() => void load()}
                       />

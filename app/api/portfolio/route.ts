@@ -26,6 +26,7 @@ type CopyRowMeta = {
 };
 
 type CopyLiveStatus = "open" | "not_found" | "unknown";
+type CopySourceKind = "tail" | "wallet";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,6 +57,26 @@ function parseCopyRowMeta(value: unknown): CopyRowMeta | null {
 function finiteNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function sideFromPacifica(side: PacificaPosition["side"]): "long" | "short" {
+  return side === "bid" ? "long" : "short";
+}
+
+function positionKey(market: string, side: "long" | "short"): string {
+  return `${market}:${side}`;
+}
+
+async function markForSymbol(
+  symbol: string,
+  marks: Map<string, number> | null,
+): Promise<number | null> {
+  const cached = marks?.get(symbol);
+  if (cached != null) return cached;
+  return getMark(symbol).catch((err) => {
+    console.warn("[portfolio] mark fetch failed:", err);
+    return null;
+  });
 }
 
 export async function GET(request: Request) {
@@ -106,7 +127,7 @@ export async function GET(request: Request) {
   let userPositions: PacificaPosition[] | null = null;
   let positionsUnavailable = false;
   let marks: Map<string, number> | null = null;
-  if (copyBets.length > 0 && user.solanaPubkey) {
+  if (user.solanaPubkey) {
     try {
       userPositions = await getPositions(user.solanaPubkey);
     } catch (err) {
@@ -143,14 +164,7 @@ export async function GET(request: Request) {
           const size = finiteNumber(livePos?.amount);
           const liquidationPrice = finiteNumber(livePos?.liquidation_price);
           const marginUsd = finiteNumber(livePos?.margin);
-          const mark =
-            livePos && marks
-              ? (marks.get(meta.leaderMarket) ??
-                (await getMark(meta.leaderMarket).catch((err) => {
-                  console.warn("[portfolio] mark fetch failed:", err);
-                  return null;
-                })))
-              : null;
+          const mark = livePos ? await markForSymbol(meta.leaderMarket, marks) : null;
 
           let unrealizedPnlPct: number | null = null;
           let pnlUsd: number | null = null;
@@ -162,6 +176,7 @@ export async function GET(request: Request) {
 
           return {
             betId: b.id,
+            sourceKind: "tail" satisfies CopySourceKind,
             market: meta.leaderMarket,
             side: meta.leaderSide,
             leverage: meta.leverage,
@@ -197,5 +212,64 @@ export async function GET(request: Request) {
     )
   ).filter((row) => row !== null);
 
-  return NextResponse.json({ positions, copyRows });
+  const coveredLivePositions = new Set(
+    copyRows
+      .filter((row) => row.liveStatus === "open")
+      .map((row) => positionKey(row.market, row.side)),
+  );
+  const walletRows = await Promise.all(
+    (userPositions ?? [])
+      .filter(
+        (p) =>
+          !coveredLivePositions.has(
+            positionKey(p.symbol, sideFromPacifica(p.side)),
+          ),
+      )
+      .map(async (p) => {
+        const side = sideFromPacifica(p.side);
+        const entry = finiteNumber(p.entry_price);
+        const size = finiteNumber(p.amount);
+        const liquidationPrice = finiteNumber(p.liquidation_price);
+        const marginUsd = finiteNumber(p.margin);
+        const mark = await markForSymbol(p.symbol, marks);
+        const pnlUsd =
+          mark != null && entry != null && size != null
+            ? (mark - entry) * Math.abs(size) * (side === "long" ? 1 : -1)
+            : null;
+
+        return {
+          betId: null,
+          sourceKind: "wallet" satisfies CopySourceKind,
+          market: p.symbol,
+          side,
+          leverage: null,
+          stakeUsdc: null,
+          leaderAddress: null,
+          leaderUsername: null,
+          whaleId: null,
+          whaleName: null,
+          autoCloseOnSourceClose: false,
+          closeReason: null,
+          botId: null,
+          botName: null,
+          liveStatus: "open" satisfies CopyLiveStatus,
+          entryPrice: entry,
+          markPrice: mark,
+          liquidationPrice,
+          amountBase: size == null ? null : Math.abs(size),
+          marginUsd: marginUsd != null && marginUsd > 0 ? marginUsd : null,
+          marginMode: p.isolated ? "isolated" : "cross",
+          notionalUsd: mark != null && size != null ? mark * Math.abs(size) : null,
+          pnlUsd,
+          unrealizedPnlPct: null,
+          openedAt: p.created_at ? new Date(p.created_at).toISOString() : null,
+          positionUpdatedAt: p.updated_at
+            ? new Date(p.updated_at).toISOString()
+            : null,
+          leaderClosedAt: null,
+        };
+      }),
+  );
+
+  return NextResponse.json({ positions, copyRows: [...copyRows, ...walletRows] });
 }

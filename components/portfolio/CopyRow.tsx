@@ -6,11 +6,12 @@ import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { formatCopySourceLabel } from "@/lib/positions/copy-row";
 
 export interface CopyRowData {
-  betId: string;
+  betId: string | null;
+  sourceKind?: "tail" | "wallet";
   market: string;
   side: "long" | "short";
-  leverage: number;
-  stakeUsdc: number;
+  leverage: number | null;
+  stakeUsdc: number | null;
   leaderAddress: string | null;
   leaderUsername: string | null;
   whaleId?: string | null;
@@ -128,7 +129,7 @@ export function CopyRow({ row, onClosed }: Props) {
   const [status, setStatus] = useState<string | null>(null);
 
   const handleClose = useCallback(async () => {
-    if (busy) return;
+    if (busy || !row.betId) return;
     setBusy(true);
     setStatus("Closing...");
     try {
@@ -180,6 +181,17 @@ export function CopyRow({ row, onClosed }: Props) {
             className: "border-rose-300/30 bg-rose-300/10 text-rose-200",
             subtitle: "No live wallet position found",
           };
+  const hasStake = row.stakeUsdc !== null;
+  const sourceText =
+    row.sourceKind === "wallet"
+      ? "wallet position"
+      : `copied from ${formatCopySourceLabel(row)}`;
+  const subtitleParts = [
+    statusMeta.subtitle,
+    hasStake ? `Stake ${formatUsd(row.stakeUsdc)}` : null,
+    sourceText,
+  ].filter(Boolean);
+  const leverageText = row.leverage === null ? "" : ` ${Math.round(row.leverage)}x`;
 
   return (
     <div className="rounded-2xl bg-white/5 p-4">
@@ -192,22 +204,24 @@ export function CopyRow({ row, onClosed }: Props) {
               {statusMeta.label}
             </span>
             <div className="text-sm font-semibold">
-              {row.market} {row.side.toUpperCase()} {Math.round(row.leverage)}x
+              {row.market} {row.side.toUpperCase()}
+              {leverageText}
             </div>
           </div>
           <div className="mt-1 text-xs text-white/60">
-            {statusMeta.subtitle} · Stake {formatUsd(row.stakeUsdc)} · copied from{" "}
-            {formatCopySourceLabel(row)}
+            {subtitleParts.join(" · ")}
           </div>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={handleClose}
-          className="shrink-0 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold disabled:opacity-40"
-        >
-          {busy ? "..." : "Close"}
-        </button>
+        {row.betId && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleClose}
+            className="shrink-0 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold disabled:opacity-40"
+          >
+            {busy ? "..." : "Close"}
+          </button>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 border-t border-white/10 pt-3">
@@ -225,7 +239,11 @@ export function CopyRow({ row, onClosed }: Props) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/45">
-        <span>{row.autoCloseOnSourceClose ? "AUTO-CLOSE ON" : "MANUAL CLOSE"}</span>
+        {row.sourceKind !== "wallet" && (
+          <span>
+            {row.autoCloseOnSourceClose ? "AUTO-CLOSE ON" : "MANUAL CLOSE"}
+          </span>
+        )}
         {row.marginMode && <span>{row.marginMode} margin</span>}
         {row.openedAt && <span>OPENED {formatAge(row.openedAt)} AGO</span>}
         {row.positionUpdatedAt && (

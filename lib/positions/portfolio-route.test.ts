@@ -182,6 +182,7 @@ describe("GET /api/portfolio", () => {
     expect(body.copyRows).toHaveLength(1);
     expect(body.copyRows[0]).toMatchObject({
       betId: "copy-live",
+      sourceKind: "tail",
       market: "MON",
       side: "short",
       leverage: 3,
@@ -204,5 +205,58 @@ describe("GET /api/portfolio", () => {
     expect(body.copyRows[0].notionalUsd).toBeCloseTo(15.0321);
     expect(body.copyRows[0].pnlUsd).toBeCloseTo(-0.09571);
     expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(-1.9142);
+  });
+
+  it("emits unmatched live Pacifica wallet positions even without a copy bet", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([
+      {
+        symbol: "BTC",
+        side: "bid",
+        amount: "0.001",
+        entry_price: "100000",
+        margin: "0",
+        funding: "0",
+        isolated: false,
+        liquidation_price: "80000",
+        created_at: 1779730000000,
+        updated_at: 1779730500000,
+      },
+    ]);
+    mocks.getMarksSnapshot.mockResolvedValue(new Map([["BTC", 101000]]));
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: null,
+      sourceKind: "wallet",
+      market: "BTC",
+      side: "long",
+      stakeUsdc: null,
+      leaderAddress: null,
+      autoCloseOnSourceClose: false,
+      liveStatus: "open",
+      entryPrice: 100000,
+      markPrice: 101000,
+      liquidationPrice: 80000,
+      amountBase: 0.001,
+      marginUsd: null,
+      marginMode: "cross",
+      notionalUsd: 101,
+      pnlUsd: 1,
+      unrealizedPnlPct: null,
+      openedAt: "2026-05-25T17:26:40.000Z",
+      positionUpdatedAt: "2026-05-25T17:35:00.000Z",
+    });
   });
 });
