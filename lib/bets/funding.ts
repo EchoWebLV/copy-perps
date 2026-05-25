@@ -4,11 +4,10 @@ import { getAccountInfo } from "@/lib/pacifica/client";
 import { getConnection } from "@/lib/solana/balance";
 import { USDC_MINT } from "@/lib/jupiter/constants";
 
-const PACIFICA_TAKER_FEE_BPS = 4;
-const OPEN_ORDER_BUFFER_USDC = 0.1;
 export const PACIFICA_MIN_DEPOSIT_USDC = 10;
 const PACIFICA_PROGRAM_ID = "PCFA5iYgmqK6MqPhWNKg7Yv7auX7VZ4Cx7T1eJyrAMH";
 const RECENT_DEPOSIT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const CREDITED_EPSILON_USDC = 0.000001;
 
 export class PacificaDepositPendingError extends Error {
   constructor(public recentDepositUsdc: number) {
@@ -57,10 +56,7 @@ export function requiredPacificaCollateralUsdc(params: {
   stakeUsdc: number;
   leverage: number;
 }): number {
-  const stake = Math.max(0, params.stakeUsdc);
-  const leverage = Math.max(1, params.leverage);
-  const openingFee = stake * leverage * (PACIFICA_TAKER_FEE_BPS / 10_000);
-  return roundUpCents(stake + openingFee + OPEN_ORDER_BUFFER_USDC);
+  return roundUpCents(Math.max(0, params.stakeUsdc));
 }
 
 export function requiredPacificaDepositUsdc(params: {
@@ -141,13 +137,29 @@ async function getRecentPacificaDepositUsdc(account: string): Promise<number> {
   return totalAtomic / 1_000_000;
 }
 
-export async function getPacificaAvailableToSpendUsdc(
+async function getPacificaFundingInfo(
   account: string,
-): Promise<number | null> {
+): Promise<{
+  availableToSpendUsdc: number;
+  creditedUsdc: number;
+} | null> {
   try {
     const info = await getAccountInfo(account);
     const available = Number(info.available_to_spend);
-    return Number.isFinite(available) ? Math.max(0, available) : 0;
+    const balance = Number(info.balance);
+    const equity = Number(info.account_equity);
+    const availableToSpendUsdc = Number.isFinite(available)
+      ? Math.max(0, available)
+      : 0;
+    const creditedUsdc = Math.max(
+      availableToSpendUsdc,
+      Number.isFinite(balance) ? balance : 0,
+      Number.isFinite(equity) ? equity : 0,
+    );
+    return {
+      availableToSpendUsdc,
+      creditedUsdc: Math.max(0, creditedUsdc),
+    };
   } catch (err) {
     if (/account not found/i.test(String(err))) return null;
     if (isPacificaFundingRateLimitError(err)) {
@@ -159,6 +171,13 @@ export async function getPacificaAvailableToSpendUsdc(
   }
 }
 
+export async function getPacificaAvailableToSpendUsdc(
+  account: string,
+): Promise<number | null> {
+  const info = await getPacificaFundingInfo(account);
+  return info?.availableToSpendUsdc ?? null;
+}
+
 export async function planPacificaDepositTopUp(params: {
   userMainPubkey: string;
   stakeUsdc: number;
@@ -168,9 +187,10 @@ export async function planPacificaDepositTopUp(params: {
   initialDepositUsdc: number;
   availablePacificaUsdc: number;
 } | null> {
-  const availablePacificaUsdc = await getPacificaAvailableToSpendUsdc(
+  const fundingInfo = await getPacificaFundingInfo(
     params.userMainPubkey,
   );
+  const availablePacificaUsdc = fundingInfo?.availableToSpendUsdc ?? null;
   let recentDepositUsdc = 0;
   let recentDepositState:
     | ReturnType<typeof classifyRecentPacificaDeposit>
@@ -195,16 +215,18 @@ export async function planPacificaDepositTopUp(params: {
       throw new PacificaDepositSettlingError(recentDepositUsdc);
     }
   };
-  if (availablePacificaUsdc === null) {
+  let availableForSizingUsdc = availablePacificaUsdc;
+  if (availableForSizingUsdc === null) {
     throwForRecentDepositState(await loadRecentDepositState());
+    availableForSizingUsdc = 0;
   }
   const topUpUsdc = pacificaDepositTopUpUsdc({
-    availableToSpendUsdc: availablePacificaUsdc ?? 0,
+    availableToSpendUsdc: availableForSizingUsdc,
     stakeUsdc: params.stakeUsdc,
     leverage: params.leverage,
   });
   if (topUpUsdc <= 0) return null;
-  if (availablePacificaUsdc !== null) {
+  if ((fundingInfo?.creditedUsdc ?? 0) <= CREDITED_EPSILON_USDC) {
     throwForRecentDepositState(await loadRecentDepositState());
   }
 
@@ -215,6 +237,6 @@ export async function planPacificaDepositTopUp(params: {
   return {
     depositTransactionB64: transactionB64,
     initialDepositUsdc: topUpUsdc,
-    availablePacificaUsdc: availablePacificaUsdc ?? 0,
+    availablePacificaUsdc: availableForSizingUsdc,
   };
 }

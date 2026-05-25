@@ -89,7 +89,7 @@ describe("Pacifica funding math", () => {
   it("sizes first deposit from the selected stake instead of a hidden buffer", () => {
     expect(
       requiredPacificaCollateralUsdc({ stakeUsdc: 5, leverage: 10 }),
-    ).toBe(5.12);
+    ).toBe(5);
     expect(requiredPacificaDepositUsdc({ stakeUsdc: 5, leverage: 10 })).toBe(
       PACIFICA_MIN_DEPOSIT_USDC,
     );
@@ -106,7 +106,7 @@ describe("Pacifica funding math", () => {
 
     expect(
       pacificaDepositTopUpUsdc({
-        availableToSpendUsdc: 6,
+        availableToSpendUsdc: 5,
         stakeUsdc: 5,
         leverage: 10,
       }),
@@ -128,7 +128,11 @@ describe("Pacifica funding math", () => {
   });
 
   it("does not request another deposit while a valid recent deposit is settling", async () => {
-    mocks.getAccountInfo.mockResolvedValue({ available_to_spend: "0" });
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "0",
+      account_equity: "0",
+      balance: "0",
+    });
     mockRecentDeposit(10);
 
     await expect(
@@ -139,6 +143,48 @@ describe("Pacifica funding math", () => {
       }),
     ).rejects.toBeInstanceOf(PacificaDepositSettlingError);
     expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+  });
+
+  it("uses credited Pacifica funds even when a previous deposit is recent", async () => {
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "5.011944",
+      account_equity: "9.996267",
+      balance: "9.944283",
+    });
+    mockRecentDeposit(10);
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 5,
+        leverage: 50,
+      }),
+    ).resolves.toBeNull();
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+    expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it("plans a top-up instead of calling credited funds still settling", async () => {
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "5",
+      account_equity: "10",
+      balance: "10",
+    });
+    mocks.buildDepositTx.mockResolvedValue({ transactionB64: "tx" });
+    mockRecentDeposit(10);
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 10,
+        leverage: 5,
+      }),
+    ).resolves.toEqual({
+      depositTransactionB64: "tx",
+      initialDepositUsdc: 10,
+      availablePacificaUsdc: 5,
+    });
+    expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
   it("does not request another deposit when Pacifica account reads are rate-limited", async () => {
