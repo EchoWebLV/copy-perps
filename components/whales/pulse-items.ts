@@ -49,7 +49,9 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         kind: "fresh_open",
         score: baseScore(position, nowMs) + 160,
         eyebrow: "Fresh open",
-        headline: `${position.displayName} opened ${position.market} ${position.side} ${position.leverage}x`,
+        headline:
+          performanceHeadline(position) ??
+          `${position.displayName} opened ${position.market} ${position.side} ${position.leverage}x`,
         context: `${formatUsd(position.notionalUsd)} live on ${position.source}. This is new enough to watch before the tape moves too far.`,
       }),
     );
@@ -62,7 +64,9 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         kind: "big_position",
         score: baseScore(position, nowMs) + 120,
         eyebrow: "Big size",
-        headline: `${position.displayName} is carrying a ${formatUsd(position.notionalUsd)} ${position.market} ${position.side}`,
+        headline:
+          performanceHeadline(position) ??
+          `${position.displayName} is carrying a ${formatUsd(position.notionalUsd)} ${position.market} ${position.side}`,
         context: `Large notional, ${position.leverage}x leverage, ${sourcePnlText(pnl)} on the source position.`,
       }),
     );
@@ -75,7 +79,9 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         kind: "deep_profit",
         score: baseScore(position, nowMs) + 100 + Math.min(80, pnl),
         eyebrow: "Deep in profit",
-        headline: `${position.market} ${position.side} is already up ${pnl.toFixed(1)}%`,
+        headline:
+          performanceHeadline(position) ??
+          `${position.market} ${position.side} is already up ${pnl.toFixed(1)}%`,
         context: "Tailing now means entering after part of the whale's move has already happened.",
       }),
     );
@@ -88,7 +94,9 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         kind: "pain_trade",
         score: baseScore(position, nowMs) + 90 + Math.min(80, Math.abs(pnl)),
         eyebrow: "Pain trade",
-        headline: `${position.displayName} is still holding a losing ${position.market} ${position.side}`,
+        headline:
+          performanceHeadline(position) ??
+          `${position.displayName} is still holding a losing ${position.market} ${position.side}`,
         context: `${sourcePnlText(pnl)}. The whale has not exited, but leverage makes timing fragile.`,
       }),
     );
@@ -101,7 +109,9 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         kind: "entry_gap",
         score: baseScore(position, nowMs) + 85 + position.leverage,
         eyebrow: "Entry gap",
-        headline: `Late entry risk on ${position.market} ${position.side}`,
+        headline:
+          performanceHeadline(position) ??
+          `Late entry risk on ${position.market} ${position.side}`,
         context: shorten(position.analysis.entryGapWarning, 132),
       }),
     );
@@ -151,6 +161,15 @@ function stableSeed(value: string): number {
 function sourcePnlText(pnl: number | null): string {
   if (pnl === null) return "P/L unavailable";
   return `${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}% source P/L`;
+}
+
+function performanceHeadline(position: PositionPayload): string | null {
+  const pnl = position.unrealizedPnlPct;
+  if (pnl === null) return null;
+  const direction = pnl >= 0 ? "up" : "down";
+  return `${position.market} ${position.side} is already ${direction} ${Math.abs(
+    pnl,
+  ).toFixed(1)}%`;
 }
 
 function formatUsd(value: number): string {

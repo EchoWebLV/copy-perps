@@ -69,6 +69,52 @@ describe("buildPulseItems", () => {
     expect(items.map((item) => item.kind)).toContain("entry_gap");
   });
 
+  it("uses performance-led headlines when live P&L is available", () => {
+    const items = buildPulseItems(
+      [
+        position({
+          positionId: "eth-short",
+          market: "ETH",
+          side: "short",
+          notionalUsd: 1_200_000,
+          unrealizedPnlPct: 162.6,
+          analysis: {
+            summary: "summary",
+            thesis: "thesis",
+            risk: "risk",
+            entryGapWarning:
+              "Current mark is 12.4% below the whale entry. Followers enter at the live price, not the whale entry.",
+            confidence: 0.4,
+          },
+        }),
+      ],
+      NOW,
+    );
+
+    expect(items.length).toBeGreaterThan(1);
+    expect(new Set(items.map((item) => item.headline))).toEqual(
+      new Set(["ETH short is already up 162.6%"]),
+    );
+  });
+
+  it("uses down-performance headlines for losing positions", () => {
+    const items = buildPulseItems(
+      [
+        position({
+          positionId: "sol-long",
+          market: "SOL",
+          side: "long",
+          unrealizedPnlPct: -18,
+        }),
+      ],
+      NOW,
+    );
+
+    expect(items.find((item) => item.kind === "pain_trade")?.headline).toBe(
+      "SOL long is already down 18.0%",
+    );
+  });
+
   it("sorts items by descending pulse score", () => {
     const items = buildPulseItems(
       [
