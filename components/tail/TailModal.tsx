@@ -29,6 +29,10 @@ import {
   sendDepositWithSponsorFallback,
 } from "./deposit-signing";
 import { clampTailLeverage, tailLeverageBounds } from "./tail-leverage";
+import {
+  PacificaCreditWaitTimeoutError,
+  retryTailRequestWithCreditWait,
+} from "./tail-settling-retry";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -318,22 +322,15 @@ export function TailModal({ open, onClose, source }: Props) {
       const requestTailWithSettlingRetry = async (
         copyPosition?: WhaleTailPosition,
       ) => {
-        const deadline = Date.now() + 30_000;
-        for (;;) {
-          try {
-            return await requestTail(copyPosition);
-          } catch (err) {
-            if (
-              !(err instanceof TailRequestError) ||
-              !err.retryable ||
-              Date.now() >= deadline
-            ) {
-              throw err;
-            }
-            setStatus("Waiting for Pacifica credit…");
-            await sleep(Math.min(Math.max(err.retryAfterMs, 1000), 5000));
-          }
-        }
+        return retryTailRequestWithCreditWait({
+          request: () => requestTail(copyPosition),
+          sleep,
+          onRetry: ({ remainingMs }) => {
+            setStatus(
+              `Waiting for Pacifica credit (${Math.ceil(remainingMs / 1000)}s)…`,
+            );
+          },
+        });
       };
 
       const signAndSendDeposit = async (depositTransactionB64: string) => {
@@ -439,7 +436,9 @@ export function TailModal({ open, onClose, source }: Props) {
       setSuccess({ opens });
       setStatus(null);
     } catch (err) {
-      console.error("[tail] failed:", err);
+      if (!(err instanceof PacificaCreditWaitTimeoutError)) {
+        console.error("[tail] failed:", err);
+      }
       setError(formatTailSigningError(err).slice(0, 220));
       setStatus(null);
     } finally {
