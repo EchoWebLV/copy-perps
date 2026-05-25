@@ -40,15 +40,30 @@ function position(
 }
 
 describe("buildPulseItems", () => {
-  it("creates social tape item variants from live whale positions", () => {
+  it("creates one best social tape item from each live whale position", () => {
     const items = buildPulseItems(
       [
         position({ positionId: "fresh", openedAtMs: NOW - 2 * 60_000 }),
-        position({ positionId: "big", notionalUsd: 1_200_000 }),
-        position({ positionId: "profit", unrealizedPnlPct: 58 }),
-        position({ positionId: "pain", unrealizedPnlPct: -18 }),
+        position({
+          positionId: "big",
+          openedAtMs: NOW - 2 * 60 * 60_000,
+          notionalUsd: 1_200_000,
+          unrealizedPnlPct: 10,
+        }),
+        position({
+          positionId: "profit",
+          openedAtMs: NOW - 2 * 60 * 60_000,
+          unrealizedPnlPct: 58,
+        }),
+        position({
+          positionId: "pain",
+          openedAtMs: NOW - 2 * 60 * 60_000,
+          unrealizedPnlPct: -18,
+        }),
         position({
           positionId: "gap",
+          openedAtMs: NOW - 2 * 60 * 60_000,
+          unrealizedPnlPct: 10,
           analysis: {
             summary: "summary",
             thesis: "thesis",
@@ -62,6 +77,8 @@ describe("buildPulseItems", () => {
       NOW,
     );
 
+    expect(items).toHaveLength(5);
+    expect(new Set(items.map((item) => item.position.positionId)).size).toBe(5);
     expect(items.map((item) => item.kind)).toContain("fresh_open");
     expect(items.map((item) => item.kind)).toContain("big_position");
     expect(items.map((item) => item.kind)).toContain("deep_profit");
@@ -91,7 +108,8 @@ describe("buildPulseItems", () => {
       NOW,
     );
 
-    expect(items.length).toBeGreaterThan(1);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("deep_profit");
     expect(new Set(items.map((item) => item.headline))).toEqual(
       new Set(["ETH short is already up 162.6%"]),
     );
@@ -104,6 +122,7 @@ describe("buildPulseItems", () => {
           positionId: "sol-long",
           market: "SOL",
           side: "long",
+          openedAtMs: NOW - 2 * 60 * 60_000,
           unrealizedPnlPct: -18,
         }),
       ],

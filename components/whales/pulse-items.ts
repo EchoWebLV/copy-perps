@@ -46,12 +46,12 @@ function comparePulseItems(a: PulseItem, b: PulseItem): number {
 }
 
 function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[] {
-  const items: PulseItem[] = [];
+  const candidates: PulseItem[] = [];
   const openedAgoMs = Math.max(0, nowMs - position.openedAtMs);
   const pnl = position.unrealizedPnlPct;
 
   if (openedAgoMs <= FRESH_OPEN_MS) {
-    items.push(
+    candidates.push(
       makeItem({
         position,
         kind: "fresh_open",
@@ -66,7 +66,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
   }
 
   if (position.notionalUsd >= BIG_POSITION_USD) {
-    items.push(
+    candidates.push(
       makeItem({
         position,
         kind: "big_position",
@@ -81,7 +81,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
   }
 
   if (pnl !== null && pnl >= DEEP_PROFIT_PCT) {
-    items.push(
+    candidates.push(
       makeItem({
         position,
         kind: "deep_profit",
@@ -96,7 +96,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
   }
 
   if (pnl !== null && pnl <= PAIN_PCT) {
-    items.push(
+    candidates.push(
       makeItem({
         position,
         kind: "pain_trade",
@@ -111,7 +111,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
   }
 
   if (position.analysis?.entryGapWarning) {
-    items.push(
+    candidates.push(
       makeItem({
         position,
         kind: "entry_gap",
@@ -125,7 +125,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
     );
   }
 
-  return items;
+  return candidates.sort(comparePulseItems).slice(0, 1);
 }
 
 function makeItem(args: {
