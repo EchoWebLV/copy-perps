@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     enrichBet: vi.fn(),
     getPositions: vi.fn(),
     getMarksSnapshot: vi.fn(),
+    getMark: vi.fn(),
     getBot: vi.fn(),
   };
 });
@@ -53,6 +54,7 @@ vi.mock("@/lib/pacifica/client", () => ({
 }));
 vi.mock("@/lib/data/marks", () => ({
   getMarksSnapshot: mocks.getMarksSnapshot,
+  getMark: mocks.getMark,
 }));
 vi.mock("@/lib/bots", () => ({
   getBot: mocks.getBot,
@@ -78,6 +80,7 @@ describe("GET /api/portfolio", () => {
     mocks.enrichBet.mockImplementation(async (bet) => ({ id: bet.id }));
     mocks.getPositions.mockResolvedValue([]);
     mocks.getMarksSnapshot.mockResolvedValue(new Map());
+    mocks.getMark.mockResolvedValue(null);
     mocks.getBot.mockReturnValue(null);
   });
 
@@ -123,7 +126,29 @@ describe("GET /api/portfolio", () => {
     });
   });
 
-  it("emits whale copy rows when the fill price was not returned", async () => {
+  it("emits whale copy rows with live wallet position details when the fill price was not returned", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.getPositions.mockResolvedValue([
+      {
+        symbol: "MON",
+        side: "ask",
+        amount: "563",
+        entry_price: "0.02653",
+        margin: "0",
+        funding: "0",
+        isolated: false,
+        liquidation_price: "0.037955",
+        created_at: 1779730644087,
+        updated_at: 1779730644087,
+      },
+    ]);
+    mocks.getMark.mockResolvedValue(0.0267);
     mocks.selectBetsOrderBy.mockResolvedValue([
       {
         id: "copy-live",
@@ -153,21 +178,31 @@ describe("GET /api/portfolio", () => {
     const response = await GET(new Request("http://local.test/api/portfolio"));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      copyRows: [
-        {
-          betId: "copy-live",
-          market: "MON",
-          side: "short",
-          leverage: 3,
-          stakeUsdc: 5,
-          leaderAddress: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
-          whaleId: "hyperliquid:0xf28e",
-          autoCloseOnSourceClose: true,
-          botId: null,
-          botName: null,
-        },
-      ],
+    const body = await response.json();
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: "copy-live",
+      market: "MON",
+      side: "short",
+      leverage: 3,
+      stakeUsdc: 5,
+      leaderAddress: "0xf28e1b06e00e8774c612e31ab3ac35d5a720085f",
+      whaleId: "hyperliquid:0xf28e",
+      autoCloseOnSourceClose: true,
+      botId: null,
+      botName: null,
+      liveStatus: "open",
+      entryPrice: 0.02653,
+      markPrice: 0.0267,
+      liquidationPrice: 0.037955,
+      amountBase: 563,
+      marginUsd: null,
+      marginMode: "cross",
+      openedAt: "2026-05-25T17:37:24.087Z",
+      positionUpdatedAt: "2026-05-25T17:37:24.087Z",
     });
+    expect(body.copyRows[0].notionalUsd).toBeCloseTo(15.0321);
+    expect(body.copyRows[0].pnlUsd).toBeCloseTo(-0.09571);
+    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(-1.9142);
   });
 });

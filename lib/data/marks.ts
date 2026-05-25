@@ -87,5 +87,14 @@ export async function getMarksSnapshot(): Promise<Map<string, number>> {
 
 export async function getMark(symbol: string): Promise<number | null> {
   const snap = await getMarksSnapshot();
-  return snap.get(symbol) ?? null;
+  const cached = snap.get(symbol);
+  if (cached != null) return cached;
+
+  const px = await fetchPacificaMark(symbol);
+  if (px == null) return null;
+  _lastMarks.set(symbol, px);
+  if (_cache) {
+    _cache.marks.set(symbol, px);
+  }
+  return px;
 }

@@ -5,7 +5,8 @@ import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
 import { getPositions } from "@/lib/pacifica/client";
-import { getMarksSnapshot } from "@/lib/data/marks";
+import { getMark, getMarksSnapshot } from "@/lib/data/marks";
+import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 
@@ -23,6 +24,8 @@ type CopyRowMeta = {
   botId?: string;
   leaderClosedAt?: string;
 };
+
+type CopyLiveStatus = "open" | "not_found" | "unknown";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -48,6 +51,11 @@ function parseCopyRowMeta(value: unknown): CopyRowMeta | null {
     botId: optionalString(value.botId),
     leaderClosedAt: optionalString(value.leaderClosedAt),
   };
+}
+
+function finiteNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 export async function GET(request: Request) {
@@ -95,12 +103,14 @@ export async function GET(request: Request) {
 
   // --- Pacifica copy bets ---
   const copyBets = userBets.filter((b) => b.type === "copy");
-  let userPositions = null;
+  let userPositions: PacificaPosition[] | null = null;
+  let positionsUnavailable = false;
   let marks: Map<string, number> | null = null;
   if (copyBets.length > 0 && user.solanaPubkey) {
     try {
       userPositions = await getPositions(user.solanaPubkey);
     } catch (err) {
+      positionsUnavailable = true;
       console.warn("[portfolio] pacifica positions fetch failed:", err);
     }
     try {
@@ -109,50 +119,83 @@ export async function GET(request: Request) {
       console.warn("[portfolio] marks snapshot failed:", err);
     }
   }
-  const copyRows = copyBets
-    .filter((b) => b.status === "confirmed")
-    .flatMap((b) => {
-      const whaleMeta = parseWhaleCopyMeta(b.meta);
-      const meta = parseCopyRowMeta(b.meta);
-      if (!meta) return [];
-      const livePos = userPositions?.find(
-        (p) =>
-          p.symbol === meta.leaderMarket &&
-          ((meta.leaderSide === "long" && p.side === "bid") ||
-            (meta.leaderSide === "short" && p.side === "ask")),
-      );
-      // Live unrealized PnL as a % of stake. Pacifica's /positions omits
-      // computed PnL, so derive it from the position's entry vs the
-      // current mark. Null when the position or a mark is unavailable.
-      let unrealizedPnlPct: number | null = null;
-      if (livePos && marks && b.amountUsdc > 0) {
-        const mark = marks.get(meta.leaderMarket);
-        const entry = Number(livePos.entry_price);
-        const size = Number(livePos.amount);
-        if (mark != null && Number.isFinite(entry) && Number.isFinite(size)) {
-          const dir = livePos.side === "bid" ? 1 : -1;
-          const pnlUsd = (mark - entry) * size * dir;
-          unrealizedPnlPct = (pnlUsd / b.amountUsdc) * 100;
-        }
-      }
-      return {
-        betId: b.id,
-        market: meta.leaderMarket,
-        side: meta.leaderSide,
-        leverage: meta.leverage,
-        stakeUsdc: b.amountUsdc,
-        leaderAddress: meta.leaderAddress ?? whaleMeta?.sourceAccount ?? null,
-        leaderUsername: null,
-        whaleId: whaleMeta?.whaleId ?? null,
-        whaleName: null,
-        autoCloseOnSourceClose: whaleMeta?.autoCloseOnSourceClose ?? false,
-        closeReason: whaleMeta?.closeReason ?? null,
-        botId: meta.botId ?? null,
-        botName: meta.botId ? (getBot(meta.botId)?.name ?? meta.botId) : null,
-        unrealizedPnlPct,
-        leaderClosedAt: meta.leaderClosedAt ?? null,
-      };
-    });
+  const copyRows = (
+    await Promise.all(
+      copyBets
+        .filter((b) => b.status === "confirmed")
+        .map(async (b) => {
+          const whaleMeta = parseWhaleCopyMeta(b.meta);
+          const meta = parseCopyRowMeta(b.meta);
+          if (!meta) return null;
+
+          const livePos = userPositions?.find(
+            (p) =>
+              p.symbol === meta.leaderMarket &&
+              ((meta.leaderSide === "long" && p.side === "bid") ||
+                (meta.leaderSide === "short" && p.side === "ask")),
+          );
+          const liveStatus: CopyLiveStatus = livePos
+            ? "open"
+            : positionsUnavailable
+              ? "unknown"
+              : "not_found";
+          const entry = finiteNumber(livePos?.entry_price);
+          const size = finiteNumber(livePos?.amount);
+          const liquidationPrice = finiteNumber(livePos?.liquidation_price);
+          const marginUsd = finiteNumber(livePos?.margin);
+          const mark =
+            livePos && marks
+              ? (marks.get(meta.leaderMarket) ??
+                (await getMark(meta.leaderMarket).catch((err) => {
+                  console.warn("[portfolio] mark fetch failed:", err);
+                  return null;
+                })))
+              : null;
+
+          let unrealizedPnlPct: number | null = null;
+          let pnlUsd: number | null = null;
+          if (mark != null && entry != null && size != null && b.amountUsdc > 0) {
+            const direction = livePos?.side === "bid" ? 1 : -1;
+            pnlUsd = (mark - entry) * Math.abs(size) * direction;
+            unrealizedPnlPct = (pnlUsd / b.amountUsdc) * 100;
+          }
+
+          return {
+            betId: b.id,
+            market: meta.leaderMarket,
+            side: meta.leaderSide,
+            leverage: meta.leverage,
+            stakeUsdc: b.amountUsdc,
+            leaderAddress: meta.leaderAddress ?? whaleMeta?.sourceAccount ?? null,
+            leaderUsername: null,
+            whaleId: whaleMeta?.whaleId ?? null,
+            whaleName: null,
+            autoCloseOnSourceClose: whaleMeta?.autoCloseOnSourceClose ?? false,
+            closeReason: whaleMeta?.closeReason ?? null,
+            botId: meta.botId ?? null,
+            botName: meta.botId ? (getBot(meta.botId)?.name ?? meta.botId) : null,
+            liveStatus,
+            entryPrice: entry,
+            markPrice: mark,
+            liquidationPrice,
+            amountBase: size == null ? null : Math.abs(size),
+            marginUsd: marginUsd != null && marginUsd > 0 ? marginUsd : null,
+            marginMode: livePos ? (livePos.isolated ? "isolated" : "cross") : null,
+            notionalUsd:
+              mark != null && size != null ? mark * Math.abs(size) : null,
+            pnlUsd,
+            unrealizedPnlPct,
+            openedAt: livePos?.created_at
+              ? new Date(livePos.created_at).toISOString()
+              : null,
+            positionUpdatedAt: livePos?.updated_at
+              ? new Date(livePos.updated_at).toISOString()
+              : null,
+            leaderClosedAt: meta.leaderClosedAt ?? null,
+          };
+        }),
+    )
+  ).filter((row) => row !== null);
 
   return NextResponse.json({ positions, copyRows });
 }
