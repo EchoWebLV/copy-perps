@@ -22,8 +22,6 @@ import {
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import { buildPulseItems, type PulseItem } from "./pulse-items";
 import {
-  buildPulseSeedComments,
-  buildPulseSocialStats,
   PULSE_REACTIONS,
   type PulseComment,
   type PulseCommentProfile,
@@ -65,14 +63,8 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
-  const [reactions, setReactions] = useState<
-    Record<string, PulseReaction | undefined>
-  >({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [localComments, setLocalComments] = useState<
-    Record<string, PulseComment[]>
-  >({});
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -211,22 +203,15 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 item={item}
                 now={now}
                 selectedReaction={
-                  persistedSocial[item.position.positionId]?.myReaction ??
-                  reactions[item.position.positionId]
+                  persistedSocial[item.position.positionId]?.myReaction ?? undefined
                 }
                 commentsOpen={openComments[item.position.positionId] === true}
                 commentDraft={commentDrafts[item.position.positionId] ?? ""}
-                localComments={localComments[item.position.positionId] ?? []}
                 persistedSocial={persistedSocial[item.position.positionId]}
                 onReact={(reaction) => {
                   const positionId = item.position.positionId;
-                  const current =
-                    persistedSocial[positionId]?.myReaction ?? reactions[positionId];
+                  const current = persistedSocial[positionId]?.myReaction;
                   const next = current === reaction ? undefined : reaction;
-                  setReactions((current) => ({
-                    ...current,
-                    [positionId]: next,
-                  }));
                   void postPulseSocial({
                     positionId,
                     reaction: next ?? null,
@@ -257,21 +242,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                     ...current,
                     [positionId]: true,
                   }));
-                  const saved = await postPulseSocial({ positionId, comment: body });
-                  if (!saved) {
-                    setLocalComments((current) => ({
-                      ...current,
-                      [positionId]: [
-                        {
-                          id: `${positionId}:local:${Date.now()}`,
-                          author: "You",
-                          body,
-                          age: "now",
-                        },
-                        ...(current[positionId] ?? []),
-                      ],
-                    }));
-                  }
+                  void postPulseSocial({ positionId, comment: body });
                 }}
                 onTail={() => setTailSource(toTailSource(item.position))}
               />
@@ -295,7 +266,6 @@ function PulsePost({
   selectedReaction,
   commentsOpen,
   commentDraft,
-  localComments,
   persistedSocial,
   onReact,
   onToggleComments,
@@ -308,7 +278,6 @@ function PulsePost({
   selectedReaction?: PulseReaction;
   commentsOpen: boolean;
   commentDraft: string;
-  localComments: PulseComment[];
   persistedSocial?: PulseApiSocialRecord;
   onReact: (reaction: PulseReaction) => void;
   onToggleComments: () => void;
@@ -319,16 +288,11 @@ function PulsePost({
   const p = item.position;
   const sideColor = p.side === "long" ? GREEN : RED;
   const profit = (p.unrealizedPnlPct ?? 0) >= 0;
-  const seedCounts = buildPulseSocialStats(item);
-  const counts = mergeSocialCounts(seedCounts, persistedSocial?.reactionCounts);
-  const seedComments = useMemo(() => buildPulseSeedComments(item), [item]);
+  const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
   const persistedComments =
     persistedSocial?.comments.map(apiCommentToPulseComment) ?? [];
-  const comments = [...localComments, ...persistedComments, ...seedComments];
-  const commentCount =
-    seedCounts.Comments +
-    (persistedSocial?.commentsCount ?? 0) +
-    localComments.length;
+  const comments = persistedComments;
+  const commentCount = persistedSocial?.commentsCount ?? 0;
   const aiLine = buildAiLine(item);
   const recentReactors = persistedSocial?.recentReactors ?? [];
 
@@ -766,14 +730,11 @@ function buildPulseStats(positions: WhalePositionSignal[]) {
   };
 }
 
-function mergeSocialCounts(
-  seedCounts: Record<PulseReaction | "Comments", number>,
-  persistedCounts?: Record<PulseReaction, number>,
-): Record<PulseReaction, number> {
+function emptySocialCounts(): Record<PulseReaction, number> {
   return {
-    Tailing: seedCounts.Tailing + (persistedCounts?.Tailing ?? 0),
-    Bullish: seedCounts.Bullish + (persistedCounts?.Bullish ?? 0),
-    Bearish: seedCounts.Bearish + (persistedCounts?.Bearish ?? 0),
+    Tailing: 0,
+    Bullish: 0,
+    Bearish: 0,
   };
 }
 
