@@ -59,7 +59,7 @@ interface PulseApiSocialRecord {
 type PulseApiSocial = Record<string, PulseApiSocialRecord>;
 
 export function WhalePulseFeed({ initialPositions }: Props) {
-  const { getAccessToken } = usePrivy();
+  const { ready, authenticated, getAccessToken, login } = usePrivy();
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
@@ -104,12 +104,23 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     setPersistedSocial((current) => ({ ...current, ...social }));
   }, []);
 
+  const requirePulseAuth = useCallback(() => {
+    if (!ready) return false;
+    if (!authenticated) {
+      login();
+      return false;
+    }
+    return true;
+  }, [authenticated, login, ready]);
+
   useEffect(() => {
     if (!positionIdsParam) return;
     let cancelled = false;
 
     async function loadPulseSocial() {
-      const token = await getAccessToken().catch(() => null);
+      const token = authenticated
+        ? await getAccessToken().catch(() => null)
+        : null;
       const r = await fetch(`/api/pulse/social?positionIds=${positionIdsParam}`, {
         cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -123,7 +134,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [getAccessToken, mergePulseSocial, positionIdsParam]);
+  }, [authenticated, getAccessToken, mergePulseSocial, positionIdsParam]);
 
   const postPulseSocial = useCallback(
     async (body: {
@@ -131,8 +142,12 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       reaction?: PulseReaction | null;
       comment?: string;
     }): Promise<boolean> => {
+      if (!requirePulseAuth()) return false;
       const token = await getAccessToken().catch(() => null);
-      if (!token) return false;
+      if (!token) {
+        login();
+        return false;
+      }
 
       const r = await fetch("/api/pulse/social", {
         method: "POST",
@@ -147,7 +162,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       if (data.social) mergePulseSocial(data.social);
       return true;
     },
-    [getAccessToken, mergePulseSocial],
+    [getAccessToken, login, mergePulseSocial, requirePulseAuth],
   );
 
   return (
@@ -209,6 +224,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 commentDraft={commentDrafts[item.position.positionId] ?? ""}
                 persistedSocial={persistedSocial[item.position.positionId]}
                 onReact={(reaction) => {
+                  if (!requirePulseAuth()) return;
                   const positionId = item.position.positionId;
                   const current = persistedSocial[positionId]?.myReaction;
                   const next = current === reaction ? undefined : reaction;
@@ -217,13 +233,14 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                     reaction: next ?? null,
                   });
                 }}
-                onToggleComments={() =>
+                onToggleComments={() => {
+                  if (!requirePulseAuth()) return;
                   setOpenComments((current) => ({
                     ...current,
                     [item.position.positionId]:
                       current[item.position.positionId] !== true,
-                  }))
-                }
+                  }));
+                }}
                 onCommentDraftChange={(value) =>
                   setCommentDrafts((current) => ({
                     ...current,
@@ -234,17 +251,22 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                   const positionId = item.position.positionId;
                   const body = (commentDrafts[positionId] ?? "").trim();
                   if (!body) return;
-                  setCommentDrafts((current) => ({
-                    ...current,
-                    [positionId]: "",
-                  }));
+                  if (!requirePulseAuth()) return;
                   setOpenComments((current) => ({
                     ...current,
                     [positionId]: true,
                   }));
-                  void postPulseSocial({ positionId, comment: body });
+                  const saved = await postPulseSocial({ positionId, comment: body });
+                  if (!saved) return;
+                  setCommentDrafts((current) => ({
+                    ...current,
+                    [positionId]: "",
+                  }));
                 }}
-                onTail={() => setTailSource(toTailSource(item.position))}
+                onTail={() => {
+                  if (!requirePulseAuth()) return;
+                  setTailSource(toTailSource(item.position));
+                }}
               />
             ))}
           </ul>
