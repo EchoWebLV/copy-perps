@@ -7,10 +7,6 @@ import {
 import { createHash } from "crypto";
 import { getConnection } from "@/lib/solana/balance";
 import {
-  getGasWalletPubkey,
-  partialSignAsFeePayer,
-} from "@/lib/wallets/gas";
-import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -69,9 +65,8 @@ async function getAtaUsdcBalance(
   }
 }
 
-// Returns a base64-encoded v0 tx with Gas Wallet as fee payer,
-// partial-signed by Gas Wallet. Client signs (adds user signature)
-// and broadcasts via Helius.
+// Returns a base64-encoded unsigned v0 tx. The client sends it through
+// Privy's sponsored Solana flow, so no server fee-payer key is needed.
 export async function buildDepositTx(params: {
   userPubkey: PublicKey;
   amountUsdc: number;
@@ -109,11 +104,10 @@ export async function buildDepositTx(params: {
 
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   const msg = new TransactionMessage({
-    payerKey: getGasWalletPubkey(),
+    payerKey: params.userPubkey,
     recentBlockhash: blockhash,
     instructions: [ix],
   }).compileToV0Message();
   const tx = new VersionedTransaction(msg);
-  partialSignAsFeePayer(tx);
   return { transactionB64: Buffer.from(tx.serialize()).toString("base64") };
 }

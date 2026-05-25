@@ -72,9 +72,8 @@ Copy `.env.example` → `.env.local`. Required for any non-mock work:
 - `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET` — Privy app.
 - `NEXT_PUBLIC_HELIUS_RPC_URL` — Helius mainnet RPC (used by both client and server).
 - `CRON_SECRET` — `/api/cron/*` rejects requests without `Authorization: Bearer ${CRON_SECRET}` (Vercel sets this header automatically).
-- `FEATURE_GASLESS_BETS` — `"true"` flips every bet/close/withdraw onto the gasless server-fee-payer path. Required env vars below are mandatory when this is on.
-- `GAS_WALLET_PRIVATE_KEY` — base58 secret for the Gas Wallet that pays SOL fees on user txs.
-- `TREASURY_PUBKEY` — Treasury Wallet pubkey; receives USDC platform fees (0.5% + $0.05 per bet).
+- Privy gas sponsorship is configured in the Privy Dashboard, not env vars.
+- `FEATURE_GASLESS_BETS`, `GAS_WALLET_PRIVATE_KEY`, `TREASURY_PUBKEY` — legacy rails only; the current whale/Pacifica tail deposit flow uses Privy's sponsored Solana send path.
 
 `drizzle.config.ts` reads `.env.local` directly (via `dotenv`), so `db:push` and `db:studio` work outside Next.
 
@@ -164,6 +163,10 @@ Each cron route guards on `checkCronAuth` (Bearer CRON_SECRET) and runs in `runt
 
 ### Bet lifecycle (the part that confused us repeatedly)
 
+The active whale/Pacifica tail flow now uses Privy native Solana sponsorship for user deposits: the server builds an unsigned user-payer Pacifica deposit transaction, and the client calls `useSignAndSendTransaction` with `options.sponsor: true`. Do not set a server Gas Wallet as fee payer for that deposit path.
+
+The notes below describe the legacy meme / prediction / Flash rails.
+
 A bet is a multi-phase dance. The client orchestrates; the server only ever **builds** unsigned transactions. Privy's wallet signs; Helius RPC submits.
 
 1. **POST `/api/bet/{rail}`** — server validates, runs balance preflight (see "USDC consolidation" below), builds the open tx (Jupiter swap / Jupiter Prediction order / Flash `swapAndOpen`). When `FEATURE_GASLESS_BETS=true`, the tx is built with **Gas Wallet as fee payer** and a **Treasury USDC fee-transfer ix appended** (0.5% + $0.05); server partial-signs as the fee payer before returning. Inserts a `bets` row with `status: 'pending'`, returns `{ phase: 'open', betId, swapTransaction }`, `{ phase: 'consolidate', consolidationTransaction }`, or — for prediction in gasless mode — `{ phase: 'open', betId, prefundTransaction, swapTransaction }`.
@@ -176,9 +179,9 @@ Close mirrors this: `close` builds, client signs+submits, `close/confirm` writes
 
 A pending bet that never reaches `confirm` (user cancels the wallet modal, network drops mid-sign) gets reaped to `status: 'abandoned'` after 5 minutes by `/api/portfolio` — see [app/api/portfolio/route.ts](app/api/portfolio/route.ts).
 
-### Gasless via server fee payer
+### Legacy gasless via server fee payer
 
-When `FEATURE_GASLESS_BETS=true`, users only ever hold USDC. SOL fees on every user tx are paid by a server-controlled **Gas Wallet** ([lib/wallets/gas.ts](lib/wallets/gas.ts), `GAS_WALLET_PRIVATE_KEY`) which is set as fee payer on every bet, close, withdraw, and consolidation tx. The user signs to authorize their own USDC moving; their SOL balance is irrelevant.
+This is the old legacy rail path, not the current whale/Pacifica tail deposit path. When `FEATURE_GASLESS_BETS=true`, users only ever hold USDC. SOL fees on every user tx are paid by a server-controlled **Gas Wallet** ([lib/wallets/gas.ts](lib/wallets/gas.ts), `GAS_WALLET_PRIVATE_KEY`) which is set as fee payer on every bet, close, withdraw, and consolidation tx. The user signs to authorize their own USDC moving; their SOL balance is irrelevant.
 
 A 0.5% + $0.05 platform fee per open is appended as a `TransferChecked` USDC instruction inside the same tx, routed to a **Treasury Wallet** ([lib/wallets/treasury.ts](lib/wallets/treasury.ts), `TREASURY_PUBKEY`). Closes and withdraws are free.
 

@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
+import {
+  useSignAndSendTransaction,
+  useSignMessage,
+} from "@privy-io/react-auth/solana";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
 import { Minus, Plus } from "lucide-react";
@@ -112,7 +115,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const { getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
   const { signMessage } = useSignMessage();
-  const { signTransaction } = useSignTransaction();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [stake, setStake] = useState<number>(10);
   const [custom, setCustom] = useState<string>("");
@@ -324,14 +327,15 @@ export function TailModal({ open, onClose, source }: Props) {
       const signAndSendDeposit = async (depositTransactionB64: string) => {
         setStatus("Depositing USDC…");
         const txBytes = b64ToBytes(depositTransactionB64);
-        const { signedTransaction } = (await signTransaction({
+        const { signature } = (await signAndSendTransaction({
           transaction: txBytes,
           wallet,
-        })) as { signedTransaction: Uint8Array };
+          options: { sponsor: true },
+        })) as { signature: Uint8Array | string };
+        const bs58 = (await import("bs58")).default;
+        const sig =
+          typeof signature === "string" ? signature : bs58.encode(signature);
         const conn = new Connection(RPC, "confirmed");
-        const sig = await conn.sendRawTransaction(signedTransaction, {
-          maxRetries: 3,
-        });
         await conn.confirmTransaction(sig, "confirmed");
         await sleep(1000);
       };
@@ -435,7 +439,7 @@ export function TailModal({ open, onClose, source }: Props) {
     copyableWhalePositions,
     getAccessToken,
     signMessage,
-    signTransaction,
+    signAndSendTransaction,
   ]);
 
   if (!open || !source) return null;
