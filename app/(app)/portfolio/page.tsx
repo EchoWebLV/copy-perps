@@ -55,6 +55,12 @@ interface PacificaAccountData {
   availableToSpendUsd: number | null;
   availableToWithdrawUsd: number | null;
   totalMarginUsedUsd: number | null;
+  pendingDepositUsd?: number;
+  pendingDeposits?: Array<{
+    amountUsdc: number;
+    signature: string;
+    createdAt: string;
+  }>;
   updatedAt: string | null;
 }
 
@@ -182,13 +188,20 @@ export default function PortfolioPage() {
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
   const pacificaEquityUsd = pacificaAccount?.equityUsd ?? null;
   const pacificaAvailableUsd = pacificaAccount?.availableToSpendUsd ?? null;
+  const processingFundsUsd = Math.max(
+    0,
+    pacificaAccount?.pendingDepositUsd ?? 0,
+  );
   const pacificaPortfolioValue = pacificaEquityUsd ?? copyRowsValue;
   const availableCashUsd =
     walletUsd == null && pacificaAvailableUsd == null
       ? null
       : (walletUsd ?? 0) + (pacificaAvailableUsd ?? 0);
   const totalNetWorth =
-    (walletUsd ?? 0) + pacificaPortfolioValue + legacyPositionsValue;
+    (walletUsd ?? 0) +
+    pacificaPortfolioValue +
+    legacyPositionsValue +
+    processingFundsUsd;
 
   // Realized PnL summary for the Closed tab. Only positions with known
   // proceeds count — a closed position whose proceeds haven't been
@@ -264,6 +277,14 @@ export default function PortfolioPage() {
             {availableCashUsd == null ? "-" : `$${availableCashUsd.toFixed(2)}`}
           </BigNum>
         </div>
+        {processingFundsUsd > 0 && (
+          <div
+            className="mt-1 text-[10px] font-black uppercase tracking-widest"
+            style={{ color: ACCENT }}
+          >
+            Processing ${processingFundsUsd.toFixed(2)}
+          </div>
+        )}
       </div>
 
       <div
@@ -378,6 +399,14 @@ export default function PortfolioPage() {
                       style={{ color: DIM }}
                     >
                       + {walletSol.toFixed(4)} SOL
+                    </div>
+                  )}
+                  {processingFundsUsd > 0 && (
+                    <div
+                      className="text-[10px] font-black uppercase tracking-widest"
+                      style={{ color: ACCENT }}
+                    >
+                      Processing ${processingFundsUsd.toFixed(2)}
                     </div>
                   )}
                 </div>

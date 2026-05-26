@@ -1,5 +1,6 @@
 import type {
   PacificaAccountInfo,
+  PacificaBalanceHistoryRow,
   PacificaLeaderboardEntry,
   PacificaMarketInfo,
   PacificaOrderFill,
@@ -94,6 +95,15 @@ export async function getPositions(account: string): Promise<PacificaPosition[]>
 
 export async function getAccountInfo(account: string): Promise<PacificaAccountInfo> {
   return getEnvelope<PacificaAccountInfo>(`/account?account=${account}`);
+}
+
+export async function getAccountBalanceHistory(
+  account: string,
+  limit = 100,
+): Promise<PacificaBalanceHistoryRow[]> {
+  return getEnvelope<PacificaBalanceHistoryRow[]>(
+    `/account/balance/history?account=${account}&limit=${limit}`,
+  );
 }
 
 // Per-fill history with realized PnL per row. Used to compute win

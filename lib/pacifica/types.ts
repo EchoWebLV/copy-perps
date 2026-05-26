@@ -95,6 +95,14 @@ export interface PacificaAccountInfo {
   updated_at: number;
 }
 
+export interface PacificaBalanceHistoryRow {
+  amount: string;
+  balance: string;
+  pending_balance: string;
+  event_type: string;
+  created_at: number;
+}
+
 export interface PacificaOrderFill {
   order_id: string;
   client_order_id: string | null;

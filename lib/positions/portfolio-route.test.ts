@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     enrichBet: vi.fn(),
     getPositions: vi.fn(),
     getAccountInfo: vi.fn(),
+    findUncreditedPacificaDeposits: vi.fn(),
     getMarksSnapshot: vi.fn(),
     getMark: vi.fn(),
     getBot: vi.fn(),
@@ -53,6 +54,9 @@ vi.mock("@/lib/positions/enrich", () => ({
 vi.mock("@/lib/pacifica/client", () => ({
   getPositions: mocks.getPositions,
   getAccountInfo: mocks.getAccountInfo,
+}));
+vi.mock("@/lib/pacifica/deposit-reconcile", () => ({
+  findUncreditedPacificaDeposits: mocks.findUncreditedPacificaDeposits,
 }));
 vi.mock("@/lib/data/marks", () => ({
   getMarksSnapshot: mocks.getMarksSnapshot,
@@ -88,6 +92,10 @@ describe("GET /api/portfolio", () => {
       available_to_withdraw: "0",
       total_margin_used: "0",
       updated_at: 0,
+    });
+    mocks.findUncreditedPacificaDeposits.mockResolvedValue({
+      totalUsdc: 0,
+      deposits: [],
     });
     mocks.getMarksSnapshot.mockResolvedValue(new Map());
     mocks.getMark.mockResolvedValue(null);
@@ -301,6 +309,53 @@ describe("GET /api/portfolio", () => {
         availableToWithdrawUsd: 9.954257,
         totalMarginUsedUsd: 0,
         updatedAt: "2026-05-25T17:58:42.548Z",
+      },
+    });
+  });
+
+  it("includes uncredited Pacifica deposits as pending portfolio funds", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.getAccountInfo.mockResolvedValue({
+      balance: "9.780636",
+      account_equity: "9.697111",
+      available_to_spend: "4.705972",
+      available_to_withdraw: "-0.285167",
+      total_margin_used: "4.991139",
+      updated_at: 1779794748480,
+    });
+    mocks.findUncreditedPacificaDeposits.mockResolvedValue({
+      totalUsdc: 4.306925,
+      deposits: [
+        {
+          amountUsdc: 4.306925,
+          signature: "pending-sig",
+          createdAt: "2026-05-26T11:12:39.000Z",
+        },
+      ],
+    });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      pacificaAccount: {
+        equityUsd: 9.697111,
+        pendingDepositUsd: 4.306925,
+        pendingDeposits: [
+          {
+            amountUsdc: 4.306925,
+            signature: "pending-sig",
+            createdAt: "2026-05-26T11:12:39.000Z",
+          },
+        ],
       },
     });
   });

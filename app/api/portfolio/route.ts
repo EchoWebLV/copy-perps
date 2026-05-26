@@ -5,6 +5,7 @@ import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
 import { getAccountInfo, getPositions } from "@/lib/pacifica/client";
+import { findUncreditedPacificaDeposits } from "@/lib/pacifica/deposit-reconcile";
 import { getMark, getMarksSnapshot } from "@/lib/data/marks";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
@@ -138,6 +139,12 @@ export async function GET(request: Request) {
     availableToSpendUsd: number | null;
     availableToWithdrawUsd: number | null;
     totalMarginUsedUsd: number | null;
+    pendingDepositUsd: number;
+    pendingDeposits: Array<{
+      amountUsdc: number;
+      signature: string;
+      createdAt: string;
+    }>;
     updatedAt: string | null;
   } | null = null;
   if (user.solanaPubkey) {
@@ -154,12 +161,20 @@ export async function GET(request: Request) {
     }
     try {
       const account = await getAccountInfo(user.solanaPubkey);
+      const pending = await findUncreditedPacificaDeposits({
+        account: user.solanaPubkey,
+      }).catch((err) => {
+        console.warn("[portfolio] pacifica deposit reconcile failed:", err);
+        return { totalUsdc: 0, deposits: [] };
+      });
       pacificaAccount = {
         balanceUsd: finiteNumber(account.balance),
         equityUsd: finiteNumber(account.account_equity),
         availableToSpendUsd: finiteNumber(account.available_to_spend),
         availableToWithdrawUsd: finiteNumber(account.available_to_withdraw),
         totalMarginUsedUsd: finiteNumber(account.total_margin_used),
+        pendingDepositUsd: pending.totalUsdc,
+        pendingDeposits: pending.deposits,
         updatedAt: isoFromMillis(account.updated_at),
       };
     } catch (err) {
