@@ -20,16 +20,21 @@ describe("Railway deployment config", () => {
       readFileSync(join(root, "railway.json"), "utf8"),
     ) as {
       build: { builder: string; buildCommand: string };
-      deploy: { startCommand: string; healthcheckPath: string };
+      deploy: {
+        startCommand: string;
+        healthcheckPath: string;
+        healthcheckTimeout: number;
+      };
     };
 
     expect(packageJson.scripts.start).toBe(
-      "node .next/standalone/server.js",
+      "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     );
     expect(railwayJson.build.builder).toBe("RAILPACK");
     expect(railwayJson.build.buildCommand).toBe("npm run build");
     expect(railwayJson.deploy.startCommand).toBe(packageJson.scripts.start);
     expect(railwayJson.deploy.healthcheckPath).toBe("/api/health");
+    expect(railwayJson.deploy.healthcheckTimeout).toBeGreaterThanOrEqual(120);
   });
 
   it("exposes a cheap Railway healthcheck", async () => {
