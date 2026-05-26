@@ -98,14 +98,14 @@ describe("Pacifica funding math", () => {
     );
   });
 
-  it("tops up the shortfall while obeying Pacifica's minimum deposit", () => {
+  it("sizes top-ups from the collateral shortfall instead of a fresh-deposit minimum", () => {
     expect(
       pacificaDepositTopUpUsdc({
         availableToSpendUsdc: 3,
         stakeUsdc: 5,
         leverage: 10,
       }),
-    ).toBe(PACIFICA_MIN_DEPOSIT_USDC);
+    ).toBe(2);
 
     expect(
       pacificaDepositTopUpUsdc({
@@ -218,7 +218,7 @@ describe("Pacifica funding math", () => {
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
-  it("returns a plain insufficient-funds error when wallet USDC cannot satisfy the deposit minimum", async () => {
+  it("tops up with a sub-minimum wallet balance when existing Pacifica cash covers the stake", async () => {
     mocks.getAccountInfo.mockResolvedValue({
       available_to_spend: "3.97",
       account_equity: "8.92",
@@ -234,8 +234,15 @@ describe("Pacifica funding math", () => {
         stakeUsdc: 5,
         leverage: 20,
       }),
-    ).rejects.toThrow("Add $5.69 more USDC to trade.");
-    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+    ).resolves.toEqual({
+      depositTransactionB64: "tx",
+      initialDepositUsdc: 4.31,
+      availablePacificaUsdc: 3.97,
+    });
+    expect(mocks.buildDepositTx).toHaveBeenCalledWith({
+      userPubkey: expect.objectContaining({}),
+      amountUsdc: 4.31,
+    });
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 

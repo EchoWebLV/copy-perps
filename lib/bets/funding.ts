@@ -90,7 +90,7 @@ export function pacificaDepositTopUpUsdc(params: {
     leverage: params.leverage,
   });
   const shortfall = roundUpCents(Math.max(0, required - available));
-  return shortfall > 0 ? Math.max(PACIFICA_MIN_DEPOSIT_USDC, shortfall) : 0;
+  return shortfall;
 }
 
 export function classifyRecentPacificaDeposit(params: {
@@ -237,13 +237,17 @@ export async function planPacificaDepositTopUp(params: {
     leverage: params.leverage,
   });
   if (topUpUsdc <= 0) return null;
-  if ((fundingInfo?.creditedUsdc ?? 0) <= CREDITED_EPSILON_USDC) {
+  const hasCreditedPacificaFunds =
+    (fundingInfo?.creditedUsdc ?? 0) > CREDITED_EPSILON_USDC;
+  if (!hasCreditedPacificaFunds) {
     throwForRecentDepositState(await loadRecentDepositState());
   }
 
   const userPubkey = new PublicKey(params.userMainPubkey);
   const walletUsdc = await getWalletUsdcBalance(userPubkey);
-  const requiredDepositUsdc = Math.max(PACIFICA_MIN_DEPOSIT_USDC, topUpUsdc);
+  const requiredDepositUsdc = hasCreditedPacificaFunds
+    ? topUpUsdc
+    : Math.max(PACIFICA_MIN_DEPOSIT_USDC, topUpUsdc);
   if (walletUsdc + CREDITED_EPSILON_USDC < requiredDepositUsdc) {
     throw new InsufficientAppFundsError(
       roundUpCents(requiredDepositUsdc - walletUsdc),
