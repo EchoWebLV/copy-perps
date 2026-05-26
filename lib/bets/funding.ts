@@ -245,9 +245,7 @@ export async function planPacificaDepositTopUp(params: {
 
   const userPubkey = new PublicKey(params.userMainPubkey);
   const walletUsdc = await getWalletUsdcBalance(userPubkey);
-  const requiredDepositUsdc = hasCreditedPacificaFunds
-    ? topUpUsdc
-    : Math.max(PACIFICA_MIN_DEPOSIT_USDC, topUpUsdc);
+  const requiredDepositUsdc = Math.max(PACIFICA_MIN_DEPOSIT_USDC, topUpUsdc);
   if (walletUsdc + CREDITED_EPSILON_USDC < requiredDepositUsdc) {
     throw new InsufficientAppFundsError(
       roundUpCents(requiredDepositUsdc - walletUsdc),
@@ -255,7 +253,7 @@ export async function planPacificaDepositTopUp(params: {
       requiredDepositUsdc,
     );
   }
-  const depositUsdc = walletUsdc;
+  const depositUsdc = requiredDepositUsdc;
 
   const { transactionB64 } = await buildDepositTx({
     userPubkey,

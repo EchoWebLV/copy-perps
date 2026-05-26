@@ -190,7 +190,7 @@ describe("Pacifica funding math", () => {
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
-  it("sweeps wallet USDC when a trade-triggered top-up is needed", async () => {
+  it("deposits only the Pacifica minimum when a small trade top-up is needed", async () => {
     mocks.getAccountInfo.mockResolvedValue({
       available_to_spend: "3.97",
       account_equity: "8.92",
@@ -208,17 +208,17 @@ describe("Pacifica funding math", () => {
       }),
     ).resolves.toEqual({
       depositTransactionB64: "tx",
-      initialDepositUsdc: 13.22,
+      initialDepositUsdc: PACIFICA_MIN_DEPOSIT_USDC,
       availablePacificaUsdc: 3.97,
     });
     expect(mocks.buildDepositTx).toHaveBeenCalledWith({
       userPubkey: expect.objectContaining({}),
-      amountUsdc: 13.22,
+      amountUsdc: PACIFICA_MIN_DEPOSIT_USDC,
     });
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
-  it("tops up with a sub-minimum wallet balance when existing Pacifica cash covers the stake", async () => {
+  it("does not submit sub-minimum Pacifica deposits from a partially funded account", async () => {
     mocks.getAccountInfo.mockResolvedValue({
       available_to_spend: "3.97",
       account_equity: "8.92",
@@ -234,15 +234,8 @@ describe("Pacifica funding math", () => {
         stakeUsdc: 5,
         leverage: 20,
       }),
-    ).resolves.toEqual({
-      depositTransactionB64: "tx",
-      initialDepositUsdc: 4.31,
-      availablePacificaUsdc: 3.97,
-    });
-    expect(mocks.buildDepositTx).toHaveBeenCalledWith({
-      userPubkey: expect.objectContaining({}),
-      amountUsdc: 4.31,
-    });
+    ).rejects.toThrow("Add $5.69 more USDC to trade.");
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
