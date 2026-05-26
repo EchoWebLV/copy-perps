@@ -431,7 +431,7 @@ function PulsePost({
                 border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
               }}
             >
-              {p.stale ? "Stale" : "Fresh"}
+              {p.stale ? "Stale" : "Live"}
             </span>
           </div>
 

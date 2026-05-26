@@ -61,4 +61,26 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("sm:flex-wrap");
     expect(componentSource).toContain("sm:inline");
   });
+
+  it("labels source freshness as live instead of fresh so old holdings do not read as new opens", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+    const rosterSource = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+    const liveSource = readFileSync(
+      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain('{p.stale ? "Stale" : "Live"}');
+    expect(componentSource).not.toContain('{p.stale ? "Stale" : "Fresh"}');
+    expect(rosterSource).toContain('{stale ? "STALE" : "LIVE"}');
+    expect(liveSource).toContain('{stale ? "STALE" : "LIVE"}');
+    expect(rosterSource).not.toContain('{stale ? "STALE" : "FRESH"}');
+    expect(liveSource).not.toContain('{stale ? "STALE" : "FRESH"}');
+  });
 });

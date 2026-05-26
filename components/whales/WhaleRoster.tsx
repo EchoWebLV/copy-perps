@@ -458,7 +458,7 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
 function FreshnessBadge({ stale }: { stale: boolean }) {
   return (
     <span style={{ color: stale ? RED : GREEN }}>
-      {stale ? "STALE" : "FRESH"}
+      {stale ? "STALE" : "LIVE"}
     </span>
   );
 }
