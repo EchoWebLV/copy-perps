@@ -75,4 +75,13 @@ describe("whale API routes", () => {
       ],
     });
   });
+
+  it("passes an explicit live positions limit from the request query", async () => {
+    mocks.buildWhalePositionSignals.mockResolvedValue([]);
+    const { GET } = await import("@/app/api/whales/live/route");
+
+    await GET(new Request("http://localhost/api/whales/live?limit=1000"));
+
+    expect(mocks.buildWhalePositionSignals).toHaveBeenCalledWith(1000);
+  });
 });

@@ -128,7 +128,7 @@ function EventRow({ ev }: { ev: ChatterEvent }) {
 
 export default async function ChatterPage() {
   if (whaleSocialEnabled()) {
-    const positions = await buildWhalePositionSignals();
+    const positions = await buildWhalePositionSignals(1000);
 
     return (
       <AppShell railTitle="Pulse">

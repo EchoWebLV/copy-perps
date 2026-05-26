@@ -10,6 +10,7 @@ describe("WhalePulseFeed route contract", () => {
     );
 
     expect(routeSource).toContain("WhalePulseFeed");
+    expect(routeSource).toContain("buildWhalePositionSignals(1000)");
     expect(routeSource).not.toContain("WhaleAnalysisStream");
   });
 
@@ -29,6 +30,7 @@ describe("WhalePulseFeed route contract", () => {
     expect(socialSource).toContain("Bearish");
     expect(componentSource).toContain("Comments");
     expect(componentSource).toContain("buildPulseItems");
+    expect(componentSource).toContain('/api/whales/live?limit=1000');
     expect(componentSource).toContain("/api/pulse/social");
     expect(componentSource).toContain("getAccessToken");
     expect(componentSource).toContain("login");
@@ -60,6 +62,16 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("flex-nowrap");
     expect(componentSource).toContain("sm:flex-wrap");
     expect(componentSource).toContain("sm:inline");
+  });
+
+  it("does not render time-sensitive age labels with Date.now during hydration", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("useState(0)");
+    expect(componentSource).not.toContain("useState(() => Date.now())");
   });
 
   it("labels source freshness as live instead of fresh so old holdings do not read as new opens", () => {

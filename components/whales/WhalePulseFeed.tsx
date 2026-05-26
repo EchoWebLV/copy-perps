@@ -70,11 +70,13 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch("/api/whales/live", { cache: "no-store" });
+      const r = await fetch("/api/whales/live?limit=1000", {
+        cache: "no-store",
+      });
       if (!r.ok) return;
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
       setPositions(data.positions);
@@ -86,6 +88,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   useVisiblePoll(load, POLL_MS);
 
   useEffect(() => {
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
