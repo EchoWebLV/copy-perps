@@ -561,6 +561,31 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 
+  it("treats market metadata 429s as retryable instead of hard failing", async () => {
+    mocks.getMarketBySymbol.mockRejectedValue(
+      new Error("Pacifica GET /info failed: HTTP 429"),
+    );
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Market data is busy. Retrying shortly.",
+      retryable: true,
+      retryAfterMs: expect.any(Number),
+    });
+    expect(mocks.ensureUser).not.toHaveBeenCalled();
+    expect(mocks.reserveTailOnMarket).not.toHaveBeenCalled();
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+  });
+
   it("returns prepare error when pending ledger insert returns no row", async () => {
     const consoleError = vi
       .spyOn(console, "error")

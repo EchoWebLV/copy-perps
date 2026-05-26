@@ -9,6 +9,7 @@ import {
   isPacificaFundingRateLimitError,
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
+import { marketDataErrorResponse } from "@/lib/bets/route-errors";
 import {
   blockTailReservation,
   releaseTailReservation,
@@ -185,7 +186,18 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
-  const marketInfo = await getMarketBySymbol(position.market);
+  let marketInfo;
+  try {
+    marketInfo = await getMarketBySymbol(position.market);
+  } catch (err) {
+    const marketError = marketDataErrorResponse(err);
+    if (marketError) return marketError;
+    console.error("[bet/whale] market data lookup failed:", err);
+    return NextResponse.json(
+      { error: "Could not load market data. Try again." },
+      { status: 502 },
+    );
+  }
   if (!marketInfo) {
     return NextResponse.json(
       { error: `${position.market} is not available for copy trading` },
@@ -218,7 +230,18 @@ export async function POST(request: Request) {
   }
 
   const userNotional = body.stakeUsdc * requestedLeverage;
-  const clamped = await clampLeverageForNotional(position.market, userNotional);
+  let clamped: number;
+  try {
+    clamped = await clampLeverageForNotional(position.market, userNotional);
+  } catch (err) {
+    const marketError = marketDataErrorResponse(err);
+    if (marketError) return marketError;
+    console.error("[bet/whale] leverage lookup failed:", err);
+    return NextResponse.json(
+      { error: "Could not load market data. Try again." },
+      { status: 502 },
+    );
+  }
   const effectiveLeverage = Math.min(requestedLeverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const sizingPrice = await resolveSizingPrice(position);

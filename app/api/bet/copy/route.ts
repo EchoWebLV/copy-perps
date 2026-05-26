@@ -19,6 +19,7 @@ import {
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
+import { marketDataErrorResponse } from "@/lib/bets/route-errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -135,11 +136,23 @@ export async function POST(request: Request) {
 
   // Compute the user's notional + amount given their stake and leader's lev.
   const userNotional = body.stakeUsdc * body.leverage;
-  const clamped = await clampLeverageForNotional(body.market, userNotional);
+  let clamped: number;
+  let marketInfo;
+  try {
+    clamped = await clampLeverageForNotional(body.market, userNotional);
+    marketInfo = await getMarketBySymbol(body.market);
+  } catch (err) {
+    const marketError = marketDataErrorResponse(err);
+    if (marketError) return marketError;
+    console.error("[bet/copy] market data lookup failed:", err);
+    return NextResponse.json(
+      { error: "Could not load market data. Try again." },
+      { status: 502 },
+    );
+  }
   const effectiveLeverage = Math.min(body.leverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const entryPrice = Number(leaderPos.entry_price);
-  const marketInfo = await getMarketBySymbol(body.market);
   if (!marketInfo) {
     return NextResponse.json(
       { error: `${body.market} is not available for copy trading` },

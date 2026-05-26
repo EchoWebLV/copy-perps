@@ -17,6 +17,7 @@ import {
   isPacificaFundingRateLimitError,
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
+import { marketDataErrorResponse } from "@/lib/bets/route-errors";
 import { fetchOpenPositionForBot } from "@/lib/bots/paper";
 import { getBot } from "@/lib/bots";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
@@ -131,10 +132,22 @@ export async function POST(request: Request) {
   // Scale stake → notional using the bot's leverage (clamped by Pacifica
   // per-market max).
   const userNotional = body.stakeUsdc * paperPos.leverage;
-  const clamped = await clampLeverageForNotional(body.market, userNotional);
+  let clamped: number;
+  let marketInfo;
+  try {
+    clamped = await clampLeverageForNotional(body.market, userNotional);
+    marketInfo = await getMarketBySymbol(body.market);
+  } catch (err) {
+    const marketError = marketDataErrorResponse(err);
+    if (marketError) return marketError;
+    console.error("[bet/bot] market data lookup failed:", err);
+    return NextResponse.json(
+      { error: "Could not load market data. Try again." },
+      { status: 502 },
+    );
+  }
   const effectiveLeverage = Math.min(paperPos.leverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
-  const marketInfo = await getMarketBySymbol(body.market);
   if (!marketInfo) {
     return NextResponse.json(
       { error: `${body.market} is not available for copy trading` },

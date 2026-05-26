@@ -212,4 +212,46 @@ describe("POST /api/bet/bot", () => {
     });
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
+
+  it("treats market metadata 429s as retryable instead of hard failing", async () => {
+    mocks.fetchOpenPositionForBot.mockResolvedValue({
+      id: "eth-pos",
+      botId: "megalodon",
+      asset: "ETH",
+      side: "long",
+      leverage: 10,
+      entryMark: 2118.51,
+    });
+    mocks.getMarketBySymbol.mockRejectedValue(
+      new Error("Pacifica GET /info failed: HTTP 429"),
+    );
+
+    const response = await POST(
+      new Request("http://local.test/api/bet/bot", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token",
+        },
+        body: JSON.stringify({
+          botId: "megalodon",
+          positionId: "eth-pos",
+          market: "ETH",
+          side: "long",
+          leverage: 10,
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Market data is busy. Retrying shortly.",
+      retryable: true,
+      retryAfterMs: expect.any(Number),
+    });
+    expect(mocks.planPacificaDepositTopUp).not.toHaveBeenCalled();
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+  });
 });
