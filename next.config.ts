@@ -3,6 +3,7 @@ import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   // PostHog reverse proxy. Routes /ingest/* to PostHog's US ingest so
   // ad blockers (uBlock, Brave shields, etc.) can't blacklist our
   // analytics calls. skipTrailingSlashRedirect is required for the

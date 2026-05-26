@@ -1,0 +1,41 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { GET } from "@/app/api/health/route";
+
+const root = process.cwd();
+
+describe("Railway deployment config", () => {
+  it("builds a standalone Next.js server for Railway", () => {
+    const nextConfig = readFileSync(join(root, "next.config.ts"), "utf8");
+
+    expect(nextConfig).toContain('output: "standalone"');
+  });
+
+  it("starts the standalone server on Railway", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(root, "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+    const railwayJson = JSON.parse(
+      readFileSync(join(root, "railway.json"), "utf8"),
+    ) as {
+      build: { builder: string; buildCommand: string };
+      deploy: { startCommand: string; healthcheckPath: string };
+    };
+
+    expect(packageJson.scripts.start).toBe(
+      "node .next/standalone/server.js",
+    );
+    expect(railwayJson.build.builder).toBe("RAILPACK");
+    expect(railwayJson.build.buildCommand).toBe("npm run build");
+    expect(railwayJson.deploy.startCommand).toBe(packageJson.scripts.start);
+    expect(railwayJson.deploy.healthcheckPath).toBe("/api/health");
+  });
+
+  it("exposes a cheap Railway healthcheck", async () => {
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+});
