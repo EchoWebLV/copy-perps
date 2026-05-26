@@ -45,7 +45,10 @@ export async function POST(request: Request) {
 
   const agent = await getAgentWallet(user.id);
   if (!agent) {
-    return NextResponse.json({ error: "no agent wallet bound" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Trading account is not ready." },
+      { status: 409 },
+    );
   }
 
   // Balance check and withdraw both target agent.mainPubkey — the Pacifica
@@ -55,8 +58,9 @@ export async function POST(request: Request) {
   try {
     withdrawable = await getWithdrawable(agent.mainPubkey);
   } catch (err) {
+    console.error("[withdraw/pacifica] account lookup failed:", err);
     return NextResponse.json(
-      { error: `Pacifica account lookup failed: ${String(err)}` },
+      { error: "Could not load withdrawable balance. Try again." },
       { status: 502 },
     );
   }
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[withdraw/pacifica] failed:", err);
     return NextResponse.json(
-      { error: `Pacifica withdraw failed: ${String(err)}` },
+      { error: "Cash out failed. Try again." },
       { status: 502 },
     );
   }
@@ -100,8 +104,9 @@ export async function GET(request: Request) {
     const withdrawable = await getWithdrawable(agent.mainPubkey);
     return NextResponse.json({ withdrawable });
   } catch (err) {
+    console.error("[withdraw/pacifica] account lookup failed:", err);
     return NextResponse.json(
-      { error: `Pacifica account lookup failed: ${String(err)}` },
+      { error: "Could not load withdrawable balance. Try again." },
       { status: 502 },
     );
   }

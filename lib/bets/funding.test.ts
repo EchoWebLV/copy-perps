@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   buildDepositTx: vi.fn(),
+  getWalletUsdcBalance: vi.fn(),
   getAccountInfo: vi.fn(),
   getConnection: vi.fn(),
 }));
 
 vi.mock("@/lib/pacifica/deposit", () => ({
   buildDepositTx: mocks.buildDepositTx,
+  getWalletUsdcBalance: mocks.getWalletUsdcBalance,
 }));
 vi.mock("@/lib/pacifica/client", () => ({
   getAccountInfo: mocks.getAccountInfo,
@@ -84,6 +86,7 @@ function mockNoRecentDeposit() {
 describe("Pacifica funding math", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getWalletUsdcBalance.mockResolvedValue(10);
   });
 
   it("sizes first deposit from the selected stake instead of a hidden buffer", () => {
@@ -171,7 +174,7 @@ describe("Pacifica funding math", () => {
       balance: "10",
     });
     mocks.buildDepositTx.mockResolvedValue({ transactionB64: "tx" });
-    mockRecentDeposit(10);
+    mockNoRecentDeposit();
 
     await expect(
       planPacificaDepositTopUp({
@@ -185,6 +188,75 @@ describe("Pacifica funding math", () => {
       availablePacificaUsdc: 5,
     });
     expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it("sweeps wallet USDC when a trade-triggered top-up is needed", async () => {
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "3.97",
+      account_equity: "8.92",
+      balance: "8.92",
+    });
+    mocks.getWalletUsdcBalance.mockResolvedValue(13.22);
+    mocks.buildDepositTx.mockResolvedValue({ transactionB64: "tx" });
+    mockNoRecentDeposit();
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 5,
+        leverage: 20,
+      }),
+    ).resolves.toEqual({
+      depositTransactionB64: "tx",
+      initialDepositUsdc: 13.22,
+      availablePacificaUsdc: 3.97,
+    });
+    expect(mocks.buildDepositTx).toHaveBeenCalledWith({
+      userPubkey: expect.objectContaining({}),
+      amountUsdc: 13.22,
+    });
+    expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it("returns a plain insufficient-funds error when wallet USDC cannot satisfy the deposit minimum", async () => {
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "3.97",
+      account_equity: "8.92",
+      balance: "8.92",
+    });
+    mocks.getWalletUsdcBalance.mockResolvedValue(4.31);
+    mocks.buildDepositTx.mockResolvedValue({ transactionB64: "tx" });
+    mockNoRecentDeposit();
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 5,
+        leverage: 20,
+      }),
+    ).rejects.toThrow("Add $5.69 more USDC to trade.");
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+    expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it("returns a plain insufficient-funds error when wallet USDC is below a larger top-up", async () => {
+    mocks.getAccountInfo.mockResolvedValue({
+      available_to_spend: "0",
+      account_equity: "0",
+      balance: "0",
+    });
+    mocks.getWalletUsdcBalance.mockResolvedValue(20);
+    mocks.buildDepositTx.mockResolvedValue({ transactionB64: "tx" });
+    mockNoRecentDeposit();
+
+    await expect(
+      planPacificaDepositTopUp({
+        userMainPubkey: ACCOUNT,
+        stakeUsdc: 50,
+        leverage: 5,
+      }),
+    ).rejects.toThrow("Add $30.00 more USDC to trade.");
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
   });
 
   it("does not request another deposit when Pacifica account reads are rate-limited", async () => {

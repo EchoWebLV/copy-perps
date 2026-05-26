@@ -8,9 +8,8 @@ interface Props {
   onComplete: () => void;
 }
 
-// "Cash Out" — pulls USDC out of the user's Pacifica trading account back
-// to their own wallet. The agent wallet signs the withdraw server-side, so
-// there is no wallet-signing modal; Pacifica settles to the account owner.
+// "Cash Out" pulls trading USDC back to the user's own wallet. The agent
+// wallet signs the withdrawal server-side, so there is no wallet modal.
 export function PacificaWithdrawButton({ onComplete }: Props) {
   const { getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
@@ -115,7 +114,7 @@ export function PacificaWithdrawButton({ onComplete }: Props) {
           </button>
         </div>
         <p className="mb-4 text-[11px] text-neutral-500">
-          Pulls USDC out of your Pacifica trading account back to your wallet.
+          Move trading USDC back to your wallet.
         </p>
 
         <div className="mb-1 flex items-baseline justify-between">

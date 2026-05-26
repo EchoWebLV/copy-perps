@@ -23,6 +23,12 @@ const mocks = vi.hoisted(() => ({
       this.name = "PacificaFundingRateLimitError";
     }
   },
+  InsufficientAppFundsError: class InsufficientAppFundsError extends Error {
+    constructor(public additionalUsdc: number) {
+      super(`Add $${additionalUsdc.toFixed(2)} more USDC to trade.`);
+      this.name = "InsufficientAppFundsError";
+    }
+  },
   isPacificaFundingRateLimitError: vi.fn((err: unknown) =>
     /HTTP 429|rate.?limit/i.test(String(err)),
   ),
@@ -58,6 +64,7 @@ vi.mock("@/lib/bets/onboard", () => ({
   planOnboarding: mocks.planOnboarding,
 }));
 vi.mock("@/lib/bets/funding", () => ({
+  InsufficientAppFundsError: mocks.InsufficientAppFundsError,
   PacificaDepositPendingError: mocks.PacificaDepositPendingError,
   PacificaDepositSettlingError: mocks.PacificaDepositSettlingError,
   PacificaFundingRateLimitError: mocks.PacificaFundingRateLimitError,

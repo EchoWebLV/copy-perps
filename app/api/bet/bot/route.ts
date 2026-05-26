@@ -10,6 +10,7 @@ import { lotSizedAmountFromNotional } from "@/lib/pacifica/sizing";
 import { InsufficientWalletUsdcError } from "@/lib/pacifica/deposit";
 import { planOnboarding } from "@/lib/bets/onboard";
 import {
+  InsufficientAppFundsError,
   PacificaDepositPendingError,
   PacificaDepositSettlingError,
   PacificaFundingRateLimitError,
@@ -38,8 +39,15 @@ interface Body {
 }
 
 function fundingErrorResponse(err: unknown): NextResponse | null {
-  if (err instanceof InsufficientWalletUsdcError) {
+  if (err instanceof InsufficientAppFundsError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  if (err instanceof InsufficientWalletUsdcError) {
+    const additionalUsdc = Math.max(0, err.requiredUsdc - err.walletUsdc);
+    return NextResponse.json(
+      { error: `Add $${additionalUsdc.toFixed(2)} more USDC to trade.` },
+      { status: 400 },
+    );
   }
   if (err instanceof PacificaDepositPendingError) {
     return NextResponse.json({ error: err.message }, { status: 409 });
@@ -53,7 +61,7 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
   if (isPacificaFundingRateLimitError(err)) {
     return NextResponse.json(
       {
-        error: "Pacifica is rate limiting balance checks. Retrying shortly.",
+        error: "Balance checks are busy. Retrying shortly.",
         retryable: true,
         retryAfterMs:
           err instanceof PacificaFundingRateLimitError ? err.retryAfterMs : 5000,
@@ -129,7 +137,7 @@ export async function POST(request: Request) {
   const marketInfo = await getMarketBySymbol(body.market);
   if (!marketInfo) {
     return NextResponse.json(
-      { error: `unknown Pacifica market: ${body.market}` },
+      { error: `${body.market} is not available for copy trading` },
       { status: 409 },
     );
   }
@@ -180,7 +188,7 @@ export async function POST(request: Request) {
     if (fundingError) return fundingError;
     console.error("[bet/bot] funding check failed:", err);
     return NextResponse.json(
-      { error: `Pacifica funding check failed: ${String(err)}` },
+      { error: "Could not check your trading balance. Try again." },
       { status: 502 },
     );
   }
@@ -197,7 +205,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[bet/bot] open failed:", err);
     return NextResponse.json(
-      { error: `Pacifica order failed: ${String(err)}` },
+      { error: "Trade could not open. No funds were spent." },
       { status: 502 },
     );
   }

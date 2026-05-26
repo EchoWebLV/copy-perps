@@ -32,7 +32,7 @@ export class InsufficientWalletUsdcError extends Error {
     public walletUsdc: number,
   ) {
     super(
-      `Insufficient wallet USDC: need $${requiredUsdc.toFixed(2)}, have $${walletUsdc.toFixed(2)}`,
+      `Add $${Math.max(0, requiredUsdc - walletUsdc).toFixed(2)} more USDC to trade.`,
     );
     this.name = "InsufficientWalletUsdcError";
   }
@@ -65,6 +65,13 @@ async function getAtaUsdcBalance(
   }
 }
 
+export async function getWalletUsdcBalance(
+  userPubkey: PublicKey,
+): Promise<number> {
+  const userUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, userPubkey);
+  return getAtaUsdcBalance(getConnection(), userUsdcAta);
+}
+
 // Returns a base64-encoded unsigned v0 tx. The user's wallet is the fee payer;
 // the client signs and sends it before retrying the Pacifica order.
 export async function buildDepositTx(params: {
@@ -76,7 +83,7 @@ export async function buildDepositTx(params: {
     params.userPubkey,
   );
   const conn = getConnection();
-  const walletUsdc = await getAtaUsdcBalance(conn, userUsdcAta);
+  const walletUsdc = await getWalletUsdcBalance(params.userPubkey);
   if (walletUsdc + 0.000001 < params.amountUsdc) {
     throw new InsufficientWalletUsdcError(params.amountUsdc, walletUsdc);
   }

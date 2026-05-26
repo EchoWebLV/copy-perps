@@ -37,6 +37,12 @@ const mocks = vi.hoisted(() => {
         this.name = "PacificaFundingRateLimitError";
       }
     },
+    InsufficientAppFundsError: class InsufficientAppFundsError extends Error {
+      constructor(public additionalUsdc: number) {
+        super(`Add $${additionalUsdc.toFixed(2)} more USDC to trade.`);
+        this.name = "InsufficientAppFundsError";
+      }
+    },
     isPacificaFundingRateLimitError: vi.fn((err: unknown) =>
       /HTTP 429|rate.?limit/i.test(String(err)),
     ),
@@ -91,6 +97,7 @@ vi.mock("@/lib/bets/onboard", () => ({
   planOnboarding: mocks.planOnboarding,
 }));
 vi.mock("@/lib/bets/funding", () => ({
+  InsufficientAppFundsError: mocks.InsufficientAppFundsError,
   PacificaDepositPendingError: mocks.PacificaDepositPendingError,
   PacificaDepositSettlingError: mocks.PacificaDepositSettlingError,
   PacificaFundingRateLimitError: mocks.PacificaFundingRateLimitError,
@@ -724,10 +731,10 @@ describe("POST /api/bet/whale", () => {
         }),
       );
 
-      expect(response.status).toBe(502);
-      await expect(response.json()).resolves.toMatchObject({
-        error: "Pacifica order failed: Error: network down",
-      });
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Trade could not open. No funds were spent.",
+    });
       expect(mocks.updateSet).toHaveBeenCalledWith(
         expect.objectContaining({
           status: "failed",
@@ -856,7 +863,7 @@ describe("POST /api/bet/whale", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
-      error: "HYPE is not available on Pacifica for copy trading",
+      error: "HYPE is not available for copy trading",
     });
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });

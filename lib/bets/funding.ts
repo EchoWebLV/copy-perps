@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { buildDepositTx } from "@/lib/pacifica/deposit";
+import { buildDepositTx, getWalletUsdcBalance } from "@/lib/pacifica/deposit";
 import { getAccountInfo } from "@/lib/pacifica/client";
 import { getConnection } from "@/lib/solana/balance";
 import { USDC_MINT } from "@/lib/jupiter/constants";
@@ -12,7 +12,7 @@ const CREDITED_EPSILON_USDC = 0.000001;
 export class PacificaDepositPendingError extends Error {
   constructor(public recentDepositUsdc: number) {
     super(
-      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit landed on-chain, but Pacifica has not credited the account yet. Do not deposit again; wait for Pacifica support/credit before tailing.`,
+      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit landed, but your trading balance has not updated yet. Do not deposit again; wait before trading.`,
     );
     this.name = "PacificaDepositPendingError";
   }
@@ -23,7 +23,7 @@ export class PacificaDepositSettlingError extends Error {
 
   constructor(public recentDepositUsdc: number) {
     super(
-      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit is confirmed on-chain; Pacifica is still crediting it. Waiting before opening the tail.`,
+      `Your ${recentDepositUsdc.toFixed(2)} USDC deposit is confirmed; your trading funds are still settling. Waiting before opening the trade.`,
     );
     this.name = "PacificaDepositSettlingError";
   }
@@ -34,9 +34,20 @@ export class PacificaFundingRateLimitError extends Error {
 
   constructor(public cause: unknown) {
     super(
-      "Pacifica is rate limiting balance checks. Waiting before retrying.",
+      "Balance checks are busy. Waiting before retrying.",
     );
     this.name = "PacificaFundingRateLimitError";
+  }
+}
+
+export class InsufficientAppFundsError extends Error {
+  constructor(
+    public additionalUsdc: number,
+    public walletUsdc: number,
+    public minimumDepositUsdc: number,
+  ) {
+    super(`Add $${additionalUsdc.toFixed(2)} more USDC to trade.`);
+    this.name = "InsufficientAppFundsError";
   }
 }
 
@@ -230,13 +241,25 @@ export async function planPacificaDepositTopUp(params: {
     throwForRecentDepositState(await loadRecentDepositState());
   }
 
+  const userPubkey = new PublicKey(params.userMainPubkey);
+  const walletUsdc = await getWalletUsdcBalance(userPubkey);
+  const requiredDepositUsdc = Math.max(PACIFICA_MIN_DEPOSIT_USDC, topUpUsdc);
+  if (walletUsdc + CREDITED_EPSILON_USDC < requiredDepositUsdc) {
+    throw new InsufficientAppFundsError(
+      roundUpCents(requiredDepositUsdc - walletUsdc),
+      walletUsdc,
+      requiredDepositUsdc,
+    );
+  }
+  const depositUsdc = walletUsdc;
+
   const { transactionB64 } = await buildDepositTx({
-    userPubkey: new PublicKey(params.userMainPubkey),
-    amountUsdc: topUpUsdc,
+    userPubkey,
+    amountUsdc: depositUsdc,
   });
   return {
     depositTransactionB64: transactionB64,
-    initialDepositUsdc: topUpUsdc,
+    initialDepositUsdc: depositUsdc,
     availablePacificaUsdc: availableForSizingUsdc,
   };
 }

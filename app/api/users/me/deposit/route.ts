@@ -55,7 +55,11 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     if (err instanceof InsufficientWalletUsdcError) {
-      return NextResponse.json({ error: err.message }, { status: 400 });
+      const additionalUsdc = Math.max(0, err.requiredUsdc - err.walletUsdc);
+      return NextResponse.json(
+        { error: `Add $${additionalUsdc.toFixed(2)} more USDC to trade.` },
+        { status: 400 },
+      );
     }
     throw err;
   }

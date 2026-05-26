@@ -28,7 +28,7 @@ describe("retryTailRequestWithCreditWait", () => {
       }),
     ).rejects.toMatchObject({
       name: "PacificaCreditWaitTimeoutError",
-      message: expect.stringContaining("Try opening the tail again"),
+      message: expect.stringContaining("Try opening the trade again"),
     });
 
     expect(request).toHaveBeenCalledTimes(4);

@@ -257,22 +257,13 @@ export default function PortfolioPage() {
           className="mt-5 text-[10px] font-black uppercase tracking-widest"
           style={{ color: DIM }}
         >
-          Available
+          Available to trade
         </div>
         <div className="mt-1">
           <BigNum size={26}>
             {availableCashUsd == null ? "-" : `$${availableCashUsd.toFixed(2)}`}
           </BigNum>
         </div>
-        {pacificaAvailableUsd != null && (
-          <div
-            className="mt-2 space-y-0.5 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            <div>WALLET ${(walletUsd ?? 0).toFixed(2)}</div>
-            <div>PACIFICA ${pacificaAvailableUsd.toFixed(2)}</div>
-          </div>
-        )}
       </div>
 
       <div
@@ -372,7 +363,7 @@ export default function PortfolioPage() {
                     className="text-[10px] font-black uppercase tracking-widest"
                     style={{ color: DIM }}
                   >
-                    AVAILABLE
+                    AVAILABLE TO TRADE
                   </div>
                   <div className="mt-0.5">
                     <BigNum size={18}>
@@ -381,15 +372,6 @@ export default function PortfolioPage() {
                         : `$${availableCashUsd.toFixed(2)}`}
                     </BigNum>
                   </div>
-                  {pacificaAvailableUsd != null && (
-                    <div
-                      className="text-[10px] font-black uppercase tracking-widest"
-                      style={{ color: DIM }}
-                    >
-                      Wallet ${(walletUsd ?? 0).toFixed(2)} · Pacifica $
-                      {pacificaAvailableUsd.toFixed(2)}
-                    </div>
-                  )}
                   {walletSol != null && (
                     <div
                       className="text-[10px] font-black uppercase tracking-widest"

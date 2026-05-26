@@ -29,7 +29,12 @@ export async function POST(request: Request) {
   if (!user.solanaPubkey) return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
 
   const agent = await getAgentWallet(user.id);
-  if (!agent) return NextResponse.json({ error: "no agent wallet bound" }, { status: 409 });
+  if (!agent) {
+    return NextResponse.json(
+      { error: "Trading account is not ready." },
+      { status: 409 },
+    );
+  }
 
   const [bet] = await db
     .select()
@@ -56,8 +61,9 @@ export async function POST(request: Request) {
   try {
     userPositions = await getPositions(user.solanaPubkey);
   } catch (err) {
+    console.error("[bet/copy/close] position lookup failed:", err);
     return NextResponse.json(
-      { error: `Pacifica account lookup failed: ${String(err)}` },
+      { error: "Could not load your open position. Try again." },
       { status: 502 },
     );
   }
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[bet/copy/close] failed:", err);
     return NextResponse.json(
-      { error: `Pacifica close failed: ${String(err)}` },
+      { error: "Position could not close. Try again." },
       { status: 502 },
     );
   }

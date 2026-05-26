@@ -327,14 +327,14 @@ export function TailModal({ open, onClose, source }: Props) {
           sleep,
           onRetry: ({ remainingMs }) => {
             setStatus(
-              `Waiting for Pacifica credit (${Math.ceil(remainingMs / 1000)}s)…`,
+              `Updating trading balance (${Math.ceil(remainingMs / 1000)}s)…`,
             );
           },
         });
       };
 
       const signAndSendDeposit = async (depositTransactionB64: string) => {
-        setStatus("Depositing USDC…");
+        setStatus("Funding trade…");
         const txBytes = b64ToBytes(depositTransactionB64);
         const { signature } = await sendDepositWithSponsorFallback({
           transaction: txBytes,
@@ -343,7 +343,7 @@ export function TailModal({ open, onClose, source }: Props) {
           preferSponsored: false,
           onSponsorFallback: (err) => {
             console.warn("[tail] sponsored deposit send failed:", err);
-            setStatus("Gasless send failed. Retrying with wallet gas…");
+            setStatus("Funding trade…");
           },
         });
         const bs58 = (await import("bs58")).default;
@@ -410,14 +410,14 @@ export function TailModal({ open, onClose, source }: Props) {
           if (first.phase === "deposit") {
             await signAndSendDeposit(first.depositTransactionB64);
           }
-          setStatus("Waiting for Pacifica credit…");
+          setStatus("Updating trading balance…");
           result = await requestTailWithSettlingRetry(copyPosition);
         }
 
         if (result.phase !== "open") {
           throw new Error(
             result.phase === "deposit"
-              ? "Deposit confirmed. Pacifica balance is still settling; try again in a few seconds."
+              ? "Funds are still settling. Try again in a few seconds."
               : "Onboarding needs to be retried.",
           );
         }
@@ -731,7 +731,7 @@ export function TailModal({ open, onClose, source }: Props) {
                     const statusLabel = position.stale
                       ? "Stale"
                       : position.copyableOnPacifica === false
-                        ? "Pacifica N/A"
+                        ? "Not available"
                         : "Will copy";
 
                     return (
@@ -856,7 +856,7 @@ export function TailModal({ open, onClose, source }: Props) {
                           positions: whaleTailPositions,
                           effectiveStake,
                         })
-                      : "No Pacifica-copyable positions"
+                      : "No copyable positions"
                     : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (

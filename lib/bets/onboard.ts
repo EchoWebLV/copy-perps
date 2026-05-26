@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { buildMessage } from "@/lib/pacifica/sign";
-import { buildDepositTx } from "@/lib/pacifica/deposit";
+import { buildDepositTx, getWalletUsdcBalance } from "@/lib/pacifica/deposit";
 import { requiredPacificaDepositUsdc } from "@/lib/bets/funding";
 import {
   generateAgentKeypair,
@@ -60,12 +60,16 @@ export async function planOnboarding(params: {
     { agent_wallet: agentPubkey },
   );
 
-  const initialDeposit = requiredPacificaDepositUsdc({
+  const userPubkey = new PublicKey(params.userMainPubkey);
+  const minimumInitialDeposit = requiredPacificaDepositUsdc({
     stakeUsdc: params.desiredStakeUsdc,
     leverage: params.leverage,
   });
+  const walletUsdc = await getWalletUsdcBalance(userPubkey);
+  const initialDeposit =
+    walletUsdc >= minimumInitialDeposit ? walletUsdc : minimumInitialDeposit;
   const { transactionB64 } = await buildDepositTx({
-    userPubkey: new PublicKey(params.userMainPubkey),
+    userPubkey,
     amountUsdc: initialDeposit,
   });
 
