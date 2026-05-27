@@ -30,6 +30,16 @@ describe("Railway deployment config", () => {
     expect(packageJson.scripts.start).toBe(
       "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     );
+    expect(packageJson.scripts.build).toContain("next build");
+    expect(packageJson.scripts.build).toContain(
+      "npm run build:standalone-assets",
+    );
+    expect(packageJson.scripts["build:standalone-assets"]).toContain(
+      ".next/standalone/.next/static",
+    );
+    expect(packageJson.scripts["build:standalone-assets"]).toContain(
+      ".next/standalone/public",
+    );
     expect(railwayJson.build.builder).toBe("RAILPACK");
     expect(railwayJson.build.buildCommand).toBe("npm run build");
     expect(railwayJson.deploy.startCommand).toBe(packageJson.scripts.start);
@@ -42,5 +52,16 @@ describe("Railway deployment config", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("does not request Vercel-only analytics routes on Railway", () => {
+    const rootLayout = readFileSync(join(root, "app/layout.tsx"), "utf8");
+
+    expect(rootLayout).toContain(
+      'const isVercelDeployment = process.env.VERCEL === "1"',
+    );
+    expect(rootLayout).toContain("isVercelDeployment ? (");
+    expect(rootLayout).toContain("<Analytics />");
+    expect(rootLayout).toContain("<SpeedInsights />");
   });
 });

@@ -5,6 +5,8 @@ import { PrivyClientProvider } from "@/components/providers/PrivyClientProvider"
 import { PostHogProvider } from "@/components/providers/PostHogProvider";
 import "./globals.css";
 
+const isVercelDeployment = process.env.VERCEL === "1";
+
 export const metadata: Metadata = {
   title: "Breach",
   description: "Watch the bots. Tail the signal.",
@@ -32,8 +34,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PostHogProvider>
           <PrivyClientProvider>{children}</PrivyClientProvider>
         </PostHogProvider>
-        <Analytics />
-        <SpeedInsights />
+        {isVercelDeployment ? (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        ) : null}
       </body>
     </html>
   );
