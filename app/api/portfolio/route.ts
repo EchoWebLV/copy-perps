@@ -12,6 +12,7 @@ import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
+const PORTFOLIO_MARK_CACHE_MS = 3_000;
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -86,6 +87,7 @@ async function markForSymbol(
 }
 
 export async function GET(request: Request) {
+  const pricedAt = new Date().toISOString();
   const claims = await verifyPrivyRequest(request);
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -155,7 +157,7 @@ export async function GET(request: Request) {
       console.warn("[portfolio] pacifica positions fetch failed:", err);
     }
     try {
-      marks = await getMarksSnapshot();
+      marks = await getMarksSnapshot({ maxAgeMs: PORTFOLIO_MARK_CACHE_MS });
     } catch (err) {
       console.warn("[portfolio] marks snapshot failed:", err);
     }
@@ -233,6 +235,7 @@ export async function GET(request: Request) {
             liveStatus,
             entryPrice: entry,
             markPrice: mark,
+            pricedAt: mark == null ? null : pricedAt,
             liquidationPrice,
             amountBase: size == null ? null : Math.abs(size),
             marginUsd: marginUsd != null && marginUsd > 0 ? marginUsd : null,
@@ -296,6 +299,7 @@ export async function GET(request: Request) {
           liveStatus: "open" satisfies CopyLiveStatus,
           entryPrice: entry,
           markPrice: mark,
+          pricedAt: mark == null ? null : pricedAt,
           liquidationPrice,
           amountBase: size == null ? null : Math.abs(size),
           marginUsd: marginUsd != null && marginUsd > 0 ? marginUsd : null,

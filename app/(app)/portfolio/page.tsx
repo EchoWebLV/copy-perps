@@ -127,13 +127,13 @@ export default function PortfolioPage() {
     void load();
   }, [load]);
 
-  // Live PnL: re-fetch every 5s while the tab is visible and the user is
-  // signed in. Skips while `document.hidden` so we don't burn Jupiter
-  // API quota / Flash on-chain reads when nobody's looking. Manual
+  // Live PnL: re-fetch every 3s while the tab is visible and the user is
+  // signed in. Skips while `document.hidden` so we don't burn price
+  // and account API calls when nobody's looking. Manual
   // refresh button still works the same way.
   useEffect(() => {
     if (!authenticated) return;
-    const POLL_MS = 5000;
+    const POLL_MS = 3000;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {

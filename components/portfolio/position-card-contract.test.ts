@@ -22,6 +22,8 @@ describe("Portfolio position cards", () => {
     expect(source).not.toContain('label="Liq"');
     expect(source).not.toContain('label="Margin"');
     expect(source).not.toContain('label="Mode"');
+    expect(source).not.toContain("SYNCED");
+    expect(source).toContain("PRICED");
     expect(source).toContain("P/L");
     expect(source).toContain("Notional");
   });
@@ -29,8 +31,11 @@ describe("Portfolio position cards", () => {
   it("lets unmatched wallet positions close through the self-trade close route", () => {
     const source = copyRow();
 
+    expect(source).toContain('venue?: "pacifica" | "flash"');
     expect(source).toContain('sourceKind?: "tail" | "wallet"');
     expect(source).toContain("/api/trade/perp/close");
+    expect(source).toContain("/api/flash/perp/close");
+    expect(source).toContain("signAndSendFlashClose");
     expect(source).toContain('row.sourceKind === "wallet"');
   });
 

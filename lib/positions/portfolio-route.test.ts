@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const selectUserLimit = vi.fn();
@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
     getMarksSnapshot: vi.fn(),
     getMark: vi.fn(),
     getBot: vi.fn(),
+    getFlashPerpsService: vi.fn(),
+    flashPositionsOf: vi.fn(),
   };
 });
 
@@ -65,10 +67,17 @@ vi.mock("@/lib/data/marks", () => ({
 vi.mock("@/lib/bots", () => ({
   getBot: mocks.getBot,
 }));
+vi.mock("@/lib/flash/perps", () => ({
+  getFlashPerpsService: mocks.getFlashPerpsService,
+}));
 
 import { GET } from "../../app/api/portfolio/route";
 
 describe("GET /api/portfolio", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.verifyPrivyRequest.mockResolvedValue({ userId: "privy-user" });
@@ -100,6 +109,10 @@ describe("GET /api/portfolio", () => {
     mocks.getMarksSnapshot.mockResolvedValue(new Map());
     mocks.getMark.mockResolvedValue(null);
     mocks.getBot.mockReturnValue(null);
+    mocks.getFlashPerpsService.mockReturnValue({
+      positionsOf: mocks.flashPositionsOf,
+    });
+    mocks.flashPositionsOf.mockResolvedValue([]);
   });
 
   it("skips malformed confirmed copy metadata without emitting invalid copy rows", async () => {
@@ -145,6 +158,8 @@ describe("GET /api/portfolio", () => {
   });
 
   it("emits whale copy rows with live wallet position details when the fill price was not returned", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-25T17:40:00.000Z"));
     mocks.selectUserLimit.mockResolvedValueOnce([
       {
         id: "user-1",
@@ -213,6 +228,7 @@ describe("GET /api/portfolio", () => {
       liveStatus: "open",
       entryPrice: 0.02653,
       markPrice: 0.0267,
+      pricedAt: "2026-05-25T17:40:00.000Z",
       liquidationPrice: 0.037955,
       amountBase: 563,
       marginUsd: null,
@@ -223,9 +239,12 @@ describe("GET /api/portfolio", () => {
     expect(body.copyRows[0].notionalUsd).toBeCloseTo(15.0321);
     expect(body.copyRows[0].pnlUsd).toBeCloseTo(-0.09571);
     expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(-1.9142);
+    expect(mocks.getMarksSnapshot).toHaveBeenCalledWith({ maxAgeMs: 3000 });
   });
 
   it("emits unmatched live Pacifica wallet positions even without a copy bet", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-25T17:40:00.000Z"));
     mocks.selectUserLimit.mockResolvedValueOnce([
       {
         id: "user-1",
@@ -266,6 +285,7 @@ describe("GET /api/portfolio", () => {
       liveStatus: "open",
       entryPrice: 100000,
       markPrice: 101000,
+      pricedAt: "2026-05-25T17:40:00.000Z",
       liquidationPrice: 80000,
       amountBase: 0.001,
       marginUsd: null,
@@ -275,6 +295,66 @@ describe("GET /api/portfolio", () => {
       unrealizedPnlPct: null,
       openedAt: "2026-05-25T17:26:40.000Z",
       positionUpdatedAt: "2026-05-25T17:35:00.000Z",
+    });
+  });
+
+  it("emits live Flash wallet positions into the same open portfolio rows", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T14:15:00.000Z"));
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.flashPositionsOf.mockResolvedValue([
+      {
+        symbol: "SOL",
+        side: "short",
+        positionPubkey: "flash-sol-short",
+        marketAccount: "flash-market",
+        entryPriceUsd: 160,
+        markPriceUsd: 158,
+        sizeUsd: 100,
+        collateralUsd: 1,
+        leverage: 100,
+        liquidationPriceUsd: 161.6,
+        pnlUsd: 1.25,
+        receiveUsd: 2.25,
+        isProfitable: true,
+        openTime: 1779977400000,
+      },
+    ]);
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(mocks.flashPositionsOf).toHaveBeenCalledWith("wallet-1");
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: null,
+      venue: "flash",
+      sourceKind: "wallet",
+      market: "SOL",
+      side: "short",
+      leverage: 100,
+      stakeUsdc: 1,
+      liveStatus: "open",
+      entryPrice: 160,
+      markPrice: 158,
+      pricedAt: "2026-05-28T14:15:00.000Z",
+      liquidationPrice: 161.6,
+      marginUsd: 1,
+      marginMode: "isolated",
+      notionalUsd: 100,
+      pnlUsd: 1.25,
+      unrealizedPnlPct: 125,
+      openedAt: "2026-05-28T14:10:00.000Z",
+      positionUpdatedAt: "2026-05-28T14:15:00.000Z",
     });
   });
 

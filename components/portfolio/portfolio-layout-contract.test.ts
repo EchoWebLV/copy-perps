@@ -69,4 +69,10 @@ describe("Portfolio layout contract", () => {
     expect(page).not.toContain("text-[38px]");
     expect(page).not.toContain("text-[30px]");
   });
+
+  it("refreshes open-position pricing quickly while the tab is visible", () => {
+    const page = source();
+
+    expect(page).toContain("const POLL_MS = 3000");
+  });
 });

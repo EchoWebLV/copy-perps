@@ -17,7 +17,10 @@ const MARK_SYMBOLS = ["BTC", "ETH", "SOL", "XAU", "SP500"] as const;
 // Pacifica WS, so a slightly staler server snapshot costs nothing.
 const TTL_MS = 15_000;
 
-let _cache: { marks: Map<string, number>; expiresAt: number } | null = null;
+let _cache: {
+  marks: Map<string, number>;
+  fetchedAt: number;
+} | null = null;
 // Last good value per symbol. If one symbol's fetch misses on a
 // refresh, we carry its previous mark so it never blanks mid-tick.
 const _lastMarks = new Map<string, number>();
@@ -61,8 +64,12 @@ async function fetchPacificaMark(symbol: string): Promise<number | null> {
  * carries its last good value, so a transient miss never leaves the
  * resolver blind on that market.
  */
-export async function getMarksSnapshot(): Promise<Map<string, number>> {
-  if (_cache && _cache.expiresAt > Date.now()) return _cache.marks;
+export async function getMarksSnapshot(
+  options: { maxAgeMs?: number } = {},
+): Promise<Map<string, number>> {
+  const now = Date.now();
+  const maxAgeMs = options.maxAgeMs ?? TTL_MS;
+  if (_cache && now - _cache.fetchedAt < maxAgeMs) return _cache.marks;
 
   const marks = new Map<string, number>();
   await Promise.all(
@@ -79,7 +86,8 @@ export async function getMarksSnapshot(): Promise<Map<string, number>> {
   // Cache only a non-empty snapshot. Empty = total failure; keep the
   // previous cache so the resolver isn't blind.
   if (marks.size > 0) {
-    _cache = { marks, expiresAt: Date.now() + TTL_MS };
+    const fetchedAt = Date.now();
+    _cache = { marks, fetchedAt };
     return marks;
   }
   return _cache?.marks ?? new Map();

@@ -23,6 +23,7 @@ export interface CopyRowData {
   liveStatus: "open" | "not_found" | "unknown";
   entryPrice: number | null;
   markPrice: number | null;
+  pricedAt: string | null;
   liquidationPrice: number | null;
   amountBase: number | null;
   marginUsd: number | null;
@@ -248,8 +249,8 @@ export function CopyRow({ row, onClosed }: Props) {
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/38">
         {row.openedAt && <span>OPENED {formatAge(row.openedAt)} AGO</span>}
-        {row.positionUpdatedAt && (
-          <span>SYNCED {formatAge(row.positionUpdatedAt)} AGO</span>
+        {row.pricedAt && (
+          <span>PRICED {formatAge(row.pricedAt)} AGO</span>
         )}
       </div>
 
