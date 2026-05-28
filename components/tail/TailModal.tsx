@@ -41,6 +41,7 @@ const RPC =
 const STAKE_CHIPS = [5, 10, 20, 50] as const;
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
+const TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000;
 
 interface Props {
   open: boolean;
@@ -519,10 +520,9 @@ export function TailModal({ open, onClose, source }: Props) {
         return retryTailRequestWithCreditWait({
           request: () => requestTail(copyPosition),
           sleep,
-          onRetry: ({ remainingMs }) => {
-            setStatus(
-              `Updating trading balance (${Math.ceil(remainingMs / 1000)}s)…`,
-            );
+          maxWaitMs: TAIL_TRADE_SETTLING_AUTO_WAIT_MS,
+          onRetry: () => {
+            setStatus("Opening trade when balance updates…");
           },
           retryResult: retryDepositPhase ? retryFundedDepositPhase : undefined,
         });

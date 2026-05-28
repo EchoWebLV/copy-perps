@@ -25,7 +25,7 @@ export interface TailCreditRetryState {
 export class PacificaCreditWaitTimeoutError extends Error {
   constructor(public sourceMessage: string) {
     super(
-      "Your funds are confirmed, but your trading balance is still updating. Do not deposit again. Try opening the trade again in about a minute.",
+      "Your funds are confirmed, but your trading balance is still updating. Do not deposit again. Try opening the trade again shortly.",
     );
     this.name = "PacificaCreditWaitTimeoutError";
   }

@@ -46,4 +46,19 @@ describe("TailModal deposit send", () => {
       "requestTailWithSettlingRetry(copyPosition, true)",
     );
   });
+
+  it("does not show a long countdown while waiting for funded credit", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/tail/TailModal.tsx"),
+      "utf8",
+    );
+    const retryFlow = source.slice(
+      source.indexOf("const requestTailWithSettlingRetry"),
+      source.indexOf("const signAndSendDeposit"),
+    );
+
+    expect(source).toContain("TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000");
+    expect(retryFlow).toContain("maxWaitMs: TAIL_TRADE_SETTLING_AUTO_WAIT_MS");
+    expect(retryFlow).not.toContain("Math.ceil(remainingMs / 1000)");
+  });
 });
