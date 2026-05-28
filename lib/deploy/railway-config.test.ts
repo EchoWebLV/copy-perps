@@ -12,6 +12,12 @@ describe("Railway deployment config", () => {
     expect(nextConfig).toContain('output: "standalone"');
   });
 
+  it("hides the Next.js dev indicator for clean local recordings", () => {
+    const nextConfig = readFileSync(join(root, "next.config.ts"), "utf8");
+
+    expect(nextConfig).toContain("devIndicators: false");
+  });
+
   it("starts the standalone server on Railway", () => {
     const packageJson = JSON.parse(
       readFileSync(join(root, "package.json"), "utf8"),
