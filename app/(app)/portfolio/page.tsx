@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import {
   Activity,
@@ -42,6 +42,8 @@ import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
 import { mergeCopyRowsForPortfolioRefresh } from "@/lib/positions/portfolio-refresh";
+import { applyLiveMarksToCopyRows } from "@/lib/positions/live-copy-row";
+import { useLiveMarks } from "@/lib/pacifica/live-context";
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -141,6 +143,7 @@ export default function PortfolioPage() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<PortfolioTab>("wallet");
   const isXl = useMediaQuery("(min-width: 1280px)");
+  const liveMarks = useLiveMarks();
 
   const applyPortfolioResponse = useCallback((data: PortfolioResponseData) => {
     const payload = data.payload ?? data;
@@ -255,12 +258,19 @@ export default function PortfolioPage() {
   // Open copy trades render through the live copy card; closed copy trades
   // still belong in the closed ledger.
   const { openPositions, closedPositions } = splitPortfolioPositions(positions);
+  const liveCopyRows = useMemo(
+    () =>
+      applyLiveMarksToCopyRows(copyRows, liveMarks, {
+        pricedAt: new Date().toISOString(),
+      }),
+    [copyRows, liveMarks],
+  );
 
   const legacyPositionsValue = openPositions.reduce(
     (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
     0,
   );
-  const copyRowsValue = copyRows.reduce((sum, row) => {
+  const copyRowsValue = liveCopyRows.reduce((sum, row) => {
     if (row.stakeUsdc === null) {
       const marginValue =
         row.marginUsd === null ? 0 : row.marginUsd + (row.pnlUsd ?? 0);
@@ -270,11 +280,14 @@ export default function PortfolioPage() {
       row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
     return sum + Math.max(0, row.stakeUsdc * liveMultiplier);
   }, 0);
-  const openHoldingCount = openPositions.length + copyRows.length;
+  const openHoldingCount = openPositions.length + liveCopyRows.length;
 
   const totalCost =
     openPositions.reduce((sum, p) => sum + p.amountUsdc, 0) +
-    copyRows.reduce((sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0), 0);
+    liveCopyRows.reduce(
+      (sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0),
+      0,
+    );
   const positionsValue = legacyPositionsValue + copyRowsValue;
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
@@ -564,7 +577,7 @@ export default function PortfolioPage() {
                   <OpenPositionsPanel
                     positions={positions}
                     openPositions={openPositions}
-                    copyRows={copyRows}
+                    copyRows={liveCopyRows}
                     openHoldingCount={openHoldingCount}
                     positionsValue={positionsValue}
                     positionsPnl={positionsPnl}
