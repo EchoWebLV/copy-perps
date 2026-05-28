@@ -12,6 +12,7 @@ import {
   Trophy,
 } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
+import type { MarketSentiment } from "@/lib/data/market-sentiment";
 import {
   ACCENT,
   BG,
@@ -29,6 +30,8 @@ import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
+const SENTIMENT_POLL_MS = 30_000;
+const SENTIMENT_MARKET_LIMIT = 20;
 
 type WhalePosition = WhalePositionSignal["payload"];
 
@@ -64,9 +67,25 @@ interface MarketHeatRow {
   strongestPnl: WhalePosition | null;
 }
 
+interface MarketHeatDisplay {
+  totalNotional: number;
+  longNotional: number;
+  shortNotional: number;
+  netNotional: number;
+  longPct: number;
+  shortPct: number;
+  bias: MarketHeatRow["bias"];
+  sourceLabel: string;
+  longLabel: string;
+  shortLabel: string;
+}
+
 export function WhaleMarketHeatmap({ initialPositions }: Props) {
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
+  const [sentimentByMarket, setSentimentByMarket] = useState<
+    Record<string, MarketSentiment>
+  >({});
   const [now, setNow] = useState(0);
 
   const load = useCallback(async () => {
@@ -84,14 +103,57 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
 
   useVisiblePoll(load, POLL_MS);
 
+  const rows = useMemo(() => buildMarketHeatRows(positions), [positions]);
+  const sentimentMarketsParam = useMemo(
+    () =>
+      rows
+        .slice(0, SENTIMENT_MARKET_LIMIT)
+        .map((row) => encodeURIComponent(row.market))
+        .join(","),
+    [rows],
+  );
+
+  const loadSentiment = useCallback(async () => {
+    if (!sentimentMarketsParam) return;
+    try {
+      const r = await fetch(
+        `/api/markets/sentiment?markets=${sentimentMarketsParam}`,
+        { cache: "no-store" },
+      );
+      if (!r.ok) return;
+      const data = (await r.json()) as {
+        sentiment: Record<string, MarketSentiment>;
+      };
+      setSentimentByMarket((current) => ({
+        ...current,
+        ...data.sentiment,
+      }));
+    } catch {
+      // Keep tracked-whale heat visible if the public sentiment feed misses.
+    }
+  }, [sentimentMarketsParam]);
+
+  useEffect(() => {
+    void loadSentiment();
+  }, [loadSentiment]);
+
+  useVisiblePoll(loadSentiment, SENTIMENT_POLL_MS);
+
   useEffect(() => {
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  const rows = useMemo(() => buildMarketHeatRows(positions), [positions]);
-  const summary = useMemo(() => buildHeatSummary(rows), [rows]);
+  const displayRows = useMemo(
+    () =>
+      rows.map((row) => ({
+        row,
+        heat: getMarketHeatDisplay(row, sentimentByMarket[row.market]),
+      })),
+    [rows, sentimentByMarket],
+  );
+  const summary = useMemo(() => buildHeatSummary(displayRows), [displayRows]);
 
   return (
     <div
@@ -121,7 +183,7 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
                   style={{ color: DIM }}
                 >
                   <Activity size={13} />
-                  Live whale money
+                  Public positioning
                 </div>
               </div>
             </div>
@@ -161,8 +223,13 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
             <EmptyHeat />
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
-              {rows.map((row) => (
-                <MarketHeatCard key={row.market} row={row} now={now} />
+              {displayRows.map(({ row, heat }) => (
+                <MarketHeatCard
+                  key={row.market}
+                  row={row}
+                  heat={heat}
+                  now={now}
+                />
               ))}
             </div>
           )}
@@ -266,9 +333,17 @@ export function buildMarketHeatRows(
     .sort((a, b) => b.totalNotional - a.totalNotional);
 }
 
-function MarketHeatCard({ row, now }: { row: MarketHeatRow; now: number }) {
+function MarketHeatCard({
+  row,
+  heat,
+  now,
+}: {
+  row: MarketHeatRow;
+  heat: MarketHeatDisplay;
+  now: number;
+}) {
   const biasColor =
-    row.bias === "long" ? GREEN : row.bias === "short" ? RED : ACCENT;
+    heat.bias === "long" ? GREEN : heat.bias === "short" ? RED : ACCENT;
   const topWhaleSide =
     row.topWhale.longNotional >= row.topWhale.shortNotional ? "long" : "short";
 
@@ -288,6 +363,8 @@ function MarketHeatCard({ row, now }: { row: MarketHeatRow; now: number }) {
               style={{ color: DIM }}
             >
               {row.whaleCount} whales | {row.positions.length} positions
+              {" | "}
+              {heat.sourceLabel}
             </div>
           </div>
           <div className="text-right">
@@ -295,13 +372,13 @@ function MarketHeatCard({ row, now }: { row: MarketHeatRow; now: number }) {
               className="rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]"
               style={{ borderColor: biasColor, color: biasColor }}
             >
-              {row.bias}
+              {heat.bias}
             </div>
             <div
               className="mt-2 text-[10px] font-black uppercase tracking-[0.16em]"
               style={{ color: DIM }}
             >
-              {formatUsd(row.totalNotional)}
+              {formatUsd(heat.totalNotional)}
             </div>
           </div>
         </div>
@@ -314,27 +391,27 @@ function MarketHeatCard({ row, now }: { row: MarketHeatRow; now: number }) {
           <div className="flex h-full w-full">
             <div
               className="h-full"
-              style={{ width: `${row.longPct}%`, background: GREEN }}
+              style={{ width: `${heat.longPct}%`, background: GREEN }}
             />
             <div
               className="h-full"
-              style={{ width: `${row.shortPct}%`, background: RED }}
+              style={{ width: `${heat.shortPct}%`, background: RED }}
             />
           </div>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <MoneyCell
             icon={ArrowUpRight}
-            label="Long Money"
-            value={formatUsd(row.longNotional)}
-            share={formatPct(row.longPct)}
+            label={heat.longLabel}
+            value={formatUsd(heat.longNotional)}
+            share={formatPct(heat.longPct)}
             color={GREEN}
           />
           <MoneyCell
             icon={ArrowDownRight}
-            label="Short Money"
-            value={formatUsd(row.shortNotional)}
-            share={formatPct(row.shortPct)}
+            label={heat.shortLabel}
+            value={formatUsd(heat.shortNotional)}
+            share={formatPct(heat.shortPct)}
             color={RED}
           />
         </div>
@@ -530,13 +607,15 @@ function EmptyHeat() {
   );
 }
 
-function buildHeatSummary(rows: MarketHeatRow[]) {
-  return rows.reduce(
+function buildHeatSummary(
+  entries: Array<{ row: MarketHeatRow; heat: MarketHeatDisplay }>,
+) {
+  return entries.reduce(
     (summary, row) => ({
       marketCount: summary.marketCount + 1,
-      longNotional: summary.longNotional + row.longNotional,
-      shortNotional: summary.shortNotional + row.shortNotional,
-      netNotional: summary.netNotional + row.netNotional,
+      longNotional: summary.longNotional + row.heat.longNotional,
+      shortNotional: summary.shortNotional + row.heat.shortNotional,
+      netNotional: summary.netNotional + row.heat.netNotional,
     }),
     {
       marketCount: 0,
@@ -545,6 +624,49 @@ function buildHeatSummary(rows: MarketHeatRow[]) {
       netNotional: 0,
     },
   );
+}
+
+function getMarketHeatDisplay(
+  row: MarketHeatRow,
+  sentiment?: MarketSentiment,
+): MarketHeatDisplay {
+  const hasPublicSplit =
+    sentiment?.longPressureUsd != null &&
+    sentiment.shortPressureUsd != null &&
+    sentiment.longPct != null &&
+    sentiment.shortPct != null;
+
+  if (hasPublicSplit) {
+    const longNotional = sentiment.longPressureUsd ?? 0;
+    const shortNotional = sentiment.shortPressureUsd ?? 0;
+    const totalNotional =
+      sentiment.openInterestUsd ?? longNotional + shortNotional;
+    return {
+      totalNotional,
+      longNotional,
+      shortNotional,
+      netNotional: longNotional - shortNotional,
+      longPct: sentiment.longPct ?? 0,
+      shortPct: sentiment.shortPct ?? 0,
+      bias: sentiment.bias === "unknown" ? row.bias : sentiment.bias,
+      sourceLabel: "Public positioning",
+      longLabel: "Long Pressure",
+      shortLabel: "Short Pressure",
+    };
+  }
+
+  return {
+    totalNotional: row.totalNotional,
+    longNotional: row.longNotional,
+    shortNotional: row.shortNotional,
+    netNotional: row.netNotional,
+    longPct: row.longPct,
+    shortPct: row.shortPct,
+    bias: row.bias,
+    sourceLabel: sentiment?.hyperliquid ? "Public OI" : "Tracked whales",
+    longLabel: "Long Money",
+    shortLabel: "Short Money",
+  };
 }
 
 function getMarketBias(

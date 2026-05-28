@@ -19,7 +19,7 @@ export default async function LivePage({
 }) {
   if (whaleSocialEnabled()) {
     const [positions, params] = await Promise.all([
-      buildWhalePositionSignals(),
+      buildWhalePositionSignals(1000),
       searchParams,
     ]);
 

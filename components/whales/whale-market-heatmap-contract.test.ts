@@ -10,6 +10,7 @@ describe("WhaleMarketHeatmap contract", () => {
     );
 
     expect(routeSource).toContain("WhaleMarketHeatmap");
+    expect(routeSource).toContain("buildWhalePositionSignals(1000)");
     expect(routeSource).toContain("<WhaleMarketHeatmap initialPositions={positions} />");
     expect(routeSource).toContain('params.mode === "swipe"');
     expect(routeSource).toContain("<WhaleLiveFeed initialPositions={positions} />");
@@ -29,6 +30,19 @@ describe("WhaleMarketHeatmap contract", () => {
     expect(source).toContain("shortNotional");
     expect(source).toContain("Long Money");
     expect(source).toContain("Short Money");
+  });
+
+  it("uses public market positioning as the primary heat source when available", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("/api/markets/sentiment?markets=");
+    expect(source).toContain("MarketSentiment");
+    expect(source).toContain("Long Pressure");
+    expect(source).toContain("Short Pressure");
+    expect(source).toContain("Public positioning");
   });
 
   it("surfaces fast market read leaders for each market", () => {
