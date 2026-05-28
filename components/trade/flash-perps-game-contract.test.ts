@@ -91,6 +91,16 @@ describe("Flash fast perps game contract", () => {
     expect(page).not.toContain("}, 2500)");
   });
 
+  it("shows the selected Scalp P/L percentage next to the dollar loss", () => {
+    const page = source();
+
+    expect(page).toContain("function fmtSignedPct");
+    expect(page).toContain("const roi = view?.roiPct ?? 0");
+    expect(page).toContain("fmtSignedPct(roi)");
+    expect(page).toContain("subvalue={selectedPosition ? fmtSignedPct(liveRoi) : undefined}");
+    expect(page).toContain("fmtSignedPct(liveRoi)");
+  });
+
   it("keeps the mobile trade controls compact without an empty graph placeholder", () => {
     const page = source();
 

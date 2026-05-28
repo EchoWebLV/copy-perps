@@ -177,6 +177,11 @@ function fmtPrice(value: number | null | undefined): string {
   return `$${value.toPrecision(4)}`;
 }
 
+function fmtSignedPct(value: number): string {
+  if (!Number.isFinite(value)) return "0.0%";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
 function stakeForPosition(position: FlashPosition | null): number {
   return flashStakeUsdFromPosition(position) ?? 0;
 }
@@ -544,6 +549,7 @@ export function FastPerpsGame() {
               position.symbol === market && position.side === side;
             const view = positionViewsByKey.get(position.positionPubkey);
             const pnl = view?.pnlUsd ?? 0;
+            const roi = view?.roiPct ?? 0;
             const exitValue = view?.exitValueUsd ?? 0;
             return (
               <button
@@ -571,11 +577,14 @@ export function FastPerpsGame() {
                 </div>
                 <div className="text-right">
                   <div
-                    className="font-mono text-[11px] font-black"
+                    className="whitespace-nowrap font-mono text-[11px] font-black"
                     style={{ color: pnl >= 0 ? GREEN : RED }}
                   >
                     {pnl >= 0 ? "+" : ""}
                     {fmtUsd(pnl)}
+                    <span className="ml-1" style={{ color: DIM }}>
+                      {fmtSignedPct(roi)}
+                    </span>
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
                     exit {fmtUsd(exitValue)}
@@ -665,6 +674,7 @@ export function FastPerpsGame() {
               ? `${livePnl >= 0 ? "+" : ""}${fmtUsd(livePnl)}`
               : fmtUsd(notional)
           }
+          subvalue={selectedPosition ? fmtSignedPct(liveRoi) : undefined}
           color={selectedPosition ? graphColor : sideColor}
         />
       </div>
@@ -780,8 +790,7 @@ export function FastPerpsGame() {
           {" · "}
           Exit {fmtUsd(exitValue)}
           {" · "}
-          {liveRoi >= 0 ? "+" : ""}
-          {liveRoi.toFixed(1)}%
+          {fmtSignedPct(liveRoi)}
         </div>
       )}
 
@@ -853,10 +862,12 @@ export function FastPerpsGame() {
 function PreviewMetric({
   label,
   value,
+  subvalue,
   color = FG,
 }: {
   label: string;
   value: string;
+  subvalue?: string;
   color?: string;
 }) {
   return (
@@ -867,6 +878,11 @@ function PreviewMetric({
       <div className="mt-0.5 text-[20px] font-black leading-none tabular-nums" style={{ color }}>
         {value}
       </div>
+      {subvalue && (
+        <div className="mt-1 font-mono text-[10px] font-black uppercase tracking-widest" style={{ color }}>
+          {subvalue}
+        </div>
+      )}
     </div>
   );
 }
