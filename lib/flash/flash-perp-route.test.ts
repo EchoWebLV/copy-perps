@@ -144,6 +144,24 @@ describe("Flash perp routes", () => {
     expect(mocks.open).not.toHaveBeenCalled();
   });
 
+  it("rejects custom Flash stakes below one dollar", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 0.5,
+        leverage: 100,
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "stake must be between $1 and $1000",
+    });
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
   it("explains wallet USDC shortfall when Flash cannot build the open transaction", async () => {
     mocks.open.mockRejectedValueOnce("Insufficient Funds need more 10000000 tokens");
 

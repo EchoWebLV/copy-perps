@@ -38,8 +38,8 @@ export type { TailSource, WhaleTailPosition } from "./tail-types";
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
-const STAKE_CHIPS = [5, 10, 20, 50] as const;
-const MIN_USDC = 5;
+const STAKE_CHIPS = [1, 5, 10, 50] as const;
+const MIN_USDC = 1;
 const MAX_USDC = 1000;
 const TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000;
 
@@ -219,7 +219,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const { signMessage } = useSignMessage();
   const { signAndSendTransaction } = useSignAndSendTransaction();
 
-  const [stake, setStake] = useState<number>(10);
+  const [stake, setStake] = useState<number>(1);
   const [custom, setCustom] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -284,7 +284,7 @@ export function TailModal({ open, onClose, source }: Props) {
   useEffect(() => {
     if (!open) return;
     setNow(Date.now());
-    setStake(10);
+    setStake(1);
     setCustom("");
     setSubmitting(false);
     setStatus(null);

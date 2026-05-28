@@ -10,7 +10,8 @@ describe("Flash fast perps game contract", () => {
     const page = source();
 
     expect(page).toContain("FLASH PERPS");
-    expect(page).toContain("const STAKES = [1, 2, 5, 10] as const");
+    expect(page).toContain("const STAKES = [1, 5, 10, 50] as const");
+    expect(page).not.toContain("const STAKES = [1, 2, 5, 10] as const");
     expect(page).toContain("const LEVERAGES = [20, 50, 100] as const");
     expect(page).toContain("Flash minimum position is $10 notional");
   });

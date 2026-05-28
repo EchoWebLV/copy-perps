@@ -30,7 +30,7 @@ const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
 const MARKETS = ["BTC", "ETH", "SOL"] as const;
-const STAKES = [1, 2, 5, 10] as const;
+const STAKES = [1, 5, 10, 50] as const;
 const LEVERAGES = [20, 50, 100] as const;
 const FLASH_MIN_NOTIONAL_USD = 10;
 const FLASH_MIN_NOTIONAL_TEXT = "Flash minimum position is $10 notional";

@@ -3,6 +3,19 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("TailModal deposit send", () => {
+  it("uses the shared one-dollar Flash stake ladder", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/tail/TailModal.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("const STAKE_CHIPS = [1, 5, 10, 50] as const");
+    expect(source).toContain("const MIN_USDC = 1");
+    expect(source).toContain("const [stake, setStake] = useState<number>(1)");
+    expect(source).toContain("setStake(1)");
+    expect(source).not.toContain("const STAKE_CHIPS = [5, 10, 20, 50] as const");
+  });
+
   it("prepares tail copies through Flash instead of Pacifica bet routes", () => {
     const source = readFileSync(
       join(process.cwd(), "components/tail/TailModal.tsx"),

@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
+const MIN_USDC = 1;
 const MAX_USDC = 1000;
 const USDC_ATOMS_PER_USDC = 1_000_000;
 
@@ -99,9 +100,9 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (!Number.isFinite(body.stakeUsdc) || body.stakeUsdc <= 0 || body.stakeUsdc > MAX_USDC) {
+  if (!Number.isFinite(body.stakeUsdc) || body.stakeUsdc < MIN_USDC || body.stakeUsdc > MAX_USDC) {
     return NextResponse.json(
-      { error: `stake must be between $1 and $${MAX_USDC}` },
+      { error: `stake must be between $${MIN_USDC} and $${MAX_USDC}` },
       { status: 400 },
     );
   }
