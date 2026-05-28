@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Radio, Zap } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_NAV_ITEMS, isShellNavActive } from "./nav-items";
 
@@ -29,6 +30,15 @@ describe("desktop shell nav contract", () => {
     );
   });
 
+  it("uses the swapped Pulse and Swipe icons without changing their labels", () => {
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Pulse")?.icon).toBe(
+      Zap,
+    );
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Swipe")?.icon).toBe(
+      Radio,
+    );
+  });
+
   it("marks feed and live nested paths active", () => {
     expect(isShellNavActive("/feed", "/feed")).toBe(true);
     expect(isShellNavActive("/feed", "/feed?bot=whale")).toBe(true);
@@ -43,11 +53,11 @@ describe("desktop shell nav contract", () => {
     );
 
     expect(bottomNav).toContain(
-      '{ href: "/live", icon: Zap, label: "Swipe" }',
+      '{ href: "/live", icon: Radio, label: "Swipe" }',
     );
     expect(bottomNav).toContain('href="/chatter"');
     expect(bottomNav).toContain('aria-label="Pulse open positions"');
-    expect(bottomNav).toContain("<Radio size={26}");
+    expect(bottomNav).toContain("<Zap size={26}");
     expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
   });
 
