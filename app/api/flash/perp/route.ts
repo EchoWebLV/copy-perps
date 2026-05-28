@@ -8,6 +8,7 @@ import {
 } from "@/lib/flash/perps";
 import {
   flashLeverageBoundsForMarket,
+  normalizeFlashMarket,
   type FlashTradeMode,
 } from "@/lib/flash/markets";
 import { signAndSendPrivySolanaTransaction } from "@/lib/privy/instant-solana";
@@ -44,9 +45,8 @@ const FLASH_ERROR_STATUS: Record<FlashPerpsError["code"], number> = {
 };
 
 function parseMarket(value: unknown) {
-  if (typeof value !== "string") return null;
-  const market = value.trim().toUpperCase();
-  return isSupportedFlashMarket(market) ? market : null;
+  const market = normalizeFlashMarket(value);
+  return market && isSupportedFlashMarket(market) ? market : null;
 }
 
 function parseMode(value: unknown): FlashTradeMode {
@@ -157,6 +157,7 @@ export async function POST(request: Request) {
     });
     if (body.instant) {
       const sent = await signAndSendPrivySolanaTransaction({
+        privyUserId: claims.userId,
         walletAddress: user.solanaPubkey,
         transactionB64: result.transaction,
       });

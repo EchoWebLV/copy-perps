@@ -42,7 +42,7 @@ describe("buildWhaleTailSource", () => {
       openPositionsCount: 3,
       openPositions: [
         position("stale-btc", "BTC", true),
-        position("fresh-hype", "HYPE", false, false),
+        position("fresh-hype", "HYPE"),
         position("fresh-sol", "SOL"),
         position("fresh-eth", "ETH"),
       ],
@@ -68,10 +68,11 @@ describe("buildWhaleTailSource", () => {
     expect(source?.asset).toBe("SOL");
     expect(source?.positions.map((p) => p.sourcePositionId)).toEqual([
       "stale-btc",
+      "fresh-hype",
       "fresh-sol",
       "fresh-eth",
     ]);
-    expect(source?.positions.some((p) => p.asset === "HYPE")).toBe(false);
+    expect(source?.positions.some((p) => p.asset === "HYPE")).toBe(true);
   });
 
   it("returns null when the whale has no Flash-copyable positions", () => {
@@ -85,7 +86,7 @@ describe("buildWhaleTailSource", () => {
       tags: [],
       openPositionsCount: 2,
       openPositions: [
-        position("fresh-hype", "HYPE"),
+        position("fresh-jitosol", "JitoSOL"),
         position("fresh-near", "NEAR"),
       ],
       bestPosition: null,

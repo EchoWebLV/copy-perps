@@ -1,6 +1,7 @@
 import { getLeaderboard, getMarkets, getPositions } from "@/lib/pacifica/client";
 import { filterTradeable, preRankByActivity } from "@/lib/pacifica/leaderboard";
 import { getMarksSnapshot } from "@/lib/data/marks";
+import { maxFlashLeverageForMarket } from "@/lib/flash/markets";
 import { generatedWhaleHandle, makeWhaleId } from "./identity";
 import { writeWhaleLiveSnapshot } from "./live-cache";
 import {
@@ -131,7 +132,9 @@ export async function refreshPacificaWhales(): Promise<{
             sourceAccount: account,
             position,
             marketMaxLeverage:
-              marketMaxLeverage.get(position.symbol) ?? 1,
+              maxFlashLeverageForMarket(position.symbol) ??
+              marketMaxLeverage.get(position.symbol) ??
+              1,
             currentMark: marks.get(position.symbol) ?? null,
             now,
           });

@@ -26,7 +26,8 @@ vi.mock("@/lib/flash/perps", () => ({
   },
   getFlashPerpsService: mocks.getFlashPerpsService,
   isSupportedFlashMarket: (value: unknown) =>
-    typeof value === "string" && ["BTC", "ETH", "SOL"].includes(value),
+    typeof value === "string" &&
+    ["BTC", "ETH", "SOL", "HYPE", "BONK", "NVDA", "USDJPY"].includes(value),
 }));
 
 import { POST as OPEN } from "../../app/api/flash/perp/route";
@@ -188,7 +189,52 @@ describe("Flash perp routes", () => {
     expect(mocks.open).not.toHaveBeenCalled();
   });
 
-  it("sends a delegated Flash open transaction when instant execution is requested", async () => {
+  it("accepts newly supported Flash whale markets", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "hype",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.open).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "HYPE",
+      side: "long",
+      amountUsd: 1,
+      leverage: 20,
+      mode: "standard",
+    });
+  });
+
+  it("uses Degen mode for whale copies above the standard ceiling", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "USDJPY",
+        side: "short",
+        stakeUsdc: 1,
+        leverage: 125,
+        mode: "degen",
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.open).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "USDJPY",
+      side: "short",
+      amountUsd: 1,
+      leverage: 125,
+      mode: "degen",
+    });
+  });
+
+  it("sends a session-signed Flash open transaction when instant execution is requested", async () => {
     const response = await OPEN(
       postRequest("/api/flash/perp", {
         market: "SOL",
@@ -210,6 +256,7 @@ describe("Flash perp routes", () => {
       mode: "standard",
     });
     expect(mocks.signAndSendPrivySolanaTransaction).toHaveBeenCalledWith({
+      privyUserId: "privy-user",
       transactionB64: "open-tx-b64",
       walletAddress: "wallet-1",
     });
@@ -312,7 +359,7 @@ describe("Flash perp routes", () => {
     });
   });
 
-  it("sends a delegated Flash close transaction when instant execution is requested", async () => {
+  it("sends a session-signed Flash close transaction when instant execution is requested", async () => {
     const response = await CLOSE(
       postRequest("/api/flash/perp/close", {
         market: "SOL",
@@ -329,6 +376,7 @@ describe("Flash perp routes", () => {
       side: "short",
     });
     expect(mocks.signAndSendPrivySolanaTransaction).toHaveBeenCalledWith({
+      privyUserId: "privy-user",
       transactionB64: "close-tx-b64",
       walletAddress: "wallet-1",
     });

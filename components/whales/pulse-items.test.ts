@@ -163,7 +163,7 @@ describe("buildPulseItems", () => {
     }
   });
 
-  it("keeps stale supported positions tail-ready and hides unsupported markets", () => {
+  it("keeps stale and expanded Flash markets tail-ready while hiding unsupported markets", () => {
     const items = buildPulseItems(
       [
         position({ positionId: "stale", stale: true, notionalUsd: 1_000_000 }),
@@ -174,9 +174,13 @@ describe("buildPulseItems", () => {
           notionalUsd: 1_000_000,
         }),
         position({
-          positionId: "unsupported",
+          positionId: "expanded-hype",
           market: "HYPE",
-          copyableOnPacifica: false,
+          notionalUsd: 1_000_000,
+        }),
+        position({
+          positionId: "unsupported",
+          market: "NEAR",
           notionalUsd: 1_000_000,
         }),
       ],
@@ -185,6 +189,7 @@ describe("buildPulseItems", () => {
 
     expect(items.find((item) => item.position.positionId === "stale")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(true);
+    expect(items.find((item) => item.position.positionId === "expanded-hype")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "unsupported")).toBeUndefined();
   });
 });

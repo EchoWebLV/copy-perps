@@ -8,7 +8,6 @@ const upsertWhalePosition = vi.fn();
 const markMissingWhalePositionsClosed = vi.fn();
 const getOpenWhalePositionsForSource = vi.fn();
 const writeWhaleLiveSnapshot = vi.fn();
-const getMarketsCached = vi.fn();
 
 vi.mock("@/lib/hyperliquid/client", () => ({
   getClearinghouseState,
@@ -24,10 +23,6 @@ vi.mock("./repository", () => ({
 
 vi.mock("./live-cache", () => ({
   writeWhaleLiveSnapshot,
-}));
-
-vi.mock("@/lib/pacifica/markets", () => ({
-  getMarketsCached,
 }));
 
 vi.mock("@/lib/hyperliquid/whales", () => ({
@@ -75,7 +70,6 @@ describe("refreshHyperliquidWhales", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAllMids.mockResolvedValue({ ETH: "2100" });
-    getMarketsCached.mockResolvedValue([{ symbol: "ETH", max_leverage: 20 }]);
     getClearinghouseState.mockImplementation(async (account: string) =>
       account === "0xempty"
         ? clearinghouseState({ assetPositions: [] })
@@ -111,8 +105,8 @@ describe("refreshHyperliquidWhales", () => {
         currentMark: 2100,
         raw: expect.objectContaining({
           copyableOnPacifica: true,
-          maxLeverage: 20,
-          pacificaMaxLeverage: 20,
+          maxLeverage: 500,
+          pacificaMaxLeverage: 500,
         }),
       }),
     );
@@ -140,9 +134,8 @@ describe("refreshHyperliquidWhales", () => {
     );
   });
 
-  it("marks Hyperliquid-only markets as unavailable for Pacifica copy routing", async () => {
+  it("marks Flash-supported Hyperliquid markets as available for copy routing", async () => {
     getAllMids.mockResolvedValue({ HYPE: "20" });
-    getMarketsCached.mockResolvedValue([{ symbol: "ETH" }]);
     getClearinghouseState.mockImplementation(async (account: string) =>
       account === "0xempty"
         ? clearinghouseState({ assetPositions: [] })
@@ -174,7 +167,50 @@ describe("refreshHyperliquidWhales", () => {
       expect.objectContaining({
         market: "HYPE",
         raw: expect.objectContaining({
+          copyableOnPacifica: true,
+          maxLeverage: 20,
+          pacificaMaxLeverage: 20,
+        }),
+      }),
+    );
+  });
+
+  it("marks non-Flash markets as unavailable for copy routing", async () => {
+    getAllMids.mockResolvedValue({ NEAR: "7" });
+    getClearinghouseState.mockImplementation(async (account: string) =>
+      account === "0xempty"
+        ? clearinghouseState({ assetPositions: [] })
+        : clearinghouseState({
+            assetPositions: [
+              {
+                type: "oneWay",
+                position: {
+                  coin: "NEAR",
+                  szi: "100",
+                  leverage: { type: "cross", value: 5 },
+                  entryPx: "6",
+                  positionValue: "700",
+                  unrealizedPnl: "100",
+                  returnOnEquity: "0.2",
+                  liquidationPx: "3",
+                  marginUsed: "140",
+                  maxLeverage: 10,
+                },
+              },
+            ],
+          }),
+    );
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    await refreshHyperliquidWhales();
+
+    expect(upsertWhalePosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        market: "NEAR",
+        raw: expect.objectContaining({
           copyableOnPacifica: false,
+          maxLeverage: null,
+          pacificaMaxLeverage: null,
         }),
       }),
     );

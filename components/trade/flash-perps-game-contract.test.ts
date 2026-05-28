@@ -10,9 +10,12 @@ describe("Flash fast perps game contract", () => {
     const page = source();
 
     expect(page).toContain("FLASH PERPS");
+    expect(page).toContain("FLASH_SCALP_MARKETS");
+    expect(page).toContain("FLASH_MARKET_CATEGORIES");
+    expect(page).toContain("flashLeverageOptionsForMarket");
     expect(page).toContain("const STAKES = [1, 5, 10, 50] as const");
     expect(page).not.toContain("const STAKES = [1, 2, 5, 10] as const");
-    expect(page).toContain("const STANDARD_LEVERAGES = [20, 50, 100] as const");
+    expect(page).not.toContain('const MARKETS = ["BTC", "ETH", "SOL"] as const');
     expect(page).toContain("Flash minimum position is $10 notional");
   });
 
@@ -37,11 +40,16 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("transactionB64");
   });
 
-  it("uses Privy delegation for one-click Flash execution after first approval", () => {
+  it("uses Privy session signers for TEE one-click Flash execution", () => {
     const page = source();
 
-    expect(page).toContain("useDelegatedActions");
-    expect(page).toContain("delegateWallet({");
+    expect(page).toContain("useSessionSigners");
+    expect(page).toContain("addSessionSigners({");
+    expect(page).toContain("NEXT_PUBLIC_PRIVY_FLASH_SIGNER_ID");
+    expect(page).toContain("signerId: PRIVY_INSTANT_SIGNER_ID");
+    expect(page).toContain("policyIds: PRIVY_INSTANT_POLICY_IDS");
+    expect(page).not.toContain("useDelegatedActions");
+    expect(page).not.toContain("delegateWallet({");
     expect(page).toContain("ensureInstantTrading");
     expect(page).toContain("requestOpen(true)");
     expect(page).toContain("requestClose(true)");

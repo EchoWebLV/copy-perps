@@ -9,7 +9,10 @@ import {
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
 import { Minus, Plus } from "lucide-react";
-import { maxFlashLeverageForMarket } from "@/lib/flash/markets";
+import {
+  flashTradeModeForLeverage,
+  maxFlashLeverageForMarket,
+} from "@/lib/flash/markets";
 import { useLiveMark } from "@/lib/pacifica/live-context";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
@@ -446,6 +449,7 @@ export function TailModal({ open, onClose, source }: Props) {
           side: flashSide,
           stakeUsdc: effectiveStake,
           leverage: flashLeverage,
+          mode: flashTradeModeForLeverage(flashMarket, flashLeverage) ?? "standard",
           walletAddress: wallet.address,
         };
         const resp = await fetch("/api/flash/perp", {

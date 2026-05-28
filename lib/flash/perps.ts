@@ -25,14 +25,15 @@ import {
   type OpenPositionQuoteData,
 } from "flash-sdk";
 import {
-  SUPPORTED_FLASH_MARKETS,
+  FLASH_POOL_NAMES,
   flashLeverageBoundsForMarket,
-  isFlashCopyableMarket,
+  flashPoolNameForMarket,
+  normalizeFlashMarket,
   type FlashMarketSymbol,
+  type FlashPoolName,
   type FlashTradeMode,
 } from "./markets";
 
-const FLASH_POOL_NAME = "Crypto.1";
 const FLASH_CLUSTER = "mainnet-beta";
 const FLASH_COMPUTE_UNITS = 600_000;
 const FLASH_SLIPPAGE_BPS = 800;
@@ -120,7 +121,7 @@ export interface FlashTxResponse {
 export function isSupportedFlashMarket(
   value: unknown,
 ): value is FlashMarketSymbol {
-  return isFlashCopyableMarket(value);
+  return normalizeFlashMarket(value) !== null;
 }
 
 export function assertFlashTrade(input: {
@@ -207,42 +208,56 @@ function applyCloseQuoteToSummary(
 
 export class FlashPerpsService {
   private readonly connection: Connection;
-  private readonly poolConfig: PoolConfig;
+  private readonly poolConfigs: PoolConfig[];
+  private readonly poolConfigByName: Map<FlashPoolName, PoolConfig>;
 
   constructor(rpcUrl = DEFAULT_RPC) {
     this.connection = new Connection(rpcUrl, "confirmed");
-    this.poolConfig = PoolConfig.fromIdsByName(FLASH_POOL_NAME, FLASH_CLUSTER);
+    const poolEntries = FLASH_POOL_NAMES.map((poolName) => [
+      poolName,
+      PoolConfig.fromIdsByName(poolName, FLASH_CLUSTER),
+    ] as const);
+    this.poolConfigs = poolEntries.map(([, poolConfig]) => poolConfig);
+    this.poolConfigByName = new Map<FlashPoolName, PoolConfig>(poolEntries);
   }
 
   async positionsOf(trader: string): Promise<FlashPositionSummary[]> {
     const owner = new PublicKey(trader);
-    const client = this.createClient(owner);
-    const positions = await client.getUserPositions(owner, this.poolConfig);
     const result: FlashPositionSummary[] = [];
-    for (const position of positions) {
-      if (!hasOpenSize(position)) continue;
-      const market = this.poolConfig.markets.find((m) =>
-        m.marketAccount.equals(position.market),
-      );
-      if (!market) continue;
-      const symbol = this.symbolForMarket(market);
-      if (!symbol) continue;
-      const summary = this.positionSummary(position.pubkey, position, market, symbol);
-      try {
-        const quote = await client.getClosePositionQuote(
-          position.pubkey,
-          PositionAccount.from(position.pubkey, position),
-          this.poolConfig,
-          new BN(0),
-          Privilege.None,
-          this.usdcCustody(),
-          null,
-          null,
-          owner,
+    for (const poolConfig of this.poolConfigs) {
+      const client = this.createClient(owner, poolConfig);
+      const positions = await client.getUserPositions(owner, poolConfig);
+      for (const position of positions) {
+        if (!hasOpenSize(position)) continue;
+        const market = poolConfig.markets.find((m) =>
+          m.marketAccount.equals(position.market),
         );
-        result.push(applyCloseQuoteToSummary(summary, quote));
-      } catch {
-        result.push(summary);
+        if (!market) continue;
+        const symbol = this.symbolForMarket(poolConfig, market);
+        if (!symbol) continue;
+        const summary = this.positionSummary(
+          poolConfig,
+          position.pubkey,
+          position,
+          market,
+          symbol,
+        );
+        try {
+          const quote = await client.getClosePositionQuote(
+            position.pubkey,
+            PositionAccount.from(position.pubkey, position),
+            poolConfig,
+            new BN(0),
+            Privilege.None,
+            this.usdcCustody(poolConfig),
+            null,
+            null,
+            owner,
+          );
+          result.push(applyCloseQuoteToSummary(summary, quote));
+        } catch {
+          result.push(summary);
+        }
       }
     }
     return result;
@@ -251,18 +266,21 @@ export class FlashPerpsService {
   async open(req: FlashOpenRequest): Promise<FlashTxResponse> {
     assertFlashTrade(req);
     const owner = new PublicKey(req.trader);
-    const client = this.createClient(owner);
-    const market = this.marketForSymbol(req.market, req.side);
+    const poolConfig = this.poolConfigForMarket(req.market);
+    const client = this.createClient(owner, poolConfig);
+    const market = this.marketForSymbol(poolConfig, req.market, req.side);
     const mode = req.mode ?? "standard";
     const configuredBounds = flashLeverageBoundsForMarket(req.market, mode);
-    const minLeverage =
-      mode === "degen"
-        ? Math.floor(Number(market.degenMinLev || configuredBounds?.min || 1))
-        : 1;
-    const maxLeverage =
-      mode === "degen"
-        ? Math.floor(Number(market.degenMaxLev || configuredBounds?.max || 0))
-        : Math.floor(Number(market.maxLev));
+    if (!configuredBounds) {
+      throw new FlashPerpsError("InvalidLeverage");
+    }
+    const minLeverage = configuredBounds.min;
+    const maxLeverage = Math.min(
+      configuredBounds.max,
+      Math.floor(
+        Number(mode === "degen" ? market.degenMaxLev : market.maxLev),
+      ),
+    );
     if (minLeverage > 0 && req.leverage < minLeverage) {
       throw new FlashPerpsError(
         "InvalidLeverage",
@@ -281,9 +299,9 @@ export class FlashPerpsService {
         amountIn,
         leverageToFlashBps(req.leverage),
         market,
-        this.poolConfig,
+        poolConfig,
         Privilege.None,
-        this.usdcCustody(),
+        this.usdcCustody(poolConfig),
         undefined,
         null,
         null,
@@ -299,7 +317,7 @@ export class FlashPerpsService {
       contractPriceToOracle(quote.entryPrice),
       flashSide,
     );
-    const collateralSymbol = this.collateralSymbolForMarket(market);
+    const collateralSymbol = this.collateralSymbolForMarket(poolConfig, market);
     const txData =
       collateralSymbol === "USDC"
         ? await client.openPosition(
@@ -309,7 +327,7 @@ export class FlashPerpsService {
             quote.amountIn,
             quote.sizeAmount,
             flashSide,
-            this.poolConfig,
+            poolConfig,
             Privilege.None,
           )
         : await client.swapAndOpen(
@@ -320,18 +338,20 @@ export class FlashPerpsService {
             priceWithSlippage,
             quote.sizeAmount,
             flashSide,
-            this.poolConfig,
+            poolConfig,
             Privilege.None,
           );
 
     const transaction = await this.serializeInstructions(
+      poolConfig,
       owner,
       txData.instructions,
       txData.additionalSigners,
       client,
     );
     const summary = this.positionSummary(
-      this.poolConfig.getPositionFromMarketPk(owner, market.marketAccount),
+      poolConfig,
+      poolConfig.getPositionFromMarketPk(owner, market.marketAccount),
       {
         market: market.marketAccount,
         entryPrice: quote.entryPrice,
@@ -365,13 +385,14 @@ export class FlashPerpsService {
 
   async close(req: FlashCloseRequest): Promise<FlashTxResponse> {
     const owner = new PublicKey(req.trader);
-    const client = this.createClient(owner);
-    const market = this.marketForSymbol(req.market, req.side);
-    const positionPk = this.poolConfig.getPositionFromMarketPk(
+    const poolConfig = this.poolConfigForMarket(req.market);
+    const client = this.createClient(owner, poolConfig);
+    const market = this.marketForSymbol(poolConfig, req.market, req.side);
+    const positionPk = poolConfig.getPositionFromMarketPk(
       owner,
       market.marketAccount,
     );
-    const position = (await client.getUserPositions(owner, this.poolConfig)).find(
+    const position = (await client.getUserPositions(owner, poolConfig)).find(
       (p) => p.pubkey.equals(positionPk) && hasOpenSize(p),
     );
     if (!position) throw new FlashPerpsError("PositionNotOpen");
@@ -382,10 +403,10 @@ export class FlashPerpsService {
       quote = await client.getClosePositionQuote(
         positionPk,
         positionAccount,
-        this.poolConfig,
+        poolConfig,
         new BN(0),
         Privilege.None,
-        this.usdcCustody(),
+        this.usdcCustody(poolConfig),
         null,
         null,
         owner,
@@ -401,7 +422,7 @@ export class FlashPerpsService {
       contractPriceToOracle(quote.markPrice),
       flashSide,
     );
-    const collateralSymbol = this.collateralSymbolForMarket(market);
+    const collateralSymbol = this.collateralSymbolForMarket(poolConfig, market);
     const txData =
       collateralSymbol === "USDC"
         ? await client.closePosition(
@@ -409,7 +430,7 @@ export class FlashPerpsService {
             collateralSymbol,
             priceWithSlippage,
             flashSide,
-            this.poolConfig,
+            poolConfig,
             Privilege.None,
             undefined,
             undefined,
@@ -421,11 +442,12 @@ export class FlashPerpsService {
             collateralSymbol,
             priceWithSlippage,
             flashSide,
-            this.poolConfig,
+            poolConfig,
             Privilege.None,
           );
 
     const transaction = await this.serializeInstructions(
+      poolConfig,
       owner,
       txData.instructions,
       txData.additionalSigners,
@@ -441,13 +463,23 @@ export class FlashPerpsService {
         isProfitable: quote.isProfitable,
       },
       position: applyCloseQuoteToSummary(
-        this.positionSummary(positionPk, position, market, req.market),
+        this.positionSummary(poolConfig, positionPk, position, market, req.market),
         quote,
       ),
     };
   }
 
-  private createClient(owner: PublicKey): PerpetualsClient {
+  private poolConfigForMarket(symbol: FlashMarketSymbol): PoolConfig {
+    const poolName = flashPoolNameForMarket(symbol);
+    const poolConfig = poolName ? this.poolConfigByName.get(poolName) : undefined;
+    if (!poolConfig) throw new FlashPerpsError("UnsupportedMarket");
+    return poolConfig;
+  }
+
+  private createClient(
+    owner: PublicKey,
+    poolConfig: PoolConfig,
+  ): PerpetualsClient {
     const wallet = {
       publicKey: owner,
       signTransaction: async <T>(tx: T): Promise<T> => tx,
@@ -459,26 +491,27 @@ export class FlashPerpsService {
     });
     return new PerpetualsClient(
       provider,
-      this.poolConfig.programId,
-      this.poolConfig.perpComposibilityProgramId,
-      this.poolConfig.fbNftRewardProgramId,
-      this.poolConfig.rewardDistributionProgram.programId,
+      poolConfig.programId,
+      poolConfig.perpComposibilityProgramId,
+      poolConfig.fbNftRewardProgramId,
+      poolConfig.rewardDistributionProgram.programId,
       {},
     );
   }
 
   private marketForSymbol(
+    poolConfig: PoolConfig,
     symbol: FlashMarketSymbol,
     side: FlashSide,
   ): MarketConfig {
-    const token = this.poolConfig.tokens.find((t) => t.symbol === symbol);
+    const token = poolConfig.tokens.find((t) => t.symbol === symbol);
     const usdcMint = new PublicKey(USDC_MINT);
     const market = token
-      ? this.poolConfig.markets.find((m) => {
+      ? poolConfig.markets.find((m) => {
           if (!m.targetMint.equals(token.mintKey)) return false;
           if (!marketMatchesSide(m, side)) return false;
           return side === "long"
-            ? m.collateralMint.equals(token.mintKey)
+            ? !m.collateralMint.equals(usdcMint)
             : m.collateralMint.equals(usdcMint);
         })
       : undefined;
@@ -486,27 +519,34 @@ export class FlashPerpsService {
     return market;
   }
 
-  private symbolForMarket(market: MarketConfig): FlashMarketSymbol | null {
-    const token = this.poolConfig.tokens.find((t) =>
+  private symbolForMarket(
+    poolConfig: PoolConfig,
+    market: MarketConfig,
+  ): FlashMarketSymbol | null {
+    const token = poolConfig.tokens.find((t) =>
       t.mintKey.equals(market.targetMint),
     );
-    return isSupportedFlashMarket(token?.symbol) ? token.symbol : null;
+    return normalizeFlashMarket(token?.symbol);
   }
 
-  private collateralSymbolForMarket(market: MarketConfig): string {
+  private collateralSymbolForMarket(
+    poolConfig: PoolConfig,
+    market: MarketConfig,
+  ): string {
     return (
-      this.poolConfig.tokens.find((t) => t.mintKey.equals(market.collateralMint))
+      poolConfig.tokens.find((t) => t.mintKey.equals(market.collateralMint))
         ?.symbol ?? "USDC"
     );
   }
 
-  private usdcCustody(): CustodyConfig {
-    const custody = this.poolConfig.custodies.find((c) => c.symbol === "USDC");
+  private usdcCustody(poolConfig: PoolConfig): CustodyConfig {
+    const custody = poolConfig.custodies.find((c) => c.symbol === "USDC");
     if (!custody) throw new FlashPerpsError("UnsupportedMarket");
     return custody;
   }
 
   private positionSummary(
+    poolConfig: PoolConfig,
     positionPk: PublicKey,
     position: {
       market: PublicKey;
@@ -526,12 +566,13 @@ export class FlashPerpsService {
       entryPriceUsd: contractPriceToNumber(position.entryPrice),
       sizeUsd: bnToNumber(position.sizeUsd, USD_DECIMALS),
       collateralUsd: bnToNumber(position.collateralUsd, USD_DECIMALS),
-      collateralSymbol: this.collateralSymbolForMarket(market),
+      collateralSymbol: this.collateralSymbolForMarket(poolConfig, market),
       openTime: position.openTime.toNumber() * 1000,
     };
   }
 
   private async serializeInstructions(
+    poolConfig: PoolConfig,
     owner: PublicKey,
     instructions: TransactionInstruction[],
     additionalSigners: Signer[],
@@ -540,7 +581,7 @@ export class FlashPerpsService {
     try {
       const blockhash = await this.connection.getLatestBlockhash("finalized");
       const { addressLookupTables } = await client.getOrLoadAddressLookupTable(
-        this.poolConfig,
+        poolConfig,
       );
       const message = new TransactionMessage({
         payerKey: owner,

@@ -95,8 +95,8 @@ describe("refreshPacificaWhales", () => {
         id: "pacifica:ABC123:BTC:long:1779543000000",
         sourceAccount: "ABC123",
         raw: expect.objectContaining({
-          maxLeverage: 50,
-          pacificaMaxLeverage: 50,
+          maxLeverage: 500,
+          pacificaMaxLeverage: 500,
         }),
       }),
     );

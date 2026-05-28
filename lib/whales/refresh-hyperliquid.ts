@@ -3,7 +3,10 @@ import {
   getClearinghouseState,
 } from "@/lib/hyperliquid/client";
 import { CURATED_WHALES, truncateEthAddress } from "@/lib/hyperliquid/whales";
-import { getMarketsCached } from "@/lib/pacifica/markets";
+import {
+  isFlashCopyableMarket,
+  maxFlashLeverageForMarket,
+} from "@/lib/flash/markets";
 import { writeWhaleLiveSnapshot } from "./live-cache";
 import {
   InvalidHyperliquidPositionError,
@@ -57,23 +60,6 @@ export async function refreshHyperliquidWhales(): Promise<{
     ).values(),
   ];
   const mids = await getAllMids().catch(() => ({} as Record<string, string>));
-  const pacificaMarkets = await getMarketsCached().catch((err) => {
-    console.warn("[whales] Pacifica market list failed:", err);
-    return null;
-  });
-  const copyableMarkets = pacificaMarkets
-    ? new Set(pacificaMarkets.map((market) => market.symbol))
-    : null;
-  const pacificaMaxLeverageByMarket = pacificaMarkets
-    ? new Map(
-        pacificaMarkets.map((market) => [
-          market.symbol,
-          Number.isFinite(Number(market.max_leverage))
-            ? Number(market.max_leverage)
-            : null,
-        ]),
-      )
-    : null;
 
   let positionsSeen = 0;
   const snapshotObservedAt = new Date();
@@ -136,13 +122,12 @@ export async function refreshHyperliquidWhales(): Promise<{
             assetPosition,
             currentMark: readMark(mids, assetPosition.position.coin),
             now: Number.isNaN(now.getTime()) ? snapshotObservedAt : now,
-            copyableOnPacifica:
-              copyableMarkets === null
-                ? true
-                : copyableMarkets.has(assetPosition.position.coin),
-            pacificaMaxLeverage:
-              pacificaMaxLeverageByMarket?.get(assetPosition.position.coin) ??
-              null,
+            copyableOnPacifica: isFlashCopyableMarket(
+              assetPosition.position.coin,
+            ),
+            pacificaMaxLeverage: maxFlashLeverageForMarket(
+              assetPosition.position.coin,
+            ),
           });
           const existing = existingOpenById.get(mapped.id);
           if (existing) {

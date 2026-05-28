@@ -7,6 +7,8 @@ import { isFlashCopyableMarket } from "@/lib/flash/markets";
 type WhalePayload = WhaleTraderSignal["payload"];
 type WhalePosition = WhalePayload["openPositions"][number];
 
+const PRIMARY_FLASH_MARKETS = new Set(["BTC", "ETH", "SOL"]);
+
 function toTailPosition(
   position: WhalePosition,
   nowMs: number,
@@ -39,10 +41,14 @@ export function buildWhaleTailSource(
     .filter((position) => isFlashCopyableMarket(position.market))
     .map((position) => toTailPosition(position, nowMs));
   if (positions.length === 0) return null;
+  const livePositions = positions.filter((position) =>
+    isWhaleTailPositionCopyable(position, nowMs),
+  );
   const primary =
-    positions.find((position) =>
-      isWhaleTailPositionCopyable(position, nowMs),
+    livePositions.find((position) =>
+      PRIMARY_FLASH_MARKETS.has(position.asset.toUpperCase()),
     ) ??
+    livePositions[0] ??
     positions.find((position) => !position.stale) ??
     positions[0] ??
     null;

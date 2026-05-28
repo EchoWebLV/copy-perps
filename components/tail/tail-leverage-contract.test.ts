@@ -31,6 +31,7 @@ describe("TailModal single whale leverage control", () => {
       "copyLeverage ?? copyPosition?.leverage ?? source.leverage",
     );
     expect(source).toContain("leverage: flashLeverage");
+    expect(source).toContain("mode: flashTradeModeForLeverage");
     expect(source).not.toContain('fetch("/api/bet/whale"');
   });
 

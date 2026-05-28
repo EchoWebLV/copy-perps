@@ -82,7 +82,8 @@ describe("whale tail helpers", () => {
     expect(copyable.map((p) => p.sourcePositionId)).toEqual([
       "primary",
       "second",
+      "hyper-only",
     ]);
-    expect(whaleTailTotalNotional(10, copyable)).toBe(70);
+    expect(whaleTailTotalNotional(10, copyable)).toBe(90);
   });
 });
