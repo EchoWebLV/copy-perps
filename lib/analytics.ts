@@ -20,16 +20,18 @@ export function initPostHog() {
     return;
   }
 
+  const apiHost =
+    process.env.NEXT_PUBLIC_POSTHOG_API_HOST ?? "https://us.i.posthog.com";
+
   posthog.init(key, {
-    // Reverse-proxied through /ingest in next.config.ts so ad blockers
-    // (uBlock, Brave shields) don't eat events. The crypto audience runs
-    // these heavily — direct posthog.com hits get dropped.
-    api_host: "/ingest",
+    // Keep analytics off the app server by default. Set
+    // NEXT_PUBLIC_POSTHOG_API_HOST=/ingest to opt back into the proxy.
+    api_host: apiHost,
     ui_host: "https://us.posthog.com",
     capture_pageview: false,
-    capture_pageleave: true,
+    capture_pageleave: false,
     person_profiles: "identified_only",
-    autocapture: true,
+    autocapture: false,
   });
   initted = true;
 }

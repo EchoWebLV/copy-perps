@@ -37,7 +37,14 @@ describe("whale API routes", () => {
   });
 
   it("returns roster signals when whale social is enabled", async () => {
-    const whale = { id: "whale_trader:one" };
+    const whale = {
+      id: "whale_trader:one",
+      heatScore: 10,
+      payload: {
+        openPositions: [],
+        stats: { pnlCurve: [] },
+      },
+    };
     mocks.buildCachedWhaleTraderSignals.mockResolvedValue([whale]);
     const { GET } = await import("@/app/api/whales/roster/route");
 
@@ -46,6 +53,40 @@ describe("whale API routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ whales: [whale] });
     expect(mocks.buildCachedWhaleTraderSignals).toHaveBeenCalledTimes(1);
+  });
+
+  it("trims roster payloads before sending them to the client", async () => {
+    const whale = {
+      id: "whale_trader:heavy",
+      heatScore: 100,
+      payload: {
+        openPositions: Array.from({ length: 8 }, (_, idx) => ({
+          positionId: `position-${idx}`,
+        })),
+        stats: {
+          pnlCurve: Array.from({ length: 140 }, (_, idx) => ({
+            t: idx,
+            v: idx,
+          })),
+        },
+      },
+    };
+    mocks.buildCachedWhaleTraderSignals.mockResolvedValue([whale]);
+    const { GET } = await import("@/app/api/whales/roster/route");
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.whales[0].payload.openPositions).toHaveLength(3);
+    expect(body.whales[0].payload.stats.pnlCurve).toHaveLength(96);
+    expect(body.whales[0].payload.stats.pnlCurve.at(0)).toEqual({
+      t: 0,
+      v: 0,
+    });
+    expect(body.whales[0].payload.stats.pnlCurve.at(-1)).toEqual({
+      t: 139,
+      v: 139,
+    });
   });
 
   it("returns 404 from live positions when whale social is disabled", async () => {

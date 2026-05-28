@@ -38,6 +38,15 @@ describe("WhaleRoster feed layout", () => {
     expect(source).toContain("run();");
   });
 
+  it("polls the roster at a slower cadence to keep route transitions responsive", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("const POLL_MS = 30_000;");
+  });
+
   it("shows hold duration for the position surfaced on the whale card", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleRoster.tsx"),

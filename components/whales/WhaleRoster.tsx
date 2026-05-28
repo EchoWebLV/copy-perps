@@ -29,7 +29,7 @@ import {
   RED,
 } from "@/components/v2/ui";
 
-const POLL_MS = 4_000;
+const POLL_MS = 30_000;
 
 interface Props {
   initialWhales: WhaleTraderSignal[];
@@ -202,6 +202,7 @@ function WhaleCard({
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Link
           href="/live"
+          prefetch={false}
           className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
           style={{
             background: PANEL_2,

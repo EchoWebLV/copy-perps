@@ -1,25 +1,30 @@
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
-import { refreshWhales } from "./refresh";
 import { whaleSocialEnabled } from "@/lib/features";
-import {
-  acquireWhaleTickerLease,
-  ensureWhaleLeaseTable,
-} from "./ticker-lease";
-import {
-  startWhaleSourceMonitor,
-  type SourceMonitorHandle,
-} from "./source-monitor";
+import type { SourceMonitorHandle } from "./source-monitor";
 
-const REFRESH_GAP_MS = Number(process.env.WHALE_REFRESH_GAP_MS ?? 15_000);
+const REFRESH_GAP_MS = Number(process.env.WHALE_REFRESH_GAP_MS ?? 60_000);
 const LEASE_RECHECK_MS = 30_000;
 const STARTUP_DELAY_MS = 5_000;
 const HOLDER = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
+
+type WhaleTickerDeps = {
+  refreshWhales: typeof import("./refresh").refreshWhales;
+  acquireWhaleTickerLease: typeof import("./ticker-lease").acquireWhaleTickerLease;
+  ensureWhaleLeaseTable: typeof import("./ticker-lease").ensureWhaleLeaseTable;
+  startWhaleSourceMonitor: typeof import("./source-monitor").startWhaleSourceMonitor;
+};
+
+let depsPromise: Promise<WhaleTickerDeps> | null = null;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function startWhaleTicker(): void {
+  if (process.env.DISABLE_WHALE_TICKER === "true") {
+    console.log("[whales] ticker disabled via DISABLE_WHALE_TICKER");
+    return;
+  }
   if (!whaleSocialEnabled()) return;
   const g = globalThis as typeof globalThis & { __whaleTickerStarted?: boolean };
   if (g.__whaleTickerStarted) return;
@@ -30,6 +35,12 @@ export function startWhaleTicker(): void {
 
 async function loop(): Promise<void> {
   await sleep(STARTUP_DELAY_MS);
+  const {
+    acquireWhaleTickerLease,
+    ensureWhaleLeaseTable,
+    refreshWhales,
+    startWhaleSourceMonitor,
+  } = await loadWhaleTickerDeps();
 
   let tableReady = false;
   let wasHolder = false;
@@ -84,4 +95,18 @@ async function loop(): Promise<void> {
     }
     await sleep(REFRESH_GAP_MS);
   }
+}
+
+function loadWhaleTickerDeps(): Promise<WhaleTickerDeps> {
+  depsPromise ??= Promise.all([
+    import("./refresh"),
+    import("./ticker-lease"),
+    import("./source-monitor"),
+  ]).then(([refresh, lease, sourceMonitor]) => ({
+    refreshWhales: refresh.refreshWhales,
+    acquireWhaleTickerLease: lease.acquireWhaleTickerLease,
+    ensureWhaleLeaseTable: lease.ensureWhaleLeaseTable,
+    startWhaleSourceMonitor: sourceMonitor.startWhaleSourceMonitor,
+  }));
+  return depsPromise;
 }
