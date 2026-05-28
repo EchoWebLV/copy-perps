@@ -32,4 +32,14 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("entryValue");
     expect(page).toContain("MAX_GRAPH_POINTS");
   });
+
+  it("keeps the mobile trade controls compact without an empty graph placeholder", () => {
+    const page = source();
+
+    expect(page).toContain("overflow-hidden px-4 pt-3");
+    expect(page).not.toContain("overflow-y-auto px-5 pt-5");
+    expect(page).toContain("{selectedPosition && (");
+    expect(page).not.toContain("Open a Flash position for live graph");
+    expect(page).toContain("pb-[calc(88px+env(safe-area-inset-bottom))]");
+  });
 });

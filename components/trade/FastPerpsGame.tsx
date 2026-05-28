@@ -325,31 +325,31 @@ export function FastPerpsGame() {
 
   return (
     <div
-      className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-5 pt-5 lg:max-w-5xl lg:px-8"
+      className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden px-4 pt-3 pb-[calc(88px+env(safe-area-inset-bottom))] lg:max-w-5xl lg:px-8 lg:py-8"
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <Stamp label="Trade" value="FLASH PERPS" />
-          <div className="mt-2 text-[42px] font-black uppercase leading-none">
+          <div className="mt-1 text-[34px] font-black uppercase leading-none">
             {market}
           </div>
-          <div className="mt-1 text-[11px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+          <div className="mt-0.5 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
             USDC collateral · user-signed
           </div>
         </div>
         <Link
           href="/portfolio"
-          className="flex h-11 w-11 items-center justify-center rounded-2xl transition active:scale-95"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition active:scale-95"
           style={{ background: PANEL, color: FG, border: `1px solid ${FAINT}` }}
           aria-label="Open positions"
         >
-          <WalletCards size={18} strokeWidth={2.8} />
+          <WalletCards size={16} strokeWidth={2.8} />
         </Link>
       </div>
 
       {positions.length > 0 && (
-        <div className="mt-4 grid gap-2">
+        <div className="no-scrollbar mt-2 flex max-h-12 gap-2 overflow-x-auto overflow-y-hidden">
           {positions.map((position) => {
             const active =
               position.symbol === market && position.side === side;
@@ -363,26 +363,26 @@ export function FastPerpsGame() {
                   setSide(position.side);
                   setError(null);
                 }}
-                className="flex items-center justify-between rounded-2xl px-3 py-2 text-left transition active:scale-[0.98]"
+                className="flex min-w-[168px] items-center justify-between rounded-xl px-3 py-1.5 text-left transition active:scale-[0.98]"
                 style={{
                   background: active ? PANEL_2 : PANEL,
                   border: `1px solid ${active ? ACCENT : FAINT}`,
                 }}
               >
                 <div>
-                  <div className="text-[13px] font-black uppercase tracking-widest">
+                  <div className="text-[11px] font-black uppercase tracking-widest">
                     {position.symbol} {position.side}
                   </div>
-                  <div className="mt-1 font-mono text-[11px] font-black" style={{ color: DIM }}>
+                  <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
                     {(position.leverage ?? 0).toFixed(0)}x · stake {fmtUsd(position.collateralUsd)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono text-[13px] font-black">
+                  <div className="font-mono text-[11px] font-black">
                     {fmtUsd(valueForPosition(position))}
                   </div>
                   <div
-                    className="mt-1 font-mono text-[11px] font-black"
+                    className="mt-0.5 font-mono text-[10px] font-black"
                     style={{ color: pnl >= 0 ? GREEN : RED }}
                   >
                     {pnl >= 0 ? "+" : ""}
@@ -395,7 +395,7 @@ export function FastPerpsGame() {
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         {MARKETS.map((nextMarket) => {
           const active = market === nextMarket;
           return (
@@ -406,7 +406,7 @@ export function FastPerpsGame() {
                 setMarket(nextMarket);
                 setError(null);
               }}
-              className="rounded-2xl px-3 py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+              className="rounded-xl px-3 py-2 text-[12px] font-black uppercase tracking-widest transition active:scale-[0.97]"
               style={{
                 background: active ? ACCENT : PANEL,
                 color: active ? BG : FG,
@@ -419,7 +419,7 @@ export function FastPerpsGame() {
         })}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {(["long", "short"] as const).map((nextSide) => {
           const active = side === nextSide;
           const color = nextSide === "long" ? GREEN : RED;
@@ -432,7 +432,7 @@ export function FastPerpsGame() {
                 setSide(nextSide);
                 setError(null);
               }}
-              className="flex items-center justify-center gap-2 rounded-2xl px-4 py-4 text-[14px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
               style={{
                 background: active ? `${color}22` : PANEL,
                 color: active ? color : FG,
@@ -446,22 +446,18 @@ export function FastPerpsGame() {
         })}
       </div>
 
-      <div className="mt-4 h-[180px] overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-        {selectedPosition ? (
+      {selectedPosition && (
+        <div className="mt-3 h-[180px] overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
           <LivePerpGraph
             value={graphValue}
             entryValue={selectedPosition.collateralUsd}
             color={graphColor}
             activeKey={selectedPosition.positionPubkey}
           />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            Open a Flash position for live graph
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         <PreviewMetric
           label={selectedPosition ? "Value" : "Stake"}
           value={fmtUsd(selectedPosition ? graphValue : effectiveStake)}
@@ -480,11 +476,11 @@ export function FastPerpsGame() {
 
       {!selectedPosition && (
         <>
-          <div className="mt-4 rounded-2xl p-3" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-            <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+          <div className="mt-2 rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
+            <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
               Stake
             </div>
-            <div className="mt-2 grid grid-cols-4 gap-2">
+            <div className="mt-1.5 grid grid-cols-4 gap-1.5">
               {STAKES.map((nextStake) => {
                 const active = !customStake && stake === nextStake;
                 return (
@@ -496,7 +492,7 @@ export function FastPerpsGame() {
                       setCustomStake("");
                       setError(null);
                     }}
-                    className="rounded-xl px-2 py-3 text-[13px] font-black transition active:scale-[0.97]"
+                    className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
                     style={{
                       background: active ? FG : PANEL_2,
                       color: active ? BG : FG,
@@ -516,21 +512,21 @@ export function FastPerpsGame() {
                 setError(null);
               }}
               placeholder="Custom USDC"
-              className="mt-2 w-full rounded-xl border bg-black/20 px-4 py-3 text-[14px] font-black text-white outline-none placeholder:text-white/30"
+              className="mt-1.5 w-full rounded-lg border bg-black/20 px-3 py-2 text-[12px] font-black text-white outline-none placeholder:text-white/30"
               style={{ borderColor: FAINT }}
             />
           </div>
 
-          <div className="mt-4 rounded-2xl p-3" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
+          <div className="mt-2 rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
             <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+              <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
                 Leverage
               </div>
-              <div className="text-[22px] font-black" style={{ color: sideColor }}>
+              <div className="text-[18px] font-black leading-none" style={{ color: sideColor }}>
                 {leverage}x
               </div>
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-1.5 grid grid-cols-3 gap-1.5">
               {LEVERAGES.map((nextLeverage) => {
                 const active = leverage === nextLeverage;
                 return (
@@ -541,7 +537,7 @@ export function FastPerpsGame() {
                       setLeverage(nextLeverage);
                       setError(null);
                     }}
-                    className="rounded-xl px-2 py-3 text-[13px] font-black transition active:scale-[0.97]"
+                    className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
                     style={{
                       background: active ? sideColor : PANEL_2,
                       color: active ? BG : FG,
@@ -558,7 +554,7 @@ export function FastPerpsGame() {
       )}
 
       {selectedPosition?.liquidationPriceUsd != null && (
-        <div className="mt-3 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
+        <div className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
           Mark {fmtPrice(selectedPosition.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
           {fmtPrice(selectedPosition.liquidationPriceUsd)}
           {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
@@ -570,7 +566,7 @@ export function FastPerpsGame() {
 
       {(status || error || (!tradeAllowed && !selectedPosition)) && (
         <div
-          className="mt-4 rounded-2xl px-4 py-3 text-[12px] font-black uppercase tracking-widest"
+          className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest"
           style={{
             background: error ? `${RED}18` : PANEL,
             color: error ? RED : DIM,
@@ -583,12 +579,12 @@ export function FastPerpsGame() {
         </div>
       )}
 
-      <div className="mt-auto pb-28 pt-5 lg:pb-8">
+      <div className="mt-auto pt-3 lg:pb-0">
         {!ready ? (
           <button
             type="button"
             disabled
-            className="flex w-full items-center justify-center rounded-2xl py-4 text-[15px] font-black uppercase tracking-widest"
+            className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest"
             style={{ background: PANEL, color: DIM }}
           >
             Loading
@@ -597,7 +593,7 @@ export function FastPerpsGame() {
           <button
             type="button"
             onClick={login}
-            className="flex w-full items-center justify-center rounded-2xl py-4 text-[15px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+            className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
             style={{ background: ACCENT, color: BG }}
           >
             Log in to trade
@@ -607,7 +603,7 @@ export function FastPerpsGame() {
             type="button"
             onClick={() => void (selectedPosition ? closeLive() : openLive())}
             disabled={!readyToTrade || (!selectedPosition && !tradeAllowed)}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-[15px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
             style={{
               background: !readyToTrade
                 ? PANEL
@@ -643,11 +639,11 @@ function PreviewMetric({
   color?: string;
 }) {
   return (
-    <div className="rounded-2xl p-3" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-      <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+    <div className="rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
+      <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
         {label}
       </div>
-      <div className="mt-1 text-[24px] font-black leading-none tabular-nums" style={{ color }}>
+      <div className="mt-0.5 text-[20px] font-black leading-none tabular-nums" style={{ color }}>
         {value}
       </div>
     </div>
