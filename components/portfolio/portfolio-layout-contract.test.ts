@@ -59,4 +59,14 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("setPacificaAccount((current)");
     expect(page).toContain("nextPacificaAccount ?? current");
   });
+
+  it("uses compact portfolio sizing instead of oversized summary cards", () => {
+    const page = source();
+
+    expect(page).toContain("<BigNum size={30}>");
+    expect(page).toContain("CompactPositionSummary");
+    expect(page).not.toContain("PositionSummaryPanel");
+    expect(page).not.toContain("text-[38px]");
+    expect(page).not.toContain("text-[30px]");
+  });
 });

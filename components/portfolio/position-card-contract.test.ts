@@ -11,12 +11,17 @@ describe("Portfolio position cards", () => {
       "utf8",
     );
 
-  it("makes live copy positions read like large trading cards", () => {
+  it("keeps live copy positions compact and action-focused", () => {
     const source = copyRow();
 
-    expect(source).toContain("PositionHeroMetric");
-    expect(source).toContain("PositionDetailGrid");
-    expect(source).toContain("text-[22px]");
+    expect(source).toContain("CompactPositionMetric");
+    expect(source).not.toContain("PositionHeroMetric");
+    expect(source).not.toContain("PositionDetailGrid");
+    expect(source).not.toContain("text-[22px]");
+    expect(source).not.toContain('label="Entry"');
+    expect(source).not.toContain('label="Liq"');
+    expect(source).not.toContain('label="Margin"');
+    expect(source).not.toContain('label="Mode"');
     expect(source).toContain("P/L");
     expect(source).toContain("Notional");
   });
@@ -29,11 +34,13 @@ describe("Portfolio position cards", () => {
     expect(source).toContain('row.sourceKind === "wallet"');
   });
 
-  it("makes legacy open and closed positions use the same card language", () => {
+  it("keeps legacy open and closed positions in a slim row layout", () => {
     const source = positionRow();
 
-    expect(source).toContain("LegacyPositionMetric");
-    expect(source).toContain("text-[20px]");
+    expect(source).toContain("CompactLegacyMetric");
+    expect(source).not.toContain("LegacyPositionMetric");
+    expect(source).not.toContain("text-[20px]");
+    expect(source).not.toContain("shadow-[");
     expect(source).toContain("Current");
     expect(source).toContain("Cost");
   });

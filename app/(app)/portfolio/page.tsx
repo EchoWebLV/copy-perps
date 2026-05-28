@@ -329,7 +329,7 @@ export default function PortfolioPage() {
                 <div>
                   <Stamp label="NET WORTH · LIVE" />
                   <div className="mt-1">
-                    <BigNum size={38}>
+                    <BigNum size={30}>
                       {formatMaybeUsd(totalNetWorth, portfolioBalancesReady)}
                     </BigNum>
                   </div>
@@ -352,7 +352,7 @@ export default function PortfolioPage() {
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 <PortfolioSummaryCard
                   label="Cash"
                   value={formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
@@ -381,7 +381,7 @@ export default function PortfolioPage() {
               </div>
 
               <div
-                className="mt-4 grid grid-cols-3 gap-1 rounded-2xl p-1"
+                className="mt-3 grid grid-cols-3 gap-1 rounded-2xl p-1"
                 style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
               >
                 {(
@@ -413,8 +413,8 @@ export default function PortfolioPage() {
               </div>
             </div>
 
-            <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto pb-24 lg:pb-6">
-              <div className="flex flex-col gap-3">
+            <div className="no-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto pb-24 lg:pb-6">
+              <div className="flex flex-col gap-2.5">
                 {error && (
                   <div
                     className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
@@ -509,7 +509,7 @@ function PortfolioSummaryCard({
 
   return (
     <div
-      className="min-w-0 p-3"
+      className="min-w-0 p-2.5"
       style={{ background: PANEL, borderRadius: 12, border: `1px solid ${FAINT}` }}
     >
       <div
@@ -518,12 +518,12 @@ function PortfolioSummaryCard({
       >
         {label}
       </div>
-      <div className="mt-1 truncate text-[20px] font-black leading-none" style={{ color: toneColor }}>
+      <div className="mt-1 truncate text-[16px] font-black leading-none" style={{ color: toneColor }}>
         {value}
       </div>
       {detail && (
         <div
-          className="mt-1 truncate text-[10px] font-black uppercase tracking-widest"
+          className="mt-1 truncate text-[9px] font-black uppercase tracking-widest"
           style={{ color: tone ? toneColor : DIM }}
         >
           {detail}
@@ -688,7 +688,7 @@ function OpenPositionsPanel({
 
   return (
     <section className="space-y-3">
-      <PositionSummaryPanel
+      <CompactPositionSummary
         label="Open positions"
         count={openHoldingCount}
         value={formatMaybeUsd(positionsValue, positions !== null)}
@@ -704,8 +704,8 @@ function OpenPositionsPanel({
         />
       )}
       {copyRows.length > 0 && (
-        <section className="space-y-3">
-          <Stamp label="LIVE POSITIONS" value={`${copyRows.length}`} />
+        <section className="space-y-2.5">
+          <Stamp label="POSITIONS" value={`${copyRows.length}`} />
           {copyRows.map((row) => (
             <CopyRow
               key={row.betId ?? `${row.market}:${row.side}`}
@@ -716,7 +716,7 @@ function OpenPositionsPanel({
         </section>
       )}
       {openPositions.length > 0 && (
-        <section className="grid gap-3 lg:grid-cols-2">
+        <section className="grid gap-2.5 lg:grid-cols-2">
           {openPositions.map((position) => (
             <PositionRow
               key={position.id}
@@ -748,7 +748,7 @@ function ClosedPositionsPanel({
 }) {
   return (
     <section className="space-y-3">
-      <PositionSummaryPanel
+      <CompactPositionSummary
         label="Closed positions"
         count={closedPositions.length}
         value={formatSignedUsd(realizedPnl)}
@@ -764,7 +764,7 @@ function ClosedPositionsPanel({
         />
       )}
       {closedPositions.length > 0 && (
-        <section className="grid gap-3 lg:grid-cols-2">
+        <section className="grid gap-2.5 lg:grid-cols-2">
           {closedPositions.map((position) => (
             <PositionRow
               key={position.id}
@@ -779,7 +779,7 @@ function ClosedPositionsPanel({
   );
 }
 
-function PositionSummaryPanel({
+function CompactPositionSummary({
   label,
   count,
   value,
@@ -798,40 +798,36 @@ function PositionSummaryPanel({
 
   return (
     <div
-      className="p-4"
+      className="flex items-center justify-between gap-3 px-3 py-2.5"
       style={{ background: PANEL, borderRadius: 14, border: `1px solid ${FAINT}` }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Stamp label={label} value={`${count}`} />
-          <div className="mt-2 text-[30px] font-black leading-none">{value}</div>
+      <div className="min-w-0">
+        <div
+          className="truncate text-[9px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          {label} {count}
         </div>
-        <div className="rounded-xl bg-white/[0.04] px-3 py-2 text-right">
-          <div
-            className="text-[9px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            P/L
-          </div>
-          <div className="mt-1 text-[16px] font-black" style={{ color: pnlTone }}>
-            {formatSignedUsd(pnl)}
-          </div>
-          {cost > 0 && (
-            <div
-              className="text-[11px] font-black"
-              style={{ color: pnlTone }}
-            >
-              {pnlPct >= 0 ? "+" : ""}
-              {pnlPct.toFixed(1)}%
-            </div>
-          )}
+        <div className="mt-0.5 truncate text-[17px] font-black leading-none">
+          {value}
         </div>
       </div>
-      <div
-        className="mt-3 text-[10px] font-black uppercase tracking-widest"
-        style={{ color: DIM }}
-      >
-        Cost ${cost.toFixed(2)}
+      <div className="shrink-0 rounded-xl bg-white/[0.04] px-2.5 py-1.5 text-right">
+        <div
+          className="text-[8px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          P/L
+        </div>
+        <div className="mt-0.5 text-[14px] font-black leading-none" style={{ color: pnlTone }}>
+          {formatSignedUsd(pnl)}
+        </div>
+        {cost > 0 && (
+          <div className="text-[9px] font-black" style={{ color: pnlTone }}>
+            {pnlPct >= 0 ? "+" : ""}
+            {pnlPct.toFixed(1)}%
+          </div>
+        )}
       </div>
     </div>
   );

@@ -37,16 +37,16 @@ export interface PortfolioPosition {
 
 const fmtUsd = (n: number | null | undefined) =>
   n == null
-    ? "—"
+    ? "-"
     : `${n < 0 ? "-" : ""}$${Math.abs(n) >= 1000 ? Math.abs(n).toFixed(0) : Math.abs(n).toFixed(2)}`;
 
 const fmtPct = (n: number | null | undefined) => {
-  if (n == null) return "—";
+  if (n == null) return "-";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(1)}%`;
 };
 
-function LegacyPositionMetric({
+function CompactLegacyMetric({
   label,
   value,
   tone,
@@ -63,14 +63,14 @@ function LegacyPositionMetric({
         : "text-white";
 
   return (
-    <div className="min-w-0 rounded-2xl bg-black/20 p-3">
-      <div className="text-[9px] font-black uppercase tracking-widest text-white/40">
+    <span className="min-w-0 rounded-lg bg-black/20 px-2 py-1.5">
+      <span className="block text-[8px] font-black uppercase tracking-widest text-white/35">
         {label}
-      </div>
-      <div className={`mt-1 truncate font-mono text-[20px] font-black leading-none ${valueClass}`}>
+      </span>
+      <span className={`mt-0.5 block truncate font-mono text-[12px] font-black leading-none ${valueClass}`}>
         {value}
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 
@@ -162,23 +162,23 @@ export function PositionRow({
 
   return (
     <div
-      className={`rounded-[22px] border p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)] transition ${
+      className={`rounded-2xl border p-3 transition ${
         dim
           ? "border-white/5 bg-white/[0.015] opacity-60"
-          : "border-white/10 bg-white/[0.055]"
+          : "border-white/10 bg-white/[0.045]"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div
-            className={`truncate text-[20px] font-black leading-tight ${
+            className={`truncate text-[15px] font-black leading-tight ${
               dim ? "text-neutral-400" : ""
             }`}
             title={title}
           >
             {title}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {subtitleEl}
             {isPending && (
               <span className="rounded bg-neutral-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
@@ -196,7 +196,7 @@ export function PositionRow({
               </span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] font-semibold text-neutral-500">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-neutral-500">
             <span>Cost {fmtUsd(position.amountUsdc)}</span>
             <span>·</span>
             <span>Current {fmtUsd(value)}</span>
@@ -217,18 +217,18 @@ export function PositionRow({
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <div className="flex flex-col items-end leading-tight">
             <div
-              className={`text-[18px] font-black ${
+              className={`text-[15px] font-black ${
                 dim ? "text-neutral-500" : pnlColor
               }`}
             >
-              {dim ? "—" : fmtUsd(position.pnlUsdc)}
+              {dim ? "-" : fmtUsd(position.pnlUsdc)}
             </div>
             <div
-              className={`text-[11px] font-semibold ${
+              className={`text-[10px] font-semibold ${
                 dim ? "text-neutral-600" : pnlColor
               }`}
             >
-              {dim ? "—" : fmtPct(position.pnlPct)}
+              {dim ? "-" : fmtPct(position.pnlPct)}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -250,12 +250,12 @@ export function PositionRow({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
-        <LegacyPositionMetric label="Current" value={fmtUsd(value)} />
-        <LegacyPositionMetric label="Cost" value={fmtUsd(position.amountUsdc)} />
-        <LegacyPositionMetric
+      <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/10 pt-2">
+        <CompactLegacyMetric label="Current" value={fmtUsd(value)} />
+        <CompactLegacyMetric label="Cost" value={fmtUsd(position.amountUsdc)} />
+        <CompactLegacyMetric
           label="P/L"
-          value={dim ? "—" : fmtUsd(position.pnlUsdc)}
+          value={dim ? "-" : fmtUsd(position.pnlUsdc)}
           tone={dim ? undefined : pnlTone}
         />
       </div>
