@@ -210,4 +210,151 @@ describe("portfolio snapshot payload", () => {
     expect(summary.netWorthUsd).toBeCloseTo(3.52);
     expect(summary.netWorthUsd).not.toBeCloseTo(72.39);
   });
+
+  it("does not count confirmed copy bets twice when live copy rows are present", () => {
+    const summary = buildPortfolioSummary({
+      positions: [
+        {
+          id: "copy-open",
+          type: "copy",
+          status: "confirmed",
+          amountUsdc: 10,
+          createdAt: "2026-05-28T12:00:00.000Z",
+        },
+      ],
+      copyRows: [
+        {
+          betId: "copy-open",
+          venue: "pacifica",
+          sourceKind: "tail",
+          market: "BTC",
+          side: "long",
+          leverage: 25,
+          stakeUsdc: 10,
+          leaderAddress: null,
+          leaderUsername: null,
+          botId: null,
+          botName: null,
+          liveStatus: "open",
+          entryPrice: 72_000,
+          markPrice: 72_360,
+          pricedAt: "2026-05-28T12:01:00.000Z",
+          liquidationPrice: null,
+          amountBase: 0.003,
+          marginUsd: 10,
+          marginMode: "cross",
+          notionalUsd: 217.08,
+          pnlUsd: 1,
+          unrealizedPnlPct: 10,
+          openedAt: "2026-05-28T12:00:00.000Z",
+          positionUpdatedAt: "2026-05-28T12:01:00.000Z",
+          leaderClosedAt: null,
+        },
+      ],
+      pacificaAccount: {
+        balanceUsd: 49,
+        equityUsd: 48,
+        availableToSpendUsd: 33,
+        availableToWithdrawUsd: 13,
+        totalMarginUsedUsd: 15,
+        pendingDepositUsd: 0,
+        pendingDeposits: [],
+        updatedAt: "2026-05-28T12:01:00.000Z",
+      },
+      walletBalance: {
+        stableUsd: 3.5,
+        sol: 0.1,
+        updatedAt: "2026-05-28T12:01:00.000Z",
+      },
+    });
+
+    expect(summary).toMatchObject({
+      legacyPositionsValueUsd: 0,
+      copyRowsValueUsd: 11,
+      positionsValueUsd: 11,
+      positionsCostUsd: 10,
+      openCount: 1,
+      netWorthUsd: 51.5,
+    });
+  });
+
+  it("includes Flash rows alongside Pacifica exchange equity", () => {
+    const summary = buildPortfolioSummary({
+      positions: [],
+      copyRows: [
+        {
+          betId: "pacifica-copy",
+          venue: "pacifica",
+          sourceKind: "tail",
+          market: "BTC",
+          side: "long",
+          leverage: 25,
+          stakeUsdc: 10,
+          leaderAddress: null,
+          leaderUsername: null,
+          botId: null,
+          botName: null,
+          liveStatus: "open",
+          entryPrice: 72_000,
+          markPrice: 72_360,
+          pricedAt: "2026-05-28T12:01:00.000Z",
+          liquidationPrice: null,
+          amountBase: 0.003,
+          marginUsd: 10,
+          marginMode: "cross",
+          notionalUsd: 217.08,
+          pnlUsd: 1,
+          unrealizedPnlPct: 10,
+          openedAt: "2026-05-28T12:00:00.000Z",
+          positionUpdatedAt: "2026-05-28T12:01:00.000Z",
+          leaderClosedAt: null,
+        },
+        {
+          betId: null,
+          venue: "flash",
+          sourceKind: "wallet",
+          market: "SOL",
+          side: "short",
+          leverage: 100,
+          stakeUsdc: 2,
+          leaderAddress: null,
+          leaderUsername: null,
+          botId: null,
+          botName: null,
+          liveStatus: "open",
+          entryPrice: 80,
+          markPrice: 79.6,
+          pricedAt: "2026-05-28T12:01:00.000Z",
+          liquidationPrice: 80.8,
+          amountBase: null,
+          marginUsd: 2,
+          marginMode: "isolated",
+          notionalUsd: 200,
+          pnlUsd: 0.5,
+          unrealizedPnlPct: 25,
+          openedAt: "2026-05-28T12:00:00.000Z",
+          positionUpdatedAt: "2026-05-28T12:01:00.000Z",
+          leaderClosedAt: null,
+        },
+      ],
+      pacificaAccount: {
+        balanceUsd: 49,
+        equityUsd: 48,
+        availableToSpendUsd: 33,
+        availableToWithdrawUsd: 13,
+        totalMarginUsedUsd: 15,
+        pendingDepositUsd: 0,
+        pendingDeposits: [],
+        updatedAt: "2026-05-28T12:01:00.000Z",
+      },
+      walletBalance: {
+        stableUsd: 3.5,
+        sol: 0.1,
+        updatedAt: "2026-05-28T12:01:00.000Z",
+      },
+    });
+
+    expect(summary.copyRowsValueUsd).toBeCloseTo(13.5);
+    expect(summary.netWorthUsd).toBeCloseTo(54);
+  });
 });

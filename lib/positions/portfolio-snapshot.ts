@@ -56,13 +56,26 @@ export interface PortfolioSnapshotMeta {
 }
 
 function openPositions(payload: PortfolioSnapshotPayload) {
-  return payload.positions.filter((position) =>
-    ["pending", "confirmed"].includes(position.status),
+  return payload.positions.filter(
+    (position) =>
+      position.type !== "copy" &&
+      ["pending", "confirmed"].includes(position.status),
   );
 }
 
 function closedPositions(payload: PortfolioSnapshotPayload) {
   return payload.positions.filter((position) => position.status === "closed");
+}
+
+function copyRowValueUsd(row: CopyRowData): number {
+  if (row.stakeUsdc === null) {
+    const marginValue =
+      row.marginUsd === null ? 0 : row.marginUsd + (row.pnlUsd ?? 0);
+    return Math.max(0, marginValue);
+  }
+  const liveMultiplier =
+    row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
+  return Math.max(0, row.stakeUsdc * liveMultiplier);
 }
 
 export function buildPortfolioSummary(
@@ -74,16 +87,17 @@ export function buildPortfolioSummary(
     (sum, position) => sum + (position.currentValueUsdc ?? position.amountUsdc),
     0,
   );
-  const copyRowsValueUsd = payload.copyRows.reduce((sum, row) => {
-    if (row.stakeUsdc === null) {
-      const marginValue =
-        row.marginUsd === null ? 0 : row.marginUsd + (row.pnlUsd ?? 0);
-      return sum + Math.max(0, marginValue);
-    }
-    const liveMultiplier =
-      row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
-    return sum + Math.max(0, row.stakeUsdc * liveMultiplier);
-  }, 0);
+  const copyRowsValueUsd = payload.copyRows.reduce(
+    (sum, row) => sum + copyRowValueUsd(row),
+    0,
+  );
+  const nonPacificaCopyRowsValueUsd = payload.copyRows.reduce(
+    (sum, row) =>
+      (row.venue ?? "pacifica") === "pacifica"
+        ? sum
+        : sum + copyRowValueUsd(row),
+    0,
+  );
   const positionsCostUsd =
     openLegacyPositions.reduce((sum, position) => sum + position.amountUsdc, 0) +
     payload.copyRows.reduce(
@@ -103,7 +117,10 @@ export function buildPortfolioSummary(
     0,
     payload.pacificaAccount?.pendingDepositUsd ?? 0,
   );
-  const pacificaPortfolioValue = pacificaEquityUsd ?? copyRowsValueUsd;
+  const pacificaPortfolioValue =
+    pacificaEquityUsd == null
+      ? copyRowsValueUsd
+      : pacificaEquityUsd + nonPacificaCopyRowsValueUsd;
   const availableCashUsd =
     walletStableUsd == null && pacificaAvailableUsd == null
       ? null

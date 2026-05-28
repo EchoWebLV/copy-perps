@@ -20,9 +20,10 @@ function normalizeSnapshotRow(
   row: typeof portfolioSnapshots.$inferSelect,
   source: "cache" | "live" = "cache",
 ): StoredPortfolioSnapshot {
+  const payload = row.payload as PortfolioSnapshotPayload;
   return {
-    payload: row.payload as PortfolioSnapshotPayload,
-    summary: row.summary as PortfolioSummary,
+    payload,
+    summary: buildPortfolioSummary(payload),
     snapshot: {
       source,
       status: row.status as PortfolioSnapshotStatus,
