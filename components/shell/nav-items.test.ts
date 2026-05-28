@@ -60,7 +60,9 @@ describe("desktop shell nav contract", () => {
     expect(bottomNav).toContain("pathname.startsWith(\"/trade\")");
     expect(bottomNav).toContain('href="/chatter"');
     expect(bottomNav).toContain('aria-label="Pulse open positions"');
-    expect(bottomNav).toContain("<Zap size={26}");
+    expect(bottomNav).toContain('src="/nav-swipe-face-yellow.png"');
+    expect(bottomNav).toContain("borderColor: ACCENT");
+    expect(bottomNav).not.toContain("<Zap size={26}");
     expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
     expect(ChartCandlestick).toBeDefined();
   });

@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartCandlestick, Flame, Settings, PieChart, Zap } from "lucide-react";
+import { ChartCandlestick, Flame, Settings, PieChart } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
@@ -52,10 +53,10 @@ export function BottomNav() {
           aria-label="Pulse open positions"
         >
           <span
-            className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-full"
+            className="absolute -top-5 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-[3px]"
             style={{
-              background: ACCENT,
-              color: BG,
+              background: BG,
+              borderColor: ACCENT,
               boxShadow: pulseActive
                 ? `0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
                 : `0 8px 24px ${ACCENT}55, inset 0 -3px 0 rgba(0,0,0,0.18)`,
@@ -63,7 +64,14 @@ export function BottomNav() {
               transition: "transform 200ms, box-shadow 200ms",
             }}
           >
-            <Zap size={26} strokeWidth={3} fill={BG} />
+            <Image
+              src="/nav-swipe-face-yellow.png"
+              alt=""
+              width={56}
+              height={56}
+              sizes="56px"
+              className="h-full w-full object-cover"
+            />
           </span>
           <span
             className="pt-6 text-[10px] font-black uppercase tracking-widest"
