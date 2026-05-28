@@ -9,6 +9,7 @@ import {
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { Connection } from "@solana/web3.js";
 import { Minus, Plus } from "lucide-react";
+import { maxFlashLeverageForMarket } from "@/lib/flash/markets";
 import { useLiveMark } from "@/lib/pacifica/live-context";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
@@ -257,11 +258,15 @@ export function TailModal({ open, onClose, source }: Props) {
     source?.kind === "whale"
       ? Math.max(1, activeWhalePosition?.leverage ?? source.leverage)
       : 1;
+  const activeFlashMaxLeverage =
+    source?.kind === "whale"
+      ? maxFlashLeverageForMarket(activeWhalePosition?.asset ?? source.asset)
+      : null;
   const whaleLeverageBounds = tailLeverageBounds({
     sourceLeverage: sourceWhaleLeverage,
     marketMaxLeverage:
       source?.kind === "whale"
-        ? activeWhalePosition?.maxLeverage ?? source.maxLeverage
+        ? activeFlashMaxLeverage ?? activeWhalePosition?.maxLeverage ?? source.maxLeverage
         : null,
   });
   const maxWhaleLeverage = whaleLeverageBounds.maxLeverage;
@@ -301,7 +306,11 @@ export function TailModal({ open, onClose, source }: Props) {
         ? tailLeverageBounds({
             sourceLeverage: source.positions[0]?.leverage ?? source.leverage,
             marketMaxLeverage:
-              source.positions[0]?.maxLeverage ?? source.maxLeverage,
+              maxFlashLeverageForMarket(
+                source.positions[0]?.asset ?? source.asset,
+              ) ??
+              source.positions[0]?.maxLeverage ??
+              source.maxLeverage,
           }).initialLeverage
         : 1,
     );

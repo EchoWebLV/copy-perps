@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SUPPORTED_FLASH_MARKETS,
   isFlashCopyableMarket,
+  maxFlashLeverageForMarket,
 } from "./markets";
 
 describe("Flash copyable markets", () => {
@@ -12,5 +13,12 @@ describe("Flash copyable markets", () => {
     expect(isFlashCopyableMarket("SOL")).toBe(true);
     expect(isFlashCopyableMarket("HYPE")).toBe(false);
     expect(isFlashCopyableMarket("NEAR")).toBe(false);
+  });
+
+  it("exposes the Flash leverage ceiling for supported copy markets", () => {
+    expect(maxFlashLeverageForMarket("BTC")).toBe(100);
+    expect(maxFlashLeverageForMarket("ETH")).toBe(100);
+    expect(maxFlashLeverageForMarket(" sol ")).toBe(100);
+    expect(maxFlashLeverageForMarket("HYPE")).toBeNull();
   });
 });

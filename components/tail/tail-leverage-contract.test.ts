@@ -33,4 +33,18 @@ describe("TailModal single whale leverage control", () => {
     expect(source).toContain("leverage: flashLeverage");
     expect(source).not.toContain('fetch("/api/bet/whale"');
   });
+
+  it("keeps the copied leverage as default while using Flash max as the slider ceiling", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/tail/TailModal.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("maxFlashLeverageForMarket");
+    expect(source).toContain("activeFlashMaxLeverage");
+    expect(source).toContain(
+      "activeFlashMaxLeverage ?? activeWhalePosition?.maxLeverage ?? source.maxLeverage",
+    );
+    expect(source).toContain("source.positions[0]?.leverage ?? source.leverage");
+  });
 });
