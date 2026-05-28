@@ -54,7 +54,8 @@ describe("WhaleLiveFeed position card contract", () => {
       "utf8",
     );
 
-    expect(source).toContain("const canTail = p.copyableOnPacifica !== false;");
+    expect(source).toContain("isFlashCopyableMarket(position.payload.market)");
+    expect(source).toContain("const canTail = isFlashCopyableMarket(p.market);");
     expect(source).not.toContain("const canTail = now > 0 && !stale");
   });
 

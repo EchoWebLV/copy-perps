@@ -13,12 +13,12 @@ import { useLiveMark } from "@/lib/pacifica/live-context";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
 import {
+  isWhaleTailPositionMarketCopyable,
   isWhaleTailPositionCopyable,
   whalePositionsForTail,
   whaleTailTotalNotional,
 } from "./whale-tail";
 import {
-  whaleTailAutoCloseLabel,
   whaleTailFollowingText,
   whaleTailPositionsHeading,
   whaleTailPrimaryCta,
@@ -87,11 +87,40 @@ interface OpenResponse {
   };
 }
 
+interface FlashSignResponse {
+  phase: "sign";
+  venue: "flash";
+  transactionB64: string;
+  quote: {
+    amountUsd?: number;
+    notionalUsd?: number;
+    leverage?: number;
+    entryPriceUsd?: number;
+    feesUsd?: number;
+  };
+  position: {
+    symbol: string;
+    side: "long" | "short";
+    entryPriceUsd: number;
+    sizeUsd: number;
+  };
+  trade: {
+    market: string;
+    side: "long" | "short";
+    stakeUsdc: number;
+    leverage: number;
+  };
+}
+
 interface TailSuccess {
   opens: OpenResponse[];
 }
 
-type TailRequestResponse = OnboardResponse | DepositResponse | OpenResponse;
+type TailRequestResponse =
+  | OnboardResponse
+  | DepositResponse
+  | OpenResponse
+  | FlashSignResponse;
 
 function retryFundedDepositPhase(response: TailRequestResponse) {
   if (response.phase !== "deposit") return null;
@@ -124,10 +153,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function whaleSourceKind(whaleId: string): "pacifica" | "hyperliquid" {
-  return whaleId.startsWith("hyperliquid:") ? "hyperliquid" : "pacifica";
-}
-
 class TailRequestError extends Error {
   constructor(
     message: string,
@@ -137,6 +162,55 @@ class TailRequestError extends Error {
     super(message);
     this.name = "TailRequestError";
   }
+}
+
+function flashSignResponseToOpen(
+  response: FlashSignResponse,
+  signature: string,
+  source: TailSource,
+): OpenResponse {
+  const entryPrice =
+    response.quote.entryPriceUsd ?? response.position.entryPriceUsd ?? 0;
+  const sizeUsd = response.position.sizeUsd ?? response.quote.notionalUsd ?? 0;
+  return {
+    phase: "open",
+    betId: `flash:${signature}`,
+    fill: {
+      orderId: signature,
+      avgFillPrice: String(entryPrice),
+      filledAmount:
+        Number.isFinite(sizeUsd) && sizeUsd > 0
+          ? `$${sizeUsd.toFixed(2)} notional`
+          : "Flash position",
+      side: response.trade.side,
+    },
+    source:
+      source.kind === "whale"
+        ? {
+            whaleId: source.whaleId,
+            displayName: source.displayName,
+            asset: response.trade.market,
+            side: response.trade.side,
+            leverage: response.trade.leverage,
+            autoCloseOnSourceClose: false,
+          }
+        : {
+            botId: source.botId,
+            botName: source.botName,
+            asset: response.trade.market,
+            side: response.trade.side,
+            leverage: response.trade.leverage,
+          },
+  };
+}
+
+function tailSuccessSummary(open: OpenResponse, fallbackAsset: string): string {
+  const asset = open.source.asset ?? fallbackAsset;
+  const price = fmtPrice(Number(open.fill.avgFillPrice || 0));
+  if (open.betId.startsWith("flash:")) {
+    return `${open.fill.filledAmount} ${open.source.side.toUpperCase()} ${asset} @ ${price}`;
+  }
+  return `${open.fill.filledAmount} ${asset} @ ${price}`;
 }
 
 export function TailModal({ open, onClose, source }: Props) {
@@ -151,7 +225,6 @@ export function TailModal({ open, onClose, source }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<null | TailSuccess>(null);
-  const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
   const [whaleLeverage, setWhaleLeverage] = useState(1);
   const [now, setNow] = useState(() => Date.now());
   const [preflight, setPreflight] = useState<TailPreflightState>({
@@ -171,7 +244,7 @@ export function TailModal({ open, onClose, source }: Props) {
     () =>
       source?.kind === "whale"
         ? whaleTailPositions.filter(
-            (position) => position.copyableOnPacifica !== false,
+            (position) => isWhaleTailPositionMarketCopyable(position),
           )
         : [],
     [source?.kind, whaleTailPositions],
@@ -223,7 +296,6 @@ export function TailModal({ open, onClose, source }: Props) {
       canOpen: null,
       mode: null,
     });
-    setAutoCloseOnSourceClose(source?.kind === "whale");
     setWhaleLeverage(
       source?.kind === "whale"
         ? tailLeverageBounds({
@@ -286,7 +358,7 @@ export function TailModal({ open, onClose, source }: Props) {
     source,
   ]);
 
-  const sliceBps = 4; // Pacifica taker, conservative display
+  const sliceBps = 4; // Flash taker, conservative display
   const estFeeUsd = useMemo(
     () => (notional * sliceBps) / 10_000,
     [notional],
@@ -301,36 +373,6 @@ export function TailModal({ open, onClose, source }: Props) {
     source?.kind === "whale" && activeWhalePosition
       ? isWhaleTailPositionCopyable(activeWhalePosition, now)
       : false;
-  const sourceDetached =
-    preflight.mode === "snapshot" ||
-    (source?.kind === "whale" &&
-      activeWhalePosition !== null &&
-      activeWhalePosition.copyableOnPacifica !== false &&
-      !activeWhalePositionLive);
-
-  const whaleRequestSnapshot = useCallback(
-    (copyPosition?: WhaleTailPosition) => {
-      if (source?.kind !== "whale") return undefined;
-      const position = copyPosition ?? activeWhalePosition;
-      if (!position) return undefined;
-      return {
-        sourcePositionId: position.sourcePositionId,
-        whaleId: source.whaleId,
-        source: whaleSourceKind(source.whaleId),
-        sourceAccount: source.sourceAccount,
-        displayName: source.displayName,
-        market: position.asset,
-        side: position.side,
-        leverage: position.leverage,
-        maxLeverage: position.maxLeverage ?? null,
-        entryPrice: position.entryMark,
-        currentMark: position.currentMark,
-        lastSeenAtMs: position.lastSeenAtMs,
-      };
-    },
-    [activeWhalePosition, source],
-  );
-
   useEffect(() => {
     if (!open || source?.kind !== "whale" || !wallet || !hasCopyableSource) {
       setPreflight({
@@ -341,102 +383,18 @@ export function TailModal({ open, onClose, source }: Props) {
       });
       return;
     }
-
-    const walletAddress = wallet.address;
-    let cancelled = false;
-    setPreflight({ checking: true, error: null, canOpen: null, mode: null });
-
-    async function runPreflight() {
-      try {
-        const token = await getAccessToken();
-        if (!token || source?.kind !== "whale") {
-          if (!cancelled) {
-            setPreflight({
-              checking: false,
-              error: null,
-              canOpen: null,
-              mode: null,
-            });
-          }
-          return;
-        }
-        const position = activeWhalePosition;
-	        if (!position) {
-	          if (!cancelled) {
-	            setPreflight({
-              checking: false,
-              error: null,
-              canOpen: null,
-              mode: null,
-            });
-          }
-          return;
-        }
-        const resp = await fetch("/api/bet/whale", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            positionId: position.sourcePositionId,
-	            snapshot: whaleRequestSnapshot(position),
-	            stakeUsdc: effectiveStake,
-	            walletAddress,
-            leverage: copyLeverage,
-            autoCloseOnSourceClose,
-            preflightOnly: true,
-          }),
-        });
-        const data = (await resp.json().catch(() => ({}))) as {
-          phase?: string;
-          canOpen?: boolean;
-          mode?: "live" | "snapshot";
-          error?: string;
-        };
-        if (cancelled) return;
-        if (data.phase === "preflight") {
-          setPreflight({
-            checking: false,
-            error: data.error ?? null,
-            canOpen:
-              typeof data.canOpen === "boolean" ? data.canOpen : resp.ok,
-            mode: data.mode ?? null,
-          });
-          return;
-        }
-        setPreflight({
-          checking: false,
-          error: data.error ?? `HTTP ${resp.status}`,
-          canOpen: false,
-          mode: null,
-        });
-      } catch {
-        if (cancelled) return;
-        setPreflight({
-          checking: false,
-          error: "Could not check this tail. Try again.",
-          canOpen: null,
-          mode: null,
-        });
-      }
-    }
-
-    void runPreflight();
-    return () => {
-      cancelled = true;
-    };
+    setPreflight({
+      checking: false,
+      error: null,
+      canOpen: true,
+      mode: activeWhalePositionLive ? "live" : "snapshot",
+    });
   }, [
-    activeWhalePosition,
-    autoCloseOnSourceClose,
-    copyLeverage,
-    effectiveStake,
-    getAccessToken,
+    activeWhalePositionLive,
     hasCopyableSource,
     open,
-    source,
+    source?.kind,
     wallet,
-    whaleRequestSnapshot,
   ]);
 
   const submit = useCallback(async () => {
@@ -462,31 +420,26 @@ export function TailModal({ open, onClose, source }: Props) {
       }
 
       const requestTail = async (copyPosition?: WhaleTailPosition) => {
-        const endpoint =
-          source.kind === "whale" ? "/api/bet/whale" : "/api/bet/bot";
-        const body =
+        const flashMarket =
           source.kind === "whale"
-            ? {
-                positionId:
-                  copyPosition?.sourcePositionId ?? source.sourcePositionId,
-                snapshot: whaleRequestSnapshot(copyPosition),
-                stakeUsdc: effectiveStake,
-                walletAddress: wallet.address,
-                leverage: copyLeverage,
-                autoCloseOnSourceClose: sourceDetached
-                  ? false
-                  : autoCloseOnSourceClose,
-              }
-            : {
-                botId: source.botId,
-                positionId: source.positionId,
-                market: source.asset,
-                side: source.side,
-                leverage: source.leverage,
-                stakeUsdc: effectiveStake,
-                walletAddress: wallet.address,
-              };
-        const resp = await fetch(endpoint, {
+            ? copyPosition?.asset ?? source.asset
+            : source.asset;
+        const flashSide =
+          source.kind === "whale"
+            ? copyPosition?.side ?? source.side
+            : source.side;
+        const flashLeverage =
+          source.kind === "whale"
+            ? copyLeverage ?? copyPosition?.leverage ?? source.leverage
+            : source.leverage;
+        const body = {
+          market: flashMarket,
+          side: flashSide,
+          stakeUsdc: effectiveStake,
+          leverage: flashLeverage,
+          walletAddress: wallet.address,
+        };
+        const resp = await fetch("/api/flash/perp", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -498,7 +451,8 @@ export function TailModal({ open, onClose, source }: Props) {
           return (await resp.json()) as
             | OnboardResponse
             | DepositResponse
-            | OpenResponse;
+            | OpenResponse
+            | FlashSignResponse;
         }
         const e = (await resp.json().catch(() => ({}))) as {
           error?: string;
@@ -528,8 +482,11 @@ export function TailModal({ open, onClose, source }: Props) {
         });
       };
 
-      const signAndSendDeposit = async (depositTransactionB64: string) => {
-        setStatus("Funding trade…");
+      const signAndSendDeposit = async (
+        depositTransactionB64: string,
+        statusText = "Signing transaction…",
+      ) => {
+        setStatus(statusText);
         const txBytes = b64ToBytes(depositTransactionB64);
         const { signature } = await sendDepositWithSponsorFallback({
           transaction: txBytes,
@@ -538,7 +495,7 @@ export function TailModal({ open, onClose, source }: Props) {
           preferSponsored: false,
           onSponsorFallback: (err) => {
             console.warn("[tail] sponsored deposit send failed:", err);
-            setStatus("Funding trade…");
+            setStatus(statusText);
           },
         });
         const bs58 = (await import("bs58")).default;
@@ -547,6 +504,7 @@ export function TailModal({ open, onClose, source }: Props) {
         const conn = new Connection(RPC, "confirmed");
         await conn.confirmTransaction(sig, "confirmed");
         await sleep(1000);
+        return sig;
       };
 
       const openOne = async (
@@ -565,7 +523,16 @@ export function TailModal({ open, onClose, source }: Props) {
         );
 
         const first = await requestTailWithSettlingRetry(copyPosition);
-        let result: OnboardResponse | DepositResponse | OpenResponse = first;
+        let result: TailRequestResponse = first;
+
+        if (first.phase === "sign") {
+          const signature = await signAndSendDeposit(
+            first.transactionB64,
+            "Signing Flash trade…",
+          );
+          setStatus("Opened on Flash");
+          return flashSignResponseToOpen(first, signature, source);
+        }
 
         if (first.phase === "onboard") {
           setStatus("Authorizing trader…");
@@ -598,12 +565,18 @@ export function TailModal({ open, onClose, source }: Props) {
             const e = await bindResp.json().catch(() => ({}));
             throw new Error(`bind failed: ${e.error ?? bindResp.status}`);
           }
-          await signAndSendDeposit(first.depositTransactionB64);
+          await signAndSendDeposit(
+            first.depositTransactionB64,
+            "Funding trade…",
+          );
         }
 
         if (first.phase === "onboard" || first.phase === "deposit") {
           if (first.phase === "deposit") {
-            await signAndSendDeposit(first.depositTransactionB64);
+            await signAndSendDeposit(
+              first.depositTransactionB64,
+              "Funding trade…",
+            );
           }
           setStatus("Updating trading balance…");
           result = await requestTailWithSettlingRetry(copyPosition, true);
@@ -646,15 +619,12 @@ export function TailModal({ open, onClose, source }: Props) {
     stakeValid,
     effectiveStake,
     copyLeverage,
-    autoCloseOnSourceClose,
     executableWhalePositions,
     getAccessToken,
     preflight.error,
     preflightBlocked,
     signMessage,
     signAndSendTransaction,
-    sourceDetached,
-    whaleRequestSnapshot,
   ]);
 
   if (!open || !source) return null;
@@ -792,7 +762,9 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
               <div className="text-xs text-emerald-200/80">
                 {success.opens.length === 1
-                  ? `${success.opens[0]?.fill.filledAmount} ${success.opens[0]?.source.asset ?? source.asset} @ ${fmtPrice(Number(success.opens[0]?.fill.avgFillPrice ?? 0))}`
+                  ? success.opens[0]
+                    ? tailSuccessSummary(success.opens[0], source.asset)
+                    : "Position copied"
                   : `${success.opens.length} open positions copied`}
               </div>
             </div>
@@ -937,7 +909,8 @@ export function TailModal({ open, onClose, source }: Props) {
                       position,
                       now,
                     );
-                    const executable = position.copyableOnPacifica !== false;
+                    const executable =
+                      isWhaleTailPositionMarketCopyable(position);
                     const statusLabel = !executable
                       ? "Not available"
                       : liveCopyable
@@ -1021,25 +994,6 @@ export function TailModal({ open, onClose, source }: Props) {
                     : `${sourceName}'s ${source.asset} ${sideLabel}`}
                 </span>
               </div>
-              {source.kind === "whale" ? (
-                <label className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-[11px] font-black uppercase tracking-widest text-white/80">
-                  <span>{whaleTailAutoCloseLabel(whaleTailPositions)}</span>
-                  <input
-                    type="checkbox"
-                    checked={sourceDetached ? false : autoCloseOnSourceClose}
-                    onChange={(e) =>
-                      setAutoCloseOnSourceClose(e.target.checked)
-                    }
-                    disabled={submitting || sourceDetached}
-                    className="h-4 w-4 accent-emerald-400"
-                  />
-                </label>
-              ) : null}
-              {source.kind === "whale" && sourceDetached ? (
-                <div className="text-[11px] text-amber-200/80">
-                  Snapshot copy: source auto-close is off.
-                </div>
-              ) : null}
             </div>
 
             {/* Status / error */}

@@ -1,4 +1,5 @@
 import type { WhalePositionSignal } from "@/lib/types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 const FRESH_OPEN_MS = 15 * 60_000;
 const BIG_POSITION_USD = 500_000;
@@ -32,6 +33,7 @@ export function buildPulseItems(
   nowMs: number,
 ): PulseItem[] {
   return positions
+    .filter((signal) => isFlashCopyableMarket(signal.payload.market))
     .flatMap((signal) => itemsForPosition(signal.payload, nowMs))
     .sort(comparePulseItems)
     .slice(0, MAX_ITEMS);
@@ -156,7 +158,7 @@ function makeItem(args: {
 }
 
 function isPositionCopyable(position: PositionPayload): boolean {
-  return position.copyableOnPacifica !== false;
+  return isFlashCopyableMarket(position.market);
 }
 
 function baseScore(position: PositionPayload, nowMs: number): number {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BotSignal } from "@/lib/types";
 import { flattenBotPositions } from "./live-positions";
 
-const bot = (botId: string, openSinceMs: number) => ({
+const bot = (botId: string, openSinceMs: number, asset = "SOL") => ({
   payload: {
     botId,
     botName: botId,
@@ -12,7 +12,7 @@ const bot = (botId: string, openSinceMs: number) => ({
     currentPositions: [
       {
         positionId: `${botId}-pos`,
-        asset: "SOL",
+        asset,
         side: "long",
         leverage: 10,
         entryMark: 100,
@@ -44,5 +44,16 @@ describe("flattenBotPositions", () => {
     );
     expect(out).toHaveLength(1);
     expect(out[0]?.bot.botId).toBe("old");
+  });
+
+  it("hides bot positions that cannot be copied through Flash", () => {
+    const out = flattenBotPositions(
+      [
+        bot("supported", 1000, "SOL"),
+        bot("unsupported", 2000, "NEAR"),
+      ] as unknown as BotSignal[],
+      null,
+    );
+    expect(out.map((position) => position.asset)).toEqual(["SOL"]);
   });
 });

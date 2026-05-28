@@ -10,6 +10,7 @@ import { getThoughtSettings } from "@/lib/bots/thoughts/settings";
 import { avatarImageForBot } from "@/lib/bots/avatars";
 import type { BotConfig } from "@/lib/bots/types";
 import type { BotSignal } from "@/lib/types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 export async function buildBotSignals(): Promise<BotSignal[]> {
   // Hide busted bots from the feed for now. Phase 3+ may surface them
@@ -79,7 +80,9 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
       .filter((r) => r.exitTs && r.exitTs.getTime() >= since7d)
       .reduce((s, r) => s + (r.paperPnlUsd ?? 0), 0);
 
-    const currentPositions = openRows.map((openRow) => {
+    const currentPositions = openRows
+      .filter((openRow) => isFlashCopyableMarket(openRow.asset))
+      .map((openRow) => {
       const currentMark = marks.get(openRow.asset) ?? openRow.entryMark;
       const livePaperPnlPct = computeLivePaperPnlPct({
         side: openRow.side as "long" | "short",
@@ -108,23 +111,23 @@ export async function buildBotSignals(): Promise<BotSignal[]> {
           };
         });
 
-      return {
-        positionId: openRow.id,
-        asset: openRow.asset,
-        side: openRow.side as "long" | "short",
-        leverage: openRow.leverage,
-        entryMark: openRow.entryMark,
-        currentMark,
-        stakeUsd: openRow.stakeUsd,
-        livePaperPnlPct,
-        livePaperPnlUsd: livePaperPnlPct * openRow.stakeUsd,
-        openSinceMs: openRow.entryTs.getTime(),
-        narrationOpen: openRow.narrationOpen,
-        triggerMeta:
-          (openRow.triggerMeta as Record<string, unknown> | null) ?? null,
-        disagreements,
-      };
-    });
+        return {
+          positionId: openRow.id,
+          asset: openRow.asset,
+          side: openRow.side as "long" | "short",
+          leverage: openRow.leverage,
+          entryMark: openRow.entryMark,
+          currentMark,
+          stakeUsd: openRow.stakeUsd,
+          livePaperPnlPct,
+          livePaperPnlUsd: livePaperPnlPct * openRow.stakeUsd,
+          openSinceMs: openRow.entryTs.getTime(),
+          narrationOpen: openRow.narrationOpen,
+          triggerMeta:
+            (openRow.triggerMeta as Record<string, unknown> | null) ?? null,
+          disagreements,
+        };
+      });
 
     const lockedStake = currentPositions.reduce(
       (s, p) => s + p.stakeUsd,

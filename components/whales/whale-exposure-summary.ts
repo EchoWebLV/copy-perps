@@ -1,4 +1,5 @@
 import type { WhaleTraderSignal } from "@/lib/types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 import { isSourceFresh } from "@/lib/whales/identity";
 
 type WhaleOpenPosition = WhaleTraderSignal["payload"]["openPositions"][number];
@@ -59,7 +60,7 @@ export function buildWhaleExposureSummary(
 }
 
 function isWhaleOpenPositionSupported(position: WhaleOpenPosition): boolean {
-  return position.copyableOnPacifica !== false;
+  return isFlashCopyableMarket(position.market);
 }
 
 function isWhaleOpenPositionStale(

@@ -3,6 +3,21 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("TailModal deposit send", () => {
+  it("prepares tail copies through Flash instead of Pacifica bet routes", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/tail/TailModal.tsx"),
+      "utf8",
+    );
+    const requestTail = source.slice(
+      source.indexOf("const requestTail"),
+      source.indexOf("const requestTailWithSettlingRetry"),
+    );
+
+    expect(requestTail).toContain('fetch("/api/flash/perp"');
+    expect(requestTail).not.toContain('"/api/bet/whale"');
+    expect(requestTail).not.toContain('"/api/bet/bot"');
+  });
+
   it("does not request Privy sponsorship by default", () => {
     const source = readFileSync(
       join(process.cwd(), "components/tail/TailModal.tsx"),

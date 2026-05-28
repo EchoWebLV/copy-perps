@@ -20,6 +20,7 @@ import {
   type WhaleLiveSnapshot,
 } from "@/lib/whales/live-cache";
 import { refreshWhales } from "@/lib/whales/refresh";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
@@ -327,6 +328,7 @@ async function buildWhalePositionSignalsFromSnapshot(
         options.includeStalePositions ||
         isSourceFresh(position.lastSeenAt.getTime()),
     )
+    .filter((position) => isFlashCopyableMarket(position.market))
     .filter((position) => whaleById.get(position.whaleId)?.status === "active")
     .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
     .slice(0, limit);

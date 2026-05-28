@@ -19,13 +19,18 @@ describe("TailModal single whale leverage control", () => {
     expect(source).toContain("Max {maxWhaleLeverage}x");
   });
 
-  it("sends the selected leverage only with whale copy requests", () => {
+  it("sends the selected leverage through the Flash copy request", () => {
     const source = readFileSync(
       join(process.cwd(), "components/tail/TailModal.tsx"),
       "utf8",
     );
 
-    expect(source).toContain("leverage: copyLeverage");
-    expect(source).not.toContain("leverage: copyPosition?.leverage");
+    expect(source).toContain('fetch("/api/flash/perp"');
+    expect(source).toContain("const flashLeverage =");
+    expect(source).toContain(
+      "copyLeverage ?? copyPosition?.leverage ?? source.leverage",
+    );
+    expect(source).toContain("leverage: flashLeverage");
+    expect(source).not.toContain('fetch("/api/bet/whale"');
   });
 });

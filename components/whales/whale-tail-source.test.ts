@@ -30,7 +30,7 @@ const position = (
 });
 
 describe("buildWhaleTailSource", () => {
-  it("builds one whale tail source containing every open position", () => {
+  it("builds one whale tail source containing every Flash-copyable position", () => {
     const now = Date.parse("2026-05-23T12:00:00.000Z");
     const source = buildWhaleTailSource({
       whaleId: "whale-1",
@@ -68,10 +68,43 @@ describe("buildWhaleTailSource", () => {
     expect(source?.asset).toBe("SOL");
     expect(source?.positions.map((p) => p.sourcePositionId)).toEqual([
       "stale-btc",
-      "fresh-hype",
       "fresh-sol",
       "fresh-eth",
     ]);
-    expect(source?.positions[1]?.copyableOnPacifica).toBe(false);
+    expect(source?.positions.some((p) => p.asset === "HYPE")).toBe(false);
+  });
+
+  it("returns null when the whale has no Flash-copyable positions", () => {
+    const now = Date.parse("2026-05-23T12:00:00.000Z");
+    const source = buildWhaleTailSource({
+      whaleId: "whale-1",
+      source: "hyperliquid",
+      sourceAccount: "acct-1",
+      displayName: "Alpha Whale",
+      avatarUrl: null,
+      tags: [],
+      openPositionsCount: 2,
+      openPositions: [
+        position("fresh-hype", "HYPE"),
+        position("fresh-near", "NEAR"),
+      ],
+      bestPosition: null,
+      stats: {
+        equityUsdc: 100000,
+        openInterestUsdc: 200000,
+        pnl1dUsdc: 100,
+        pnl7dUsdc: 200,
+        pnl30dUsdc: 300,
+        pnlAllTimeUsdc: 400,
+        pnlCurve: [],
+        winRatePct1d: null,
+        totalCloses1d: 0,
+        volume1dUsdc: 500000,
+      },
+      lastSeenAt: "2026-05-23T12:00:00.000Z",
+      stale: false,
+    }, now);
+
+    expect(source).toBeNull();
   });
 });

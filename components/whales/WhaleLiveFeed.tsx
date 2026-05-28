@@ -9,6 +9,7 @@ import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
   ACCENT,
@@ -75,7 +76,10 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
   useVisiblePoll(load, POLL_MS);
 
   const sorted = useMemo(
-    () => [...positions].sort((a, b) => b.payload.openedAtMs - a.payload.openedAtMs),
+    () =>
+      positions
+        .filter((position) => isFlashCopyableMarket(position.payload.market))
+        .sort((a, b) => b.payload.openedAtMs - a.payload.openedAtMs),
     [positions],
   );
   const selectedIndex =
@@ -223,7 +227,7 @@ function PositionCard({
   const chartPosition = toWhaleEntryChartPosition(p, liveMark);
   const stale =
     p.stale || (now > 0 && !isSourceFresh(p.lastSeenAtMs, undefined, now));
-  const canTail = p.copyableOnPacifica !== false;
+  const canTail = isFlashCopyableMarket(p.market);
 
   useEffect(() => {
     setNow(Date.now());

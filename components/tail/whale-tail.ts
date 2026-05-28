@@ -1,4 +1,5 @@
 import type { TailSource, WhaleTailPosition } from "./tail-types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 import { isSourceFresh } from "@/lib/whales/identity";
 
 type WhaleTailSource = Extract<TailSource, { kind: "whale" }>;
@@ -30,8 +31,14 @@ export function isWhaleTailPositionCopyable(
   return (
     !position.stale &&
     isSourceFresh(position.lastSeenAtMs, undefined, nowMs) &&
-    position.copyableOnPacifica !== false
+    isWhaleTailPositionMarketCopyable(position)
   );
+}
+
+export function isWhaleTailPositionMarketCopyable(
+  position: WhaleTailPosition,
+): boolean {
+  return isFlashCopyableMarket(position.asset);
 }
 
 export function copyableWhalePositionsForTail(

@@ -1,4 +1,5 @@
 import type { BotSignal } from "@/lib/types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 export interface FlatPosition {
   positionId: string;
@@ -35,6 +36,7 @@ export function flattenBotPositions(
   for (const bot of bots) {
     if (filter && bot.payload.botId !== filter) continue;
     for (const pos of bot.payload.currentPositions) {
+      if (!isFlashCopyableMarket(pos.asset)) continue;
       out.push({
         positionId: pos.positionId,
         asset: pos.asset,

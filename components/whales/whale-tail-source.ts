@@ -2,6 +2,7 @@ import type { TailSource, WhaleTailPosition } from "@/components/tail/tail-types
 import { isSourceFresh } from "@/lib/whales/identity";
 import { isWhaleTailPositionCopyable } from "@/components/tail/whale-tail";
 import type { WhaleTraderSignal } from "@/lib/types";
+import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 type WhalePayload = WhaleTraderSignal["payload"];
 type WhalePosition = WhalePayload["openPositions"][number];
@@ -34,9 +35,10 @@ export function buildWhaleTailSource(
 ): Extract<TailSource, { kind: "whale" }> | null {
   if (whale.openPositions.length === 0) return null;
 
-  const positions = whale.openPositions.map((position) =>
-    toTailPosition(position, nowMs),
-  );
+  const positions = whale.openPositions
+    .filter((position) => isFlashCopyableMarket(position.market))
+    .map((position) => toTailPosition(position, nowMs));
+  if (positions.length === 0) return null;
   const primary =
     positions.find((position) =>
       isWhaleTailPositionCopyable(position, nowMs),

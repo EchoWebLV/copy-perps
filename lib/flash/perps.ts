@@ -24,6 +24,11 @@ import {
   type MarketConfig,
   type OpenPositionQuoteData,
 } from "flash-sdk";
+import {
+  SUPPORTED_FLASH_MARKETS,
+  isFlashCopyableMarket,
+  type FlashMarketSymbol,
+} from "./markets";
 
 const FLASH_POOL_NAME = "Crypto.1";
 const FLASH_CLUSTER = "mainnet-beta";
@@ -36,8 +41,6 @@ const DEFAULT_RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ??
   "https://api.mainnet-beta.solana.com";
 export const FLASH_MIN_NOTIONAL_USD = 10;
-export const SUPPORTED_FLASH_MARKETS = ["BTC", "ETH", "SOL"] as const;
-export type FlashMarketSymbol = (typeof SUPPORTED_FLASH_MARKETS)[number];
 export type FlashSide = "long" | "short";
 
 export type FlashPerpsErrorCode =
@@ -114,10 +117,7 @@ export interface FlashTxResponse {
 export function isSupportedFlashMarket(
   value: unknown,
 ): value is FlashMarketSymbol {
-  return (
-    typeof value === "string" &&
-    (SUPPORTED_FLASH_MARKETS as readonly string[]).includes(value)
-  );
+  return isFlashCopyableMarket(value);
 }
 
 export function assertFlashTrade(input: {
