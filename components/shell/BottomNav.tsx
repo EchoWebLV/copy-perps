@@ -6,10 +6,10 @@ import { Flame, Settings, PieChart, Radio, Zap } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
-// swipe CTA elevates above the bar like the camera button in Snapchat.
+// Pulse CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Whales" },
-  { href: "/chatter", icon: Radio, label: "Pulse" },
+  { href: "/live", icon: Zap, label: "Swipe" },
 ];
 const RIGHT_TABS = [
   { href: "/portfolio", icon: PieChart, label: "Folio" },
@@ -24,10 +24,11 @@ export function BottomNav() {
     if (pathname === href) return true;
     if (href === "/feed" && pathname.startsWith("/feed")) return true;
     if (href === "/live" && pathname.startsWith("/live")) return true;
+    if (href === "/chatter" && pathname.startsWith("/chatter")) return true;
     return false;
   }
 
-  const liveActive = isActive("/live");
+  const pulseActive = isActive("/chatter");
 
   return (
     <nav
@@ -43,32 +44,32 @@ export function BottomNav() {
           <NavTab key={t.href} {...t} active={isActive(t.href)} />
         ))}
 
-        {/* Elevated center swipe shortcut to the per-position feed. */}
+        {/* Elevated center Pulse shortcut. */}
         <Link
-          href="/live"
+          href="/chatter"
           prefetch={false}
           className="relative flex flex-1 items-center justify-center"
-          aria-label="Swipe open positions"
+          aria-label="Pulse open positions"
         >
           <span
             className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-full"
             style={{
               background: ACCENT,
               color: BG,
-              boxShadow: liveActive
+              boxShadow: pulseActive
                 ? `0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
                 : `0 8px 24px ${ACCENT}55, inset 0 -3px 0 rgba(0,0,0,0.18)`,
-              transform: liveActive ? "scale(1.05)" : "scale(1)",
+              transform: pulseActive ? "scale(1.05)" : "scale(1)",
               transition: "transform 200ms, box-shadow 200ms",
             }}
           >
-            <Zap size={26} strokeWidth={3} fill={BG} />
+            <Radio size={26} strokeWidth={3} fill={BG} />
           </span>
           <span
             className="pt-6 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: FG, opacity: liveActive ? 1 : 0.55 }}
+            style={{ color: FG, opacity: pulseActive ? 1 : 0.55 }}
           >
-            Swipe
+            Pulse
           </span>
         </Link>
 

@@ -7,8 +7,8 @@ describe("desktop shell nav contract", () => {
   it("exposes the main app destinations in display order", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/feed",
-      "/live",
       "/chatter",
+      "/live",
       "/portfolio",
       "/deposit",
       "/leaderboard",
@@ -18,8 +18,8 @@ describe("desktop shell nav contract", () => {
   it("labels the main whale trading surfaces without legacy bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Whales",
-      "Swipe",
       "Pulse",
+      "Swipe",
       "Portfolio",
       "Settings",
       "Wins",
@@ -34,6 +34,21 @@ describe("desktop shell nav contract", () => {
     expect(isShellNavActive("/feed", "/feed?bot=whale")).toBe(true);
     expect(isShellNavActive("/feed", "/feed/whale")).toBe(true);
     expect(isShellNavActive("/live", "/live?bot=whale")).toBe(true);
+  });
+
+  it("puts Pulse on the elevated mobile shortcut and keeps Swipe as a tab", () => {
+    const bottomNav = readFileSync(
+      join(process.cwd(), "components/shell/BottomNav.tsx"),
+      "utf8",
+    );
+
+    expect(bottomNav).toContain(
+      '{ href: "/live", icon: Zap, label: "Swipe" }',
+    );
+    expect(bottomNav).toContain('href="/chatter"');
+    expect(bottomNav).toContain('aria-label="Pulse open positions"');
+    expect(bottomNav).toContain("<Radio size={26}");
+    expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
   });
 
   it("does not mark unrelated destinations active", () => {
