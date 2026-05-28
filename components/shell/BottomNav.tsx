@@ -9,7 +9,7 @@ import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 // Pulse CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Whales" },
-  { href: "/live", icon: Radio, label: "Swipe" },
+  { href: "/live", icon: Radio, label: "Heat" },
 ];
 const RIGHT_TABS = [
   { href: "/portfolio", icon: PieChart, label: "Folio" },

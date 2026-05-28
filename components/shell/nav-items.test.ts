@@ -20,7 +20,7 @@ describe("desktop shell nav contract", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Whales",
       "Pulse",
-      "Swipe",
+      "Heat",
       "Portfolio",
       "Settings",
       "Wins",
@@ -30,11 +30,11 @@ describe("desktop shell nav contract", () => {
     );
   });
 
-  it("uses the swapped Pulse and Swipe icons without changing their labels", () => {
+  it("uses the Pulse and Heat icons without changing their routes", () => {
     expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Pulse")?.icon).toBe(
       Zap,
     );
-    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Swipe")?.icon).toBe(
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Heat")?.icon).toBe(
       Radio,
     );
   });
@@ -46,14 +46,14 @@ describe("desktop shell nav contract", () => {
     expect(isShellNavActive("/live", "/live?bot=whale")).toBe(true);
   });
 
-  it("puts Pulse on the elevated mobile shortcut and keeps Swipe as a tab", () => {
+  it("puts Pulse on the elevated mobile shortcut and keeps Heat as a tab", () => {
     const bottomNav = readFileSync(
       join(process.cwd(), "components/shell/BottomNav.tsx"),
       "utf8",
     );
 
     expect(bottomNav).toContain(
-      '{ href: "/live", icon: Radio, label: "Swipe" }',
+      '{ href: "/live", icon: Radio, label: "Heat" }',
     );
     expect(bottomNav).toContain('href="/chatter"');
     expect(bottomNav).toContain('aria-label="Pulse open positions"');

@@ -2,30 +2,34 @@ import { LiveFeed } from "@/components/feed/LiveFeed";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { WhaleLiveFeed } from "@/components/whales/WhaleLiveFeed";
+import { WhaleMarketHeatmap } from "@/components/whales/WhaleMarketHeatmap";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildBotSignals } from "@/lib/signals/bot-signals";
 import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 
 export const dynamic = "force-dynamic";
 
-// /live is the scrollable per-position feed - every open paper position
-// across the entire roster becomes its own snap-scroll card with the
-// $5 / $10 / $20 / $50 stake buttons. Lives behind the elevated ⚡
-// button in the bottom nav, and behind the "TAIL <bot>" CTA on /feed.
-//
-// `?bot=<id>` filters to a single operator (deep-linked from the
-// roster cards).
+// /live is the market-level whale money heatmap. The old per-position
+// swipe feed remains hidden behind ?mode=swipe so it can be compared
+// without putting it back in the main nav.
 export default async function LivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ bot?: string }>;
+  searchParams: Promise<{ bot?: string; mode?: string }>;
 }) {
   if (whaleSocialEnabled()) {
-    const positions = await buildWhalePositionSignals();
+    const [positions, params] = await Promise.all([
+      buildWhalePositionSignals(),
+      searchParams,
+    ]);
 
     return (
-      <AppShell railTitle="Live Positions">
-        <WhaleLiveFeed initialPositions={positions} />
+      <AppShell railTitle="Whale Heat">
+        {params.mode === "swipe" ? (
+          <WhaleLiveFeed initialPositions={positions} />
+        ) : (
+          <WhaleMarketHeatmap initialPositions={positions} />
+        )}
         <BottomNav />
       </AppShell>
     );
