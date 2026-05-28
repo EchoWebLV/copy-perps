@@ -69,6 +69,37 @@ describe("retryTailRequestWithCreditWait", () => {
     );
   });
 
+  it("can retry a returned deposit phase while funded credit is settling", async () => {
+    let nowMs = 0;
+    type TailTestResponse =
+      | { phase: "deposit" }
+      | { phase: "open"; betId: string };
+    const responses: TailTestResponse[] = [
+      { phase: "deposit" },
+      { phase: "deposit" },
+      { phase: "open", betId: "bet-1" },
+    ];
+    const request = vi.fn(async () => responses.shift() ?? responses[2]);
+    const sleep = vi.fn(async (ms: number) => {
+      nowMs += ms;
+    });
+
+    const result = await retryTailRequestWithCreditWait({
+      request,
+      sleep,
+      now: () => nowMs,
+      retryResult: (response) =>
+        response.phase === "deposit"
+          ? { message: "Trading balance is still updating.", retryAfterMs: 2000 }
+          : null,
+    });
+
+    expect(result).toEqual({ phase: "open", betId: "bet-1" });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 2000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 2000);
+  });
+
   it("does not retry non-retryable tail errors", async () => {
     const err = Object.assign(new Error("bad request"), {
       retryable: false,

@@ -26,4 +26,24 @@ describe("TailModal deposit send", () => {
     expect(depositFlow).not.toContain("signTransaction({");
     expect(depositFlow).not.toContain("sendRawTransaction");
   });
+
+  it("keeps retrying when a funded trade returns another deposit phase", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/tail/TailModal.tsx"),
+      "utf8",
+    );
+    const retryFlow = source.slice(
+      source.indexOf("const requestTailWithSettlingRetry"),
+      source.indexOf("const signAndSendDeposit"),
+    );
+    const fundedOpenFlow = source.slice(
+      source.indexOf('if (first.phase === "onboard" || first.phase === "deposit")'),
+      source.indexOf('if (result.phase !== "open")'),
+    );
+
+    expect(retryFlow).toContain("retryResult:");
+    expect(fundedOpenFlow).toContain(
+      "requestTailWithSettlingRetry(copyPosition, true)",
+    );
+  });
 });

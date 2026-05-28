@@ -90,6 +90,16 @@ interface TailSuccess {
   opens: OpenResponse[];
 }
 
+type TailRequestResponse = OnboardResponse | DepositResponse | OpenResponse;
+
+function retryFundedDepositPhase(response: TailRequestResponse) {
+  if (response.phase !== "deposit") return null;
+  return {
+    message: "Trading balance is still updating.",
+    retryAfterMs: 2000,
+  };
+}
+
 type TailPreflightState =
   | { checking: true; error: null; canOpen: null; mode: null }
   | {
@@ -504,6 +514,7 @@ export function TailModal({ open, onClose, source }: Props) {
       };
       const requestTailWithSettlingRetry = async (
         copyPosition?: WhaleTailPosition,
+        retryDepositPhase = false,
       ) => {
         return retryTailRequestWithCreditWait({
           request: () => requestTail(copyPosition),
@@ -513,6 +524,7 @@ export function TailModal({ open, onClose, source }: Props) {
               `Updating trading balance (${Math.ceil(remainingMs / 1000)}s)…`,
             );
           },
+          retryResult: retryDepositPhase ? retryFundedDepositPhase : undefined,
         });
       };
 
@@ -594,7 +606,7 @@ export function TailModal({ open, onClose, source }: Props) {
             await signAndSendDeposit(first.depositTransactionB64);
           }
           setStatus("Updating trading balance…");
-          result = await requestTailWithSettlingRetry(copyPosition);
+          result = await requestTailWithSettlingRetry(copyPosition, true);
         }
 
         if (result.phase !== "open") {
