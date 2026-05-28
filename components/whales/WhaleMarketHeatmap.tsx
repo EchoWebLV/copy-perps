@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   ArrowDownRight,
@@ -9,6 +10,7 @@ import {
   Crown,
   Flame,
   Gauge,
+  Zap,
   Trophy,
 } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
@@ -208,16 +210,30 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
                 </div>
               </div>
             </div>
-            <div
-              className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em]"
-              style={{
-                borderColor: FAINT,
-                background: PANEL,
-                color: ACCENT,
-              }}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: GREEN }} />
-              Refreshing
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/trade"
+                className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition active:scale-[0.97]"
+                style={{
+                  borderColor: ACCENT,
+                  background: ACCENT,
+                  color: BG,
+                }}
+              >
+                <Zap size={12} strokeWidth={3} />
+                Trade Now
+              </Link>
+              <div
+                className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em]"
+                style={{
+                  borderColor: FAINT,
+                  background: PANEL,
+                  color: ACCENT,
+                }}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ background: GREEN }} />
+                Refreshing
+              </div>
             </div>
           </header>
 

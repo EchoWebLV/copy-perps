@@ -160,33 +160,55 @@ export function CopyRow({ row, onClosed }: Props) {
   const [status, setStatus] = useState<string | null>(null);
 
   const handleClose = useCallback(async () => {
-    if (busy || !row.betId) return;
+    if (busy) return;
+    if (!row.betId && row.sourceKind !== "wallet") return;
     setBusy(true);
     setStatus("Closing...");
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("not authed");
-      const r = await fetch("/api/bet/copy/close", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const isWalletPosition = row.sourceKind === "wallet";
+      const r = await fetch(
+        isWalletPosition ? "/api/trade/perp/close" : "/api/bet/copy/close",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(
+            isWalletPosition
+              ? {
+                  market: row.market,
+                  side: row.side,
+                  walletAddress: wallet?.address,
+                }
+              : { betId: row.betId, walletAddress: wallet?.address },
+          ),
         },
-        body: JSON.stringify({ betId: row.betId, walletAddress: wallet?.address }),
-      });
+      );
       if (!r.ok) {
         const b = await r.json().catch(() => ({}));
         throw new Error(b.error ?? `HTTP ${r.status}`);
       }
       setStatus("Closed");
-      onClosed(row.betId);
+      onClosed(row.betId ?? `${row.market}:${row.side}`);
     } catch (err) {
       setStatus(`Failed: ${String(err).slice(0, 80)}`);
     } finally {
       setBusy(false);
       setTimeout(() => setStatus(null), 4000);
     }
-  }, [busy, getAccessToken, onClosed, row.betId, wallet?.address]);
+  }, [
+    busy,
+    getAccessToken,
+    onClosed,
+    row.betId,
+    row.market,
+    row.side,
+    row.sourceKind,
+    wallet?.address,
+  ]);
 
   const pnlTone =
     row.pnlUsd == null ? undefined : row.pnlUsd >= 0 ? "up" : "down";
@@ -243,7 +265,7 @@ export function CopyRow({ row, onClosed }: Props) {
             {subtitleParts.join(" · ")}
           </div>
         </div>
-        {row.betId && (
+        {(row.betId || row.sourceKind === "wallet") && (
           <button
             type="button"
             disabled={busy}

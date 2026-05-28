@@ -19,6 +19,21 @@ describe("WhaleMarketHeatmap contract", () => {
     ).toBe(true);
   });
 
+  it("keeps Heat visible while exposing the fast self-trade game", () => {
+    const routeSource = readFileSync(
+      join(process.cwd(), "app/(app)/live/page.tsx"),
+      "utf8",
+    );
+    const heatmapSource = readFileSync(
+      join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),
+      "utf8",
+    );
+
+    expect(routeSource).toContain("WhaleMarketHeatmap");
+    expect(heatmapSource).toContain('href="/trade"');
+    expect(heatmapSource).toContain("Trade Now");
+  });
+
   it("summarizes market-level long and short whale money", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),

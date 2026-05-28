@@ -21,6 +21,14 @@ describe("Portfolio position cards", () => {
     expect(source).toContain("Notional");
   });
 
+  it("lets unmatched wallet positions close through the self-trade close route", () => {
+    const source = copyRow();
+
+    expect(source).toContain('sourceKind?: "tail" | "wallet"');
+    expect(source).toContain("/api/trade/perp/close");
+    expect(source).toContain('row.sourceKind === "wallet"');
+  });
+
   it("makes legacy open and closed positions use the same card language", () => {
     const source = positionRow();
 
