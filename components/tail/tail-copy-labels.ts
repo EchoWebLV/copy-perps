@@ -27,7 +27,7 @@ export function whaleTailFollowingText({
     return `${sourceName}'s ${position.asset} ${position.side.toUpperCase()} position`;
   }
 
-  return `${sourceName}'s ${copyableCount} live position${copyableCount === 1 ? "" : "s"}`;
+  return `${sourceName}'s ${copyableCount} ready position${copyableCount === 1 ? "" : "s"}`;
 }
 
 export function whaleTailAutoCloseLabel(

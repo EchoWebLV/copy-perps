@@ -172,6 +172,24 @@ function openPacificaSource(overrides?: {
   };
 }
 
+function sourceSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    sourcePositionId: "source-pos-1",
+    whaleId: "pacifica:abc",
+    source: "pacifica",
+    sourceAccount: "abc",
+    displayName: "Whale ABC",
+    market: "ETH",
+    side: "long",
+    leverage: 7,
+    maxLeverage: 50,
+    entryPrice: 2000,
+    currentMark: 2000,
+    lastSeenAtMs: Date.parse("2026-05-23T11:56:00.000Z"),
+    ...overrides,
+  };
+}
+
 describe("POST /api/bet/whale", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -864,6 +882,88 @@ describe("POST /api/bet/whale", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "whale position is stale",
     });
+    expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+  });
+
+  it("opens a stale whale card from its snapshot without source auto-close", async () => {
+    mocks.getWhaleLivePositionById.mockResolvedValue(
+      openPacificaSource({
+        lastSeenAt: new Date("2026-05-23T11:56:00.000Z"),
+      }),
+    );
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        snapshot: sourceSnapshot(),
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.openCopyOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ETH",
+        side: "long",
+        amountBase: "0.035",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          sourceType: "whale",
+          sourcePositionId: "source-pos-1",
+          leaderMarket: "ETH",
+          autoCloseOnSourceClose: false,
+          detachedFromSource: true,
+        }),
+      }),
+    );
+    expect(mocks.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          autoCloseOnSourceClose: false,
+          detachedFromSource: true,
+        }),
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "open",
+      source: {
+        asset: "ETH",
+        side: "long",
+        leverage: 7,
+        autoCloseOnSourceClose: false,
+        detachedFromSource: true,
+      },
+    });
+  });
+
+  it("preflights same-market tails before opening or reserving", async () => {
+    mocks.hasOpenTailOnMarket.mockResolvedValue(true);
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        snapshot: sourceSnapshot(),
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        autoCloseOnSourceClose: true,
+        preflightOnly: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      phase: "preflight",
+      canOpen: false,
+      reason: "same_market_tail",
+      error: "you already have an open ETH tail - close it first",
+    });
+    expect(mocks.planPacificaDepositTopUp).not.toHaveBeenCalled();
+    expect(mocks.reserveTailOnMarket).not.toHaveBeenCalled();
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 

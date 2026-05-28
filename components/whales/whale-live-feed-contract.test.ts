@@ -47,4 +47,25 @@ describe("WhaleLiveFeed position card contract", () => {
     expect(source).not.toContain("pt-[72px]");
     expect(source).not.toContain("pl-[80px]");
   });
+
+  it("keeps supported stale cards copyable through snapshot mode", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("const canTail = p.copyableOnPacifica !== false;");
+    expect(source).not.toContain("const canTail = now > 0 && !stale");
+  });
+
+  it("renders source P/L as a yellow brush stroke", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("PNL_BRUSH_STROKES");
+    expect(source).toContain("<PnlBrushStroke");
+    expect(source).toContain('background: "#f5d84b"');
+  });
 });

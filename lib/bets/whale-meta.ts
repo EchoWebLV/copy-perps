@@ -8,6 +8,7 @@ export type WhaleCopyMeta = {
   leaderSide: "long" | "short";
   leverage: number;
   autoCloseOnSourceClose: boolean;
+  detachedFromSource?: boolean;
   userEntryPrice: number | null;
   sourceEntryPriceAtCopy: number;
   pacificaOrderId: string | number;
@@ -70,6 +71,12 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
   if (value.leaderSide !== "long" && value.leaderSide !== "short") return null;
   if (!isNumber(value.leverage)) return null;
   if (typeof value.autoCloseOnSourceClose !== "boolean") return null;
+  if (
+    value.detachedFromSource !== undefined &&
+    typeof value.detachedFromSource !== "boolean"
+  ) {
+    return null;
+  }
   if (!isNumberOrNull(value.userEntryPrice)) return null;
   if (!isNumber(value.sourceEntryPriceAtCopy)) return null;
   if (!isStringOrNumber(value.pacificaOrderId)) return null;
@@ -85,6 +92,7 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
     leaderSide: value.leaderSide,
     leverage: value.leverage,
     autoCloseOnSourceClose: value.autoCloseOnSourceClose,
+    detachedFromSource: value.detachedFromSource,
     userEntryPrice: value.userEntryPrice,
     sourceEntryPriceAtCopy: value.sourceEntryPriceAtCopy,
     pacificaOrderId: value.pacificaOrderId,

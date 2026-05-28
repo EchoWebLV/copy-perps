@@ -40,11 +40,56 @@ const MAX_USDC = 1000;
 
 interface Body {
   positionId?: string;
+  snapshot?: WhaleSnapshotBody;
   stakeUsdc?: number;
   walletAddress?: string;
   leverage?: number;
   autoCloseOnSourceClose?: boolean;
+  preflightOnly?: boolean;
 }
+
+interface WhaleSnapshotBody {
+  sourcePositionId?: string;
+  whaleId?: string;
+  source?: string;
+  sourceAccount?: string;
+  displayName?: string;
+  market?: string;
+  side?: string;
+  leverage?: number;
+  maxLeverage?: number | null;
+  entryPrice?: number;
+  currentMark?: number | null;
+  lastSeenAtMs?: number;
+}
+
+type WhaleTailCandidate = {
+  detachedFromSource: boolean;
+  position: {
+    id: string;
+    whaleId: string;
+    source: "pacifica" | "hyperliquid";
+    sourceAccount: string;
+    market: string;
+    side: "long" | "short";
+    leverage: number;
+    entryPrice: number;
+    currentMark: number | null;
+    status: string;
+    lastSeenAt: Date;
+  };
+  whale: {
+    id: string;
+    source: "pacifica" | "hyperliquid";
+    sourceAccount: string;
+    displayName: string;
+    status: string;
+  };
+};
+
+type CandidateResult =
+  | { candidate: WhaleTailCandidate }
+  | { response: NextResponse };
 
 function fundingErrorResponse(err: unknown): NextResponse | null {
   if (err instanceof InsufficientAppFundsError) {
@@ -126,6 +171,176 @@ async function resolveSizingPrice(position: {
   return typeof mark === "number" && mark > 0 ? mark : null;
 }
 
+function parseWhaleSource(value: unknown): "pacifica" | "hyperliquid" | null {
+  return value === "pacifica" || value === "hyperliquid" ? value : null;
+}
+
+function positiveNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
+
+function parseSnapshotCandidate(
+  snapshot: WhaleSnapshotBody | undefined,
+): WhaleTailCandidate | null {
+  const source = parseWhaleSource(snapshot?.source);
+  const sourcePositionId = snapshot?.sourcePositionId;
+  const whaleId = snapshot?.whaleId;
+  const sourceAccount = snapshot?.sourceAccount;
+  const displayName = snapshot?.displayName;
+  const market = snapshot?.market?.trim().toUpperCase();
+  const side = snapshot?.side;
+  const leverage = positiveNumber(snapshot?.leverage);
+  const entryPrice = positiveNumber(snapshot?.entryPrice);
+  const currentMark =
+    snapshot?.currentMark === null ? null : positiveNumber(snapshot?.currentMark);
+  const lastSeenAtMs =
+    typeof snapshot?.lastSeenAtMs === "number" &&
+    Number.isFinite(snapshot.lastSeenAtMs)
+      ? snapshot.lastSeenAtMs
+      : Date.now();
+
+  if (
+    !source ||
+    typeof sourcePositionId !== "string" ||
+    sourcePositionId.length === 0 ||
+    typeof whaleId !== "string" ||
+    whaleId.length === 0 ||
+    typeof sourceAccount !== "string" ||
+    sourceAccount.length === 0 ||
+    typeof displayName !== "string" ||
+    displayName.length === 0 ||
+    !market ||
+    (side !== "long" && side !== "short") ||
+    leverage === null ||
+    entryPrice === null
+  ) {
+    return null;
+  }
+
+  return {
+    detachedFromSource: true,
+    position: {
+      id: sourcePositionId,
+      whaleId,
+      source,
+      sourceAccount,
+      market,
+      side,
+      leverage,
+      entryPrice,
+      currentMark,
+      status: "open",
+      lastSeenAt: new Date(lastSeenAtMs),
+    },
+    whale: {
+      id: whaleId,
+      source,
+      sourceAccount,
+      displayName,
+      status: "active",
+    },
+  };
+}
+
+function liveCandidate(
+  source: Awaited<ReturnType<typeof getWhaleLivePositionById>>,
+): WhaleTailCandidate | null {
+  if (!source) return null;
+  const { position, whale } = source;
+  if (position.side !== "long" && position.side !== "short") return null;
+  if (position.source !== "pacifica" && position.source !== "hyperliquid") {
+    return null;
+  }
+  if (whale.source !== "pacifica" && whale.source !== "hyperliquid") {
+    return null;
+  }
+
+  return {
+    detachedFromSource: false,
+    position: {
+      id: position.id,
+      whaleId: position.whaleId,
+      source: position.source,
+      sourceAccount: position.sourceAccount,
+      market: position.market,
+      side: position.side,
+      leverage: position.leverage,
+      entryPrice: position.entryPrice,
+      currentMark: position.currentMark,
+      status: position.status,
+      lastSeenAt: position.lastSeenAt,
+    },
+    whale: {
+      id: whale.id,
+      source: whale.source,
+      sourceAccount: whale.sourceAccount,
+      displayName: whale.displayName,
+      status: whale.status,
+    },
+  };
+}
+
+async function resolveWhaleTailCandidate(body: Body): Promise<CandidateResult> {
+  const source = body.positionId
+    ? await getWhaleLivePositionById(body.positionId)
+    : null;
+  const live = liveCandidate(source);
+
+  if (
+    live &&
+    live.position.status === "open" &&
+    live.whale.status === "active" &&
+    isSourceFresh(live.position.lastSeenAt.getTime())
+  ) {
+    return { candidate: live };
+  }
+
+  const snapshot = parseSnapshotCandidate(body.snapshot);
+  if (snapshot) return { candidate: snapshot };
+
+  if (!live) {
+    return {
+      response: NextResponse.json(
+        { error: "whale position is not live" },
+        { status: 404 },
+      ),
+    };
+  }
+  if (live.position.status !== "open") {
+    return {
+      response: NextResponse.json(
+        { error: "whale position is not open" },
+        { status: 409 },
+      ),
+    };
+  }
+  if (live.whale.status !== "active") {
+    return {
+      response: NextResponse.json(
+        { error: "whale is not active" },
+        { status: 409 },
+      ),
+    };
+  }
+  if (!isSourceFresh(live.position.lastSeenAt.getTime())) {
+    return {
+      response: NextResponse.json(
+        { error: "whale position is stale" },
+        { status: 409 },
+      ),
+    };
+  }
+
+  return {
+    response: NextResponse.json(
+      { error: "unsupported whale position side" },
+      { status: 409 },
+    ),
+  };
+}
+
 export async function POST(request: Request) {
   if (!whaleSocialEnabled()) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -156,36 +371,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const source = await getWhaleLivePositionById(body.positionId);
-  if (!source) {
-    return NextResponse.json({ error: "whale position is not live" }, { status: 404 });
-  }
+  const resolved = await resolveWhaleTailCandidate(body);
+  if ("response" in resolved) return resolved.response;
 
-  const { position, whale } = source;
-  if (position.status !== "open") {
-    return NextResponse.json(
-      { error: "whale position is not open" },
-      { status: 409 },
-    );
-  }
-  if (whale.status !== "active") {
-    return NextResponse.json(
-      { error: "whale is not active" },
-      { status: 409 },
-    );
-  }
-  if (!isSourceFresh(position.lastSeenAt.getTime())) {
-    return NextResponse.json(
-      { error: "whale position is stale" },
-      { status: 409 },
-    );
-  }
-  if (position.side !== "long" && position.side !== "short") {
-    return NextResponse.json(
-      { error: "unsupported whale position side" },
-      { status: 409 },
-    );
-  }
+  const { position, whale, detachedFromSource } = resolved.candidate;
+  const sourceAutoClose = detachedFromSource
+    ? false
+    : body.autoCloseOnSourceClose;
+
   let marketInfo;
   try {
     marketInfo = await getMarketBySymbol(position.market);
@@ -258,10 +451,27 @@ export async function POST(request: Request) {
   });
 
   if (await hasOpenTailOnMarket(user.id, position.market)) {
+    if (body.preflightOnly === true) {
+      return NextResponse.json({
+        phase: "preflight",
+        canOpen: false,
+        reason: "same_market_tail",
+        error: `you already have an open ${position.market} tail - close it first`,
+      });
+    }
     return NextResponse.json(
       { error: `you already have an open ${position.market} tail - close it first` },
       { status: 409 },
     );
+  }
+
+  if (body.preflightOnly === true) {
+    return NextResponse.json({
+      phase: "preflight",
+      canOpen: true,
+      mode: detachedFromSource ? "snapshot" : "live",
+      autoCloseOnSourceClose: sourceAutoClose,
+    });
   }
 
   const agent = await getAgentWallet(user.id);
@@ -325,7 +535,8 @@ export async function POST(request: Request) {
           leaderMarket: position.market,
           leaderSide: position.side,
           leverage: effectiveLeverage,
-          autoCloseOnSourceClose: body.autoCloseOnSourceClose,
+          autoCloseOnSourceClose: sourceAutoClose,
+          detachedFromSource,
           userEntryPrice: 0,
           sourceEntryPriceAtCopy: position.entryPrice,
           pacificaOrderId: "pending",
@@ -390,7 +601,8 @@ export async function POST(request: Request) {
           leaderMarket: position.market,
           leaderSide: position.side,
           leverage: effectiveLeverage,
-          autoCloseOnSourceClose: body.autoCloseOnSourceClose,
+          autoCloseOnSourceClose: sourceAutoClose,
+          detachedFromSource,
           userEntryPrice: Number.isFinite(avgFillPrice)
             ? avgFillPrice
             : sizingPrice,
@@ -449,7 +661,8 @@ export async function POST(request: Request) {
       asset: position.market,
       side: position.side,
       leverage: effectiveLeverage,
-      autoCloseOnSourceClose: body.autoCloseOnSourceClose,
+      autoCloseOnSourceClose: sourceAutoClose,
+      ...(detachedFromSource ? { detachedFromSource: true } : {}),
     },
   });
 }

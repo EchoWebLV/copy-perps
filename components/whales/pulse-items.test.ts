@@ -163,7 +163,7 @@ describe("buildPulseItems", () => {
     }
   });
 
-  it("marks stale and unsupported positions as watch-only", () => {
+  it("keeps stale supported positions tail-ready", () => {
     const items = buildPulseItems(
       [
         position({ positionId: "stale", stale: true, notionalUsd: 1_000_000 }),
@@ -182,8 +182,8 @@ describe("buildPulseItems", () => {
       NOW,
     );
 
-    expect(items.find((item) => item.position.positionId === "stale")?.canTail).toBe(false);
-    expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(false);
+    expect(items.find((item) => item.position.positionId === "stale")?.canTail).toBe(true);
+    expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "unsupported")?.canTail).toBe(false);
   });
 });

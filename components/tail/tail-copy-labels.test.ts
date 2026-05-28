@@ -46,7 +46,7 @@ describe("tail copy labels", () => {
       sourceName: "Whale One",
       positions,
       copyableCount: 2,
-    })).toBe("Whale One's 2 live positions");
+    })).toBe("Whale One's 2 ready positions");
     expect(whaleTailAutoCloseLabel(positions)).toBe(
       "Close my copies when whale closes",
     );

@@ -5,6 +5,31 @@ import {
 } from "./tail-settling-retry";
 
 describe("retryTailRequestWithCreditWait", () => {
+  it("waits long enough by default for Pacifica trading credit to settle", async () => {
+    let nowMs = 0;
+    const request = vi.fn().mockRejectedValue(
+      Object.assign(new Error("Pacifica is still crediting it."), {
+        retryable: true,
+        retryAfterMs: 5000,
+      }),
+    );
+    const sleep = vi.fn(async (ms: number) => {
+      nowMs += ms;
+    });
+
+    await expect(
+      retryTailRequestWithCreditWait({
+        request,
+        sleep,
+        now: () => nowMs,
+      }),
+    ).rejects.toBeInstanceOf(PacificaCreditWaitTimeoutError);
+
+    expect(nowMs).toBe(90_000);
+    expect(sleep).toHaveBeenCalledTimes(18);
+    expect(request).toHaveBeenCalledTimes(19);
+  });
+
   it("stops waiting quickly when Pacifica crediting keeps returning retryable errors", async () => {
     let nowMs = 0;
     const request = vi.fn().mockRejectedValue(

@@ -19,15 +19,17 @@ export function buildWhaleExposureSummary(
   nowMs = Date.now(),
 ): WhaleExposureSummary {
   let copyableCount = 0;
+  let staleCount = 0;
   let longCount = 0;
   let shortCount = 0;
   let exposureUsd = 0;
   let largestPosition: WhaleOpenPosition | null = null;
 
   for (const position of positions) {
-    if (isWhaleOpenPositionCopyable(position, nowMs)) {
+    if (isWhaleOpenPositionSupported(position)) {
       copyableCount += 1;
     }
+    if (isWhaleOpenPositionStale(position, nowMs)) staleCount += 1;
     if (position.side === "long") longCount += 1;
     else shortCount += 1;
     exposureUsd += position.notionalUsd;
@@ -44,7 +46,7 @@ export function buildWhaleExposureSummary(
   return {
     totalCount,
     copyableCount,
-    staleCount: totalCount - copyableCount,
+    staleCount,
     longCount,
     shortCount,
     exposureUsd,
@@ -56,14 +58,16 @@ export function buildWhaleExposureSummary(
   };
 }
 
-function isWhaleOpenPositionCopyable(
+function isWhaleOpenPositionSupported(position: WhaleOpenPosition): boolean {
+  return position.copyableOnPacifica !== false;
+}
+
+function isWhaleOpenPositionStale(
   position: WhaleOpenPosition,
   nowMs: number,
 ): boolean {
   return (
-    nowMs > 0 &&
-    !position.stale &&
-    isSourceFresh(position.lastSeenAtMs, undefined, nowMs) &&
-    position.copyableOnPacifica !== false
+    position.stale ||
+    (nowMs > 0 && !isSourceFresh(position.lastSeenAtMs, undefined, nowMs))
   );
 }

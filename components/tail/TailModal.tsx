@@ -13,7 +13,6 @@ import { useLiveMark } from "@/lib/pacifica/live-context";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
 import {
-  copyableWhalePositionsForTail,
   isWhaleTailPositionCopyable,
   whalePositionsForTail,
   whaleTailTotalNotional,
@@ -83,12 +82,22 @@ interface OpenResponse {
     side: "long" | "short";
     leverage: number;
     autoCloseOnSourceClose?: boolean;
+    detachedFromSource?: boolean;
   };
 }
 
 interface TailSuccess {
   opens: OpenResponse[];
 }
+
+type TailPreflightState =
+  | { checking: true; error: null; canOpen: null; mode: null }
+  | {
+      checking: false;
+      error: string | null;
+      canOpen: boolean | null;
+      mode: "live" | "snapshot" | null;
+    };
 
 function b64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -102,6 +111,10 @@ function fmtPrice(v: number): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function whaleSourceKind(whaleId: string): "pacifica" | "hyperliquid" {
+  return whaleId.startsWith("hyperliquid:") ? "hyperliquid" : "pacifica";
 }
 
 class TailRequestError extends Error {
@@ -130,6 +143,12 @@ export function TailModal({ open, onClose, source }: Props) {
   const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
   const [whaleLeverage, setWhaleLeverage] = useState(1);
   const [now, setNow] = useState(() => Date.now());
+  const [preflight, setPreflight] = useState<TailPreflightState>({
+    checking: false,
+    error: null,
+    canOpen: null,
+    mode: null,
+  });
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   const whaleTailPositions = useMemo(
@@ -137,15 +156,17 @@ export function TailModal({ open, onClose, source }: Props) {
       source?.kind === "whale" ? whalePositionsForTail(source) : [],
     [source],
   );
-  const copyableWhalePositions = useMemo(
+  const executableWhalePositions = useMemo(
     () =>
       source?.kind === "whale"
-        ? copyableWhalePositionsForTail(source, now)
+        ? whaleTailPositions.filter(
+            (position) => position.copyableOnPacifica !== false,
+          )
         : [],
-    [now, source],
+    [source?.kind, whaleTailPositions],
   );
   const activeWhalePosition =
-    copyableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
+    executableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
   const isSingleWhalePosition =
     source?.kind === "whale" && whaleTailPositions.length === 1;
   const sourceWhaleLeverage =
@@ -185,6 +206,12 @@ export function TailModal({ open, onClose, source }: Props) {
     setStatus(null);
     setError(null);
     setSuccess(null);
+    setPreflight({
+      checking: false,
+      error: null,
+      canOpen: null,
+      mode: null,
+    });
     setAutoCloseOnSourceClose(source?.kind === "whale");
     setWhaleLeverage(
       source?.kind === "whale"
@@ -237,13 +264,13 @@ export function TailModal({ open, onClose, source }: Props) {
       if (showWhaleLeverageControl) {
         return effectiveStake * boundedWhaleLeverage;
       }
-      return whaleTailTotalNotional(effectiveStake, copyableWhalePositions);
+      return whaleTailTotalNotional(effectiveStake, executableWhalePositions);
     }
     return effectiveStake * source.leverage;
   }, [
     boundedWhaleLeverage,
-    copyableWhalePositions,
     effectiveStake,
+    executableWhalePositions,
     showWhaleLeverageControl,
     source,
   ]);
@@ -257,7 +284,149 @@ export function TailModal({ open, onClose, source }: Props) {
   const stakeValid =
     effectiveStake >= MIN_USDC && effectiveStake <= MAX_USDC;
   const hasCopyableSource =
-    source?.kind !== "whale" || copyableWhalePositions.length > 0;
+    source?.kind !== "whale" || executableWhalePositions.length > 0;
+  const preflightBlocked = preflight.canOpen === false;
+  const activeWhalePositionLive =
+    source?.kind === "whale" && activeWhalePosition
+      ? isWhaleTailPositionCopyable(activeWhalePosition, now)
+      : false;
+  const sourceDetached =
+    preflight.mode === "snapshot" ||
+    (source?.kind === "whale" &&
+      activeWhalePosition !== null &&
+      activeWhalePosition.copyableOnPacifica !== false &&
+      !activeWhalePositionLive);
+
+  const whaleRequestSnapshot = useCallback(
+    (copyPosition?: WhaleTailPosition) => {
+      if (source?.kind !== "whale") return undefined;
+      const position = copyPosition ?? activeWhalePosition;
+      if (!position) return undefined;
+      return {
+        sourcePositionId: position.sourcePositionId,
+        whaleId: source.whaleId,
+        source: whaleSourceKind(source.whaleId),
+        sourceAccount: source.sourceAccount,
+        displayName: source.displayName,
+        market: position.asset,
+        side: position.side,
+        leverage: position.leverage,
+        maxLeverage: position.maxLeverage ?? null,
+        entryPrice: position.entryMark,
+        currentMark: position.currentMark,
+        lastSeenAtMs: position.lastSeenAtMs,
+      };
+    },
+    [activeWhalePosition, source],
+  );
+
+  useEffect(() => {
+    if (!open || source?.kind !== "whale" || !wallet || !hasCopyableSource) {
+      setPreflight({
+        checking: false,
+        error: null,
+        canOpen: null,
+        mode: null,
+      });
+      return;
+    }
+
+    const walletAddress = wallet.address;
+    let cancelled = false;
+    setPreflight({ checking: true, error: null, canOpen: null, mode: null });
+
+    async function runPreflight() {
+      try {
+        const token = await getAccessToken();
+        if (!token || source?.kind !== "whale") {
+          if (!cancelled) {
+            setPreflight({
+              checking: false,
+              error: null,
+              canOpen: null,
+              mode: null,
+            });
+          }
+          return;
+        }
+        const position = activeWhalePosition;
+	        if (!position) {
+	          if (!cancelled) {
+	            setPreflight({
+              checking: false,
+              error: null,
+              canOpen: null,
+              mode: null,
+            });
+          }
+          return;
+        }
+        const resp = await fetch("/api/bet/whale", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            positionId: position.sourcePositionId,
+	            snapshot: whaleRequestSnapshot(position),
+	            stakeUsdc: effectiveStake,
+	            walletAddress,
+            leverage: copyLeverage,
+            autoCloseOnSourceClose,
+            preflightOnly: true,
+          }),
+        });
+        const data = (await resp.json().catch(() => ({}))) as {
+          phase?: string;
+          canOpen?: boolean;
+          mode?: "live" | "snapshot";
+          error?: string;
+        };
+        if (cancelled) return;
+        if (data.phase === "preflight") {
+          setPreflight({
+            checking: false,
+            error: data.error ?? null,
+            canOpen:
+              typeof data.canOpen === "boolean" ? data.canOpen : resp.ok,
+            mode: data.mode ?? null,
+          });
+          return;
+        }
+        setPreflight({
+          checking: false,
+          error: data.error ?? `HTTP ${resp.status}`,
+          canOpen: false,
+          mode: null,
+        });
+      } catch {
+        if (cancelled) return;
+        setPreflight({
+          checking: false,
+          error: "Could not check this tail. Try again.",
+          canOpen: null,
+          mode: null,
+        });
+      }
+    }
+
+    void runPreflight();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeWhalePosition,
+    autoCloseOnSourceClose,
+    copyLeverage,
+    effectiveStake,
+    getAccessToken,
+    hasCopyableSource,
+    open,
+    source,
+    wallet,
+    whaleRequestSnapshot,
+  ]);
 
   const submit = useCallback(async () => {
     if (!source || !wallet || submitting) return;
@@ -273,9 +442,12 @@ export function TailModal({ open, onClose, source }: Props) {
       if (!token) throw new Error("not authed");
 
       const positionsToCopy =
-        source.kind === "whale" ? copyableWhalePositions : [];
+        source.kind === "whale" ? executableWhalePositions : [];
       if (source.kind === "whale" && positionsToCopy.length === 0) {
-        throw new Error("No fresh whale positions are available to copy.");
+        throw new Error("No executable whale positions are available to copy.");
+      }
+      if (source.kind === "whale" && preflightBlocked) {
+        throw new Error(preflight.error ?? "This tail is not available.");
       }
 
       const requestTail = async (copyPosition?: WhaleTailPosition) => {
@@ -286,10 +458,13 @@ export function TailModal({ open, onClose, source }: Props) {
             ? {
                 positionId:
                   copyPosition?.sourcePositionId ?? source.sourcePositionId,
+                snapshot: whaleRequestSnapshot(copyPosition),
                 stakeUsdc: effectiveStake,
                 walletAddress: wallet.address,
                 leverage: copyLeverage,
-                autoCloseOnSourceClose,
+                autoCloseOnSourceClose: sourceDetached
+                  ? false
+                  : autoCloseOnSourceClose,
               }
             : {
                 botId: source.botId,
@@ -460,10 +635,14 @@ export function TailModal({ open, onClose, source }: Props) {
     effectiveStake,
     copyLeverage,
     autoCloseOnSourceClose,
-    copyableWhalePositions,
+    executableWhalePositions,
     getAccessToken,
+    preflight.error,
+    preflightBlocked,
     signMessage,
     signAndSendTransaction,
+    sourceDetached,
+    whaleRequestSnapshot,
   ]);
 
   if (!open || !source) return null;
@@ -474,7 +653,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const displayAsset =
     source.kind === "whale"
       ? isWhaleBundle
-        ? `${copyableWhalePositions.length} live`
+        ? `${executableWhalePositions.length} ready`
         : displayPosition?.asset ?? source.asset
       : source.asset;
   const displaySide =
@@ -506,6 +685,13 @@ export function TailModal({ open, onClose, source }: Props) {
   const sourceAvatarUrl = source.kind === "bot" ? source.avatarImageUrl : null;
   const sourceAvatarFallback =
     source.kind === "bot" ? source.avatarEmoji ?? "🤖" : null;
+  const submitDisabled =
+    submitting ||
+    !stakeValid ||
+    !wallet ||
+    !hasCopyableSource ||
+    preflight.checking ||
+    preflightBlocked;
 
   return (
     <div
@@ -722,7 +908,7 @@ export function TailModal({ open, onClose, source }: Props) {
                   <span>{whaleTailPositionsHeading(whaleTailPositions)}</span>
                   {isSingleWhalePosition ? null : (
                     <span>
-                      {copyableWhalePositions.length}/{whaleTailPositions.length}
+                      {executableWhalePositions.length}/{whaleTailPositions.length}
                     </span>
                   )}
                 </div>
@@ -735,12 +921,16 @@ export function TailModal({ open, onClose, source }: Props) {
                         ? liveMark ?? position.currentMark
                         : position.currentMark;
 
-                    const copyable = isWhaleTailPositionCopyable(position, now);
-                    const statusLabel = copyable
-                      ? "Will copy"
-                      : position.copyableOnPacifica === false
-                        ? "Not available"
-                        : "Stale";
+                    const liveCopyable = isWhaleTailPositionCopyable(
+                      position,
+                      now,
+                    );
+                    const executable = position.copyableOnPacifica !== false;
+                    const statusLabel = !executable
+                      ? "Not available"
+                      : liveCopyable
+                        ? "Live copy"
+                        : "Snapshot copy";
 
                     return (
                       <div
@@ -773,11 +963,11 @@ export function TailModal({ open, onClose, source }: Props) {
                           </div>
                           <div
                             className={
-                              copyable
-                                ? "text-[10px] uppercase tracking-widest text-emerald-400"
-                                : position.stale
-                                ? "text-[10px] uppercase tracking-widest text-rose-400"
-                                : "text-[10px] uppercase tracking-widest text-amber-300"
+                              !executable
+                                ? "text-[10px] uppercase tracking-widest text-white/30"
+                                : liveCopyable
+                                  ? "text-[10px] uppercase tracking-widest text-emerald-400"
+                                  : "text-[10px] uppercase tracking-widest text-amber-300"
                             }
                           >
                             {statusLabel}
@@ -814,7 +1004,7 @@ export function TailModal({ open, onClose, source }: Props) {
                     ? whaleTailFollowingText({
                         sourceName,
                         positions: whaleTailPositions,
-                        copyableCount: copyableWhalePositions.length,
+                        copyableCount: executableWhalePositions.length,
                       })
                     : `${sourceName}'s ${source.asset} ${sideLabel}`}
                 </span>
@@ -824,24 +1014,35 @@ export function TailModal({ open, onClose, source }: Props) {
                   <span>{whaleTailAutoCloseLabel(whaleTailPositions)}</span>
                   <input
                     type="checkbox"
-                    checked={autoCloseOnSourceClose}
+                    checked={sourceDetached ? false : autoCloseOnSourceClose}
                     onChange={(e) =>
                       setAutoCloseOnSourceClose(e.target.checked)
                     }
-                    disabled={submitting}
+                    disabled={submitting || sourceDetached}
                     className="h-4 w-4 accent-emerald-400"
                   />
                 </label>
               ) : null}
+              {source.kind === "whale" && sourceDetached ? (
+                <div className="text-[11px] text-amber-200/80">
+                  Snapshot copy: source auto-close is off.
+                </div>
+              ) : null}
             </div>
 
             {/* Status / error */}
-            {status ? (
-              <div className="mx-5 mb-3 text-xs text-white/60">{status}</div>
+            {status || preflight.checking ? (
+              <div className="mx-5 mb-3 text-xs text-white/60">
+                {status ?? "Checking trade availability..."}
+              </div>
             ) : null}
             {error ? (
               <div className="mx-5 mb-3 text-xs text-rose-400 break-words">
                 {error}
+              </div>
+            ) : preflight.error ? (
+              <div className="mx-5 mb-3 text-xs text-rose-400 break-words">
+                {preflight.error}
               </div>
             ) : null}
 
@@ -849,23 +1050,27 @@ export function TailModal({ open, onClose, source }: Props) {
             <div className="px-5 pb-5 pt-1">
               <button
                 onClick={submit}
-                disabled={submitting || !stakeValid || !wallet || !hasCopyableSource}
+                disabled={submitDisabled}
                 className={`w-full py-4 rounded-2xl font-semibold text-base transition ${
-                  submitting || !stakeValid || !wallet || !hasCopyableSource
+                  submitDisabled
                     ? "bg-white/10 text-white/40 cursor-not-allowed"
                     : "bg-emerald-500 text-black hover:bg-emerald-400"
                 }`}
               >
                 {submitting
-                  ? "Working…"
-                  : source.kind === "whale"
-                    ? hasCopyableSource
-                      ? whaleTailPrimaryCta({
-                          positions: whaleTailPositions,
-                          effectiveStake,
-                        })
-                      : "No copyable positions"
-                    : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
+                  ? "Working..."
+                  : preflight.checking
+                    ? "Checking..."
+                    : preflightBlocked
+                      ? "Close existing tail first"
+                      : source.kind === "whale"
+                        ? hasCopyableSource
+                          ? whaleTailPrimaryCta({
+                              positions: whaleTailPositions,
+                              effectiveStake,
+                            })
+                          : "No copyable positions"
+                        : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (
                 <div className="mt-2 text-center text-xs text-white/40">

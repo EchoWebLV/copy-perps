@@ -10,18 +10,27 @@ describe("buildWhaleLiveTailButtonLabel", () => {
     ).toBe("TAIL THIS POSITION");
   });
 
-  it("keeps stale positions disabled", () => {
+  it("labels stale positions as snapshot-copyable", () => {
     expect(
       buildWhaleLiveTailButtonLabel({
         stale: true,
       }),
-    ).toBe("TAIL DISABLED");
+    ).toBe("COPY SNAPSHOT");
   });
 
   it("shows when a Hyperliquid source market cannot route through Pacifica", () => {
     expect(
       buildWhaleLiveTailButtonLabel({
         stale: false,
+        copyableOnPacifica: false,
+      }),
+    ).toBe("PACIFICA UNAVAILABLE");
+  });
+
+  it("keeps unsupported stale markets unavailable", () => {
+    expect(
+      buildWhaleLiveTailButtonLabel({
+        stale: true,
         copyableOnPacifica: false,
       }),
     ).toBe("PACIFICA UNAVAILABLE");

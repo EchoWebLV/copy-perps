@@ -5,6 +5,6 @@ export function buildWhaleLiveTailButtonLabel({
   stale: boolean;
   copyableOnPacifica?: boolean;
 }): string {
-  if (stale) return "TAIL DISABLED";
-  return copyableOnPacifica ? "TAIL THIS POSITION" : "PACIFICA UNAVAILABLE";
+  if (copyableOnPacifica === false) return "PACIFICA UNAVAILABLE";
+  return stale ? "COPY SNAPSHOT" : "TAIL THIS POSITION";
 }

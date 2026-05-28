@@ -33,6 +33,20 @@ import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 4_000;
 const BODY_FONT = "system-ui, -apple-system, 'Inter', sans-serif";
+const PNL_BRUSH_STROKES = [
+  {
+    clipPath: "polygon(2% 18%, 99% 4%, 94% 82%, 5% 96%)",
+    transform: "rotate(-2deg)",
+  },
+  {
+    clipPath: "polygon(4% 5%, 96% 16%, 99% 88%, 1% 78%)",
+    transform: "rotate(1.5deg)",
+  },
+  {
+    clipPath: "polygon(0 22%, 92% 0, 100% 72%, 7% 100%)",
+    transform: "rotate(-0.75deg)",
+  },
+] as const;
 
 interface Props {
   initialPositions: WhalePositionSignal[];
@@ -209,7 +223,7 @@ function PositionCard({
   const chartPosition = toWhaleEntryChartPosition(p, liveMark);
   const stale =
     p.stale || (now > 0 && !isSourceFresh(p.lastSeenAtMs, undefined, now));
-  const canTail = now > 0 && !stale && p.copyableOnPacifica !== false;
+  const canTail = p.copyableOnPacifica !== false;
 
   useEffect(() => {
     setNow(Date.now());
@@ -268,9 +282,11 @@ function PositionCard({
             <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
               SOURCE P/L
             </div>
-            <div className="mt-1 text-[28px] font-black tabular-nums" style={{ color: profit ? GREEN : RED, fontFamily: BODY_FONT, lineHeight: 1 }}>
-              {pnl === null ? "N/A" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`}
-            </div>
+            <PnlBrushStroke
+              pnl={pnl}
+              profit={profit}
+              seed={p.positionId}
+            />
           </div>
           <div className="text-right text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
             <div>HOLDING {formatWhalePositionAge(p.openedAtMs, now)}</div>
@@ -384,6 +400,53 @@ function FreshnessBadge({ stale }: { stale: boolean }) {
     <span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest" style={{ background: stale ? `${RED}18` : `${GREEN}18`, color: stale ? RED : GREEN, border: `1px solid ${stale ? `${RED}45` : `${GREEN}45`}` }}>
       {stale ? "STALE" : "LIVE"}
     </span>
+  );
+}
+
+function brushVariant(seed: string) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash + seed.charCodeAt(i)) % PNL_BRUSH_STROKES.length;
+  }
+  return PNL_BRUSH_STROKES[hash] ?? PNL_BRUSH_STROKES[0];
+}
+
+function formatSourcePnl(pnl: number | null): string {
+  if (pnl === null) return "N/A";
+  return `${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%`;
+}
+
+function PnlBrushStroke({
+  pnl,
+  profit,
+  seed,
+}: {
+  pnl: number | null;
+  profit: boolean;
+  seed: string;
+}) {
+  const variant = brushVariant(seed);
+  return (
+    <div
+      className="mt-1 inline-flex origin-left px-3 py-2"
+      style={{
+        ...variant,
+        background: "#f5d84b",
+        boxShadow: "0 8px 18px rgba(245,216,75,0.16)",
+      }}
+    >
+      <span
+        className="tabular-nums text-[34px] font-black"
+        style={{
+          color: profit ? "#082615" : "#3a090f",
+          fontFamily: BODY_FONT,
+          lineHeight: 1,
+          textShadow: "0 1px 0 rgba(255,255,255,0.25)",
+        }}
+      >
+        {formatSourcePnl(pnl)}
+      </span>
+    </div>
   );
 }
 

@@ -1,5 +1,4 @@
 import type { WhalePositionSignal } from "@/lib/types";
-import { isSourceFresh } from "@/lib/whales/identity";
 
 const FRESH_OPEN_MS = 15 * 60_000;
 const BIG_POSITION_USD = 500_000;
@@ -151,18 +150,13 @@ function makeItem(args: {
     headline: args.headline,
     context: args.context,
     reactionSeed: stableSeed(`${args.position.positionId}:${args.kind}`),
-    canTail: isPositionCopyable(args.position, args.nowMs),
+    canTail: isPositionCopyable(args.position),
     position: args.position,
   };
 }
 
-function isPositionCopyable(position: PositionPayload, nowMs: number): boolean {
-  return (
-    nowMs > 0 &&
-    !position.stale &&
-    isSourceFresh(position.lastSeenAtMs, undefined, nowMs) &&
-    position.copyableOnPacifica !== false
-  );
+function isPositionCopyable(position: PositionPayload): boolean {
+  return position.copyableOnPacifica !== false;
 }
 
 function baseScore(position: PositionPayload, nowMs: number): number {
@@ -170,7 +164,7 @@ function baseScore(position: PositionPayload, nowMs: number): number {
   const recency = Math.max(0, 60 - ageMinutes);
   const size = Math.min(140, Math.log10(Math.max(1, position.notionalUsd)) * 18);
   const leverage = Math.min(60, position.leverage * 1.5);
-  const copyable = isPositionCopyable(position, nowMs) ? 30 : -80;
+  const copyable = isPositionCopyable(position) ? 30 : -80;
   return recency + size + leverage + copyable;
 }
 

@@ -43,8 +43,8 @@ describe("buildWhaleExposureSummary", () => {
 
     expect(summary).toMatchObject({
       totalCount: 5,
-      copyableCount: 2,
-      staleCount: 3,
+      copyableCount: 4,
+      staleCount: 2,
       longCount: 3,
       shortCount: 2,
       exposureUsd: 280_000,
