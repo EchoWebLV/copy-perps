@@ -45,6 +45,20 @@ describe("WhaleMarketHeatmap contract", () => {
     expect(source).toContain("Public positioning");
   });
 
+  it("pins major markets ahead of live-ranked overflow markets", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("PINNED_MARKET_ORDER");
+    expect(source).toContain('"BTC"');
+    expect(source).toContain('"ETH"');
+    expect(source).toContain('"SOL"');
+    expect(source).toContain('"HYPE"');
+    expect(source).toContain("getPinnedMarketRank");
+  });
+
   it("surfaces fast market read leaders for each market", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),

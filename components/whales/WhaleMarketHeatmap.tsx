@@ -32,6 +32,19 @@ import { formatWhalePositionAge } from "./whale-position-age";
 const POLL_MS = 10_000;
 const SENTIMENT_POLL_MS = 30_000;
 const SENTIMENT_MARKET_LIMIT = 20;
+const PINNED_MARKET_ORDER = [
+  "BTC",
+  "ETH",
+  "SOL",
+  "HYPE",
+  "XRP",
+  "DOGE",
+  "BNB",
+  "AVAX",
+] as const;
+const PINNED_MARKET_RANK = new Map<string, number>(
+  PINNED_MARKET_ORDER.map((market, index) => [market, index]),
+);
 
 type WhalePosition = WhalePositionSignal["payload"];
 
@@ -330,7 +343,7 @@ export function buildMarketHeatRows(
         strongestPnl,
       };
     })
-    .sort((a, b) => b.totalNotional - a.totalNotional);
+    .sort(compareMarketHeatRows);
 }
 
 function MarketHeatCard({
@@ -678,6 +691,17 @@ function getMarketBias(
   const skew = Math.abs(longNotional - shortNotional) / total;
   if (skew < 0.12) return "balanced";
   return longNotional > shortNotional ? "long" : "short";
+}
+
+function compareMarketHeatRows(a: MarketHeatRow, b: MarketHeatRow): number {
+  const aRank = getPinnedMarketRank(a.market);
+  const bRank = getPinnedMarketRank(b.market);
+  if (aRank !== bRank) return aRank - bRank;
+  return b.totalNotional - a.totalNotional;
+}
+
+function getPinnedMarketRank(market: string): number {
+  return PINNED_MARKET_RANK.get(market) ?? Number.MAX_SAFE_INTEGER;
 }
 
 function normalizeMarket(market: string): string {
