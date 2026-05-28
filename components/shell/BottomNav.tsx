@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, Settings, PieChart, Radio, Zap } from "lucide-react";
+import { ChartCandlestick, Flame, Settings, PieChart, Zap } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
 // Pulse CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Whales" },
-  { href: "/live", icon: Radio, label: "Heat" },
+  { href: "/trade", icon: ChartCandlestick, label: "Scalp" },
 ];
 const RIGHT_TABS = [
   { href: "/portfolio", icon: PieChart, label: "Folio" },
@@ -23,7 +23,7 @@ export function BottomNav() {
     if (!pathname) return false;
     if (pathname === href) return true;
     if (href === "/feed" && pathname.startsWith("/feed")) return true;
-    if (href === "/live" && pathname.startsWith("/live")) return true;
+    if (href === "/trade" && pathname.startsWith("/trade")) return true;
     if (href === "/chatter" && pathname.startsWith("/chatter")) return true;
     return false;
   }

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Radio, Zap } from "lucide-react";
+import { ChartCandlestick, Radio, Zap } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_NAV_ITEMS, isShellNavActive } from "./nav-items";
 
@@ -46,19 +46,23 @@ describe("desktop shell nav contract", () => {
     expect(isShellNavActive("/live", "/live?bot=whale")).toBe(true);
   });
 
-  it("puts Pulse on the elevated mobile shortcut and keeps Heat as a tab", () => {
+  it("puts Pulse on the elevated mobile shortcut and benches Heat for Scalp", () => {
     const bottomNav = readFileSync(
       join(process.cwd(), "components/shell/BottomNav.tsx"),
       "utf8",
     );
 
     expect(bottomNav).toContain(
-      '{ href: "/live", icon: Radio, label: "Heat" }',
+      '{ href: "/trade", icon: ChartCandlestick, label: "Scalp" }',
     );
+    expect(bottomNav).not.toContain('label: "Heat"');
+    expect(bottomNav).not.toContain('href: "/live"');
+    expect(bottomNav).toContain("pathname.startsWith(\"/trade\")");
     expect(bottomNav).toContain('href="/chatter"');
     expect(bottomNav).toContain('aria-label="Pulse open positions"');
     expect(bottomNav).toContain("<Zap size={26}");
     expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
+    expect(ChartCandlestick).toBeDefined();
   });
 
   it("does not mark unrelated destinations active", () => {
