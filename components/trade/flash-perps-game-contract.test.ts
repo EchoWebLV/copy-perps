@@ -11,11 +11,16 @@ describe("Flash fast perps game contract", () => {
 
     expect(page).toContain("FLASH PERPS");
     expect(page).toContain("FLASH_SCALP_MARKETS");
-    expect(page).toContain("FLASH_MARKET_CATEGORIES");
+    expect(page).toContain(
+      'const FLASH_SCALP_MARKETS = ["BTC", "ETH", "SOL"] as const',
+    );
+    expect(page).not.toContain("FLASH_MARKET_CATEGORIES");
+    expect(page).not.toContain("categoryLabel");
+    expect(page).not.toContain('button "Meme"');
     expect(page).toContain("flashLeverageOptionsForMarket");
     expect(page).toContain("const STAKES = [1, 5, 10, 50] as const");
     expect(page).not.toContain("const STAKES = [1, 2, 5, 10] as const");
-    expect(page).not.toContain('const MARKETS = ["BTC", "ETH", "SOL"] as const');
+    expect(page).not.toContain("FLASH_MARKETS.map");
     expect(page).toContain("Flash minimum position is $10 notional");
   });
 
@@ -46,13 +51,18 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("useSessionSigners");
     expect(page).toContain("addSessionSigners({");
     expect(page).toContain("NEXT_PUBLIC_PRIVY_FLASH_SIGNER_ID");
+    expect(page).toContain("NEXT_PUBLIC_PRIVY_SIGNER_ID");
+    expect(page).toContain("NEXT_PUBLIC_PRIVY_POLICY_IDS");
     expect(page).toContain("signerId: PRIVY_INSTANT_SIGNER_ID");
     expect(page).toContain("policyIds: PRIVY_INSTANT_POLICY_IDS");
+    expect(page).toContain("PRIVY_INSTANT_TRADING_CONFIGURED");
+    expect(page).toContain("return false");
+    expect(page).toContain("requestOpen(useInstantExecution)");
+    expect(page).toContain("requestClose(useInstantExecution)");
     expect(page).not.toContain("useDelegatedActions");
     expect(page).not.toContain("delegateWallet({");
+    expect(page).not.toContain("Instant trading signer is not configured.");
     expect(page).toContain("ensureInstantTrading");
-    expect(page).toContain("requestOpen(true)");
-    expect(page).toContain("requestClose(true)");
     expect(page).toContain('result.phase === "sent"');
     expect(page).toContain('result.phase === "sent-close"');
   });

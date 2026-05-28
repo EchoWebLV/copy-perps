@@ -7,10 +7,8 @@ import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
 import {
-  FLASH_MARKETS,
   flashLeverageOptionsForMarket,
   flashMarketConfigForSymbol,
-  type FlashMarketCategory,
   type FlashMarketSymbol,
 } from "@/lib/flash/markets";
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
@@ -36,23 +34,20 @@ import {
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 const PRIVY_INSTANT_SIGNER_ID =
-  process.env.NEXT_PUBLIC_PRIVY_FLASH_SIGNER_ID ?? "";
+  process.env.NEXT_PUBLIC_PRIVY_FLASH_SIGNER_ID ??
+  process.env.NEXT_PUBLIC_PRIVY_SIGNER_ID ??
+  "";
 const PRIVY_INSTANT_POLICY_IDS = (
-  process.env.NEXT_PUBLIC_PRIVY_FLASH_POLICY_IDS ?? ""
+  process.env.NEXT_PUBLIC_PRIVY_FLASH_POLICY_IDS ??
+  process.env.NEXT_PUBLIC_PRIVY_POLICY_IDS ??
+  ""
 )
   .split(",")
   .map((id) => id.trim())
   .filter(Boolean);
+const PRIVY_INSTANT_TRADING_CONFIGURED = Boolean(PRIVY_INSTANT_SIGNER_ID);
 
-const FLASH_SCALP_MARKETS = FLASH_MARKETS;
-const FLASH_MARKET_CATEGORIES = [
-  "crypto",
-  "community",
-  "governance",
-  "commodity",
-  "fx",
-  "equity",
-] as const satisfies readonly FlashMarketCategory[];
+const FLASH_SCALP_MARKETS = ["BTC", "ETH", "SOL"] as const satisfies readonly FlashMarketSymbol[];
 const STAKES = [1, 5, 10, 50] as const;
 const STANDARD_LEVERAGES = [20, 50, 100] as const;
 const DEGEN_LEVERAGES = [125, 250, 500] as const;
@@ -62,7 +57,6 @@ const MAX_GRAPH_POINTS = 120;
 const GRAPH_SAMPLE_MS = 80;
 
 type Market = FlashMarketSymbol;
-type MarketCategory = (typeof FLASH_MARKET_CATEGORIES)[number];
 type TradeSide = "long" | "short";
 type TradeMode = "standard" | "degen";
 
@@ -214,23 +208,6 @@ function liquidationMoveForPosition(position: FlashPosition | null): number | nu
   return ((liquidation - mark) / mark) * 100;
 }
 
-function categoryLabel(category: MarketCategory): string {
-  switch (category) {
-    case "crypto":
-      return "Crypto";
-    case "community":
-      return "Meme";
-    case "governance":
-      return "Gov";
-    case "commodity":
-      return "Commod";
-    case "fx":
-      return "FX";
-    case "equity":
-      return "Equity";
-  }
-}
-
 function maxLeverageForSelection(market: Market, mode: TradeMode): number {
   const options = flashLeverageOptionsForMarket(market, mode);
   return options.at(-1) ?? (mode === "degen" ? 500 : 100);
@@ -243,7 +220,6 @@ export function FastPerpsGame() {
   const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [market, setMarket] = useState<Market>("SOL");
-  const [marketCategory, setMarketCategory] = useState<MarketCategory>("crypto");
   const [side, setSide] = useState<TradeSide>("long");
   const [tradeMode, setTradeMode] = useState<TradeMode>("degen");
   const [stake, setStake] = useState(1);
@@ -269,13 +245,6 @@ export function FastPerpsGame() {
   const selectedMarketConfig = useMemo(
     () => flashMarketConfigForSymbol(market),
     [market],
-  );
-  const visibleMarkets = useMemo(
-    () =>
-      FLASH_SCALP_MARKETS.filter(
-        (nextMarket) => nextMarket.category === marketCategory,
-      ),
-    [marketCategory],
   );
   const graphValue = markValueForPosition(selectedPosition);
   const livePnl = pnlForPosition(selectedPosition);
@@ -372,12 +341,10 @@ export function FastPerpsGame() {
     ]);
   }, []);
 
-  const ensureInstantTrading = useCallback(async () => {
+  const ensureInstantTrading = useCallback(async (): Promise<boolean> => {
     if (!wallet?.address) throw new Error("wallet not ready");
-    if (instantTradingEnabled) return;
-    if (!PRIVY_INSTANT_SIGNER_ID) {
-      throw new Error("Instant trading signer is not configured.");
-    }
+    if (!PRIVY_INSTANT_TRADING_CONFIGURED) return false;
+    if (instantTradingEnabled) return true;
     setStatus("Approve instant trading once...");
     await addSessionSigners({
       address: wallet.address,
@@ -389,6 +356,7 @@ export function FastPerpsGame() {
       ],
     });
     setSessionSignerWalletAddress(wallet.address);
+    return true;
   }, [addSessionSigners, instantTradingEnabled, wallet?.address]);
 
   const requestOpen = useCallback(async (instant: boolean): Promise<FlashOpenResponse> => {
@@ -454,9 +422,13 @@ export function FastPerpsGame() {
     setError(null);
     setStatus("Preparing Flash trade...");
     try {
-      await ensureInstantTrading();
-      setStatus("Sending Flash trade...");
-      const result = await requestOpen(true);
+      const useInstantExecution = await ensureInstantTrading();
+      setStatus(
+        useInstantExecution
+          ? "Sending Flash trade..."
+          : "Preparing Flash signature...",
+      );
+      const result = await requestOpen(useInstantExecution);
       if (result.phase === "sent") {
         upsertPosition(result.position);
         setStatus("Opened on Flash");
@@ -492,9 +464,13 @@ export function FastPerpsGame() {
     setError(null);
     setStatus("Preparing Flash close...");
     try {
-      await ensureInstantTrading();
-      setStatus("Sending Flash close...");
-      const result = await requestClose(true);
+      const useInstantExecution = await ensureInstantTrading();
+      setStatus(
+        useInstantExecution
+          ? "Sending Flash close..."
+          : "Preparing Flash close signature...",
+      );
+      const result = await requestClose(useInstantExecution);
       if (result.phase === "sent-close") {
         setPositions((current) =>
           current.filter((p) => p.positionPubkey !== selectedPosition.positionPubkey),
@@ -540,7 +516,11 @@ export function FastPerpsGame() {
           <div className="mt-0.5 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
             {selectedMarketConfig?.displayName ?? "USDC"} ·{" "}
             {tradeMode === "degen" ? "degen" : "standard"} ·{" "}
-            {instantTradingEnabled ? "instant" : "one-time approval"}
+            {PRIVY_INSTANT_TRADING_CONFIGURED
+              ? instantTradingEnabled
+                ? "instant"
+                : "one-time approval"
+              : "wallet-signed"}
           </div>
         </div>
         <Link
@@ -567,9 +547,6 @@ export function FastPerpsGame() {
                 onClick={() => {
                   setMarket(position.symbol);
                   setSide(position.side);
-                  setMarketCategory(
-                    flashMarketConfigForSymbol(position.symbol)?.category ?? "crypto",
-                  );
                   setTradeMode((position.leverage ?? 0) > 100 ? "degen" : "standard");
                   setError(null);
                 }}
@@ -605,47 +582,17 @@ export function FastPerpsGame() {
         </div>
       )}
 
-      <div className="no-scrollbar mt-3 flex gap-1.5 overflow-x-auto">
-        {FLASH_MARKET_CATEGORIES.map((category) => {
-          const active = marketCategory === category;
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        {FLASH_SCALP_MARKETS.map((nextMarket) => {
+          const active = market === nextMarket;
+          const config = flashMarketConfigForSymbol(nextMarket);
           return (
             <button
-              key={category}
+              key={nextMarket}
               type="button"
               onClick={() => {
-                setMarketCategory(category);
-                const nextMarket = FLASH_SCALP_MARKETS.find(
-                  (candidate) => candidate.category === category,
-                );
-                if (nextMarket) {
-                  setMarket(nextMarket.symbol);
-                  setLeverage(maxLeverageForSelection(nextMarket.symbol, tradeMode));
-                }
-                setError(null);
-              }}
-              className="shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-              style={{
-                background: active ? ACCENT : PANEL,
-                color: active ? BG : FG,
-                border: `1px solid ${active ? ACCENT : FAINT}`,
-              }}
-            >
-              {categoryLabel(category)}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-2 grid grid-cols-4 gap-1.5">
-        {visibleMarkets.map((nextMarket) => {
-          const active = market === nextMarket.symbol;
-          return (
-            <button
-              key={nextMarket.symbol}
-              type="button"
-              onClick={() => {
-                setMarket(nextMarket.symbol);
-                setLeverage(maxLeverageForSelection(nextMarket.symbol, tradeMode));
+                setMarket(nextMarket);
+                setLeverage(maxLeverageForSelection(nextMarket, tradeMode));
                 setError(null);
               }}
               className="min-w-0 rounded-lg px-1.5 py-2 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
@@ -654,9 +601,9 @@ export function FastPerpsGame() {
                 color: active ? BG : FG,
                 border: `1px solid ${active ? ACCENT : FAINT}`,
               }}
-              title={nextMarket.displayName}
+              title={config?.displayName ?? nextMarket}
             >
-              {nextMarket.symbol}
+              {nextMarket}
             </button>
           );
         })}
