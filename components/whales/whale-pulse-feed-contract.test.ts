@@ -53,6 +53,19 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain("RISK");
   });
 
+  it("renders Pulse as a one-card-at-a-time vertical snap feed", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("snap-y snap-mandatory overflow-y-scroll");
+    expect(componentSource).toContain('scrollSnapStop: "always"');
+    expect(componentSource).toContain("h-full w-full snap-start");
+    expect(componentSource).toContain("PulsePositionCard");
+    expect(componentSource).not.toContain('<ul className="divide-y"');
+  });
+
   it("keeps the mobile reaction controls on one row", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),

@@ -94,7 +94,6 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     () => positionIds.map(encodeURIComponent).join(","),
     [positionIds],
   );
-  const stats = useMemo(() => buildPulseStats(positions), [positions]);
   const [persistedSocial, setPersistedSocial] = useState<PulseApiSocial>({});
 
   const mergePulseSocial = useCallback((social: PulseApiSocial) => {
@@ -164,56 +163,23 @@ export function WhalePulseFeed({ initialPositions }: Props) {
 
   return (
     <div
-      className="h-full w-full overflow-hidden"
+      className="relative h-full w-full overflow-hidden lg:h-dvh"
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
-      <div className="no-scrollbar mx-auto h-full w-full max-w-2xl overflow-y-auto pb-32 lg:max-w-4xl lg:px-6 lg:pb-8">
-        <header
-          className="border-b-2 px-5 pt-5 pb-3"
-          style={{ background: BG, borderColor: FAINT }}
+      {items.length === 0 ? (
+        <EmptyPulse />
+      ) : (
+        <div
+          className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
+          style={{ scrollSnapStop: "always" }}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <Headline size={28}>PULSE</Headline>
-              <p
-                className="mt-1 truncate text-[11px]"
-                style={{ color: DIM, fontFamily: FONT_BODY }}
-              >
-                Live tape for whale positions and copyable tails.
-              </p>
-            </div>
-            <div
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase"
-              style={{
-                background: `${ACCENT}20`,
-                color: ACCENT,
-                border: `1px solid ${ACCENT}40`,
-              }}
-            >
-              <span
-                className="inline-block h-2 w-2 animate-pulse rounded-full"
-                style={{ background: ACCENT, boxShadow: `0 0 8px ${ACCENT}` }}
-              />
-              Live
-            </div>
-          </div>
-
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <StatChip label="Whales" value={stats.whales} />
-            <StatChip label="Open" value={stats.positions} />
-            <StatChip label="Copyable" value={stats.copyable} />
-          </div>
-        </header>
-
-        {items.length === 0 ? (
-          <EmptyPulse />
-        ) : (
-          <ul className="divide-y" style={{ borderColor: FAINT }}>
-            {items.map((item) => (
-              <PulsePost
-                key={item.id}
+          {items.map((item, index) => (
+            <section key={item.id} className="h-full w-full snap-start">
+              <PulsePositionCard
                 item={item}
                 now={now}
+                slideIndex={index}
+                total={items.length}
                 selectedReaction={
                   persistedSocial[item.position.positionId]?.myReaction ?? undefined
                 }
@@ -233,10 +199,10 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                   setTailSource(toTailSource(item.position));
                 }}
               />
-            ))}
-          </ul>
-        )}
-      </div>
+            </section>
+          ))}
+        </div>
+      )}
 
       <TailModal
         open={!!tailSource}
@@ -247,9 +213,11 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   );
 }
 
-function PulsePost({
+function PulsePositionCard({
   item,
   now,
+  slideIndex,
+  total,
   selectedReaction,
   persistedSocial,
   onReact,
@@ -257,6 +225,8 @@ function PulsePost({
 }: {
   item: PulseItem;
   now: number;
+  slideIndex: number;
+  total: number;
   selectedReaction?: PulseReaction;
   persistedSocial?: PulseApiSocialRecord;
   onReact: (reaction: PulseReaction) => void;
@@ -270,52 +240,85 @@ function PulsePost({
   const recentReactors = persistedSocial?.recentReactors ?? [];
 
   return (
-    <li className="px-5 py-4">
-      <article className="flex items-start gap-3">
-        <WhaleFingerprintAvatar
-          sourceAccount={p.sourceAccount}
-          label={p.displayName}
-          mood={p.stale ? "WOUNDED" : "HUNTING"}
-          size={42}
-          pulse={!p.stale}
-        />
+    <article className="mx-auto flex h-full w-full max-w-2xl flex-col px-5 pt-5 pb-28 lg:max-w-4xl lg:px-8 lg:py-8">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Headline size={28}>PULSE</Headline>
+          <div
+            className="mt-1 truncate text-[10px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            {item.eyebrow} | {p.source}
+          </div>
+        </div>
+        <div
+          className="shrink-0 rounded-full px-3 py-1.5 text-right text-[10px] font-black uppercase"
+          style={{
+            background: p.stale ? `${RED}18` : `${GREEN}18`,
+            color: p.stale ? RED : GREEN,
+            border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
+          }}
+        >
+          {String(slideIndex + 1).padStart(2, "0")} /{" "}
+          {String(total).padStart(2, "0")} {p.stale ? "Stale" : "Live"}
+        </div>
+      </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div
-                className="truncate text-[12px] font-black uppercase"
-                style={{ color: FG }}
-              >
-                {p.displayName}
+      <div
+        className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-4 lg:p-6"
+        style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
+      >
+        <div className="flex items-start gap-3">
+          <WhaleFingerprintAvatar
+            sourceAccount={p.sourceAccount}
+            label={p.displayName}
+            mood={p.stale ? "WOUNDED" : "HUNTING"}
+            size={52}
+            pulse={!p.stale}
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div
+                  className="truncate text-[13px] font-black uppercase"
+                  style={{ color: FG }}
+                >
+                  {p.displayName}
+                </div>
+                <div
+                  className="mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+                  style={{
+                    background: `${sideColor}18`,
+                    color: sideColor,
+                    border: `1px solid ${sideColor}45`,
+                  }}
+                >
+                  {p.market} {p.side} {p.leverage}x
+                </div>
               </div>
               <div
-                className="mt-0.5 text-[10px] font-black uppercase"
+                className="shrink-0 text-right text-[10px] font-black uppercase"
                 style={{ color: DIM }}
               >
-                {item.eyebrow} | {p.source}
-              </div>
-            </div>
-            <div
-              className="shrink-0 text-right text-[10px] font-black uppercase"
-              style={{ color: DIM }}
-            >
-              <div>Holding</div>
-              <div style={{ color: FG }}>
-                {formatWhalePositionAge(p.openedAtMs, now)}
+                <div>Holding</div>
+                <div style={{ color: FG }}>
+                  {formatWhalePositionAge(p.openedAtMs, now)}
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
           <h2
-            className="mt-2 text-[18px] font-black uppercase leading-tight"
+            className="mt-4 text-[24px] font-black uppercase leading-[0.98] lg:text-[36px]"
             style={{ color: FG }}
           >
             <PulseHeadlineText headline={item.headline} />
           </h2>
 
           <p
-            className="mt-2 text-[13px] leading-snug"
+            className="mt-3 text-[13px] leading-snug lg:text-[15px]"
             style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
           >
             {item.context}
@@ -342,7 +345,7 @@ function PulsePost({
           ) : null}
 
           <div
-            className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
             style={{ fontFamily: FONT_BODY }}
           >
             <Metric label="Notional" value={fmtUsd(p.notionalUsd)} />
@@ -358,30 +361,11 @@ function PulsePost({
             />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
-              style={{
-                background: `${sideColor}18`,
-                color: sideColor,
-                border: `1px solid ${sideColor}45`,
-              }}
-            >
-              {p.market} {p.side} {p.leverage}x
-            </span>
-            <span
-              className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
-              style={{
-                background: p.stale ? `${RED}18` : `${GREEN}18`,
-                color: p.stale ? RED : GREEN,
-                border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
-              }}
-            >
-              {p.stale ? "Stale" : "Live"}
-            </span>
-          </div>
+          {recentReactors.length > 0 ? (
+            <RecentReactions reactors={recentReactors} />
+          ) : null}
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
               {PULSE_REACTIONS.map((reaction) => (
                 <ReactionButton
@@ -413,13 +397,8 @@ function PulsePost({
               {item.canTail ? "Tail" : "Watch only"}
             </button>
           </div>
-
-          {recentReactors.length > 0 ? (
-            <RecentReactions reactors={recentReactors} />
-          ) : null}
-        </div>
-      </article>
-    </li>
+      </div>
+    </article>
   );
 }
 
@@ -578,22 +557,6 @@ function Metric({
   );
 }
 
-function StatChip({ label, value }: { label: string; value: number }) {
-  return (
-    <div
-      className="rounded-lg px-3 py-2"
-      style={{ background: PANEL, border: `1px solid ${FAINT}` }}
-    >
-      <div className="text-[9px] font-black uppercase" style={{ color: DIM }}>
-        {label}
-      </div>
-      <div className="text-[18px] font-black tabular-nums" style={{ color: FG }}>
-        {value.toLocaleString("en-US")}
-      </div>
-    </div>
-  );
-}
-
 function EmptyPulse() {
   return (
     <div className="px-5 py-20 text-center">
@@ -607,19 +570,6 @@ function EmptyPulse() {
       </p>
     </div>
   );
-}
-
-function buildPulseStats(positions: WhalePositionSignal[]) {
-  const whales = new Set(positions.map((position) => position.payload.whaleId));
-  return {
-    whales: whales.size,
-    positions: positions.length,
-    copyable: positions.filter(
-      (position) =>
-        !position.payload.stale &&
-        position.payload.copyableOnPacifica !== false,
-    ).length,
-  };
 }
 
 function emptySocialCounts(): Record<PulseReaction, number> {
