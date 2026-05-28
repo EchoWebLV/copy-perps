@@ -149,8 +149,8 @@ export default function PortfolioPage() {
     setCopyRows((current) =>
       mergeCopyRowsForPortfolioRefresh(current, nextCopyRows),
     );
-    setPacificaAccount((current) => payload.pacificaAccount ?? current);
-    setCachedWalletBalance((current) => payload.walletBalance ?? current);
+    setPacificaAccount(payload.pacificaAccount ?? null);
+    setCachedWalletBalance(payload.walletBalance ?? null);
     setPortfolioSummary(data.summary ?? null);
     setSnapshotMeta(data.snapshot ?? null);
   }, []);

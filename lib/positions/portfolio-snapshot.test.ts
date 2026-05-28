@@ -164,8 +164,50 @@ describe("portfolio snapshot payload", () => {
           unrealizedPnlPct: 15,
         },
       ],
-      pacificaAccount: previous.pacificaAccount,
-      walletBalance: previous.walletBalance,
+      pacificaAccount: null,
+      walletBalance: null,
     });
+  });
+
+  it("does not carry stale exchange equity into a refreshed delayed snapshot", () => {
+    const previous: PortfolioSnapshotPayload = {
+      positions: [],
+      copyRows: [],
+      pacificaAccount: {
+        balanceUsd: 69,
+        equityUsd: 68.87,
+        availableToSpendUsd: 33.66,
+        availableToWithdrawUsd: 13.5,
+        totalMarginUsedUsd: 15.22,
+        pendingDepositUsd: 0,
+        pendingDeposits: [],
+        updatedAt: "2026-05-28T18:50:00.000Z",
+      },
+      walletBalance: {
+        stableUsd: 3.52,
+        sol: 0.1547,
+        updatedAt: "2026-05-28T18:50:00.000Z",
+      },
+    };
+    const next: PortfolioSnapshotPayload = {
+      positions: [],
+      copyRows: [],
+      pacificaAccount: null,
+      walletBalance: {
+        stableUsd: 3.52,
+        sol: 0.1547,
+        updatedAt: "2026-05-28T19:10:00.000Z",
+      },
+    };
+
+    const merged = mergePortfolioSnapshotPayload(previous, next, {
+      preserveMissingOpenRows: true,
+    });
+    const summary = buildPortfolioSummary(merged);
+
+    expect(merged.pacificaAccount).toBeNull();
+    expect(summary.pacificaEquityUsd).toBeNull();
+    expect(summary.netWorthUsd).toBeCloseTo(3.52);
+    expect(summary.netWorthUsd).not.toBeCloseTo(72.39);
   });
 });

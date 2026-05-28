@@ -53,11 +53,12 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("GAS {walletSol.toFixed(4)} SOL");
   });
 
-  it("keeps the last trading account balance when a refresh misses Pacifica", () => {
+  it("clears stale trading account balances when a refresh misses Pacifica", () => {
     const page = source();
 
-    expect(page).toContain("setPacificaAccount((current)");
-    expect(page).toContain("payload.pacificaAccount ?? current");
+    expect(page).toContain("setPacificaAccount(payload.pacificaAccount ?? null)");
+    expect(page).toContain("setCachedWalletBalance(payload.walletBalance ?? null)");
+    expect(page).not.toContain("payload.pacificaAccount ?? current");
   });
 
   it("uses compact portfolio sizing instead of oversized summary cards", () => {

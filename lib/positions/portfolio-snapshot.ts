@@ -164,8 +164,8 @@ export function mergePortfolioSnapshotPayload(
   return {
     positions: next.positions,
     copyRows: mergedRows,
-    pacificaAccount: next.pacificaAccount ?? previous.pacificaAccount,
-    walletBalance: next.walletBalance ?? previous.walletBalance,
+    pacificaAccount: next.pacificaAccount,
+    walletBalance: next.walletBalance,
   };
 }
 
