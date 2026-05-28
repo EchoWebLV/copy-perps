@@ -419,7 +419,7 @@ function PulsePositionCard({
             <RecentReactions reactors={recentReactors} />
           ) : null}
 
-          <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-auto flex flex-col gap-4 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
               {PULSE_REACTIONS.map((reaction) => (
                 <ReactionButton

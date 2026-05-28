@@ -91,6 +91,17 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain('className="shrink-0"');
   });
 
+  it("keeps extra space between reactions and the Tail button", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain(
+      "mt-auto flex flex-col gap-4 pt-4 sm:flex-row",
+    );
+  });
+
   it("hides comments for now and keeps reaction icons visible on all viewports", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
