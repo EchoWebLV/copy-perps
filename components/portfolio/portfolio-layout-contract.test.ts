@@ -23,14 +23,40 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("WithdrawButton");
   });
 
+  it("uses wallet, open, and closed as the primary portfolio tabs", () => {
+    const page = source();
+
+    expect(page).toContain('type PortfolioTab = "wallet" | "open" | "closed"');
+    expect(page).toContain('useState<PortfolioTab>("wallet")');
+    expect(page).toContain('["wallet", "Wallet"');
+    expect(page).toContain('["open", "Open"');
+    expect(page).toContain('["closed", "Closed"');
+  });
+
+  it("keeps wallet actions inside the wallet tab instead of above every position list", () => {
+    const page = source();
+
+    expect(page).toContain('activeTab === "wallet"');
+    expect(page).toContain("WalletTabPanel");
+    expect(page).toContain("OpenPositionsPanel");
+    expect(page).toContain("ClosedPositionsPanel");
+  });
+
   it("does not render wallet-only balances as total net worth while portfolio data is loading", () => {
     const page = source();
 
     expect(page).toContain("portfolioBalancesReady");
     expect(page).toContain("walletStableUsd");
     expect(page).toContain("formatMaybeUsd(totalNetWorth, portfolioBalancesReady)");
-    expect(page).toContain("WALLET {formatMaybeUsd(walletStableUsd, walletStableUsd !== null)}");
-    expect(page).toContain("TRADING {formatMaybeUsd(pacificaAvailableUsd, portfolioDataReady)}");
+    expect(page).toContain('label="Wallet cash"');
+    expect(page).toContain('label="Trading cash"');
     expect(page).toContain("GAS {walletSol.toFixed(4)} SOL");
+  });
+
+  it("keeps the last trading account balance when a refresh misses Pacifica", () => {
+    const page = source();
+
+    expect(page).toContain("setPacificaAccount((current)");
+    expect(page).toContain("nextPacificaAccount ?? current");
   });
 });

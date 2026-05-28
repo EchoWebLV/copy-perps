@@ -36,13 +36,43 @@ export interface PortfolioPosition {
 }
 
 const fmtUsd = (n: number | null | undefined) =>
-  n == null ? "—" : `$${n >= 1000 ? n.toFixed(0) : n.toFixed(2)}`;
+  n == null
+    ? "—"
+    : `${n < 0 ? "-" : ""}$${Math.abs(n) >= 1000 ? Math.abs(n).toFixed(0) : Math.abs(n).toFixed(2)}`;
 
 const fmtPct = (n: number | null | undefined) => {
   if (n == null) return "—";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(1)}%`;
 };
+
+function LegacyPositionMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "up" | "down";
+}) {
+  const valueClass =
+    tone === "up"
+      ? "text-[#22c55e]"
+      : tone === "down"
+        ? "text-[#ef4444]"
+        : "text-white";
+
+  return (
+    <div className="min-w-0 rounded-2xl bg-black/20 p-3">
+      <div className="text-[9px] font-black uppercase tracking-widest text-white/40">
+        {label}
+      </div>
+      <div className={`mt-1 truncate font-mono text-[20px] font-black leading-none ${valueClass}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
 
 export function PositionRow({
   position,
@@ -116,6 +146,8 @@ export function PositionRow({
 
   const closeable = !isClosed && !isPending && !isFailed;
   const shareable = (isClosed || position.status === "confirmed") && !dim;
+  const pnlTone =
+    position.pnlUsdc == null ? undefined : position.pnlUsdc >= 0 ? "up" : "down";
   const apiBase:
     | "/api/bet/meme"
     | "/api/bet/prediction"
@@ -130,16 +162,16 @@ export function PositionRow({
 
   return (
     <div
-      className={`rounded-2xl border p-4 transition ${
+      className={`rounded-[22px] border p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)] transition ${
         dim
           ? "border-white/5 bg-white/[0.015] opacity-60"
-          : "border-white/5 bg-white/[0.03]"
+          : "border-white/10 bg-white/[0.055]"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div
-            className={`truncate text-base font-bold ${
+            className={`truncate text-[20px] font-black leading-tight ${
               dim ? "text-neutral-400" : ""
             }`}
             title={title}
@@ -164,10 +196,10 @@ export function PositionRow({
               </span>
             )}
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-neutral-500">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] font-semibold text-neutral-500">
             <span>Cost {fmtUsd(position.amountUsdc)}</span>
             <span>·</span>
-            <span>Now {fmtUsd(value)}</span>
+            <span>Current {fmtUsd(value)}</span>
             {position.openTxHash && (
               <a
                 href={`https://solscan.io/tx/${position.openTxHash}`}
@@ -185,7 +217,7 @@ export function PositionRow({
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <div className="flex flex-col items-end leading-tight">
             <div
-              className={`text-base font-bold ${
+              className={`text-[18px] font-black ${
                 dim ? "text-neutral-500" : pnlColor
               }`}
             >
@@ -216,6 +248,16 @@ export function PositionRow({
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+        <LegacyPositionMetric label="Current" value={fmtUsd(value)} />
+        <LegacyPositionMetric label="Cost" value={fmtUsd(position.amountUsdc)} />
+        <LegacyPositionMetric
+          label="P/L"
+          value={dim ? "—" : fmtUsd(position.pnlUsdc)}
+          tone={dim ? undefined : pnlTone}
+        />
       </div>
     </div>
   );

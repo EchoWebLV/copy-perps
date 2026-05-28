@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { formatCopySourceLabel } from "@/lib/positions/copy-row";
@@ -42,8 +42,8 @@ interface Props {
 
 function formatUsd(value: number | null, options: { signed?: boolean } = {}) {
   if (value === null || !Number.isFinite(value)) return "-";
-  const sign = options.signed && value > 0 ? "+" : "";
-  return `${sign}$${value.toLocaleString("en-US", {
+  const sign = value < 0 ? "-" : options.signed && value > 0 ? "+" : "";
+  return `${sign}$${Math.abs(value).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -85,7 +85,7 @@ function formatAge(iso: string | null) {
   return `${years}y ${months % 12}mo`;
 }
 
-function Metric({
+function PositionHeroMetric({
   label,
   value,
   detail,
@@ -104,20 +104,51 @@ function Metric({
         : "text-white";
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 rounded-2xl bg-black/20 p-3">
       <div className="text-[9px] font-black uppercase tracking-widest text-white/40">
         {label}
       </div>
       <div
-        className={`mt-0.5 truncate font-mono text-[12px] font-black ${valueClass}`}
+        className={`mt-1 truncate font-mono text-[22px] font-black leading-none ${valueClass}`}
       >
         {value}
       </div>
       {detail && (
-        <div className={`truncate font-mono text-[10px] font-black ${valueClass}`}>
+        <div className={`mt-1 truncate font-mono text-[12px] font-black ${valueClass}`}>
           {detail}
         </div>
       )}
+    </div>
+  );
+}
+
+function PositionDetailGrid({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+      {children}
+    </div>
+  );
+}
+
+function PositionDetailMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl bg-white/[0.035] p-3">
+      <div className="text-[9px] font-black uppercase tracking-widest text-white/40">
+        {label}
+      </div>
+      <div className="mt-1 truncate font-mono text-[14px] font-black text-white">
+        {value}
+      </div>
     </div>
   );
 }
@@ -194,7 +225,7 @@ export function CopyRow({ row, onClosed }: Props) {
   const leverageText = row.leverage === null ? "" : ` ${Math.round(row.leverage)}x`;
 
   return (
-    <div className="rounded-2xl bg-white/5 p-4">
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -203,12 +234,12 @@ export function CopyRow({ row, onClosed }: Props) {
             >
               {statusMeta.label}
             </span>
-            <div className="text-sm font-semibold">
+            <div className="text-[19px] font-black leading-tight text-white">
               {row.market} {row.side.toUpperCase()}
               {leverageText}
             </div>
           </div>
-          <div className="mt-1 text-xs text-white/60">
+          <div className="mt-2 max-w-[20rem] text-[13px] font-semibold leading-snug text-white/60">
             {subtitleParts.join(" · ")}
           </div>
         </div>
@@ -217,28 +248,39 @@ export function CopyRow({ row, onClosed }: Props) {
             type="button"
             disabled={busy}
             onClick={handleClose}
-            className="shrink-0 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold disabled:opacity-40"
+            className="shrink-0 rounded-2xl bg-white/10 px-5 py-3 text-[14px] font-black text-white transition active:scale-95 disabled:opacity-40"
           >
             {busy ? "..." : "Close"}
           </button>
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 border-t border-white/10 pt-3">
-        <Metric label="Now" value={formatPrice(row.markPrice)} />
-        <Metric label="Entry" value={formatPrice(row.entryPrice)} />
-        <Metric
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <PositionHeroMetric label="Now" value={formatPrice(row.markPrice)} />
+        <PositionHeroMetric
           label="P/L"
           value={formatUsd(row.pnlUsd, { signed: true })}
           detail={pnlPct ?? undefined}
           tone={pnlTone}
         />
-        <Metric label="Size" value={formatAmount(row.amountBase, row.market)} />
-        <Metric label="Notional" value={formatUsd(row.notionalUsd)} />
-        <Metric label="Liq" value={formatPrice(row.liquidationPrice)} />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/45">
+      <PositionDetailGrid>
+        <PositionDetailMetric label="Entry" value={formatPrice(row.entryPrice)} />
+        <PositionDetailMetric
+          label="Size"
+          value={formatAmount(row.amountBase, row.market)}
+        />
+        <PositionDetailMetric label="Notional" value={formatUsd(row.notionalUsd)} />
+        <PositionDetailMetric label="Liq" value={formatPrice(row.liquidationPrice)} />
+        <PositionDetailMetric label="Margin" value={formatUsd(row.marginUsd)} />
+        <PositionDetailMetric
+          label="Mode"
+          value={row.marginMode ? row.marginMode.toUpperCase() : "-"}
+        />
+      </PositionDetailGrid>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-widest text-white/45">
         {row.sourceKind !== "wallet" && (
           <span>
             {row.autoCloseOnSourceClose ? "AUTO-CLOSE ON" : "MANUAL CLOSE"}
