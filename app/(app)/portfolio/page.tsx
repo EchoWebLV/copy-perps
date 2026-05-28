@@ -41,6 +41,7 @@ import {
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
+import { mergeCopyRowsForPortfolioRefresh } from "@/lib/positions/portfolio-refresh";
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -107,7 +108,10 @@ export default function PortfolioPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         setPositions(data.positions);
-        setCopyRows((data.copyRows as CopyRowData[]) ?? []);
+        const nextCopyRows = (data.copyRows as CopyRowData[]) ?? [];
+        setCopyRows((current) =>
+          mergeCopyRowsForPortfolioRefresh(current, nextCopyRows),
+        );
         const nextPacificaAccount =
           (data.pacificaAccount as PacificaAccountData | null) ?? null;
         setPacificaAccount((current) => nextPacificaAccount ?? current);
