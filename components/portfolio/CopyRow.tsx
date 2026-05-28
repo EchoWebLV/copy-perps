@@ -2,11 +2,18 @@
 
 import { useCallback, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import { Connection } from "@solana/web3.js";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { sendDepositWithSponsorFallback } from "@/components/tail/deposit-signing";
 import { formatCopySourceLabel } from "@/lib/positions/copy-row";
+
+const RPC =
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
 export interface CopyRowData {
   betId: string | null;
+  venue?: "pacifica" | "flash";
   sourceKind?: "tail" | "wallet";
   market: string;
   side: "long" | "short";
@@ -79,6 +86,10 @@ function formatAge(iso: string | null) {
   return `${years}y ${months % 12}mo`;
 }
 
+function b64ToBytes(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
 function CompactPositionMetric({
   label,
   value,
@@ -119,8 +130,29 @@ function CompactPositionMetric({
 export function CopyRow({ row, onClosed }: Props) {
   const { getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  const signAndSendFlashClose = useCallback(
+    async (transactionB64: string) => {
+      if (!wallet) throw new Error("wallet not ready");
+      setStatus("Signing close...");
+      const { signature } = await sendDepositWithSponsorFallback({
+        transaction: b64ToBytes(transactionB64),
+        wallet,
+        signAndSendTransaction,
+        preferSponsored: false,
+      });
+      const bs58 = (await import("bs58")).default;
+      const signatureText =
+        typeof signature === "string" ? signature : bs58.encode(signature);
+      setStatus("Confirming close...");
+      const conn = new Connection(RPC, "confirmed");
+      await conn.confirmTransaction(signatureText, "confirmed");
+    },
+    [signAndSendTransaction, wallet],
+  );
 
   const handleClose = useCallback(async () => {
     if (busy) return;
@@ -131,8 +163,13 @@ export function CopyRow({ row, onClosed }: Props) {
       const token = await getAccessToken();
       if (!token) throw new Error("not authed");
       const isWalletPosition = row.sourceKind === "wallet";
+      const isFlashPosition = row.venue === "flash";
       const r = await fetch(
-        isWalletPosition ? "/api/trade/perp/close" : "/api/bet/copy/close",
+        isFlashPosition
+          ? "/api/flash/perp/close"
+          : isWalletPosition
+            ? "/api/trade/perp/close"
+            : "/api/bet/copy/close",
         {
           method: "POST",
           headers: {
@@ -150,12 +187,18 @@ export function CopyRow({ row, onClosed }: Props) {
           ),
         },
       );
+      const body = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.error ?? `HTTP ${r.status}`);
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
+      if (isFlashPosition) {
+        if (typeof body.transactionB64 !== "string") {
+          throw new Error("Flash close transaction missing");
+        }
+        await signAndSendFlashClose(body.transactionB64);
       }
       setStatus("Closed");
-      onClosed(row.betId ?? `${row.market}:${row.side}`);
+      onClosed(row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`);
     } catch (err) {
       setStatus(`Failed: ${String(err).slice(0, 80)}`);
     } finally {
@@ -170,6 +213,8 @@ export function CopyRow({ row, onClosed }: Props) {
     row.market,
     row.side,
     row.sourceKind,
+    row.venue,
+    signAndSendFlashClose,
     wallet?.address,
   ]);
 
@@ -196,7 +241,9 @@ export function CopyRow({ row, onClosed }: Props) {
           };
   const hasStake = row.stakeUsdc !== null;
   const sourceText =
-    row.sourceKind === "wallet"
+    row.venue === "flash"
+      ? "Flash"
+      : row.sourceKind === "wallet"
       ? "Wallet"
       : formatCopySourceLabel(row);
   const subtitleParts = [

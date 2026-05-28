@@ -712,7 +712,7 @@ function OpenPositionsPanel({
           <Stamp label="POSITIONS" value={`${copyRows.length}`} />
           {copyRows.map((row) => (
             <CopyRow
-              key={row.betId ?? `${row.market}:${row.side}`}
+              key={row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`}
               row={row}
               onClosed={() => void refreshPortfolio()}
             />

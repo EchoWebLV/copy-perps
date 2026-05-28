@@ -7,6 +7,7 @@ import { enrichBet } from "@/lib/positions/enrich";
 import { getAccountInfo, getPositions } from "@/lib/pacifica/client";
 import { findUncreditedPacificaDeposits } from "@/lib/pacifica/deposit-reconcile";
 import { getMark, getMarksSnapshot } from "@/lib/data/marks";
+import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/perps";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
@@ -29,6 +30,7 @@ type CopyRowMeta = {
 
 type CopyLiveStatus = "open" | "not_found" | "unknown";
 type CopySourceKind = "tail" | "wallet";
+type CopyVenue = "pacifica" | "flash";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,6 +74,52 @@ function sideFromPacifica(side: PacificaPosition["side"]): "long" | "short" {
 
 function positionKey(market: string, side: "long" | "short"): string {
   return `${market}:${side}`;
+}
+
+function flashRowFromPosition(
+  p: FlashPositionSummary,
+  pricedAt: string,
+) {
+  const stakeUsdc =
+    Number.isFinite(p.collateralUsd) && p.collateralUsd > 0
+      ? p.collateralUsd
+      : null;
+  const pnlUsd = Number.isFinite(p.pnlUsd) ? (p.pnlUsd ?? null) : null;
+  const unrealizedPnlPct =
+    stakeUsdc != null && pnlUsd != null ? (pnlUsd / stakeUsdc) * 100 : null;
+
+  return {
+    betId: null,
+    venue: "flash" satisfies CopyVenue,
+    sourceKind: "wallet" satisfies CopySourceKind,
+    market: p.symbol,
+    side: p.side,
+    leverage:
+      p.leverage != null && Number.isFinite(p.leverage) ? p.leverage : null,
+    stakeUsdc,
+    leaderAddress: null,
+    leaderUsername: null,
+    whaleId: null,
+    whaleName: null,
+    autoCloseOnSourceClose: false,
+    closeReason: null,
+    botId: null,
+    botName: null,
+    liveStatus: "open" satisfies CopyLiveStatus,
+    entryPrice: p.entryPriceUsd,
+    markPrice: p.markPriceUsd ?? null,
+    pricedAt: p.markPriceUsd == null ? null : pricedAt,
+    liquidationPrice: p.liquidationPriceUsd ?? null,
+    amountBase: null,
+    marginUsd: stakeUsdc,
+    marginMode: "isolated" as const,
+    notionalUsd: p.sizeUsd,
+    pnlUsd,
+    unrealizedPnlPct,
+    openedAt: new Date(p.openTime).toISOString(),
+    positionUpdatedAt: pricedAt,
+    leaderClosedAt: null,
+  };
 }
 
 async function markForSymbol(
@@ -133,6 +181,7 @@ export async function GET(request: Request) {
   // --- Pacifica copy bets ---
   const copyBets = userBets.filter((b) => b.type === "copy");
   let userPositions: PacificaPosition[] | null = null;
+  let flashPositions: FlashPositionSummary[] = [];
   let positionsUnavailable = false;
   let marks: Map<string, number> | null = null;
   let pacificaAccount: {
@@ -155,6 +204,11 @@ export async function GET(request: Request) {
     } catch (err) {
       positionsUnavailable = true;
       console.warn("[portfolio] pacifica positions fetch failed:", err);
+    }
+    try {
+      flashPositions = await getFlashPerpsService().positionsOf(user.solanaPubkey);
+    } catch (err) {
+      console.warn("[portfolio] flash positions fetch failed:", err);
     }
     try {
       marks = await getMarksSnapshot({ maxAgeMs: PORTFOLIO_MARK_CACHE_MS });
@@ -219,6 +273,7 @@ export async function GET(request: Request) {
 
           return {
             betId: b.id,
+            venue: "pacifica" satisfies CopyVenue,
             sourceKind: "tail" satisfies CopySourceKind,
             market: meta.leaderMarket,
             side: meta.leaderSide,
@@ -283,6 +338,7 @@ export async function GET(request: Request) {
 
         return {
           betId: null,
+          venue: "pacifica" satisfies CopyVenue,
           sourceKind: "wallet" satisfies CopySourceKind,
           market: p.symbol,
           side,
@@ -315,10 +371,11 @@ export async function GET(request: Request) {
         };
       }),
   );
+  const flashRows = flashPositions.map((p) => flashRowFromPosition(p, pricedAt));
 
   return NextResponse.json({
     positions,
-    copyRows: [...copyRows, ...walletRows],
+    copyRows: [...copyRows, ...walletRows, ...flashRows],
     pacificaAccount,
   });
 }
