@@ -464,6 +464,67 @@ describe("whale signals", () => {
     });
   });
 
+  it("uses live open P/L for Hyperliquid roster stats when portfolio history is unavailable", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        whales: [
+          whale({
+            id: "hl-whale",
+            source: "hyperliquid",
+            sourceAccount: "0x023a",
+            displayName: "HL 0x023a",
+            avatarUrl: null,
+            tags: ["hyperliquid"],
+          }),
+        ],
+        accounts: ["0x023a"],
+        positions: [
+          position({
+            id: "hl-pos-1",
+            whaleId: "hl-whale",
+            source: "hyperliquid",
+            sourceAccount: "0x023a",
+            market: "BTC",
+            side: "long",
+            leverage: 10,
+            notionalUsd: 100_000,
+            unrealizedPnlPct: 25,
+          }),
+          position({
+            id: "hl-pos-2",
+            whaleId: "hl-whale",
+            source: "hyperliquid",
+            sourceAccount: "0x023a",
+            market: "ETH",
+            side: "short",
+            leverage: 5,
+            notionalUsd: 50_000,
+            unrealizedPnlPct: -10,
+          }),
+        ],
+      }),
+    );
+    mocks.getPortfolio.mockRejectedValue(new Error("rate limited"));
+
+    const { buildWhaleTraderSignals } = await import("./whale-signals");
+
+    const signals = await buildWhaleTraderSignals();
+
+    expect(signals[0]).toMatchObject({
+      payload: {
+        whaleId: "hl-whale",
+        stats: {
+          statsSource: "live_positions",
+          pnlAllTimeUsdc: 1500,
+          pnl1dUsdc: 0,
+          pnl7dUsdc: 0,
+          pnl30dUsdc: 0,
+          pnlCurve: [],
+        },
+      },
+    });
+  });
+
   it("caches trader signals for roster API callers", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
     mocks.getLeaderboard.mockResolvedValue([

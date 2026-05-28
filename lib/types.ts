@@ -155,6 +155,7 @@ export interface WhaleTraderSignal extends BaseSignal {
       winRatePct1d: number | null;
       totalCloses1d: number;
       volume1dUsdc: number;
+      statsSource?: "portfolio" | "leaderboard" | "live_positions";
     };
     lastSeenAt: string | null;
     stale: boolean;

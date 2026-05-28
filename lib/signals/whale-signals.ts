@@ -239,21 +239,39 @@ function statsForHyperliquidPortfolio(
   portfolio: HLPortfolio | undefined,
   openPositions: WhalePositionSignal[],
 ) {
-  const day = portfolioWindow(portfolio ?? [], "day");
-  const week = portfolioWindow(portfolio ?? [], "week");
-  const month = portfolioWindow(portfolio ?? [], "month");
+  const windows = portfolio ?? [];
+  const day = portfolioWindow(windows, "day");
+  const week = portfolioWindow(windows, "week");
+  const month = portfolioWindow(windows, "month");
   const allTime =
-    portfolioWindow(portfolio ?? [], "allTime") ??
-    portfolioWindow(portfolio ?? [], "all");
+    portfolioWindow(windows, "allTime") ??
+    portfolioWindow(windows, "all");
+  const openInterestUsdc = openPositions.reduce(
+    (sum, position) => sum + position.payload.notionalUsd,
+    0,
+  );
+
+  if (windows.length === 0) {
+    return {
+      equityUsdc: 0,
+      openInterestUsdc,
+      pnl1dUsdc: 0,
+      pnl7dUsdc: 0,
+      pnl30dUsdc: 0,
+      pnlAllTimeUsdc: estimateLiveOpenPnlUsd(openPositions),
+      winRatePct1d: null,
+      totalCloses1d: 0,
+      volume1dUsdc: 0,
+      pnlCurve: [],
+      statsSource: "live_positions" as const,
+    };
+  }
 
   return {
     equityUsdc:
       lastHistoryNumber(allTime?.accountValueHistory) ||
       lastHistoryNumber(day?.accountValueHistory),
-    openInterestUsdc: openPositions.reduce(
-      (sum, position) => sum + position.payload.notionalUsd,
-      0,
-    ),
+    openInterestUsdc,
     pnl1dUsdc: lastHistoryNumber(day?.pnlHistory),
     pnl7dUsdc: lastHistoryNumber(week?.pnlHistory),
     pnl30dUsdc: lastHistoryNumber(month?.pnlHistory),
@@ -262,7 +280,20 @@ function statsForHyperliquidPortfolio(
     totalCloses1d: 0,
     volume1dUsdc: parseStat(day?.vlm),
     pnlCurve: curveFromPortfolioWindow(allTime),
+    statsSource: "portfolio" as const,
   };
+}
+
+function estimateLiveOpenPnlUsd(openPositions: WhalePositionSignal[]): number {
+  return openPositions.reduce((sum, position) => {
+    const pnlPct = position.payload.unrealizedPnlPct;
+    const leverage = position.payload.leverage;
+    if (pnlPct === null || !Number.isFinite(leverage) || leverage <= 0) {
+      return sum;
+    }
+    const marginUsd = position.payload.notionalUsd / leverage;
+    return sum + (marginUsd * pnlPct) / 100;
+  }, 0);
 }
 
 async function getAnalysisByPositionId(

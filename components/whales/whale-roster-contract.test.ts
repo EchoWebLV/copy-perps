@@ -57,4 +57,17 @@ describe("WhaleRoster feed layout", () => {
     expect(source).toContain("Held");
     expect(source).toContain("largest.openedAtMs");
   });
+
+  it("does not present unavailable Hyperliquid portfolio stats as real zeroes", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain('statsSource === "live_positions"');
+    expect(source).toContain('"Live P/L"');
+    expect(source).toContain("formatPeriodPnl");
+    expect(source).toContain('historyLabel={livePositionStatsOnly ? "P&L history" : "All time P&L"}');
+    expect(source).toContain("P&L HISTORY UNAVAILABLE");
+  });
 });

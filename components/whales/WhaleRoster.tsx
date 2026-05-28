@@ -112,6 +112,8 @@ function WhaleCard({
   const exposureSummary = buildWhaleExposureSummary(p.openPositions);
   const fresh = !p.stale;
   const canTail = exposureSummary.copyableCount > 0;
+  const livePositionStatsOnly = p.stats.statsSource === "live_positions";
+  const hasPortfolioStats = !livePositionStatsOnly;
   const totalPnl = p.stats.pnlAllTimeUsdc;
   const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
 
@@ -163,7 +165,7 @@ function WhaleCard({
       <div className="mt-4 flex items-end justify-between gap-3">
         <div>
           <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            Total P/L
+            {livePositionStatsOnly ? "Live P/L" : "Total P/L"}
           </div>
           <div className="mt-1 text-[34px] font-black tabular-nums leading-none" style={{ color: totalPnlColor }}>
             {formatSignedWhaleUsd(totalPnl)}
@@ -183,12 +185,21 @@ function WhaleCard({
         points={p.stats.pnlCurve}
         totalPnl={totalPnl}
         positive={totalPnl >= 0}
+        historyLabel={livePositionStatsOnly ? "P&L history" : "All time P&L"}
+        historyValue={
+          livePositionStatsOnly ? "N/A" : formatSignedWhaleUsd(totalPnl)
+        }
+        unavailableLabel={
+          livePositionStatsOnly
+            ? "P&L HISTORY UNAVAILABLE"
+            : "P&L HISTORY WARMING UP"
+        }
       />
 
       <div className="mt-3 grid grid-cols-3 overflow-hidden border-y" style={{ borderColor: FAINT }}>
-        <StatCell label="1D" value={formatSignedWhaleUsd(p.stats.pnl1dUsdc)} color={p.stats.pnl1dUsdc >= 0 ? GREEN : RED} />
-        <StatCell label="7D" value={formatSignedWhaleUsd(p.stats.pnl7dUsdc)} color={p.stats.pnl7dUsdc >= 0 ? GREEN : RED} />
-        <StatCell label="30D" value={formatSignedWhaleUsd(p.stats.pnl30dUsdc)} color={p.stats.pnl30dUsdc >= 0 ? GREEN : RED} />
+        <StatCell label="1D" value={formatPeriodPnl(p.stats.pnl1dUsdc, hasPortfolioStats)} color={periodPnlColor(p.stats.pnl1dUsdc, hasPortfolioStats)} />
+        <StatCell label="7D" value={formatPeriodPnl(p.stats.pnl7dUsdc, hasPortfolioStats)} color={periodPnlColor(p.stats.pnl7dUsdc, hasPortfolioStats)} />
+        <StatCell label="30D" value={formatPeriodPnl(p.stats.pnl30dUsdc, hasPortfolioStats)} color={periodPnlColor(p.stats.pnl30dUsdc, hasPortfolioStats)} />
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black uppercase tracking-widest">
@@ -244,10 +255,16 @@ function WhalePnlGraph({
   points,
   totalPnl,
   positive,
+  historyLabel,
+  historyValue,
+  unavailableLabel,
 }: {
   points: WhaleTraderSignal["payload"]["stats"]["pnlCurve"];
   totalPnl: number;
   positive: boolean;
+  historyLabel: string;
+  historyValue: string;
+  unavailableLabel: string;
 }) {
   const width = 320;
   const height = 86;
@@ -264,8 +281,8 @@ function WhalePnlGraph({
   return (
     <div className="mt-3 overflow-hidden rounded-xl px-3 py-2.5" style={{ background: BG, border: `1px solid ${FAINT}` }}>
       <div className="mb-1.5 flex items-center justify-between text-[9px] font-black uppercase tracking-widest">
-        <span style={{ color: DIM }}>All time P&L</span>
-        <span style={{ color }}>{formatSignedWhaleUsd(totalPnl)}</span>
+        <span style={{ color: DIM }}>{historyLabel}</span>
+        <span style={{ color }}>{historyValue}</span>
       </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -313,7 +330,7 @@ function WhalePnlGraph({
             fontSize="22"
             fontWeight="900"
           >
-            P&L HISTORY WARMING UP
+            {unavailableLabel}
           </text>
         )}
       </svg>
@@ -519,4 +536,13 @@ function fmtUsd(v: number): string {
 function fmtPct(v: number | null): string {
   if (v === null) return "P/L N/A";
   return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
+function formatPeriodPnl(value: number, hasPortfolioStats: boolean): string {
+  return hasPortfolioStats ? formatSignedWhaleUsd(value) : "N/A";
+}
+
+function periodPnlColor(value: number, hasPortfolioStats: boolean): string {
+  if (!hasPortfolioStats) return DIM;
+  return value >= 0 ? GREEN : RED;
 }
