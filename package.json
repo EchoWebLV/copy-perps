@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:push": "drizzle-kit push",
+    "db:apply:portfolio-snapshots": "tsx scripts/apply-portfolio-snapshots.ts",
     "db:studio": "drizzle-kit studio",
     "seed:bots": "tsx --env-file=.env.local scripts/seed-bots.ts"
   },

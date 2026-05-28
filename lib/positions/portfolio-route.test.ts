@@ -36,6 +36,10 @@ const mocks = vi.hoisted(() => {
     getBot: vi.fn(),
     getFlashPerpsService: vi.fn(),
     flashPositionsOf: vi.fn(),
+    savePortfolioSnapshotForUser: vi.fn(),
+    getUsdcBalance: vi.fn(),
+    getJupUsdBalance: vi.fn(),
+    getSolBalance: vi.fn(),
   };
 });
 
@@ -69,6 +73,14 @@ vi.mock("@/lib/bots", () => ({
 }));
 vi.mock("@/lib/flash/perps", () => ({
   getFlashPerpsService: mocks.getFlashPerpsService,
+}));
+vi.mock("@/lib/positions/portfolio-snapshot-store", () => ({
+  savePortfolioSnapshotForUser: mocks.savePortfolioSnapshotForUser,
+}));
+vi.mock("@/lib/solana/balance", () => ({
+  getUsdcBalance: mocks.getUsdcBalance,
+  getJupUsdBalance: mocks.getJupUsdBalance,
+  getSolBalance: mocks.getSolBalance,
 }));
 
 import { GET } from "../../app/api/portfolio/route";
@@ -113,6 +125,21 @@ describe("GET /api/portfolio", () => {
       positionsOf: mocks.flashPositionsOf,
     });
     mocks.flashPositionsOf.mockResolvedValue([]);
+    mocks.getUsdcBalance.mockResolvedValue(0);
+    mocks.getJupUsdBalance.mockResolvedValue(0);
+    mocks.getSolBalance.mockResolvedValue(0);
+    mocks.savePortfolioSnapshotForUser.mockImplementation(
+      async ({ payload, status, staleReason }) => ({
+        payload,
+        summary: null,
+        snapshot: {
+          source: "live",
+          status,
+          updatedAt: "2026-05-25T17:40:00.000Z",
+          staleReason,
+        },
+      }),
+    );
   });
 
   it("skips malformed confirmed copy metadata without emitting invalid copy rows", async () => {

@@ -90,6 +90,19 @@ export const agentWallets = pgTable("agent_wallets", {
   boundAt: timestamp("bound_at", { withTimezone: true }),
 });
 
+export const portfolioSnapshots = pgTable("portfolio_snapshots", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  payload: jsonb("payload").notNull(),
+  summary: jsonb("summary").notNull(),
+  status: text("status").notNull().default("empty"),
+  staleReason: text("stale_reason"),
+  refreshedAt: timestamp("refreshed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const bots = pgTable("bots", {
   id: text("id").primaryKey(), // e.g. "liquidation-lizard"
   parentId: text("parent_id"), // null for headliners; parent slug for variants

@@ -57,7 +57,7 @@ describe("Portfolio layout contract", () => {
     const page = source();
 
     expect(page).toContain("setPacificaAccount((current)");
-    expect(page).toContain("nextPacificaAccount ?? current");
+    expect(page).toContain("payload.pacificaAccount ?? current");
   });
 
   it("uses compact portfolio sizing instead of oversized summary cards", () => {
@@ -70,9 +70,12 @@ describe("Portfolio layout contract", () => {
     expect(page).not.toContain("text-[30px]");
   });
 
-  it("refreshes open-position pricing quickly while the tab is visible", () => {
+  it("uses cached snapshots and slower background refreshes instead of hammering live portfolio", () => {
     const page = source();
 
-    expect(page).toContain("const POLL_MS = 3000");
+    expect(page).toContain('fetch("/api/portfolio/snapshot"');
+    expect(page).toContain('fetch("/api/portfolio/refresh"');
+    expect(page).toContain("const REFRESH_MS = 30_000");
+    expect(page).not.toContain("const POLL_MS = 3000");
   });
 });

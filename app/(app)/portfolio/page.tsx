@@ -73,6 +73,52 @@ interface PacificaAccountData {
   updatedAt: string | null;
 }
 
+interface PortfolioWalletBalanceData {
+  stableUsd: number | null;
+  sol: number | null;
+  updatedAt: string | null;
+}
+
+interface PortfolioSummaryData {
+  walletStableUsd: number | null;
+  walletSol: number | null;
+  pacificaEquityUsd: number | null;
+  pacificaAvailableUsd: number | null;
+  availableCashUsd: number | null;
+  processingFundsUsd: number;
+  legacyPositionsValueUsd: number;
+  copyRowsValueUsd: number;
+  positionsValueUsd: number;
+  positionsCostUsd: number;
+  positionsPnlUsd: number;
+  positionsPnlPct: number;
+  openCount: number;
+  closedCount: number;
+  netWorthUsd: number | null;
+}
+
+interface PortfolioSnapshotMetaData {
+  source: "cache" | "fallback" | "live";
+  status: "empty" | "live" | "stale" | "delayed";
+  updatedAt: string | null;
+  staleReason: string | null;
+}
+
+interface PortfolioResponseData {
+  payload?: {
+    positions?: PortfolioPosition[];
+    copyRows?: CopyRowData[];
+    pacificaAccount?: PacificaAccountData | null;
+    walletBalance?: PortfolioWalletBalanceData | null;
+  };
+  positions?: PortfolioPosition[];
+  copyRows?: CopyRowData[];
+  pacificaAccount?: PacificaAccountData | null;
+  walletBalance?: PortfolioWalletBalanceData | null;
+  summary?: PortfolioSummaryData;
+  snapshot?: PortfolioSnapshotMetaData;
+}
+
 type PortfolioTab = "wallet" | "open" | "closed";
 
 export default function PortfolioPage() {
@@ -84,16 +130,32 @@ export default function PortfolioPage() {
   const [copyRows, setCopyRows] = useState<CopyRowData[]>([]);
   const [pacificaAccount, setPacificaAccount] =
     useState<PacificaAccountData | null>(null);
+  const [cachedWalletBalance, setCachedWalletBalance] =
+    useState<PortfolioWalletBalanceData | null>(null);
+  const [portfolioSummary, setPortfolioSummary] =
+    useState<PortfolioSummaryData | null>(null);
+  const [snapshotMeta, setSnapshotMeta] =
+    useState<PortfolioSnapshotMetaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<PortfolioTab>("wallet");
   const isXl = useMediaQuery("(min-width: 1280px)");
 
-  // `silent` = true skips the spinner + error UI flash; used by the
-  // background polling loop so live updates don't feel like a manual
-  // reload every 5 seconds. Manual refresh button still shows the spinner.
-  const load = useCallback(
+  const applyPortfolioResponse = useCallback((data: PortfolioResponseData) => {
+    const payload = data.payload ?? data;
+    setPositions(payload.positions ?? []);
+    const nextCopyRows = payload.copyRows ?? [];
+    setCopyRows((current) =>
+      mergeCopyRowsForPortfolioRefresh(current, nextCopyRows),
+    );
+    setPacificaAccount((current) => payload.pacificaAccount ?? current);
+    setCachedWalletBalance((current) => payload.walletBalance ?? current);
+    setPortfolioSummary(data.summary ?? null);
+    setSnapshotMeta(data.snapshot ?? null);
+  }, []);
+
+  const loadSnapshot = useCallback(
     async (silent = false) => {
       if (!authenticated) return;
       if (!silent) setLoading(true);
@@ -101,20 +163,38 @@ export default function PortfolioPage() {
       try {
         const token = await getAccessToken();
         if (!token) throw new Error("Not signed in");
-        const r = await fetch("/api/portfolio", {
+        const r = await fetch("/api/portfolio/snapshot", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = await r.json();
-        setPositions(data.positions);
-        const nextCopyRows = (data.copyRows as CopyRowData[]) ?? [];
-        setCopyRows((current) =>
-          mergeCopyRowsForPortfolioRefresh(current, nextCopyRows),
-        );
-        const nextPacificaAccount =
-          (data.pacificaAccount as PacificaAccountData | null) ?? null;
-        setPacificaAccount((current) => nextPacificaAccount ?? current);
+        applyPortfolioResponse((await r.json()) as PortfolioResponseData);
+      } catch (e) {
+        if (!silent) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [applyPortfolioResponse, authenticated, getAccessToken],
+  );
+
+  const refreshPortfolio = useCallback(
+    async (silent = false) => {
+      if (!authenticated) return;
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
+      try {
+        const token = await getAccessToken();
+        if (!token) throw new Error("Not signed in");
+        const r = await fetch("/api/portfolio/refresh", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        applyPortfolioResponse((await r.json()) as PortfolioResponseData);
         void refreshBalance();
       } catch (e) {
         if (!silent) {
@@ -124,28 +204,25 @@ export default function PortfolioPage() {
         if (!silent) setLoading(false);
       }
     },
-    [authenticated, getAccessToken, refreshBalance],
+    [applyPortfolioResponse, authenticated, getAccessToken, refreshBalance],
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadSnapshot();
+    void refreshPortfolio(true);
+  }, [loadSnapshot, refreshPortfolio]);
 
-  // Live PnL: re-fetch every 3s while the tab is visible and the user is
-  // signed in. Skips while `document.hidden` so we don't burn price
-  // and account API calls when nobody's looking. Manual
-  // refresh button still works the same way.
   useEffect(() => {
     if (!authenticated) return;
-    const POLL_MS = 3000;
+    const REFRESH_MS = 30_000;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {
       if (timer) return;
       timer = setInterval(() => {
         if (typeof document !== "undefined" && document.hidden) return;
-        void load(true);
-      }, POLL_MS);
+        void refreshPortfolio(true);
+      }, REFRESH_MS);
     };
     const stop = () => {
       if (timer) {
@@ -158,8 +235,8 @@ export default function PortfolioPage() {
       if (document.hidden) {
         stop();
       } else {
-        // Catch up immediately on tab refocus; then resume polling.
-        void load(true);
+        void loadSnapshot(true);
+        void refreshPortfolio(true);
         start();
       }
     };
@@ -173,7 +250,7 @@ export default function PortfolioPage() {
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [authenticated, load]);
+  }, [authenticated, loadSnapshot, refreshPortfolio]);
 
   // Open copy trades render through the live copy card; closed copy trades
   // still belong in the closed ledger.
@@ -201,24 +278,49 @@ export default function PortfolioPage() {
   const positionsValue = legacyPositionsValue + copyRowsValue;
   const positionsPnl = positionsValue - totalCost;
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
-  const pacificaEquityUsd = pacificaAccount?.equityUsd ?? null;
-  const pacificaAvailableUsd = pacificaAccount?.availableToSpendUsd ?? null;
+  const effectiveWalletStableUsd =
+    walletStableUsd ??
+    cachedWalletBalance?.stableUsd ??
+    portfolioSummary?.walletStableUsd ??
+    null;
+  const effectiveWalletSol =
+    walletSol ?? cachedWalletBalance?.sol ?? portfolioSummary?.walletSol ?? null;
+  const pacificaEquityUsd =
+    pacificaAccount?.equityUsd ?? portfolioSummary?.pacificaEquityUsd ?? null;
+  const pacificaAvailableUsd =
+    pacificaAccount?.availableToSpendUsd ??
+    portfolioSummary?.pacificaAvailableUsd ??
+    null;
   const portfolioDataReady = positions !== null;
-  const portfolioBalancesReady = portfolioDataReady && walletStableUsd !== null;
+  const portfolioBalancesReady =
+    portfolioDataReady &&
+    (portfolioSummary?.netWorthUsd != null || effectiveWalletStableUsd !== null);
   const processingFundsUsd = Math.max(
     0,
-    pacificaAccount?.pendingDepositUsd ?? 0,
+    pacificaAccount?.pendingDepositUsd ??
+      portfolioSummary?.processingFundsUsd ??
+      0,
   );
   const pacificaPortfolioValue = pacificaEquityUsd ?? copyRowsValue;
   const availableCashUsd =
-    walletStableUsd == null && pacificaAvailableUsd == null
+    portfolioSummary?.availableCashUsd ??
+    (effectiveWalletStableUsd == null && pacificaAvailableUsd == null
       ? null
-      : (walletStableUsd ?? 0) + (pacificaAvailableUsd ?? 0);
+      : (effectiveWalletStableUsd ?? 0) + (pacificaAvailableUsd ?? 0));
   const totalNetWorth =
-    (walletStableUsd ?? 0) +
-    pacificaPortfolioValue +
-    legacyPositionsValue +
-    processingFundsUsd;
+    portfolioSummary?.netWorthUsd ??
+    (portfolioBalancesReady
+      ? (effectiveWalletStableUsd ?? 0) +
+        pacificaPortfolioValue +
+        legacyPositionsValue +
+        processingFundsUsd
+      : null);
+  const freshnessLabel =
+    snapshotMeta?.status === "delayed"
+      ? "NET WORTH · DELAYED"
+      : snapshotMeta?.source === "cache"
+        ? "NET WORTH · LAST GOOD"
+        : "NET WORTH · LIVE";
 
   // Realized PnL summary for the Closed tab. Only positions with known
   // proceeds count — a closed position whose proceeds haven't been
@@ -286,8 +388,11 @@ export default function PortfolioPage() {
       >
         <Stamp label="Actions" />
         <div className="mt-3 flex flex-col items-stretch gap-2 [&>button]:w-full">
-          <PacificaWithdrawButton onComplete={load} />
-          <WithdrawButton maxUsd={walletStableUsd ?? 0} onComplete={load} />
+          <PacificaWithdrawButton onComplete={refreshPortfolio} />
+          <WithdrawButton
+            maxUsd={effectiveWalletStableUsd ?? 0}
+            onComplete={refreshPortfolio}
+          />
         </div>
       </div>
     </div>
@@ -331,15 +436,23 @@ export default function PortfolioPage() {
             <div className="flex-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <Stamp label="NET WORTH · LIVE" />
+                  <Stamp label={freshnessLabel} />
                   <div className="mt-1">
                     <BigNum size={30}>
                       {formatMaybeUsd(totalNetWorth, portfolioBalancesReady)}
                     </BigNum>
                   </div>
+                  {snapshotMeta?.updatedAt && (
+                    <div
+                      className="mt-1 text-[9px] font-black uppercase tracking-widest"
+                      style={{ color: DIM }}
+                    >
+                      Updated {formatSnapshotAge(snapshotMeta.updatedAt)} ago
+                    </div>
+                  )}
                 </div>
                 <button
-                  onClick={() => void load()}
+                  onClick={() => void refreshPortfolio()}
                   disabled={loading}
                   className="rounded-xl p-3 transition active:scale-95 disabled:opacity-50"
                   style={{
@@ -434,8 +547,8 @@ export default function PortfolioPage() {
                 {activeTab === "wallet" && (
                   <WalletTabPanel
                     walletAddress={wallet?.address ?? null}
-                    walletStableUsd={walletStableUsd}
-                    walletSol={walletSol}
+                    walletStableUsd={effectiveWalletStableUsd}
+                    walletSol={effectiveWalletSol}
                     pacificaAvailableUsd={pacificaAvailableUsd}
                     availableCashUsd={availableCashUsd}
                     totalNetWorth={totalNetWorth}
@@ -444,7 +557,7 @@ export default function PortfolioPage() {
                     processingFundsUsd={processingFundsUsd}
                     copied={copied}
                     copyWalletAddress={copyWalletAddress}
-                    refreshPortfolio={load}
+                    refreshPortfolio={refreshPortfolio}
                   />
                 )}
                 {activeTab === "open" && (
@@ -457,7 +570,7 @@ export default function PortfolioPage() {
                     positionsPnl={positionsPnl}
                     positionsPnlPct={positionsPnlPct}
                     totalCost={totalCost}
-                    refreshPortfolio={load}
+                    refreshPortfolio={refreshPortfolio}
                   />
                 )}
                 {activeTab === "closed" && (
@@ -467,7 +580,7 @@ export default function PortfolioPage() {
                     closedCost={closedCost}
                     realizedPnl={realizedPnl}
                     realizedPnlPct={realizedPnlPct}
-                    refreshPortfolio={load}
+                    refreshPortfolio={refreshPortfolio}
                   />
                 )}
                 <button
@@ -496,6 +609,16 @@ function formatMaybeUsd(value: number | null, ready: boolean): string {
 function formatSignedUsd(value: number): string {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}$${Math.abs(value).toFixed(2)}`;
+}
+
+function formatSnapshotAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 60_000) return "<1 min";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 function PortfolioSummaryCard({
@@ -556,7 +679,7 @@ function WalletTabPanel({
   walletSol: number | null;
   pacificaAvailableUsd: number | null;
   availableCashUsd: number | null;
-  totalNetWorth: number;
+  totalNetWorth: number | null;
   portfolioBalancesReady: boolean;
   portfolioDataReady: boolean;
   processingFundsUsd: number;

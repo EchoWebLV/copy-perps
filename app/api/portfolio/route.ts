@@ -11,6 +11,17 @@ import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/per
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
+import {
+  buildPortfolioSummary,
+  type PortfolioSnapshotPayload,
+  type PortfolioWalletBalance,
+} from "@/lib/positions/portfolio-snapshot";
+import { savePortfolioSnapshotForUser } from "@/lib/positions/portfolio-snapshot-store";
+import {
+  getJupUsdBalance,
+  getSolBalance,
+  getUsdcBalance,
+} from "@/lib/solana/balance";
 
 const STALE_PENDING_MS = 5 * 60 * 1000;
 const PORTFOLIO_MARK_CACHE_MS = 3_000;
@@ -79,7 +90,7 @@ function positionKey(market: string, side: "long" | "short"): string {
 function flashRowFromPosition(
   p: FlashPositionSummary,
   pricedAt: string,
-) {
+): PortfolioSnapshotPayload["copyRows"][number] {
   const stakeUsdc =
     Number.isFinite(p.collateralUsd) && p.collateralUsd > 0
       ? p.collateralUsd
@@ -183,7 +194,9 @@ export async function GET(request: Request) {
   let userPositions: PacificaPosition[] | null = null;
   let flashPositions: FlashPositionSummary[] = [];
   let positionsUnavailable = false;
+  const liveErrors: string[] = [];
   let marks: Map<string, number> | null = null;
+  let walletBalance: PortfolioWalletBalance | null = null;
   let pacificaAccount: {
     balanceUsd: number | null;
     equityUsd: number | null;
@@ -203,16 +216,19 @@ export async function GET(request: Request) {
       userPositions = await getPositions(user.solanaPubkey);
     } catch (err) {
       positionsUnavailable = true;
+      liveErrors.push("Pacifica positions delayed");
       console.warn("[portfolio] pacifica positions fetch failed:", err);
     }
     try {
       flashPositions = await getFlashPerpsService().positionsOf(user.solanaPubkey);
     } catch (err) {
+      liveErrors.push("Flash positions delayed");
       console.warn("[portfolio] flash positions fetch failed:", err);
     }
     try {
       marks = await getMarksSnapshot({ maxAgeMs: PORTFOLIO_MARK_CACHE_MS });
     } catch (err) {
+      liveErrors.push("Marks delayed");
       console.warn("[portfolio] marks snapshot failed:", err);
     }
     try {
@@ -234,7 +250,23 @@ export async function GET(request: Request) {
         updatedAt: isoFromMillis(account.updated_at),
       };
     } catch (err) {
+      liveErrors.push("Pacifica account delayed");
       console.warn("[portfolio] pacifica account fetch failed:", err);
+    }
+    try {
+      const [usdc, jupUsd, sol] = await Promise.all([
+        getUsdcBalance(user.solanaPubkey),
+        getJupUsdBalance(user.solanaPubkey),
+        getSolBalance(user.solanaPubkey),
+      ]);
+      walletBalance = {
+        stableUsd: usdc + jupUsd,
+        sol,
+        updatedAt: pricedAt,
+      };
+    } catch (err) {
+      liveErrors.push("Wallet balance delayed");
+      console.warn("[portfolio] wallet balance fetch failed:", err);
     }
   }
   const copyRows = (
@@ -372,10 +404,45 @@ export async function GET(request: Request) {
       }),
   );
   const flashRows = flashPositions.map((p) => flashRowFromPosition(p, pricedAt));
+  const liveCopyRows = [
+    ...copyRows,
+    ...walletRows,
+    ...flashRows,
+  ] as PortfolioSnapshotPayload["copyRows"];
+  const payload: PortfolioSnapshotPayload = {
+    positions,
+    copyRows: liveCopyRows,
+    pacificaAccount,
+    walletBalance,
+  };
+  const status = liveErrors.length > 0 ? "delayed" : "live";
+  const staleReason = liveErrors.length > 0 ? liveErrors.join(", ") : null;
+  const summary = buildPortfolioSummary(payload);
+
+  const saved = await savePortfolioSnapshotForUser({
+    userId: user.id,
+    payload,
+    status,
+    staleReason,
+  }).catch((err) => {
+    console.warn("[portfolio] snapshot save failed:", err);
+    return null;
+  });
+
+  const result =
+    saved ?? {
+      payload,
+      summary,
+      snapshot: {
+        source: "live",
+        status,
+        updatedAt: pricedAt,
+        staleReason,
+      },
+    };
 
   return NextResponse.json({
-    positions,
-    copyRows: [...copyRows, ...walletRows, ...flashRows],
-    pacificaAccount,
+    ...result.payload,
+    ...result,
   });
 }

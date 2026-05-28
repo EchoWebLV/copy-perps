@@ -232,7 +232,7 @@ export function CopyRow({ row, onClosed }: Props) {
         }
       : row.liveStatus === "unknown"
         ? {
-            label: "SYNCING",
+            label: row.markPrice == null ? "CHECKING" : "DATA DELAYED",
             className: "border-amber-300/30 bg-amber-300/10 text-amber-200",
           }
         : {
