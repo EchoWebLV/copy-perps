@@ -11,4 +11,15 @@ describe("app welcome overlay contract", () => {
 
     expect(source).not.toContain("WelcomeIntro");
   });
+
+  it("mounts one Flash live price provider for app screens", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/(app)/layout.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("FlashLivePriceProvider");
+    expect(source).toContain("<FlashLivePriceProvider>");
+    expect(source).toContain("</FlashLivePriceProvider>");
+  });
 });

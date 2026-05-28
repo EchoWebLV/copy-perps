@@ -76,6 +76,21 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("MAX_GRAPH_POINTS");
   });
 
+  it("drives Scalp PnL and graph from live Flash marks while reconciling exact positions slowly", () => {
+    const page = source();
+
+    expect(page).toContain("useFlashLiveMarks");
+    expect(page).toContain("computeFlashLivePositionView");
+    expect(page).toContain("FLASH_POSITION_RECONCILE_MS = 10_000");
+    expect(page).toContain("positionViewsByKey");
+    expect(page).toContain("selectedPositionView");
+    expect(page).toContain("selectedPositionView.valueUsd");
+    expect(page).toContain("selectedPositionView.pnlUsd");
+    expect(page).toContain("selectedPositionView.exitValueUsd");
+    expect(page).toContain("}, FLASH_POSITION_RECONCILE_MS)");
+    expect(page).not.toContain("}, 2500)");
+  });
+
   it("keeps the mobile trade controls compact without an empty graph placeholder", () => {
     const page = source();
 
@@ -94,7 +109,8 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain('label="Stake"');
     expect(page).toContain('label={selectedPosition ? "P/L" : "Notional"}');
     expect(page).toContain("stake {fmtUsd(stakeForPosition(position))}");
-    expect(page).toContain("const exitValue = exitValueForPosition(position)");
+    expect(page).toContain("const exitValue = view?.exitValueUsd ?? 0");
+    expect(page).toContain("selectedPositionView.exitValueUsd");
     expect(page).toContain("exit {fmtUsd(exitValue)}");
     expect(page).toContain("Exit {fmtUsd(exitValue)}");
     expect(page).not.toContain('label={selectedPosition ? "Collateral" : "Stake"}');

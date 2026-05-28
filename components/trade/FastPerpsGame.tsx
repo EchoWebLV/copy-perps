@@ -11,6 +11,11 @@ import {
   flashMarketConfigForSymbol,
   type FlashMarketSymbol,
 } from "@/lib/flash/markets";
+import {
+  computeFlashLivePositionView,
+  type FlashLivePositionView,
+} from "@/lib/flash/live-pnl";
+import { useFlashLiveMarks } from "@/lib/flash/live-prices-context";
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
@@ -53,10 +58,12 @@ const STANDARD_LEVERAGES = [20, 50, 100] as const;
 const DEGEN_LEVERAGES = [125, 250, 500] as const;
 const FLASH_MIN_NOTIONAL_USD = 10;
 const FLASH_MIN_NOTIONAL_TEXT = "Flash minimum position is $10 notional";
+const FLASH_POSITION_RECONCILE_MS = 10_000;
 const MAX_GRAPH_POINTS = 120;
 const GRAPH_SAMPLE_MS = 80;
 
 type Market = FlashMarketSymbol;
+type FlashScalpMarket = (typeof FLASH_SCALP_MARKETS)[number];
 type TradeSide = "long" | "short";
 type TradeMode = "standard" | "degen";
 
@@ -174,38 +181,8 @@ function stakeForPosition(position: FlashPosition | null): number {
   return flashStakeUsdFromPosition(position) ?? 0;
 }
 
-function markValueForPosition(position: FlashPosition | null): number {
-  if (!position) return 0;
-  return Math.max(0, stakeForPosition(position) + pnlForPosition(position));
-}
-
-function exitValueForPosition(position: FlashPosition | null): number {
-  if (!position) return 0;
-  if (position.receiveUsd != null && Number.isFinite(position.receiveUsd)) {
-    return Math.max(0, position.receiveUsd);
-  }
-  return markValueForPosition(position);
-}
-
-function pnlForPosition(position: FlashPosition | null): number {
-  if (!position) return 0;
-  if (position.pnlUsd != null && Number.isFinite(position.pnlUsd)) {
-    return position.pnlUsd;
-  }
-  return 0;
-}
-
-function roiForPosition(position: FlashPosition | null): number {
-  const stakeUsd = stakeForPosition(position);
-  if (!position || stakeUsd <= 0) return 0;
-  return (pnlForPosition(position) / stakeUsd) * 100;
-}
-
-function liquidationMoveForPosition(position: FlashPosition | null): number | null {
-  const mark = position?.markPriceUsd ?? position?.entryPriceUsd;
-  const liquidation = position?.liquidationPriceUsd;
-  if (!position || mark == null || mark <= 0 || liquidation == null) return null;
-  return ((liquidation - mark) / mark) * 100;
+function isFlashScalpMarket(market: Market): market is FlashScalpMarket {
+  return (FLASH_SCALP_MARKETS as readonly string[]).includes(market);
 }
 
 function maxLeverageForSelection(market: Market, mode: TradeMode): number {
@@ -218,6 +195,7 @@ export function FastPerpsGame() {
   const { addSessionSigners } = useSessionSigners();
   const wallet = useEmbeddedSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
+  const liveFlashMarks = useFlashLiveMarks();
 
   const [market, setMarket] = useState<Market>("SOL");
   const [side, setSide] = useState<TradeSide>("long");
@@ -246,13 +224,39 @@ export function FastPerpsGame() {
     () => flashMarketConfigForSymbol(market),
     [market],
   );
-  const graphValue = markValueForPosition(selectedPosition);
-  const livePnl = pnlForPosition(selectedPosition);
-  const liveRoi = roiForPosition(selectedPosition);
-  const liquidationMove = liquidationMoveForPosition(selectedPosition);
-  const exitValue = exitValueForPosition(selectedPosition);
+  const positionViewsByKey = useMemo(() => {
+    const views = new Map<string, FlashLivePositionView>();
+    for (const position of positions) {
+      views.set(
+        position.positionPubkey,
+        computeFlashLivePositionView({
+          position,
+          liveMarkUsd: isFlashScalpMarket(position.symbol)
+            ? liveFlashMarks[position.symbol]?.priceUsd
+            : undefined,
+        }),
+      );
+    }
+    return views;
+  }, [liveFlashMarks, positions]);
+  const selectedPositionView = selectedPosition
+    ? positionViewsByKey.get(selectedPosition.positionPubkey) ??
+      computeFlashLivePositionView({
+        position: selectedPosition,
+        liveMarkUsd: isFlashScalpMarket(selectedPosition.symbol)
+          ? liveFlashMarks[selectedPosition.symbol]?.priceUsd
+          : undefined,
+      })
+    : null;
+  const graphValue = selectedPositionView ? selectedPositionView.valueUsd : 0;
+  const livePnl = selectedPositionView ? selectedPositionView.pnlUsd : 0;
+  const liveRoi = selectedPositionView ? selectedPositionView.roiPct : 0;
+  const liquidationMove = selectedPositionView
+    ? selectedPositionView.liquidationMovePct
+    : null;
+  const exitValue = selectedPositionView ? selectedPositionView.exitValueUsd : 0;
   const sideColor = side === "long" ? GREEN : RED;
-  const graphColor = !selectedPosition
+  const graphColor = !selectedPositionView
     ? ACCENT
     : livePnl >= 0
       ? GREEN
@@ -312,7 +316,7 @@ export function FastPerpsGame() {
     const id = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       void loadPositions();
-    }, 2500);
+    }, FLASH_POSITION_RECONCILE_MS);
     return () => clearInterval(id);
   }, [authenticated, loadPositions, wallet?.address]);
 
@@ -538,8 +542,9 @@ export function FastPerpsGame() {
           {positions.map((position) => {
             const active =
               position.symbol === market && position.side === side;
-            const pnl = pnlForPosition(position);
-            const exitValue = exitValueForPosition(position);
+            const view = positionViewsByKey.get(position.positionPubkey);
+            const pnl = view?.pnlUsd ?? 0;
+            const exitValue = view?.exitValueUsd ?? 0;
             return (
               <button
                 key={position.positionPubkey}
@@ -650,7 +655,7 @@ export function FastPerpsGame() {
       <div className="mt-2 grid grid-cols-2 gap-2">
         <PreviewMetric
           label="Stake"
-          value={fmtUsd(selectedPosition ? stakeForPosition(selectedPosition) : effectiveStake)}
+          value={fmtUsd(selectedPositionView ? selectedPositionView.stakeUsd : effectiveStake)}
           color={FG}
         />
         <PreviewMetric
@@ -769,7 +774,7 @@ export function FastPerpsGame() {
 
       {selectedPosition?.liquidationPriceUsd != null && (
         <div className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
-          Mark {fmtPrice(selectedPosition.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
+          Mark {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
           {fmtPrice(selectedPosition.liquidationPriceUsd)}
           {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
           {" · "}
