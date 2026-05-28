@@ -14,6 +14,7 @@ export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
 const MAX_USDC = 1000;
+const USDC_ATOMS_PER_USDC = 1_000_000;
 
 interface Body {
   market?: string;
@@ -40,7 +41,33 @@ function parseMarket(value: unknown) {
   return isSupportedFlashMarket(market) ? market : null;
 }
 
+function errorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    return typeof message === "string" ? message : "";
+  }
+  return "";
+}
+
+function flashWalletShortfallMessage(err: unknown): string | null {
+  const match = /Insufficient Funds need more (\d+) tokens/i.exec(errorMessage(err));
+  if (!match) return null;
+
+  const amount = Number(match[1]) / USDC_ATOMS_PER_USDC;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "Need more USDC in wallet for this Flash trade.";
+  }
+  return `Need $${amount.toFixed(2)} more USDC in wallet for this Flash trade.`;
+}
+
 function flashErrorResponse(err: unknown): NextResponse {
+  const walletShortfall = flashWalletShortfallMessage(err);
+  if (walletShortfall) {
+    return NextResponse.json({ error: walletShortfall }, { status: 400 });
+  }
+
   if (err instanceof FlashPerpsError) {
     return NextResponse.json(
       { error: err.message },

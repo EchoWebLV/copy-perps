@@ -144,6 +144,32 @@ describe("Flash perp routes", () => {
     expect(mocks.open).not.toHaveBeenCalled();
   });
 
+  it("explains wallet USDC shortfall when Flash cannot build the open transaction", async () => {
+    mocks.open.mockRejectedValueOnce("Insufficient Funds need more 10000000 tokens");
+
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 10,
+        leverage: 100,
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.open).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "SOL",
+      side: "long",
+      amountUsd: 10,
+      leverage: 100,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Need $10.00 more USDC in wallet for this Flash trade.",
+    });
+  });
+
   it("builds a user-signed Flash close transaction for a portfolio row", async () => {
     const response = await CLOSE(
       postRequest("/api/flash/perp/close", {
