@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
 import type { MarketSentiment } from "@/lib/data/market-sentiment";
+import { isSourceFresh } from "@/lib/whales/identity";
 import {
   ACCENT,
   BG,
@@ -120,7 +121,10 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
 
   useVisiblePoll(load, POLL_MS);
 
-  const rows = useMemo(() => buildMarketHeatRows(positions), [positions]);
+  const rows = useMemo(
+    () => buildMarketHeatRows(positions, now),
+    [now, positions],
+  );
   const sentimentMarketsParam = useMemo(
     () =>
       rows
@@ -258,11 +262,13 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
 
 export function buildMarketHeatRows(
   signals: WhalePositionSignal[],
+  nowMs = Date.now(),
 ): MarketHeatRow[] {
   const byMarket = new Map<string, WhalePosition[]>();
 
   for (const signal of signals) {
     const position = signal.payload;
+    if (!isLiveHeatPosition(position, nowMs)) continue;
     const market = normalizeMarket(position.market);
     const bucket = byMarket.get(market) ?? [];
     bucket.push(position);
@@ -348,6 +354,13 @@ export function buildMarketHeatRows(
       };
     })
     .sort(compareMarketHeatRows);
+}
+
+function isLiveHeatPosition(position: WhalePosition, nowMs: number): boolean {
+  return (
+    !position.stale &&
+    (nowMs <= 0 || isSourceFresh(position.lastSeenAtMs, undefined, nowMs))
+  );
 }
 
 function MarketHeatCard({
