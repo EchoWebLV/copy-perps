@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import type { WhaleLiveSnapshot } from "@/lib/whales/live-cache";
 
 const mocks = vi.hoisted(() => {
@@ -497,6 +498,71 @@ describe("whale signals", () => {
     expect(mocks.getPositionsHistory).toHaveBeenCalledTimes(1);
   });
 
+  it("serves a local roster snapshot while the first enriched roster is still building", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
+    mocks.getLeaderboard.mockImplementation(() => new Promise(() => {}));
+
+    const {
+      buildCachedWhaleTraderSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    clearWhaleSignalCachesForTests();
+
+    try {
+      const result = await Promise.race<WhaleTraderSignal[] | "blocked">([
+        buildCachedWhaleTraderSignals(),
+        new Promise<"blocked">((resolve) => {
+          setTimeout(() => resolve("blocked"), 50);
+        }),
+      ]);
+
+      expect(result).not.toBe("blocked");
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: "whale_trader:whale-1",
+        payload: {
+          whaleId: "whale-1",
+          openPositionsCount: 1,
+          stats: {
+            equityUsdc: 0,
+            openInterestUsdc: 0,
+            pnlAllTimeUsdc: 0,
+            pnlCurve: [],
+          },
+        },
+      });
+      expect(mocks.getLeaderboard).toHaveBeenCalledTimes(1);
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
+  });
+
+  it("retries roster enrichment quickly after an empty cold-start result", async () => {
+    const {
+      buildCachedWhaleTraderSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    clearWhaleSignalCachesForTests();
+
+    try {
+      mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
+      const first = await buildCachedWhaleTraderSignals();
+
+      mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
+      vi.setSystemTime(new Date("2026-05-23T12:00:02.000Z"));
+      const second = await buildCachedWhaleTraderSignals();
+
+      expect(first).toEqual([]);
+      expect(second.map((signal) => signal.payload.whaleId)).toEqual([
+        "whale-1",
+      ]);
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
+  });
+
   it("includes active whales without open positions in trader signals", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(
       snapshot({
@@ -651,26 +717,67 @@ describe("whale signals", () => {
     expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
   });
 
-  it("refreshes the live cache on demand when the snapshot is stale", async () => {
-    mocks.getWhaleLiveSnapshot
-      .mockResolvedValueOnce(
-        snapshot({
-          observedAt: new Date("2026-05-23T11:55:00.000Z"),
-          positions: [
-            position({
-              lastSeenAt: new Date("2026-05-23T11:55:00.000Z"),
-            }),
-          ],
+  it("does not block live positions when a missing-cache refresh is slow", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
+    mocks.refreshWhales.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    const {
+      buildWhalePositionSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    try {
+      const result = await Promise.race<WhalePositionSignal[] | "blocked">([
+        buildWhalePositionSignals(),
+        new Promise<"blocked">((resolve) => {
+          setTimeout(() => resolve("blocked"), 50);
         }),
-      )
-      .mockResolvedValueOnce(snapshot());
+      ]);
 
-    const { buildWhalePositionSignals } = await import("./whale-signals");
+      expect(result).not.toBe("blocked");
+      expect(result).toEqual([]);
+      expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
+  });
 
-    const signals = await buildWhalePositionSignals();
+  it("serves stale live cache immediately while refreshing in the background", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        observedAt: new Date("2026-05-23T11:55:00.000Z"),
+      }),
+    );
+    mocks.refreshWhales.mockImplementation(
+      () => new Promise(() => undefined),
+    );
 
-    expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
-    expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
+    const {
+      buildWhalePositionSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    try {
+      const result = await Promise.race([
+        buildWhalePositionSignals(),
+        new Promise<"blocked">((resolve) => {
+          setTimeout(() => resolve("blocked"), 25);
+        }),
+      ]);
+
+      expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
+      expect(result).not.toBe("blocked");
+      expect(Array.isArray(result)).toBe(true);
+      expect(
+        Array.isArray(result)
+          ? result.map((item) => item.payload.positionId)
+          : [],
+      ).toEqual(["pos-1"]);
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
   });
 
   it("returns no whale signals when the live cache is empty", async () => {

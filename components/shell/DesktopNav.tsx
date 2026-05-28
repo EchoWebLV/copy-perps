@@ -16,6 +16,7 @@ export function DesktopNav() {
     >
       <Link
         href="/feed"
+        prefetch={false}
         className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl text-[12px] font-black"
         style={{ background: ACCENT, color: BG }}
         aria-label="Breach whales"
@@ -30,6 +31,7 @@ export function DesktopNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-label={item.label}
               title={item.label}
               className="group relative flex h-11 w-11 items-center justify-center rounded-2xl transition active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"

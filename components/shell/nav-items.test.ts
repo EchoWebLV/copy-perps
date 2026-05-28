@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_NAV_ITEMS, isShellNavActive } from "./nav-items";
 
@@ -38,5 +40,23 @@ describe("desktop shell nav contract", () => {
     expect(isShellNavActive("/feed", null)).toBe(false);
     expect(isShellNavActive("/feed", "/portfolio")).toBe(false);
     expect(isShellNavActive("/deposit", "/leaderboard")).toBe(false);
+  });
+
+  it("does not eagerly prefetch heavyweight app destinations from shell nav", () => {
+    const desktopNav = readFileSync(
+      join(process.cwd(), "components/shell/DesktopNav.tsx"),
+      "utf8",
+    );
+    const bottomNav = readFileSync(
+      join(process.cwd(), "components/shell/BottomNav.tsx"),
+      "utf8",
+    );
+
+    expect(
+      desktopNav.match(/prefetch={false}/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      bottomNav.match(/prefetch={false}/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

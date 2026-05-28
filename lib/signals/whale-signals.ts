@@ -24,8 +24,15 @@ import { refreshWhales } from "@/lib/whales/refresh";
 const PNL_HISTORY_LIMIT = 500;
 const PNL_HISTORY_CACHE_MS = 5 * 60_000;
 const PNL_HISTORY_CONCURRENCY = 4;
+const LIVE_SNAPSHOT_COLD_START_BUDGET_MS =
+  process.env.NODE_ENV === "test" ? 10 : 750;
 const TRADER_SIGNALS_CACHE_MS = 30_000;
+const TRADER_SIGNALS_EMPTY_CACHE_MS = 1_000;
 const TRADER_SIGNALS_STALE_MS = 5 * 60_000;
+const TRADER_SIGNALS_COLD_START_BUDGET_MS =
+  process.env.NODE_ENV === "test" ? 10 : 750;
+
+type WhaleTraderStats = WhaleTraderSignal["payload"]["stats"];
 
 const pnlHistoryCache = new Map<
   string,
@@ -53,14 +60,39 @@ async function refreshLiveSnapshotOnce(): Promise<void> {
   await liveRefreshInFlight;
 }
 
+async function refreshLiveSnapshotWithinBudget(): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      refreshLiveSnapshotOnce().then(() => true),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => {
+          resolve(false);
+        }, LIVE_SNAPSHOT_COLD_START_BUDGET_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout !== null) clearTimeout(timeout);
+  }
+}
+
 async function getWhaleLiveSnapshotOrRefresh(): Promise<WhaleLiveSnapshot | null> {
   const snapshot = await getWhaleLiveSnapshot();
   if (snapshot !== null && isSourceFresh(snapshot.observedAt.getTime())) {
     return snapshot;
   }
 
+  if (snapshot !== null) {
+    void refreshLiveSnapshotOnce().catch((err) => {
+      console.warn("[whales] background refresh failed:", err);
+    });
+    return snapshot;
+  }
+
   try {
-    await refreshLiveSnapshotOnce();
+    const refreshed = await refreshLiveSnapshotWithinBudget();
+    if (!refreshed) return snapshot;
   } catch (err) {
     console.warn("[whales] on-demand refresh failed:", err);
     return snapshot;
@@ -342,49 +374,51 @@ export async function buildWhalePositionSignals(
   return buildWhalePositionSignalsFromSnapshot(snapshot, limit);
 }
 
-export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
-  const snapshot = await getWhaleLiveSnapshotOrRefresh();
-  if (snapshot === null) return [];
-
+async function buildWhaleTraderSignalsFromSnapshot(
+  snapshot: WhaleLiveSnapshot,
+  includeRemoteStats: boolean,
+): Promise<WhaleTraderSignal[]> {
   const activeWhales = snapshot.whales.filter(
     (whale) => whale.status === "active",
   );
-  const [positions, leaderboard] = await Promise.all([
-    buildWhalePositionSignalsFromSnapshot(snapshot, 1000),
-    getLeaderboard().catch(() => [] as PacificaLeaderboardEntry[]),
-  ]);
+  const positions = await buildWhalePositionSignalsFromSnapshot(snapshot, 1000);
+  const leaderboard = includeRemoteStats
+    ? await getLeaderboard().catch(() => [] as PacificaLeaderboardEntry[])
+    : [];
   const leaderboardByAccount = new Map(
     leaderboard.map((entry) => [entry.address, entry]),
   );
   const pnlCurveByAccount = new Map<string, WhalePnlPoint[]>();
   const portfolioByAccount = new Map<string, HLPortfolio>();
 
-  await forEachWithConcurrency(
-    activeWhales,
-    PNL_HISTORY_CONCURRENCY,
-    async (whale) => {
-      if (whale.source !== "pacifica") return;
-      const stats = statsForLeaderboardEntry(
-        leaderboardByAccount.get(whale.sourceAccount),
-      );
-      pnlCurveByAccount.set(
-        whale.sourceAccount,
-        await getCachedPnlCurve(whale.sourceAccount, stats),
-      );
-    },
-  );
+  if (includeRemoteStats) {
+    await forEachWithConcurrency(
+      activeWhales,
+      PNL_HISTORY_CONCURRENCY,
+      async (whale) => {
+        if (whale.source !== "pacifica") return;
+        const stats = statsForLeaderboardEntry(
+          leaderboardByAccount.get(whale.sourceAccount),
+        );
+        pnlCurveByAccount.set(
+          whale.sourceAccount,
+          await getCachedPnlCurve(whale.sourceAccount, stats),
+        );
+      },
+    );
 
-  await forEachWithConcurrency(
-    activeWhales,
-    PNL_HISTORY_CONCURRENCY,
-    async (whale) => {
-      if (whale.source !== "hyperliquid") return;
-      portfolioByAccount.set(
-        whale.sourceAccount,
-        await getPortfolio(whale.sourceAccount).catch(() => []),
-      );
-    },
-  );
+    await forEachWithConcurrency(
+      activeWhales,
+      PNL_HISTORY_CONCURRENCY,
+      async (whale) => {
+        if (whale.source !== "hyperliquid") return;
+        portfolioByAccount.set(
+          whale.sourceAccount,
+          await getPortfolio(whale.sourceAccount).catch(() => []),
+        );
+      },
+    );
+  }
 
   const byWhale = new Map<string, WhalePositionSignal[]>();
 
@@ -406,7 +440,7 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
         ? Math.max(...list.map((position) => position.payload.lastSeenAtMs))
         : null;
 
-    const stats =
+    const stats: WhaleTraderStats =
       whale.source === "hyperliquid"
         ? statsForHyperliquidPortfolio(
             portfolioByAccount.get(whale.sourceAccount),
@@ -447,15 +481,33 @@ export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   return signals.sort((a, b) => b.heatScore - a.heatScore);
 }
 
+export async function buildWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
+  const snapshot = await getWhaleLiveSnapshotOrRefresh();
+  if (snapshot === null) return [];
+  return buildWhaleTraderSignalsFromSnapshot(snapshot, true);
+}
+
+async function buildLocalWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
+  const snapshot = await getWhaleLiveSnapshot().catch(() => null);
+  if (snapshot === null) return [];
+  return buildWhaleTraderSignalsFromSnapshot(snapshot, false);
+}
+
 async function refreshCachedWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   if (!traderSignalsInFlight) {
     traderSignalsInFlight = buildWhaleTraderSignals()
       .then((signals) => {
         const now = Date.now();
+        const cacheMs =
+          signals.length === 0
+            ? TRADER_SIGNALS_EMPTY_CACHE_MS
+            : TRADER_SIGNALS_CACHE_MS;
         traderSignalsCache = {
           signals,
-          expiresAt: now + TRADER_SIGNALS_CACHE_MS,
-          staleUntil: now + TRADER_SIGNALS_STALE_MS,
+          expiresAt: now + cacheMs,
+          staleUntil:
+            now +
+            (signals.length === 0 ? cacheMs : TRADER_SIGNALS_STALE_MS),
         };
         return signals;
       })
@@ -465,6 +517,25 @@ async function refreshCachedWhaleTraderSignals(): Promise<WhaleTraderSignal[]> {
   }
 
   return traderSignalsInFlight;
+}
+
+async function refreshCachedWhaleTraderSignalsWithinBudget(): Promise<
+  WhaleTraderSignal[]
+> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      refreshCachedWhaleTraderSignals(),
+      new Promise<WhaleTraderSignal[]>((resolve) => {
+        timeout = setTimeout(() => {
+          resolve(buildLocalWhaleTraderSignals());
+        }, TRADER_SIGNALS_COLD_START_BUDGET_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout !== null) clearTimeout(timeout);
+  }
 }
 
 export async function buildCachedWhaleTraderSignals(): Promise<
@@ -483,7 +554,7 @@ export async function buildCachedWhaleTraderSignals(): Promise<
   }
 
   try {
-    return await refreshCachedWhaleTraderSignals();
+    return await refreshCachedWhaleTraderSignalsWithinBudget();
   } catch (err) {
     if (traderSignalsCache) return traderSignalsCache.signals;
     throw err;

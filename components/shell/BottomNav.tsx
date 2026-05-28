@@ -46,6 +46,7 @@ export function BottomNav() {
         {/* Elevated center swipe shortcut to the per-position feed. */}
         <Link
           href="/live"
+          prefetch={false}
           className="relative flex flex-1 items-center justify-center"
           aria-label="Swipe open positions"
         >
@@ -93,6 +94,7 @@ function NavTab({
   return (
     <Link
       href={href}
+      prefetch={false}
       className="relative flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-black uppercase tracking-widest"
       style={{
         color: FG,
