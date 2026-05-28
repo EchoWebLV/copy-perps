@@ -70,4 +70,15 @@ describe("WhaleRoster feed layout", () => {
     expect(source).toContain('historyLabel={livePositionStatsOnly ? "P&L history" : "All time P&L"}');
     expect(source).toContain("P&L HISTORY UNAVAILABLE");
   });
+
+  it("keeps the last usable roster when a poll returns an all-stale zero-position roster", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("shouldUseRosterRefresh");
+    expect(source).toContain("nextHasOpenPositions");
+    expect(source).toContain("next.every((whale) => whale.payload.stale)");
+  });
 });

@@ -310,14 +310,23 @@ async function getAnalysisByPositionId(
   return new Map(rows.map((row) => [row.positionId, row]));
 }
 
+function shouldServeStaleSnapshot(snapshot: WhaleLiveSnapshot): boolean {
+  return !isSourceFresh(snapshot.observedAt.getTime());
+}
+
 async function buildWhalePositionSignalsFromSnapshot(
   snapshot: WhaleLiveSnapshot,
   limit: number,
+  options: { includeStalePositions?: boolean } = {},
 ): Promise<WhalePositionSignal[]> {
   const whaleById = new Map(snapshot.whales.map((whale) => [whale.id, whale]));
   const livePositions = [...snapshot.positions]
     .filter((position) => position.status === "open")
-    .filter((position) => isSourceFresh(position.lastSeenAt.getTime()))
+    .filter(
+      (position) =>
+        options.includeStalePositions ||
+        isSourceFresh(position.lastSeenAt.getTime()),
+    )
     .filter((position) => whaleById.get(position.whaleId)?.status === "active")
     .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
     .slice(0, limit);
@@ -402,7 +411,9 @@ export async function buildWhalePositionSignals(
 ): Promise<WhalePositionSignal[]> {
   const snapshot = await getWhaleLiveSnapshotOrRefresh();
   if (snapshot === null) return [];
-  return buildWhalePositionSignalsFromSnapshot(snapshot, limit);
+  return buildWhalePositionSignalsFromSnapshot(snapshot, limit, {
+    includeStalePositions: shouldServeStaleSnapshot(snapshot),
+  });
 }
 
 async function buildWhaleTraderSignalsFromSnapshot(
@@ -412,7 +423,9 @@ async function buildWhaleTraderSignalsFromSnapshot(
   const activeWhales = snapshot.whales.filter(
     (whale) => whale.status === "active",
   );
-  const positions = await buildWhalePositionSignalsFromSnapshot(snapshot, 1000);
+  const positions = await buildWhalePositionSignalsFromSnapshot(snapshot, 1000, {
+    includeStalePositions: shouldServeStaleSnapshot(snapshot),
+  });
   const leaderboard = includeRemoteStats
     ? await getLeaderboard().catch(() => [] as PacificaLeaderboardEntry[])
     : [];

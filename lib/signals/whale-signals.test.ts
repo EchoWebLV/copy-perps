@@ -841,6 +841,52 @@ describe("whale signals", () => {
     }
   });
 
+  it("keeps stale cached positions visible while the source refresh recovers", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        observedAt: new Date("2026-05-23T11:55:00.000Z"),
+        positions: [
+          position({
+            lastSeenAt: new Date("2026-05-23T11:55:00.000Z"),
+          }),
+        ],
+      }),
+    );
+    mocks.refreshWhales.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    const {
+      buildWhalePositionSignals,
+      buildWhaleTraderSignals,
+      clearWhaleSignalCachesForTests,
+    } = await import("./whale-signals");
+
+    try {
+      const positions = await buildWhalePositionSignals();
+      const traders = await buildWhaleTraderSignals();
+
+      expect(positions.map((item) => item.payload.positionId)).toEqual([
+        "pos-1",
+      ]);
+      expect(positions[0]?.payload.stale).toBe(true);
+      expect(traders[0]).toMatchObject({
+        payload: {
+          openPositionsCount: 1,
+          stale: true,
+          openPositions: [
+            {
+              positionId: "pos-1",
+              stale: true,
+            },
+          ],
+        },
+      });
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
+  });
+
   it("returns no whale signals when the live cache is empty", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
 

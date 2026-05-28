@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { splitPulseHeadline } from "./pulse-headline";
+import {
+  getPulseHeadlineBrushVariant,
+  splitPulseHeadline,
+} from "./pulse-headline";
 
 describe("splitPulseHeadline", () => {
   it("marks up as green without changing the headline text", () => {
@@ -18,6 +21,30 @@ describe("splitPulseHeadline", () => {
       "SOL long is already down 18.0%",
     );
     expect(parts).toContainEqual({ text: "down", tone: "red" });
+  });
+
+  it("marks the performance percentage for emphasis", () => {
+    const parts = splitPulseHeadline("BTC short is already down 46.3%");
+
+    expect(parts.map((part) => part.text).join("")).toBe(
+      "BTC short is already down 46.3%",
+    );
+    expect(parts).toContainEqual({ text: "46.3%", role: "percentage" });
+  });
+
+  it("selects stable brush variants across performance headlines", () => {
+    const headline = "BTC short is already down 46.3%";
+
+    expect(getPulseHeadlineBrushVariant(headline)).toBe(
+      getPulseHeadlineBrushVariant(headline),
+    );
+    expect(
+      new Set([
+        getPulseHeadlineBrushVariant(headline),
+        getPulseHeadlineBrushVariant("ETH short is already up 162.6%"),
+        getPulseHeadlineBrushVariant("SOL long is already down 18.0%"),
+      ]).size,
+    ).toBeGreaterThan(1);
   });
 
   it("leaves non-performance headlines as plain text", () => {

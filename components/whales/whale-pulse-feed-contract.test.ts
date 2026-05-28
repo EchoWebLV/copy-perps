@@ -146,4 +146,16 @@ describe("WhalePulseFeed route contract", () => {
     expect(rosterSource).not.toContain('{stale ? "STALE" : "FRESH"}');
     expect(liveSource).not.toContain('{stale ? "STALE" : "FRESH"}');
   });
+
+  it("keeps the last non-empty Pulse tape when a live-position poll returns empty", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("setPositions((current)");
+    expect(componentSource).toContain(
+      "data.positions.length > 0 || current.length === 0",
+    );
+  });
 });

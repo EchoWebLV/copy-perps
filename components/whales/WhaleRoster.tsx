@@ -45,7 +45,9 @@ export function WhaleRoster({ initialWhales }: Props) {
       const r = await fetch("/api/whales/roster", { cache: "no-store" });
       if (!r.ok) return;
       const data = (await r.json()) as { whales: WhaleTraderSignal[] };
-      setWhales(data.whales);
+      setWhales((current) =>
+        shouldUseRosterRefresh(data.whales, current) ? data.whales : current,
+      );
     } catch {
       // Keep the last good roster if the poll misses.
     } finally {
@@ -96,6 +98,31 @@ export function WhaleRoster({ initialWhales }: Props) {
       />
     </div>
   );
+}
+
+function shouldUseRosterRefresh(
+  next: WhaleTraderSignal[],
+  current: WhaleTraderSignal[],
+): boolean {
+  if (current.length === 0) return true;
+  if (next.length === 0) return false;
+
+  const currentHasOpenPositions = current.some(
+    (whale) => whale.payload.openPositionsCount > 0,
+  );
+  const nextHasOpenPositions = next.some(
+    (whale) => whale.payload.openPositionsCount > 0,
+  );
+
+  if (
+    currentHasOpenPositions &&
+    !nextHasOpenPositions &&
+    next.every((whale) => whale.payload.stale)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function WhaleCard({

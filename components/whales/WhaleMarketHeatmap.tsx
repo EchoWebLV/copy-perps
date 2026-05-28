@@ -108,7 +108,11 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
       });
       if (!r.ok) return;
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
-      setPositions(data.positions);
+      setPositions((current) =>
+        data.positions.length > 0 || current.length === 0
+          ? data.positions
+          : current,
+      );
     } catch {
       // Keep the current heatmap visible if a refresh misses.
     }

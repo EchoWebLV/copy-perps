@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
@@ -21,6 +27,7 @@ import {
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
+  getPulseHeadlineBrushVariant,
   splitPulseHeadline,
   type PulseHeadlineTone,
 } from "./pulse-headline";
@@ -35,6 +42,32 @@ import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
 const ROSTER_STATS_POLL_MS = 30_000;
+const PERCENTAGE_BRUSH_STYLES = [
+  {
+    background:
+      "linear-gradient(94deg, rgba(255,244,95,0.92) 0%, #fae500 42%, rgba(255,189,47,0.96) 100%)",
+    clipPath:
+      "polygon(3% 18%, 96% 5%, 100% 47%, 94% 88%, 8% 96%, 0 58%)",
+    transform: "rotate(-1.8deg)",
+    boxShadow: "0 0 26px rgba(250,229,0,0.34)",
+  },
+  {
+    background:
+      "linear-gradient(88deg, rgba(255,216,59,0.94) 0%, #fae500 58%, rgba(255,247,132,0.9) 100%)",
+    clipPath:
+      "polygon(0 33%, 10% 9%, 88% 0, 100% 28%, 95% 83%, 13% 100%, 3% 75%)",
+    transform: "rotate(1.4deg)",
+    boxShadow: "0 0 22px rgba(250,229,0,0.3)",
+  },
+  {
+    background:
+      "linear-gradient(101deg, rgba(255,247,118,0.94) 0%, #fae500 48%, rgba(255,198,43,0.95) 100%)",
+    clipPath:
+      "polygon(5% 7%, 91% 14%, 99% 38%, 92% 97%, 2% 85%, 0 32%)",
+    transform: "rotate(-0.6deg)",
+    boxShadow: "0 0 24px rgba(250,229,0,0.32)",
+  },
+] satisfies CSSProperties[];
 
 interface Props {
   initialPositions: WhalePositionSignal[];
@@ -77,7 +110,11 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       });
       if (!r.ok) return;
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
-      setPositions(data.positions);
+      setPositions((current) =>
+        data.positions.length > 0 || current.length === 0
+          ? data.positions
+          : current,
+      );
     } catch {
       // Keep the current Pulse tape visible if a refresh misses.
     }
@@ -457,12 +494,33 @@ function PulsePositionCard({
 }
 
 function PulseHeadlineText({ headline }: { headline: string }) {
+  const brushStyle =
+    PERCENTAGE_BRUSH_STYLES[getPulseHeadlineBrushVariant(headline)];
+
   return (
     <>
       {splitPulseHeadline(headline).map((part, index) => (
         <span
           key={`${part.text}:${index}`}
-          style={part.tone ? { color: pulseHeadlineColor(part.tone) } : undefined}
+          className={
+            part.role === "percentage"
+              ? "inline-flex items-center rounded-md px-2 py-0.5 text-[1.12em] leading-none shadow-[0_0_24px_rgba(250,229,0,0.28)]"
+              : undefined
+          }
+          style={
+            part.role === "percentage"
+              ? {
+                  color: BG,
+                  marginInline: "0.06em",
+                  paddingInline: "0.38em",
+                  paddingBlock: "0.09em",
+                  textShadow: "0 1px 0 rgba(255,255,255,0.28)",
+                  ...brushStyle,
+                }
+              : part.tone
+                ? { color: pulseHeadlineColor(part.tone) }
+                : undefined
+          }
         >
           {part.text}
         </span>

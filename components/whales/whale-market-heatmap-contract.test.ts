@@ -80,4 +80,16 @@ describe("WhaleMarketHeatmap contract", () => {
     expect(source).toContain("/api/whales/live?limit=1000");
     expect(source).toContain("useVisiblePoll");
   });
+
+  it("keeps the last non-empty heatmap when a live-position poll returns empty", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleMarketHeatmap.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("setPositions((current)");
+    expect(source).toContain(
+      "data.positions.length > 0 || current.length === 0",
+    );
+  });
 });
