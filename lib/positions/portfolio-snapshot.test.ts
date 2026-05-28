@@ -357,4 +357,76 @@ describe("portfolio snapshot payload", () => {
     expect(summary.copyRowsValueUsd).toBeCloseTo(13.5);
     expect(summary.netWorthUsd).toBeCloseTo(54);
   });
+
+  it("moves missing Flash wallet rows into closed positions after a live refresh", () => {
+    const previous: PortfolioSnapshotPayload = {
+      positions: [],
+      copyRows: [
+        {
+          betId: null,
+          venue: "flash",
+          sourceKind: "wallet",
+          market: "ETH",
+          side: "long",
+          leverage: 20,
+          stakeUsdc: 5,
+          leaderAddress: null,
+          leaderUsername: null,
+          botId: null,
+          botName: null,
+          liveStatus: "open",
+          entryPrice: 3000,
+          markPrice: 3015,
+          pricedAt: "2026-05-28T12:01:00.000Z",
+          liquidationPrice: 2850,
+          amountBase: null,
+          marginUsd: 5,
+          marginMode: "isolated",
+          notionalUsd: 100,
+          pnlUsd: 1.5,
+          unrealizedPnlPct: 30,
+          openedAt: "2026-05-28T12:00:00.000Z",
+          positionUpdatedAt: "2026-05-28T12:01:00.000Z",
+          leaderClosedAt: null,
+        },
+      ],
+      pacificaAccount: null,
+      walletBalance: null,
+    };
+    const next: PortfolioSnapshotPayload = {
+      positions: [],
+      copyRows: [],
+      pacificaAccount: null,
+      walletBalance: null,
+    };
+
+    const merged = mergePortfolioSnapshotPayload(previous, next, {
+      now: () => new Date("2026-05-28T12:02:00.000Z"),
+    });
+
+    expect(merged.copyRows).toEqual([]);
+    expect(merged.positions).toEqual([
+      expect.objectContaining({
+        id: "flash:ETH:long:2026-05-28T12:00:00.000Z",
+        type: "copy",
+        status: "closed",
+        asset: "ETH",
+        side: "long",
+        leverage: 20,
+        amountUsdc: 5,
+        proceedsUsdc: 6.5,
+        pnlUsdc: 1.5,
+        pnlPct: 30,
+        closedAt: "2026-05-28T12:02:00.000Z",
+      }),
+    ]);
+
+    const nextMerge = mergePortfolioSnapshotPayload(merged, next, {
+      now: () => new Date("2026-05-28T12:03:00.000Z"),
+    });
+    expect(nextMerge.positions).toHaveLength(1);
+    expect(nextMerge.positions[0]?.closedAt).toBe(
+      "2026-05-28T12:02:00.000Z",
+    );
+  });
 });

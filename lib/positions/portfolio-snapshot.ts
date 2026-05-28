@@ -55,6 +55,10 @@ export interface PortfolioSnapshotMeta {
   staleReason: string | null;
 }
 
+function copyRowKey(row: CopyRowData): string {
+  return row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`;
+}
+
 function openPositions(payload: PortfolioSnapshotPayload) {
   return payload.positions.filter(
     (position) =>
@@ -76,6 +80,57 @@ function copyRowValueUsd(row: CopyRowData): number {
   const liveMultiplier =
     row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
   return Math.max(0, row.stakeUsdc * liveMultiplier);
+}
+
+function flashClosedPositionId(row: CopyRowData): string {
+  return `flash:${row.market}:${row.side}:${
+    row.openedAt ?? row.positionUpdatedAt ?? row.pricedAt ?? "unknown"
+  }`;
+}
+
+function isSnapshotFlashClosedPosition(position: EnrichedPosition): boolean {
+  return position.status === "closed" && position.id.startsWith("flash:");
+}
+
+function isOpenFlashWalletRow(row: CopyRowData): boolean {
+  return (
+    row.venue === "flash" &&
+    row.sourceKind === "wallet" &&
+    row.liveStatus === "open"
+  );
+}
+
+function flashClosedPositionFromRow(
+  row: CopyRowData,
+  closedAt: string,
+): EnrichedPosition {
+  const amountUsdc = row.stakeUsdc ?? row.marginUsd ?? 0;
+  const proceedsUsdc =
+    amountUsdc > 0 && row.pnlUsd !== null
+      ? Math.max(0, amountUsdc + row.pnlUsd)
+      : null;
+  return {
+    id: flashClosedPositionId(row),
+    type: "copy",
+    status: "closed",
+    amountUsdc,
+    proceedsUsdc,
+    pnlUsdc: proceedsUsdc === null ? undefined : proceedsUsdc - amountUsdc,
+    pnlPct:
+      proceedsUsdc === null || amountUsdc <= 0
+        ? undefined
+        : ((proceedsUsdc - amountUsdc) / amountUsdc) * 100,
+    asset: row.market,
+    ticker: row.market,
+    side: row.side,
+    leverage: row.leverage ?? undefined,
+    notionalUsd: row.notionalUsd ?? undefined,
+    openTxHash: null,
+    closeTxHash: null,
+    createdAt: row.openedAt ?? row.positionUpdatedAt ?? row.pricedAt ?? closedAt,
+    closedAt,
+    sharedAt: null,
+  };
 }
 
 export function buildPortfolioSummary(
@@ -155,7 +210,7 @@ export function buildPortfolioSummary(
 export function mergePortfolioSnapshotPayload(
   previous: PortfolioSnapshotPayload | null,
   next: PortfolioSnapshotPayload,
-  options: { preserveMissingOpenRows?: boolean } = {},
+  options: { preserveMissingOpenRows?: boolean; now?: () => Date } = {},
 ): PortfolioSnapshotPayload {
   if (!previous) return next;
 
@@ -163,23 +218,43 @@ export function mergePortfolioSnapshotPayload(
     previous.copyRows,
     next.copyRows,
   );
+  const mergedRowKeys = new Set(mergedRows.map(copyRowKey));
+  const closedAt = (options.now?.() ?? new Date()).toISOString();
+  const mergedPositions: EnrichedPosition[] = [...next.positions];
+  const mergedPositionIds = new Set(mergedPositions.map((position) => position.id));
+
+  for (const position of previous.positions) {
+    if (
+      isSnapshotFlashClosedPosition(position) &&
+      !mergedPositionIds.has(position.id)
+    ) {
+      mergedPositions.push(position);
+      mergedPositionIds.add(position.id);
+    }
+  }
+
+  if (!options.preserveMissingOpenRows) {
+    for (const row of previous.copyRows) {
+      if (!isOpenFlashWalletRow(row) || mergedRowKeys.has(copyRowKey(row))) {
+        continue;
+      }
+      const position = flashClosedPositionFromRow(row, closedAt);
+      if (mergedPositionIds.has(position.id)) continue;
+      mergedPositions.push(position);
+      mergedPositionIds.add(position.id);
+    }
+  }
 
   if (options.preserveMissingOpenRows) {
-    const nextKeys = new Set(
-      mergedRows.map(
-        (row) => row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`,
-      ),
-    );
     for (const row of previous.copyRows) {
-      const key = row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`;
-      if (row.liveStatus === "open" && !nextKeys.has(key)) {
+      if (row.liveStatus === "open" && !mergedRowKeys.has(copyRowKey(row))) {
         mergedRows.push(row);
       }
     }
   }
 
   return {
-    positions: next.positions,
+    positions: mergedPositions,
     copyRows: mergedRows,
     pacificaAccount: next.pacificaAccount,
     walletBalance: next.walletBalance,
