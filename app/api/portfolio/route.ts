@@ -8,6 +8,7 @@ import { getAccountInfo, getPositions } from "@/lib/pacifica/client";
 import { findUncreditedPacificaDeposits } from "@/lib/pacifica/deposit-reconcile";
 import { getMark, getMarksSnapshot } from "@/lib/data/marks";
 import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/perps";
+import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
@@ -91,10 +92,11 @@ function flashRowFromPosition(
   p: FlashPositionSummary,
   pricedAt: string,
 ): PortfolioSnapshotPayload["copyRows"][number] {
-  const stakeUsdc =
+  const stakeUsdc = flashStakeUsdFromPosition(p);
+  const marginUsd =
     Number.isFinite(p.collateralUsd) && p.collateralUsd > 0
       ? p.collateralUsd
-      : null;
+      : stakeUsdc;
   const pnlUsd = Number.isFinite(p.pnlUsd) ? (p.pnlUsd ?? null) : null;
   const unrealizedPnlPct =
     stakeUsdc != null && pnlUsd != null ? (pnlUsd / stakeUsdc) * 100 : null;
@@ -122,7 +124,7 @@ function flashRowFromPosition(
     pricedAt: p.markPriceUsd == null ? null : pricedAt,
     liquidationPrice: p.liquidationPriceUsd ?? null,
     amountBase: null,
-    marginUsd: stakeUsdc,
+    marginUsd,
     marginMode: "isolated" as const,
     notionalUsd: p.sizeUsd,
     pnlUsd,

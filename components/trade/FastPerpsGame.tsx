@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
+import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
   formatTailSigningError,
@@ -99,9 +100,13 @@ function fmtPrice(value: number | null | undefined): string {
   return `$${value.toPrecision(4)}`;
 }
 
+function stakeForPosition(position: FlashPosition | null): number {
+  return flashStakeUsdFromPosition(position) ?? 0;
+}
+
 function markValueForPosition(position: FlashPosition | null): number {
   if (!position) return 0;
-  return Math.max(0, position.collateralUsd + (position.pnlUsd ?? 0));
+  return Math.max(0, stakeForPosition(position) + pnlForPosition(position));
 }
 
 function exitValueForPosition(position: FlashPosition | null): number {
@@ -117,12 +122,13 @@ function pnlForPosition(position: FlashPosition | null): number {
   if (position.pnlUsd != null && Number.isFinite(position.pnlUsd)) {
     return position.pnlUsd;
   }
-  return markValueForPosition(position) - position.collateralUsd;
+  return 0;
 }
 
 function roiForPosition(position: FlashPosition | null): number {
-  if (!position || position.collateralUsd <= 0) return 0;
-  return (pnlForPosition(position) / position.collateralUsd) * 100;
+  const stakeUsd = stakeForPosition(position);
+  if (!position || stakeUsd <= 0) return 0;
+  return (pnlForPosition(position) / stakeUsd) * 100;
 }
 
 function liquidationMoveForPosition(position: FlashPosition | null): number | null {
@@ -384,7 +390,7 @@ export function FastPerpsGame() {
                     {position.symbol} {position.side}
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
-                    {(position.leverage ?? 0).toFixed(0)}x · collat {fmtUsd(position.collateralUsd)}
+                    {(position.leverage ?? 0).toFixed(0)}x · stake {fmtUsd(stakeForPosition(position))}
                   </div>
                 </div>
                 <div className="text-right">
@@ -460,7 +466,7 @@ export function FastPerpsGame() {
         <div className="mt-3 h-[180px] overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
           <LivePerpGraph
             value={graphValue}
-            entryValue={selectedPosition.collateralUsd}
+            entryValue={stakeForPosition(selectedPosition)}
             color={graphColor}
             activeKey={selectedPosition.positionPubkey}
           />
@@ -469,8 +475,8 @@ export function FastPerpsGame() {
 
       <div className="mt-2 grid grid-cols-2 gap-2">
         <PreviewMetric
-          label={selectedPosition ? "Collateral" : "Stake"}
-          value={fmtUsd(selectedPosition ? selectedPosition.collateralUsd : effectiveStake)}
+          label="Stake"
+          value={fmtUsd(selectedPosition ? stakeForPosition(selectedPosition) : effectiveStake)}
           color={FG}
         />
         <PreviewMetric

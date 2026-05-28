@@ -43,15 +43,19 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("pb-[calc(88px+env(safe-area-inset-bottom))]");
   });
 
-  it("labels live Flash close estimates separately from posted collateral", () => {
+  it("shows the user stake separately from Flash posted collateral", () => {
     const page = source();
 
-    expect(page).toContain('label={selectedPosition ? "Collateral" : "Stake"}');
+    expect(page).toContain("flashStakeUsdFromPosition");
+    expect(page).toContain("stakeForPosition(selectedPosition)");
+    expect(page).toContain('label="Stake"');
     expect(page).toContain('label={selectedPosition ? "P/L" : "Notional"}');
-    expect(page).toContain("collat {fmtUsd(position.collateralUsd)}");
+    expect(page).toContain("stake {fmtUsd(stakeForPosition(position))}");
     expect(page).toContain("const exitValue = exitValueForPosition(position)");
     expect(page).toContain("exit {fmtUsd(exitValue)}");
     expect(page).toContain("Exit {fmtUsd(exitValue)}");
+    expect(page).not.toContain('label={selectedPosition ? "Collateral" : "Stake"}');
+    expect(page).not.toContain("collat {fmtUsd(position.collateralUsd)}");
     expect(page).not.toContain('label={selectedPosition ? "Value" : "Stake"}');
   });
 });
