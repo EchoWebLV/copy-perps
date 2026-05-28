@@ -67,7 +67,7 @@ interface PacificaAccountData {
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
-  const { totalUsd: walletUsd, sol: walletSol, refresh: refreshBalance } =
+  const { totalUsd: walletStableUsd, sol: walletSol, refresh: refreshBalance } =
     useWalletBalance(wallet?.address);
   const [positions, setPositions] = useState<PortfolioPosition[] | null>(null);
   const [copyRows, setCopyRows] = useState<CopyRowData[]>([]);
@@ -189,17 +189,19 @@ export default function PortfolioPage() {
   const positionsPnlPct = totalCost > 0 ? (positionsPnl / totalCost) * 100 : 0;
   const pacificaEquityUsd = pacificaAccount?.equityUsd ?? null;
   const pacificaAvailableUsd = pacificaAccount?.availableToSpendUsd ?? null;
+  const portfolioDataReady = positions !== null;
+  const portfolioBalancesReady = portfolioDataReady && walletStableUsd !== null;
   const processingFundsUsd = Math.max(
     0,
     pacificaAccount?.pendingDepositUsd ?? 0,
   );
   const pacificaPortfolioValue = pacificaEquityUsd ?? copyRowsValue;
   const availableCashUsd =
-    walletUsd == null && pacificaAvailableUsd == null
+    walletStableUsd == null && pacificaAvailableUsd == null
       ? null
-      : (walletUsd ?? 0) + (pacificaAvailableUsd ?? 0);
+      : (walletStableUsd ?? 0) + (pacificaAvailableUsd ?? 0);
   const totalNetWorth =
-    (walletUsd ?? 0) +
+    (walletStableUsd ?? 0) +
     pacificaPortfolioValue +
     legacyPositionsValue +
     processingFundsUsd;
@@ -281,7 +283,7 @@ export default function PortfolioPage() {
         </div>
         <div className="mt-1">
           <BigNum size={26}>
-            {availableCashUsd == null ? "-" : `$${availableCashUsd.toFixed(2)}`}
+            {formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
           </BigNum>
         </div>
         {processingFundsUsd > 0 && (
@@ -305,7 +307,7 @@ export default function PortfolioPage() {
         <Stamp label="Actions" />
         <div className="mt-3 flex flex-col items-stretch gap-2 [&>button]:w-full">
           <PacificaWithdrawButton onComplete={load} />
-          <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+          <WithdrawButton maxUsd={walletStableUsd ?? 0} onComplete={load} />
         </div>
       </div>
     </div>
@@ -358,7 +360,9 @@ export default function PortfolioPage() {
                 <div>
                   <Stamp label="NET WORTH · LIVE" />
                   <div className="mt-1">
-                    <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
+                    <BigNum size={36}>
+                      {formatMaybeUsd(totalNetWorth, portfolioBalancesReady)}
+                    </BigNum>
                   </div>
                 </div>
                 <button
@@ -385,17 +389,21 @@ export default function PortfolioPage() {
                   </div>
                   <div className="mt-0.5">
                     <BigNum size={18}>
-                      {availableCashUsd == null
-                        ? "-"
-                        : `$${availableCashUsd.toFixed(2)}`}
+                      {formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
                     </BigNum>
+                  </div>
+                  <div
+                    className="text-[9px] font-black uppercase tracking-widest leading-snug"
+                    style={{ color: DIM }}
+                  >
+                    WALLET {formatMaybeUsd(walletStableUsd, walletStableUsd !== null)} · TRADING {formatMaybeUsd(pacificaAvailableUsd, portfolioDataReady)}
                   </div>
                   {walletSol != null && (
                     <div
-                      className="text-[10px] font-black uppercase tracking-widest"
+                      className="text-[9px] font-black uppercase tracking-widest"
                       style={{ color: DIM }}
                     >
-                      + {walletSol.toFixed(4)} SOL
+                      GAS {walletSol.toFixed(4)} SOL
                     </div>
                   )}
                   {processingFundsUsd > 0 && (
@@ -506,7 +514,7 @@ export default function PortfolioPage() {
                     )}
                   </button>
                   <PacificaWithdrawButton onComplete={load} />
-                  <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+                  <WithdrawButton maxUsd={walletStableUsd ?? 0} onComplete={load} />
                 </div>
               </div>
             </div>
@@ -617,4 +625,9 @@ export default function PortfolioPage() {
       <BottomNav />
     </AppShell>
   );
+}
+
+function formatMaybeUsd(value: number | null, ready: boolean): string {
+  if (!ready) return "...";
+  return value == null ? "-" : `$${value.toFixed(2)}`;
 }

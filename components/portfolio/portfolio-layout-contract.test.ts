@@ -22,4 +22,15 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("PacificaWithdrawButton");
     expect(page).toContain("WithdrawButton");
   });
+
+  it("does not render wallet-only balances as total net worth while portfolio data is loading", () => {
+    const page = source();
+
+    expect(page).toContain("portfolioBalancesReady");
+    expect(page).toContain("walletStableUsd");
+    expect(page).toContain("formatMaybeUsd(totalNetWorth, portfolioBalancesReady)");
+    expect(page).toContain("WALLET {formatMaybeUsd(walletStableUsd, walletStableUsd !== null)}");
+    expect(page).toContain("TRADING {formatMaybeUsd(pacificaAvailableUsd, portfolioDataReady)}");
+    expect(page).toContain("GAS {walletSol.toFixed(4)} SOL");
+  });
 });
