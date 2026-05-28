@@ -28,7 +28,7 @@ describe("WhalePulseFeed route contract", () => {
     expect(socialSource).toContain("Tailing");
     expect(socialSource).toContain("Bullish");
     expect(socialSource).toContain("Bearish");
-    expect(componentSource).toContain("Comments");
+    expect(componentSource).not.toContain("<CommentsButton");
     expect(componentSource).toContain("buildPulseItems");
     expect(componentSource).toContain('/api/whales/live?limit=1000');
     expect(componentSource).toContain("/api/pulse/social");
@@ -61,7 +61,20 @@ describe("WhalePulseFeed route contract", () => {
 
     expect(componentSource).toContain("flex-nowrap");
     expect(componentSource).toContain("sm:flex-wrap");
-    expect(componentSource).toContain("sm:inline");
+    expect(componentSource).toContain('className="shrink-0"');
+  });
+
+  it("hides comments for now and keeps reaction icons visible on all viewports", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).not.toContain("<CommentsButton");
+    expect(componentSource).not.toContain("<CommentsPanel");
+    expect(componentSource).not.toContain("function CommentsButton");
+    expect(componentSource).not.toContain("function CommentsPanel");
+    expect(componentSource).not.toContain('className="hidden sm:inline"');
   });
 
   it("does not render time-sensitive age labels with Date.now during hydration", () => {

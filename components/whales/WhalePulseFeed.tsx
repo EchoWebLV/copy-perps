@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
@@ -28,7 +28,6 @@ import { buildPulseItems, type PulseItem } from "./pulse-items";
 import {
   getPulseReactionTone,
   PULSE_REACTIONS,
-  type PulseComment,
   type PulseCommentProfile,
   type PulseReaction,
 } from "./pulse-social";
@@ -40,14 +39,6 @@ interface Props {
   initialPositions: WhalePositionSignal[];
 }
 
-interface PulseApiComment {
-  id: string;
-  author: string;
-  profile?: PulseCommentProfile;
-  body: string;
-  createdAt: string;
-}
-
 interface PulseApiRecentReactor {
   reaction: PulseReaction;
   profile: PulseCommentProfile;
@@ -57,7 +48,7 @@ interface PulseApiSocialRecord {
   reactionCounts: Record<PulseReaction, number>;
   commentsCount: number;
   myReaction: PulseReaction | null;
-  comments: PulseApiComment[];
+  comments: unknown[];
   recentReactors: PulseApiRecentReactor[];
 }
 
@@ -68,8 +59,6 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
-  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [now, setNow] = useState(0);
 
   const load = useCallback(async () => {
@@ -228,8 +217,6 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 selectedReaction={
                   persistedSocial[item.position.positionId]?.myReaction ?? undefined
                 }
-                commentsOpen={openComments[item.position.positionId] === true}
-                commentDraft={commentDrafts[item.position.positionId] ?? ""}
                 persistedSocial={persistedSocial[item.position.positionId]}
                 onReact={(reaction) => {
                   if (!requirePulseAuth()) return;
@@ -240,36 +227,6 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                     positionId,
                     reaction: next ?? null,
                   });
-                }}
-                onToggleComments={() => {
-                  if (!requirePulseAuth()) return;
-                  setOpenComments((current) => ({
-                    ...current,
-                    [item.position.positionId]:
-                      current[item.position.positionId] !== true,
-                  }));
-                }}
-                onCommentDraftChange={(value) =>
-                  setCommentDrafts((current) => ({
-                    ...current,
-                    [item.position.positionId]: value,
-                  }))
-                }
-                onAddComment={async () => {
-                  const positionId = item.position.positionId;
-                  const body = (commentDrafts[positionId] ?? "").trim();
-                  if (!body) return;
-                  if (!requirePulseAuth()) return;
-                  setOpenComments((current) => ({
-                    ...current,
-                    [positionId]: true,
-                  }));
-                  const saved = await postPulseSocial({ positionId, comment: body });
-                  if (!saved) return;
-                  setCommentDrafts((current) => ({
-                    ...current,
-                    [positionId]: "",
-                  }));
                 }}
                 onTail={() => {
                   if (!requirePulseAuth()) return;
@@ -294,35 +251,21 @@ function PulsePost({
   item,
   now,
   selectedReaction,
-  commentsOpen,
-  commentDraft,
   persistedSocial,
   onReact,
-  onToggleComments,
-  onCommentDraftChange,
-  onAddComment,
   onTail,
 }: {
   item: PulseItem;
   now: number;
   selectedReaction?: PulseReaction;
-  commentsOpen: boolean;
-  commentDraft: string;
   persistedSocial?: PulseApiSocialRecord;
   onReact: (reaction: PulseReaction) => void;
-  onToggleComments: () => void;
-  onCommentDraftChange: (value: string) => void;
-  onAddComment: () => void;
   onTail: () => void;
 }) {
   const p = item.position;
   const sideColor = p.side === "long" ? GREEN : RED;
   const profit = (p.unrealizedPnlPct ?? 0) >= 0;
   const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
-  const persistedComments =
-    persistedSocial?.comments.map(apiCommentToPulseComment) ?? [];
-  const comments = persistedComments;
-  const commentCount = persistedSocial?.commentsCount ?? 0;
   const aiLine = buildAiLine(item);
   const recentReactors = persistedSocial?.recentReactors ?? [];
 
@@ -449,11 +392,6 @@ function PulsePost({
                   onClick={() => onReact(reaction)}
                 />
               ))}
-              <CommentsButton
-                count={commentCount}
-                active={commentsOpen}
-                onClick={onToggleComments}
-              />
             </div>
 
             <button
@@ -478,15 +416,6 @@ function PulsePost({
 
           {recentReactors.length > 0 ? (
             <RecentReactions reactors={recentReactors} />
-          ) : null}
-
-          {commentsOpen ? (
-            <CommentsPanel
-              comments={comments}
-              draft={commentDraft}
-              onDraftChange={onCommentDraftChange}
-              onAddComment={onAddComment}
-            />
           ) : null}
         </div>
       </article>
@@ -539,17 +468,17 @@ function ReactionButton({
       }}
     >
       {label === "Bullish" ? (
-        <Flame className="hidden sm:inline" size={12} strokeWidth={3} style={{ color }} />
+        <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
       ) : label === "Bearish" ? (
         <TrendingDown
-          className="hidden sm:inline"
+          className="shrink-0"
           size={12}
           strokeWidth={3}
           style={{ color }}
         />
       ) : (
         <Zap
-          className="hidden sm:inline"
+          className="shrink-0"
           size={12}
           strokeWidth={3}
           fill={active ? ACCENT : "none"}
@@ -566,112 +495,6 @@ function pulseReactionColor(reaction: PulseReaction): string {
   if (tone === "green") return GREEN;
   if (tone === "red") return RED;
   return ACCENT;
-}
-
-function CommentsButton({
-  count,
-  active,
-  onClick,
-}: {
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
-      style={{
-        background: active ? `${ACCENT}24` : PANEL_2,
-        color: active ? ACCENT : FG,
-        border: `1px solid ${active ? `${ACCENT}70` : FAINT}`,
-      }}
-    >
-      <MessageCircle className="hidden sm:inline" size={12} strokeWidth={3} />
-      <span>Comments</span>
-      <span style={{ color: active ? ACCENT : DIM }}>{count}</span>
-    </button>
-  );
-}
-
-function CommentsPanel({
-  comments,
-  draft,
-  onDraftChange,
-  onAddComment,
-}: {
-  comments: PulseComment[];
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onAddComment: () => void;
-}) {
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onAddComment();
-  }
-
-  return (
-    <div
-      className="mt-3 rounded-lg px-3 py-3"
-      style={{ background: PANEL, border: `1px solid ${FAINT}` }}
-    >
-      <div className="space-y-3">
-        {comments.map((comment) => (
-          <div key={comment.id} className="flex items-start gap-2">
-            <CommentAvatar profile={comment.profile} label={comment.author} />
-            <div className="min-w-0 flex-1">
-              <div
-                className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-black uppercase"
-                style={{ color: DIM }}
-              >
-                <span className="truncate" style={{ color: FG }}>
-                  {comment.author}
-                </span>
-                {comment.profile?.handle ? (
-                  <span className="truncate">@{comment.profile.handle}</span>
-                ) : null}
-                <span>{comment.age}</span>
-              </div>
-              <p
-                className="mt-0.5 text-[12px] leading-snug"
-                style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
-              >
-                {comment.body}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <form onSubmit={submit} className="mt-3 flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => onDraftChange(e.target.value)}
-          placeholder="Add comment"
-          className="min-w-0 flex-1 rounded-full border px-3 py-2 text-[12px] outline-none"
-          style={{
-            background: BG,
-            borderColor: FAINT,
-            color: FG,
-            fontFamily: FONT_BODY,
-          }}
-        />
-        <button
-          type="submit"
-          disabled={draft.trim().length === 0}
-          className="rounded-full px-4 py-2 text-[10px] font-black uppercase disabled:cursor-not-allowed"
-          style={{
-            background: draft.trim().length > 0 ? ACCENT : "rgba(250,250,242,0.08)",
-            color: draft.trim().length > 0 ? BG : DIM,
-            border: `1px solid ${draft.trim().length > 0 ? ACCENT : FAINT}`,
-          }}
-        >
-          Post
-        </button>
-      </form>
-    </div>
-  );
 }
 
 function RecentReactions({ reactors }: { reactors: PulseApiRecentReactor[] }) {
@@ -805,27 +628,6 @@ function emptySocialCounts(): Record<PulseReaction, number> {
     Bullish: 0,
     Bearish: 0,
   };
-}
-
-function apiCommentToPulseComment(comment: PulseApiComment): PulseComment {
-  return {
-    id: comment.id,
-    author: comment.profile?.displayName ?? comment.author,
-    profile: comment.profile,
-    body: comment.body,
-    age: formatCommentAge(comment.createdAt),
-  };
-}
-
-function formatCommentAge(createdAt: string): string {
-  const ts = new Date(createdAt).getTime();
-  if (!Number.isFinite(ts)) return "now";
-  const minutes = Math.max(0, Math.floor((Date.now() - ts) / 60_000));
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
 }
 
 function buildAiLine(item: PulseItem): string | null {
