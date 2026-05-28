@@ -6,6 +6,11 @@ import {
   isSupportedFlashMarket,
   type FlashSide,
 } from "@/lib/flash/perps";
+import {
+  flashLeverageBoundsForMarket,
+  type FlashTradeMode,
+} from "@/lib/flash/markets";
+import { signAndSendPrivySolanaTransaction } from "@/lib/privy/instant-solana";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 
@@ -23,6 +28,8 @@ interface Body {
   stakeUsdc?: number;
   leverage?: number;
   walletAddress?: string;
+  instant?: boolean;
+  mode?: FlashTradeMode;
 }
 
 const FLASH_ERROR_STATUS: Record<FlashPerpsError["code"], number> = {
@@ -40,6 +47,10 @@ function parseMarket(value: unknown) {
   if (typeof value !== "string") return null;
   const market = value.trim().toUpperCase();
   return isSupportedFlashMarket(market) ? market : null;
+}
+
+function parseMode(value: unknown): FlashTradeMode {
+  return value === "degen" ? "degen" : "standard";
 }
 
 function errorMessage(err: unknown): string {
@@ -106,9 +117,20 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (!Number.isFinite(body.leverage) || body.leverage < 1 || body.leverage > 100) {
+  const mode = parseMode(body.mode);
+  const leverageBounds = flashLeverageBoundsForMarket(market, mode);
+  if (!leverageBounds) {
+    return NextResponse.json({ error: "unsupported Flash market" }, { status: 400 });
+  }
+  if (
+    !Number.isFinite(body.leverage) ||
+    body.leverage < leverageBounds.min ||
+    body.leverage > leverageBounds.max
+  ) {
     return NextResponse.json(
-      { error: "leverage must be between 1x and 100x" },
+      {
+        error: `leverage must be between ${leverageBounds.min}x and ${leverageBounds.max}x`,
+      },
       { status: 400 },
     );
   }
@@ -131,7 +153,29 @@ export async function POST(request: Request) {
       side: body.side,
       amountUsd: body.stakeUsdc,
       leverage: body.leverage,
+      mode,
     });
+    if (body.instant) {
+      const sent = await signAndSendPrivySolanaTransaction({
+        walletAddress: user.solanaPubkey,
+        transactionB64: result.transaction,
+      });
+      return NextResponse.json({
+        phase: "sent",
+        venue: "flash",
+        signature: sent.signature,
+        caip2: sent.caip2,
+        quote: result.quote,
+        position: result.position,
+        trade: {
+          market,
+          side: body.side,
+          stakeUsdc: body.stakeUsdc,
+          leverage: body.leverage,
+          mode,
+        },
+      });
+    }
     return NextResponse.json({
       phase: "sign",
       venue: "flash",
@@ -143,6 +187,7 @@ export async function POST(request: Request) {
         side: body.side,
         stakeUsdc: body.stakeUsdc,
         leverage: body.leverage,
+        mode,
       },
     });
   } catch (err) {

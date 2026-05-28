@@ -2,6 +2,9 @@ import { PrivyClient } from "@privy-io/server-auth";
 
 const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 const appSecret = process.env.PRIVY_APP_SECRET;
+const walletAuthorizationPrivateKey =
+  process.env.PRIVY_WALLET_AUTHORIZATION_PRIVATE_KEY ??
+  process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY;
 
 if (!appId || !appSecret) {
   throw new Error(
@@ -9,7 +12,11 @@ if (!appId || !appSecret) {
   );
 }
 
-export const privyServer = new PrivyClient(appId, appSecret);
+export const privyServer = new PrivyClient(appId, appSecret, {
+  walletApi: walletAuthorizationPrivateKey
+    ? { authorizationPrivateKey: walletAuthorizationPrivateKey }
+    : undefined,
+});
 
 export interface PrivyClaims {
   userId: string;

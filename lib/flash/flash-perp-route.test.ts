@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   verifyPrivyRequest: vi.fn(),
   ensureUser: vi.fn(),
   getFlashPerpsService: vi.fn(),
+  signAndSendPrivySolanaTransaction: vi.fn(),
   open: vi.fn(),
   close: vi.fn(),
   positionsOf: vi.fn(),
@@ -11,6 +12,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/privy/server", () => ({
   verifyPrivyRequest: mocks.verifyPrivyRequest,
+}));
+vi.mock("@/lib/privy/instant-solana", () => ({
+  signAndSendPrivySolanaTransaction: mocks.signAndSendPrivySolanaTransaction,
 }));
 vi.mock("@/lib/users/ensure", () => ({
   ensureUser: mocks.ensureUser,
@@ -92,6 +96,10 @@ describe("Flash perp routes", () => {
       },
     });
     mocks.positionsOf.mockResolvedValue([]);
+    mocks.signAndSendPrivySolanaTransaction.mockResolvedValue({
+      signature: "instant-sig",
+      caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    });
   });
 
   it("builds a user-signed Flash open transaction for $1 20x USDC perps", async () => {
@@ -112,6 +120,7 @@ describe("Flash perp routes", () => {
       side: "short",
       amountUsd: 1,
       leverage: 20,
+      mode: "standard",
     });
     await expect(response.json()).resolves.toMatchObject({
       phase: "sign",
@@ -122,6 +131,98 @@ describe("Flash perp routes", () => {
         side: "short",
         stakeUsdc: 1,
         leverage: 20,
+        mode: "standard",
+      },
+    });
+  });
+
+  it("builds a Flash Degen open transaction at 500x for Scalp", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 500,
+        mode: "degen",
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.open).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "SOL",
+      side: "long",
+      amountUsd: 1,
+      leverage: 500,
+      mode: "degen",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sign",
+      venue: "flash",
+      trade: {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 500,
+        mode: "degen",
+      },
+    });
+  });
+
+  it("keeps standard Flash opens capped at 100x unless Degen mode is requested", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 500,
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "leverage must be between 1x and 100x",
+    });
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("sends a delegated Flash open transaction when instant execution is requested", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "short",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+        instant: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.open).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "SOL",
+      side: "short",
+      amountUsd: 1,
+      leverage: 20,
+      mode: "standard",
+    });
+    expect(mocks.signAndSendPrivySolanaTransaction).toHaveBeenCalledWith({
+      transactionB64: "open-tx-b64",
+      walletAddress: "wallet-1",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sent",
+      venue: "flash",
+      signature: "instant-sig",
+      trade: {
+        market: "SOL",
+        side: "short",
+        stakeUsdc: 1,
+        leverage: 20,
+        mode: "standard",
       },
     });
   });
@@ -182,6 +283,7 @@ describe("Flash perp routes", () => {
       side: "long",
       amountUsd: 10,
       leverage: 100,
+      mode: "standard",
     });
     await expect(response.json()).resolves.toMatchObject({
       error: "Need $10.00 more USDC in wallet for this Flash trade.",
@@ -207,6 +309,37 @@ describe("Flash perp routes", () => {
       phase: "sign-close",
       venue: "flash",
       transactionB64: "close-tx-b64",
+    });
+  });
+
+  it("sends a delegated Flash close transaction when instant execution is requested", async () => {
+    const response = await CLOSE(
+      postRequest("/api/flash/perp/close", {
+        market: "SOL",
+        side: "short",
+        walletAddress: "wallet-1",
+        instant: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.close).toHaveBeenCalledWith({
+      trader: "wallet-1",
+      market: "SOL",
+      side: "short",
+    });
+    expect(mocks.signAndSendPrivySolanaTransaction).toHaveBeenCalledWith({
+      transactionB64: "close-tx-b64",
+      walletAddress: "wallet-1",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sent-close",
+      venue: "flash",
+      signature: "instant-sig",
+      trade: {
+        market: "SOL",
+        side: "short",
+      },
     });
   });
 

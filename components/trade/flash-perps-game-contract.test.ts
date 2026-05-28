@@ -6,14 +6,26 @@ describe("Flash fast perps game contract", () => {
   const source = () =>
     readFileSync(join(process.cwd(), "components/trade/FastPerpsGame.tsx"), "utf8");
 
-  it("uses Flash sizing with $1 stakes and 100x leverage", () => {
+  it("uses Flash sizing with $1 stakes and 100x standard leverage", () => {
     const page = source();
 
     expect(page).toContain("FLASH PERPS");
     expect(page).toContain("const STAKES = [1, 5, 10, 50] as const");
     expect(page).not.toContain("const STAKES = [1, 2, 5, 10] as const");
-    expect(page).toContain("const LEVERAGES = [20, 50, 100] as const");
+    expect(page).toContain("const STANDARD_LEVERAGES = [20, 50, 100] as const");
     expect(page).toContain("Flash minimum position is $10 notional");
+  });
+
+  it("defaults manual Scalp to Flash Degen mode at 500x", () => {
+    const page = source();
+
+    expect(page).toContain('type TradeMode = "standard" | "degen"');
+    expect(page).toContain("const DEGEN_LEVERAGES = [125, 250, 500] as const");
+    expect(page).toContain('useState<TradeMode>("degen")');
+    expect(page).toContain("useState(500)");
+    expect(page).toContain("mode: tradeMode");
+    expect(page).toContain('result.phase === "sent"');
+    expect(page).toContain('`${side.toUpperCase()} ${market} ${leverage}x`');
   });
 
   it("opens and closes through Flash routes with user-signed transactions", () => {
@@ -23,6 +35,18 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain('fetch("/api/flash/perp/positions"');
     expect(page).toContain("signAndSendFlashTransaction");
     expect(page).toContain("transactionB64");
+  });
+
+  it("uses Privy delegation for one-click Flash execution after first approval", () => {
+    const page = source();
+
+    expect(page).toContain("useDelegatedActions");
+    expect(page).toContain("delegateWallet({");
+    expect(page).toContain("ensureInstantTrading");
+    expect(page).toContain("requestOpen(true)");
+    expect(page).toContain("requestClose(true)");
+    expect(page).toContain('result.phase === "sent"');
+    expect(page).toContain('result.phase === "sent-close"');
   });
 
   it("renders the old game-style live graph on the trade screen", () => {

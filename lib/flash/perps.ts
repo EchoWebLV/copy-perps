@@ -26,8 +26,10 @@ import {
 } from "flash-sdk";
 import {
   SUPPORTED_FLASH_MARKETS,
+  flashLeverageBoundsForMarket,
   isFlashCopyableMarket,
   type FlashMarketSymbol,
+  type FlashTradeMode,
 } from "./markets";
 
 const FLASH_POOL_NAME = "Crypto.1";
@@ -69,6 +71,7 @@ export interface FlashOpenRequest {
   side: FlashSide;
   amountUsd: number;
   leverage: number;
+  mode?: FlashTradeMode;
 }
 
 export interface FlashCloseRequest {
@@ -250,7 +253,22 @@ export class FlashPerpsService {
     const owner = new PublicKey(req.trader);
     const client = this.createClient(owner);
     const market = this.marketForSymbol(req.market, req.side);
-    const maxLeverage = Math.floor(Number(market.maxLev));
+    const mode = req.mode ?? "standard";
+    const configuredBounds = flashLeverageBoundsForMarket(req.market, mode);
+    const minLeverage =
+      mode === "degen"
+        ? Math.floor(Number(market.degenMinLev || configuredBounds?.min || 1))
+        : 1;
+    const maxLeverage =
+      mode === "degen"
+        ? Math.floor(Number(market.degenMaxLev || configuredBounds?.max || 0))
+        : Math.floor(Number(market.maxLev));
+    if (minLeverage > 0 && req.leverage < minLeverage) {
+      throw new FlashPerpsError(
+        "InvalidLeverage",
+        `leverage must be at least ${minLeverage}x`,
+      );
+    }
     if (maxLeverage > 0 && req.leverage > maxLeverage) {
       throw new FlashPerpsError("LeverageTooHigh");
     }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePrivy } from "@privy-io/react-auth";
+import { useDelegatedActions, usePrivy, type User } from "@privy-io/react-auth";
 import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
@@ -31,7 +31,8 @@ const RPC =
 
 const MARKETS = ["BTC", "ETH", "SOL"] as const;
 const STAKES = [1, 5, 10, 50] as const;
-const LEVERAGES = [20, 50, 100] as const;
+const STANDARD_LEVERAGES = [20, 50, 100] as const;
+const DEGEN_LEVERAGES = [125, 250, 500] as const;
 const FLASH_MIN_NOTIONAL_USD = 10;
 const FLASH_MIN_NOTIONAL_TEXT = "Flash minimum position is $10 notional";
 const MAX_GRAPH_POINTS = 120;
@@ -39,6 +40,7 @@ const GRAPH_SAMPLE_MS = 80;
 
 type Market = (typeof MARKETS)[number];
 type TradeSide = "long" | "short";
+type TradeMode = "standard" | "degen";
 
 interface FlashPosition {
   symbol: Market;
@@ -58,7 +60,7 @@ interface FlashPosition {
   openTime: number;
 }
 
-interface FlashOpenResponse {
+interface FlashPreparedOpenResponse {
   phase: "sign";
   venue: "flash";
   transactionB64: string;
@@ -75,14 +77,64 @@ interface FlashOpenResponse {
     side: TradeSide;
     leverage: number;
     stakeUsdc: number;
+    mode: TradeMode;
   };
 }
 
-interface FlashCloseResponse {
+interface FlashSentOpenResponse {
+  phase: "sent";
+  venue: "flash";
+  signature: string;
+  caip2: string;
+  quote: FlashPreparedOpenResponse["quote"];
+  position: FlashPosition;
+  trade: FlashPreparedOpenResponse["trade"];
+}
+
+type FlashOpenResponse = FlashPreparedOpenResponse | FlashSentOpenResponse;
+
+interface FlashPreparedCloseResponse {
   phase: "sign-close";
   venue: "flash";
   transactionB64: string;
   position: FlashPosition;
+}
+
+interface FlashSentCloseResponse {
+  phase: "sent-close";
+  venue: "flash";
+  signature: string;
+  caip2: string;
+  position: FlashPosition;
+}
+
+type FlashCloseResponse = FlashPreparedCloseResponse | FlashSentCloseResponse;
+
+type PrivyWalletAccount = {
+  type?: string;
+  address?: string;
+  chainType?: string;
+  walletClientType?: string;
+  delegated?: boolean;
+};
+
+function hasDelegatedSolanaWallet(
+  user: User | null | undefined,
+  walletAddress: string | undefined,
+): boolean {
+  if (!walletAddress) return false;
+  return (
+    user?.linkedAccounts.some((account) => {
+      const walletAccount = account as PrivyWalletAccount;
+      return (
+        walletAccount.type === "wallet" &&
+        walletAccount.address === walletAddress &&
+        walletAccount.chainType === "solana" &&
+        walletAccount.delegated === true &&
+        walletAccount.walletClientType?.startsWith("privy")
+      );
+    }) ?? false
+  );
 }
 
 function b64ToBytes(b64: string): Uint8Array {
@@ -139,19 +191,24 @@ function liquidationMoveForPosition(position: FlashPosition | null): number | nu
 }
 
 export function FastPerpsGame() {
-  const { ready, authenticated, login, getAccessToken } = usePrivy();
+  const { ready, authenticated, login, getAccessToken, user } = usePrivy();
+  const { delegateWallet } = useDelegatedActions();
   const wallet = useEmbeddedSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [market, setMarket] = useState<Market>("SOL");
   const [side, setSide] = useState<TradeSide>("long");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("degen");
   const [stake, setStake] = useState(1);
-  const [leverage, setLeverage] = useState(20);
+  const [leverage, setLeverage] = useState(500);
   const [customStake, setCustomStake] = useState("");
   const [positions, setPositions] = useState<FlashPosition[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [delegatedWalletAddress, setDelegatedWalletAddress] = useState<
+    string | null
+  >(null);
 
   const effectiveStake = useMemo(() => {
     const parsed = Number(customStake);
@@ -175,6 +232,17 @@ export function FastPerpsGame() {
       : RED;
   const readyToTrade = Boolean(ready && authenticated && wallet && !busy);
   const tradeAllowed = notional >= FLASH_MIN_NOTIONAL_USD;
+  const leverageOptions =
+    tradeMode === "degen" ? DEGEN_LEVERAGES : STANDARD_LEVERAGES;
+  const instantTradingEnabled =
+    hasDelegatedSolanaWallet(user, wallet?.address) ||
+    delegatedWalletAddress === wallet?.address;
+
+  useEffect(() => {
+    if (delegatedWalletAddress && delegatedWalletAddress !== wallet?.address) {
+      setDelegatedWalletAddress(null);
+    }
+  }, [delegatedWalletAddress, wallet?.address]);
 
   const loadPositions = useCallback(async () => {
     if (!authenticated || !wallet?.address) {
@@ -234,7 +302,18 @@ export function FastPerpsGame() {
     ]);
   }, []);
 
-  const requestOpen = useCallback(async (): Promise<FlashOpenResponse> => {
+  const ensureInstantTrading = useCallback(async () => {
+    if (!wallet?.address) throw new Error("wallet not ready");
+    if (instantTradingEnabled) return;
+    setStatus("Approve instant trading once...");
+    await delegateWallet({
+      address: wallet.address,
+      chainType: "solana",
+    });
+    setDelegatedWalletAddress(wallet.address);
+  }, [delegateWallet, instantTradingEnabled, wallet?.address]);
+
+  const requestOpen = useCallback(async (instant: boolean): Promise<FlashOpenResponse> => {
     const token = await getAccessToken();
     if (!token) throw new Error("not authed");
     const resp = await fetch("/api/flash/perp", {
@@ -248,15 +327,25 @@ export function FastPerpsGame() {
         side,
         stakeUsdc: effectiveStake,
         leverage,
+        mode: tradeMode,
         walletAddress: wallet?.address,
+        instant,
       }),
     });
     const body = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
     return body as FlashOpenResponse;
-  }, [effectiveStake, getAccessToken, leverage, market, side, wallet?.address]);
+  }, [
+    effectiveStake,
+    getAccessToken,
+    leverage,
+    market,
+    side,
+    tradeMode,
+    wallet?.address,
+  ]);
 
-  const requestClose = useCallback(async (): Promise<FlashCloseResponse> => {
+  const requestClose = useCallback(async (instant: boolean): Promise<FlashCloseResponse> => {
     const token = await getAccessToken();
     if (!token) throw new Error("not authed");
     const resp = await fetch("/api/flash/perp/close", {
@@ -269,6 +358,7 @@ export function FastPerpsGame() {
         market,
         side,
         walletAddress: wallet?.address,
+        instant,
       }),
     });
     const body = await resp.json().catch(() => ({}));
@@ -286,7 +376,15 @@ export function FastPerpsGame() {
     setError(null);
     setStatus("Preparing Flash trade...");
     try {
-      const result = await requestOpen();
+      await ensureInstantTrading();
+      setStatus("Sending Flash trade...");
+      const result = await requestOpen(true);
+      if (result.phase === "sent") {
+        upsertPosition(result.position);
+        setStatus("Opened on Flash");
+        await loadPositions();
+        return;
+      }
       setStatus("Signing Flash transaction...");
       await signAndSendFlashTransaction(result.transactionB64);
       upsertPosition(result.position);
@@ -301,6 +399,7 @@ export function FastPerpsGame() {
     }
   }, [
     loadPositions,
+    ensureInstantTrading,
     readyToTrade,
     requestOpen,
     selectedPosition,
@@ -315,7 +414,17 @@ export function FastPerpsGame() {
     setError(null);
     setStatus("Preparing Flash close...");
     try {
-      const result = await requestClose();
+      await ensureInstantTrading();
+      setStatus("Sending Flash close...");
+      const result = await requestClose(true);
+      if (result.phase === "sent-close") {
+        setPositions((current) =>
+          current.filter((p) => p.positionPubkey !== selectedPosition.positionPubkey),
+        );
+        setStatus("Closed on Flash");
+        await loadPositions();
+        return;
+      }
       setStatus("Signing Flash close...");
       await signAndSendFlashTransaction(result.transactionB64);
       setPositions((current) =>
@@ -332,6 +441,7 @@ export function FastPerpsGame() {
     }
   }, [
     loadPositions,
+    ensureInstantTrading,
     readyToTrade,
     requestClose,
     selectedPosition,
@@ -350,7 +460,8 @@ export function FastPerpsGame() {
             {market}
           </div>
           <div className="mt-0.5 text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            USDC collateral · user-signed
+            USDC · {tradeMode === "degen" ? "degen" : "standard"} ·{" "}
+            {instantTradingEnabled ? "instant" : "one-time approval"}
           </div>
         </div>
         <Link
@@ -377,6 +488,7 @@ export function FastPerpsGame() {
                 onClick={() => {
                   setMarket(position.symbol);
                   setSide(position.side);
+                  setTradeMode((position.leverage ?? 0) > 100 ? "degen" : "standard");
                   setError(null);
                 }}
                 className="flex min-w-[168px] items-center justify-between rounded-xl px-3 py-1.5 text-left transition active:scale-[0.98]"
@@ -542,8 +654,32 @@ export function FastPerpsGame() {
                 {leverage}x
               </div>
             </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              {(["standard", "degen"] as const).map((nextMode) => {
+                const active = tradeMode === nextMode;
+                return (
+                  <button
+                    key={nextMode}
+                    type="button"
+                    onClick={() => {
+                      setTradeMode(nextMode);
+                      setLeverage(nextMode === "degen" ? 500 : 100);
+                      setError(null);
+                    }}
+                    className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                    style={{
+                      background: active ? FG : PANEL_2,
+                      color: active ? BG : FG,
+                      border: `1px solid ${active ? FG : FAINT}`,
+                    }}
+                  >
+                    {nextMode}
+                  </button>
+                );
+              })}
+            </div>
             <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-              {LEVERAGES.map((nextLeverage) => {
+              {leverageOptions.map((nextLeverage) => {
                 const active = leverage === nextLeverage;
                 return (
                   <button
@@ -639,7 +775,7 @@ export function FastPerpsGame() {
               ? "Working"
               : selectedPosition
                 ? `CLOSE ${market}`
-                : `${side.toUpperCase()} ${market}`}
+                : `${side.toUpperCase()} ${market} ${leverage}x`}
           </button>
         )}
       </div>
