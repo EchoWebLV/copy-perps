@@ -89,10 +89,13 @@ describe("Pacifica funding math", () => {
     mocks.getWalletUsdcBalance.mockResolvedValue(10);
   });
 
-  it("sizes first deposit from the selected stake instead of a hidden buffer", () => {
+  it("sizes first deposit from selected stake plus the opening fee buffer", () => {
     expect(
       requiredPacificaCollateralUsdc({ stakeUsdc: 5, leverage: 10 }),
-    ).toBe(5);
+    ).toBe(5.02);
+    expect(
+      requiredPacificaCollateralUsdc({ stakeUsdc: 10, leverage: 50 }),
+    ).toBe(10.2);
     expect(requiredPacificaDepositUsdc({ stakeUsdc: 5, leverage: 10 })).toBe(
       PACIFICA_MIN_DEPOSIT_USDC,
     );
@@ -105,11 +108,11 @@ describe("Pacifica funding math", () => {
         stakeUsdc: 5,
         leverage: 10,
       }),
-    ).toBe(2);
+    ).toBe(2.02);
 
     expect(
       pacificaDepositTopUpUsdc({
-        availableToSpendUsdc: 5,
+        availableToSpendUsdc: 5.02,
         stakeUsdc: 5,
         leverage: 10,
       }),
@@ -150,7 +153,7 @@ describe("Pacifica funding math", () => {
 
   it("uses credited Pacifica funds even when a previous deposit is recent", async () => {
     mocks.getAccountInfo.mockResolvedValue({
-      available_to_spend: "5.011944",
+      available_to_spend: "5.11",
       account_equity: "9.996267",
       balance: "9.944283",
     });
@@ -255,7 +258,7 @@ describe("Pacifica funding math", () => {
         stakeUsdc: 50,
         leverage: 5,
       }),
-    ).rejects.toThrow("Add $30.00 more USDC to trade.");
+    ).rejects.toThrow("Add $30.10 more USDC to trade.");
     expect(mocks.buildDepositTx).not.toHaveBeenCalled();
   });
 

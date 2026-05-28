@@ -23,7 +23,7 @@ function position(
     currentMark: 101,
     unrealizedPnlPct: 5,
     openedAtMs: 1_000,
-    lastSeenAtMs: 2_000,
+    lastSeenAtMs: 9 * 60_000,
     stale: false,
     analysis: null,
     ...overrides,
@@ -32,21 +32,23 @@ function position(
 
 describe("buildWhaleExposureSummary", () => {
   it("summarizes open whale positions without listing every position", () => {
+    const now = 10 * 60_000;
     const summary = buildWhaleExposureSummary([
       position({ positionId: "sol", market: "SOL", side: "long", notionalUsd: 70_000 }),
       position({ positionId: "eth", market: "ETH", side: "short", notionalUsd: 40_000, stale: true }),
       position({ positionId: "btc", market: "BTC", side: "short", leverage: 50, notionalUsd: 120_000, unrealizedPnlPct: -2 }),
       position({ positionId: "hype", market: "HYPE", side: "long", notionalUsd: 30_000, copyableOnPacifica: false }),
-    ]);
+      position({ positionId: "aged", market: "XAU", side: "long", notionalUsd: 20_000, lastSeenAtMs: now - 4 * 60_000 }),
+    ], now);
 
     expect(summary).toMatchObject({
-      totalCount: 4,
+      totalCount: 5,
       copyableCount: 2,
-      staleCount: 2,
-      longCount: 2,
+      staleCount: 3,
+      longCount: 3,
       shortCount: 2,
-      exposureUsd: 260_000,
-      stanceLabel: "2 LONG / 2 SHORT",
+      exposureUsd: 280_000,
+      stanceLabel: "3 LONG / 2 SHORT",
     });
     expect(summary.largestPosition).toMatchObject({
       market: "BTC",

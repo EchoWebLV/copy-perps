@@ -1,11 +1,15 @@
 import type { TailSource, WhaleTailPosition } from "@/components/tail/tail-types";
+import { isSourceFresh } from "@/lib/whales/identity";
 import { isWhaleTailPositionCopyable } from "@/components/tail/whale-tail";
 import type { WhaleTraderSignal } from "@/lib/types";
 
 type WhalePayload = WhaleTraderSignal["payload"];
 type WhalePosition = WhalePayload["openPositions"][number];
 
-function toTailPosition(position: WhalePosition): WhaleTailPosition {
+function toTailPosition(
+  position: WhalePosition,
+  nowMs: number,
+): WhaleTailPosition {
   return {
     sourcePositionId: position.positionId,
     asset: position.market,
@@ -14,22 +18,29 @@ function toTailPosition(position: WhalePosition): WhaleTailPosition {
     maxLeverage: position.maxLeverage,
     entryMark: position.entryPrice,
     currentMark: position.currentMark,
-    stale: position.stale,
+    stale:
+      position.stale ||
+      !isSourceFresh(position.lastSeenAtMs, undefined, nowMs),
+    lastSeenAtMs: position.lastSeenAtMs,
     copyableOnPacifica: position.copyableOnPacifica ?? true,
     notionalUsd: position.notionalUsd,
     unrealizedPnlPct: position.unrealizedPnlPct,
   };
 }
 
-export function buildWhaleTailSource(whale: WhalePayload): Extract<
-  TailSource,
-  { kind: "whale" }
-> | null {
+export function buildWhaleTailSource(
+  whale: WhalePayload,
+  nowMs = Date.now(),
+): Extract<TailSource, { kind: "whale" }> | null {
   if (whale.openPositions.length === 0) return null;
 
-  const positions = whale.openPositions.map(toTailPosition);
+  const positions = whale.openPositions.map((position) =>
+    toTailPosition(position, nowMs),
+  );
   const primary =
-    positions.find(isWhaleTailPositionCopyable) ??
+    positions.find((position) =>
+      isWhaleTailPositionCopyable(position, nowMs),
+    ) ??
     positions.find((position) => !position.stale) ??
     positions[0] ??
     null;
@@ -49,6 +60,7 @@ export function buildWhaleTailSource(whale: WhalePayload): Extract<
     entryMark: primary.entryMark,
     currentMark: primary.currentMark,
     stale: primary.stale,
+    lastSeenAtMs: primary.lastSeenAtMs,
     positions,
   };
 }

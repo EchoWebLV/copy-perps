@@ -777,6 +777,42 @@ describe("POST /api/bet/whale", () => {
     }
   });
 
+  it("marks Pacifica order rate limits as retryable after releasing the reservation", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.openCopyOrder.mockRejectedValue(
+      new Error("Pacifica POST /orders/create_market failed: Rate limit exceeded"),
+    );
+
+    try {
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "Trading venue is busy. Retrying shortly.",
+        retryable: true,
+        retryAfterMs: 5000,
+      });
+      expect(mocks.updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+        }),
+      );
+      expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("still returns open when post-insert reservation release fails", async () => {
     const consoleWarn = vi
       .spyOn(console, "warn")

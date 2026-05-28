@@ -15,6 +15,7 @@ const solLong: WhaleTailPosition = {
   entryMark: 100,
   currentMark: 101,
   stale: false,
+  lastSeenAtMs: Date.parse("2026-05-23T12:00:00.000Z"),
 };
 
 describe("tail copy labels", () => {

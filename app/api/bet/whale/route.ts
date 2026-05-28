@@ -356,6 +356,19 @@ export async function POST(request: Request) {
     await markBetFailedBestEffort(pendingBet.id);
     await releaseReservationBestEffort(user.id, position.market);
     console.error("[bet/whale] open failed:", err);
+    if (isPacificaFundingRateLimitError(err)) {
+      return NextResponse.json(
+        {
+          error: "Trading venue is busy. Retrying shortly.",
+          retryable: true,
+          retryAfterMs:
+            err instanceof PacificaFundingRateLimitError
+              ? err.retryAfterMs
+              : 5000,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Trade could not open. No funds were spent." },
       { status: 502 },

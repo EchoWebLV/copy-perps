@@ -10,6 +10,7 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
+import { isSourceFresh } from "@/lib/whales/identity";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   ACCENT,
@@ -262,7 +263,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 }}
                 onTail={() => {
                   if (!requirePulseAuth()) return;
-                  setTailSource(toTailSource(item.position));
+                  setTailSource(toTailSource(item.position, now));
                 }}
               />
             </section>
@@ -300,7 +301,11 @@ function PulsePositionCard({
   onReact: (reaction: PulseReaction) => void;
   onTail: () => void;
 }) {
-  const p = item.position;
+  const rawPosition = item.position;
+  const dynamicStale =
+    rawPosition.stale ||
+    (now > 0 && !isSourceFresh(rawPosition.lastSeenAtMs, undefined, now));
+  const p = { ...rawPosition, stale: dynamicStale };
   const sideColor = p.side === "long" ? GREEN : RED;
   const profit = (p.unrealizedPnlPct ?? 0) >= 0;
   const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
@@ -716,7 +721,12 @@ function buildAiLine(item: PulseItem): string | null {
   return shorten(analysis.thesis || analysis.summary, 148);
 }
 
-function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
+function toTailSource(
+  position: WhalePositionSignal["payload"],
+  nowMs: number,
+): TailSource {
+  const agedStale =
+    position.stale || !isPulsePositionFresh(position.lastSeenAtMs, nowMs);
   return {
     kind: "whale",
     whaleId: position.whaleId,
@@ -730,7 +740,8 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
     maxLeverage: position.maxLeverage,
     entryMark: position.entryPrice,
     currentMark: position.currentMark,
-    stale: position.stale,
+    stale: agedStale,
+    lastSeenAtMs: position.lastSeenAtMs,
     positions: [
       {
         sourcePositionId: position.positionId,
@@ -740,13 +751,18 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
         maxLeverage: position.maxLeverage,
         entryMark: position.entryPrice,
         currentMark: position.currentMark,
-        stale: position.stale,
+        stale: agedStale,
+        lastSeenAtMs: position.lastSeenAtMs,
         copyableOnPacifica: position.copyableOnPacifica,
         notionalUsd: position.notionalUsd,
         unrealizedPnlPct: position.unrealizedPnlPct,
       },
     ],
   };
+}
+
+function isPulsePositionFresh(lastSeenAtMs: number, nowMs: number): boolean {
+  return isSourceFresh(lastSeenAtMs, undefined, nowMs);
 }
 
 function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {

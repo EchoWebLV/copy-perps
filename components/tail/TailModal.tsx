@@ -129,6 +129,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const [success, setSuccess] = useState<null | TailSuccess>(null);
   const [autoCloseOnSourceClose, setAutoCloseOnSourceClose] = useState(false);
   const [whaleLeverage, setWhaleLeverage] = useState(1);
+  const [now, setNow] = useState(() => Date.now());
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   const whaleTailPositions = useMemo(
@@ -139,9 +140,9 @@ export function TailModal({ open, onClose, source }: Props) {
   const copyableWhalePositions = useMemo(
     () =>
       source?.kind === "whale"
-        ? copyableWhalePositionsForTail(source)
+        ? copyableWhalePositionsForTail(source, now)
         : [],
-    [source],
+    [now, source],
   );
   const activeWhalePosition =
     copyableWhalePositions[0] ?? whaleTailPositions[0] ?? null;
@@ -177,6 +178,7 @@ export function TailModal({ open, onClose, source }: Props) {
   // Reset modal state every time it opens with a new source.
   useEffect(() => {
     if (!open) return;
+    setNow(Date.now());
     setStake(10);
     setCustom("");
     setSubmitting(false);
@@ -201,6 +203,12 @@ export function TailModal({ open, onClose, source }: Props) {
       ? source.positionId
       : `${source?.sourcePositionId}:${source?.positions.length ?? 0}`,
   ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   // Esc-to-close + body scroll lock while open.
   useEffect(() => {
@@ -727,12 +735,12 @@ export function TailModal({ open, onClose, source }: Props) {
                         ? liveMark ?? position.currentMark
                         : position.currentMark;
 
-                    const copyable = isWhaleTailPositionCopyable(position);
-                    const statusLabel = position.stale
-                      ? "Stale"
+                    const copyable = isWhaleTailPositionCopyable(position, now);
+                    const statusLabel = copyable
+                      ? "Will copy"
                       : position.copyableOnPacifica === false
                         ? "Not available"
-                        : "Will copy";
+                        : "Stale";
 
                     return (
                       <div

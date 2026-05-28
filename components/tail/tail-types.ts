@@ -7,6 +7,7 @@ export type WhaleTailPosition = {
   entryMark: number;
   currentMark: number | null;
   stale: boolean;
+  lastSeenAtMs: number;
   copyableOnPacifica?: boolean;
   notionalUsd?: number;
   unrealizedPnlPct?: number | null;
@@ -40,5 +41,6 @@ export type TailSource =
       entryMark: number;
       currentMark: number | null;
       stale: boolean;
+      lastSeenAtMs: number;
       positions: WhaleTailPosition[];
     };

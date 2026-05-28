@@ -168,6 +168,12 @@ describe("buildPulseItems", () => {
       [
         position({ positionId: "stale", stale: true, notionalUsd: 1_000_000 }),
         position({
+          positionId: "aged-out",
+          stale: false,
+          lastSeenAtMs: NOW - 4 * 60_000,
+          notionalUsd: 1_000_000,
+        }),
+        position({
           positionId: "unsupported",
           copyableOnPacifica: false,
           notionalUsd: 1_000_000,
@@ -177,6 +183,7 @@ describe("buildPulseItems", () => {
     );
 
     expect(items.find((item) => item.position.positionId === "stale")?.canTail).toBe(false);
+    expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(false);
     expect(items.find((item) => item.position.positionId === "unsupported")?.canTail).toBe(false);
   });
 });

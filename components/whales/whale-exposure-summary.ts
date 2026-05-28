@@ -1,4 +1,5 @@
 import type { WhaleTraderSignal } from "@/lib/types";
+import { isSourceFresh } from "@/lib/whales/identity";
 
 type WhaleOpenPosition = WhaleTraderSignal["payload"]["openPositions"][number];
 
@@ -15,6 +16,7 @@ export interface WhaleExposureSummary {
 
 export function buildWhaleExposureSummary(
   positions: WhaleOpenPosition[],
+  nowMs = Date.now(),
 ): WhaleExposureSummary {
   let copyableCount = 0;
   let longCount = 0;
@@ -23,7 +25,7 @@ export function buildWhaleExposureSummary(
   let largestPosition: WhaleOpenPosition | null = null;
 
   for (const position of positions) {
-    if (!position.stale && position.copyableOnPacifica !== false) {
+    if (isWhaleOpenPositionCopyable(position, nowMs)) {
       copyableCount += 1;
     }
     if (position.side === "long") longCount += 1;
@@ -52,4 +54,16 @@ export function buildWhaleExposureSummary(
         : `${longCount} LONG / ${shortCount} SHORT`,
     largestPosition,
   };
+}
+
+function isWhaleOpenPositionCopyable(
+  position: WhaleOpenPosition,
+  nowMs: number,
+): boolean {
+  return (
+    nowMs > 0 &&
+    !position.stale &&
+    isSourceFresh(position.lastSeenAtMs, undefined, nowMs) &&
+    position.copyableOnPacifica !== false
+  );
 }

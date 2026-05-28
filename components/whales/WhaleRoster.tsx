@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
+import { isSourceFresh } from "@/lib/whales/identity";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
@@ -136,8 +137,14 @@ function WhaleCard({
 }) {
   const p = whale.payload;
   const [now, setNow] = useState(0);
-  const exposureSummary = buildWhaleExposureSummary(p.openPositions);
-  const fresh = !p.stale;
+  const exposureSummary = buildWhaleExposureSummary(p.openPositions, now);
+  const lastSeenAtMs = p.lastSeenAt === null ? null : Date.parse(p.lastSeenAt);
+  const fresh =
+    now > 0 &&
+    !p.stale &&
+    lastSeenAtMs !== null &&
+    Number.isFinite(lastSeenAtMs) &&
+    isSourceFresh(lastSeenAtMs, undefined, now);
   const canTail = exposureSummary.copyableCount > 0;
   const livePositionStatsOnly = p.stats.statsSource === "live_positions";
   const hasPortfolioStats = !livePositionStatsOnly;
@@ -255,7 +262,7 @@ function WhaleCard({
           type="button"
           disabled={!canTail}
           onClick={() => {
-            const source = buildWhaleTailSource(p);
+            const source = buildWhaleTailSource(p, now);
             if (!source) return;
             onTail(source);
           }}

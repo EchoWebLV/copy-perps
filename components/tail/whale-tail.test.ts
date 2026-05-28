@@ -7,6 +7,7 @@ import type { TailSource } from "./tail-types";
 
 describe("whale tail helpers", () => {
   it("copies only fresh whale positions and totals stake per position", () => {
+    const now = Date.parse("2026-05-23T12:00:00.000Z");
     const source: Extract<TailSource, { kind: "whale" }> = {
       kind: "whale",
       whaleId: "whale-1",
@@ -20,6 +21,7 @@ describe("whale tail helpers", () => {
       entryMark: 100,
       currentMark: 101,
       stale: false,
+      lastSeenAtMs: now - 30_000,
       positions: [
         {
           sourcePositionId: "primary",
@@ -29,6 +31,7 @@ describe("whale tail helpers", () => {
           entryMark: 100,
           currentMark: 101,
           stale: false,
+          lastSeenAtMs: now - 30_000,
         },
         {
           sourcePositionId: "closed-soon",
@@ -38,6 +41,7 @@ describe("whale tail helpers", () => {
           entryMark: 3000,
           currentMark: 2990,
           stale: true,
+          lastSeenAtMs: now - 30_000,
         },
         {
           sourcePositionId: "second",
@@ -47,6 +51,7 @@ describe("whale tail helpers", () => {
           entryMark: 70000,
           currentMark: 70500,
           stale: false,
+          lastSeenAtMs: now - 45_000,
         },
         {
           sourcePositionId: "hyper-only",
@@ -56,12 +61,23 @@ describe("whale tail helpers", () => {
           entryMark: 20,
           currentMark: 21,
           stale: false,
+          lastSeenAtMs: now - 30_000,
           copyableOnPacifica: false,
+        },
+        {
+          sourcePositionId: "aged-out",
+          asset: "XAU",
+          side: "long",
+          leverage: 2,
+          entryMark: 2400,
+          currentMark: 2410,
+          stale: false,
+          lastSeenAtMs: now - 4 * 60_000,
         },
       ],
     };
 
-    const copyable = copyableWhalePositionsForTail(source);
+    const copyable = copyableWhalePositionsForTail(source, now);
 
     expect(copyable.map((p) => p.sourcePositionId)).toEqual([
       "primary",

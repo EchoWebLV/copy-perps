@@ -5,6 +5,7 @@ import { getConnection } from "@/lib/solana/balance";
 import { USDC_MINT } from "@/lib/jupiter/constants";
 
 export const PACIFICA_MIN_DEPOSIT_USDC = 10;
+const PACIFICA_OPEN_FEE_BPS = 4;
 const PACIFICA_PROGRAM_ID = "PCFA5iYgmqK6MqPhWNKg7Yv7auX7VZ4Cx7T1eJyrAMH";
 const RECENT_DEPOSIT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const CREDITED_EPSILON_USDC = 0.000001;
@@ -67,7 +68,10 @@ export function requiredPacificaCollateralUsdc(params: {
   stakeUsdc: number;
   leverage: number;
 }): number {
-  return roundUpCents(Math.max(0, params.stakeUsdc));
+  const stake = Math.max(0, params.stakeUsdc);
+  const notional = stake * Math.max(1, params.leverage);
+  const openFee = (notional * PACIFICA_OPEN_FEE_BPS) / 10_000;
+  return roundUpCents(stake + openFee);
 }
 
 export function requiredPacificaDepositUsdc(params: {

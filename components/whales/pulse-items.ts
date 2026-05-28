@@ -1,4 +1,5 @@
 import type { WhalePositionSignal } from "@/lib/types";
+import { isSourceFresh } from "@/lib/whales/identity";
 
 const FRESH_OPEN_MS = 15 * 60_000;
 const BIG_POSITION_USD = 500_000;
@@ -61,6 +62,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `${position.displayName} opened ${position.market} ${position.side} ${position.leverage}x`,
         context: `${formatUsd(position.notionalUsd)} live on ${position.source}. This is new enough to watch before the tape moves too far.`,
+        nowMs,
       }),
     );
   }
@@ -76,6 +78,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `${position.displayName} is carrying a ${formatUsd(position.notionalUsd)} ${position.market} ${position.side}`,
         context: `Large notional, ${position.leverage}x leverage, ${sourcePnlText(pnl)} on the source position.`,
+        nowMs,
       }),
     );
   }
@@ -91,6 +94,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `${position.market} ${position.side} is already up ${pnl.toFixed(1)}%`,
         context: "Tailing now means entering after part of the whale's move has already happened.",
+        nowMs,
       }),
     );
   }
@@ -106,6 +110,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `${position.displayName} is still holding a losing ${position.market} ${position.side}`,
         context: `${sourcePnlText(pnl)}. The whale has not exited, but leverage makes timing fragile.`,
+        nowMs,
       }),
     );
   }
@@ -121,6 +126,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `Late entry risk on ${position.market} ${position.side}`,
         context: shorten(position.analysis.entryGapWarning, 132),
+        nowMs,
       }),
     );
   }
@@ -135,6 +141,7 @@ function makeItem(args: {
   eyebrow: string;
   headline: string;
   context: string;
+  nowMs: number;
 }): PulseItem {
   return {
     id: `${args.position.positionId}:${args.kind}`,
@@ -144,9 +151,18 @@ function makeItem(args: {
     headline: args.headline,
     context: args.context,
     reactionSeed: stableSeed(`${args.position.positionId}:${args.kind}`),
-    canTail: !args.position.stale && args.position.copyableOnPacifica !== false,
+    canTail: isPositionCopyable(args.position, args.nowMs),
     position: args.position,
   };
+}
+
+function isPositionCopyable(position: PositionPayload, nowMs: number): boolean {
+  return (
+    nowMs > 0 &&
+    !position.stale &&
+    isSourceFresh(position.lastSeenAtMs, undefined, nowMs) &&
+    position.copyableOnPacifica !== false
+  );
 }
 
 function baseScore(position: PositionPayload, nowMs: number): number {
@@ -154,7 +170,7 @@ function baseScore(position: PositionPayload, nowMs: number): number {
   const recency = Math.max(0, 60 - ageMinutes);
   const size = Math.min(140, Math.log10(Math.max(1, position.notionalUsd)) * 18);
   const leverage = Math.min(60, position.leverage * 1.5);
-  const copyable = !position.stale && position.copyableOnPacifica !== false ? 30 : -80;
+  const copyable = isPositionCopyable(position, nowMs) ? 30 : -80;
   return recency + size + leverage + copyable;
 }
 

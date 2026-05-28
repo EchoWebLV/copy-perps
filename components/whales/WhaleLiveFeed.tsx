@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Zap } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
+import { isSourceFresh } from "@/lib/whales/identity";
 import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
@@ -115,7 +116,9 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
                   slideIndex={i}
                   total={sorted.length}
                   liveMark={liveMarks[position.payload.market]}
-                  onTail={() => setTailSource(toTailSource(position.payload))}
+                  onTail={() =>
+                    setTailSource(toTailSource(position.payload, Date.now()))
+                  }
                 />
               </div>
             ))}
@@ -157,7 +160,7 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
                 liveMark={liveMarks[selectedPosition.payload.market]}
                 onTail={() =>
                   setTailSource(
-                    toTailSource(selectedPosition.payload),
+                    toTailSource(selectedPosition.payload, Date.now()),
                   )
                 }
               />
@@ -204,7 +207,9 @@ function PositionCard({
         });
   const profit = (pnl ?? 0) >= 0;
   const chartPosition = toWhaleEntryChartPosition(p, liveMark);
-  const canTail = !p.stale && p.copyableOnPacifica !== false;
+  const stale =
+    p.stale || (now > 0 && !isSourceFresh(p.lastSeenAtMs, undefined, now));
+  const canTail = now > 0 && !stale && p.copyableOnPacifica !== false;
 
   useEffect(() => {
     setNow(Date.now());
@@ -227,9 +232,9 @@ function PositionCard({
           <WhaleFingerprintAvatar
             sourceAccount={p.sourceAccount}
             label={p.displayName}
-            mood={p.stale ? "WOUNDED" : "HUNTING"}
+            mood={stale ? "WOUNDED" : "HUNTING"}
             size={56}
-            pulse={!p.stale}
+            pulse={!stale}
           />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
@@ -245,7 +250,7 @@ function PositionCard({
               </span>
             </div>
           </div>
-          <FreshnessBadge stale={p.stale} />
+          <FreshnessBadge stale={stale} />
         </div>
 
         <div className="mt-4 grid grid-cols-3 overflow-hidden" style={{ background: PANEL, borderRadius: 16, border: `1px solid ${FAINT}` }}>
@@ -289,7 +294,7 @@ function PositionCard({
       >
         <Zap size={14} strokeWidth={3} fill={canTail ? BG : "none"} />
         {buildWhaleLiveTailButtonLabel({
-          stale: p.stale,
+          stale,
           copyableOnPacifica: p.copyableOnPacifica,
         })}
       </button>
@@ -297,7 +302,13 @@ function PositionCard({
   );
 }
 
-function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
+function toTailSource(
+  position: WhalePositionSignal["payload"],
+  nowMs = Date.now(),
+): TailSource {
+  const stale =
+    position.stale ||
+    !isSourceFresh(position.lastSeenAtMs, undefined, nowMs);
   return {
     kind: "whale",
     whaleId: position.whaleId,
@@ -311,7 +322,8 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
     maxLeverage: position.maxLeverage,
     entryMark: position.entryPrice,
     currentMark: position.currentMark,
-    stale: position.stale,
+    stale,
+    lastSeenAtMs: position.lastSeenAtMs,
     positions: [
       {
         sourcePositionId: position.positionId,
@@ -321,7 +333,8 @@ function toTailSource(position: WhalePositionSignal["payload"]): TailSource {
         maxLeverage: position.maxLeverage,
         entryMark: position.entryPrice,
         currentMark: position.currentMark,
-        stale: position.stale,
+        stale,
+        lastSeenAtMs: position.lastSeenAtMs,
         copyableOnPacifica: position.copyableOnPacifica,
         notionalUsd: position.notionalUsd,
         unrealizedPnlPct: position.unrealizedPnlPct,

@@ -31,6 +31,7 @@ const position = (
 
 describe("buildWhaleTailSource", () => {
   it("builds one whale tail source containing every open position", () => {
+    const now = Date.parse("2026-05-23T12:00:00.000Z");
     const source = buildWhaleTailSource({
       whaleId: "whale-1",
       source: "pacifica",
@@ -60,7 +61,7 @@ describe("buildWhaleTailSource", () => {
       },
       lastSeenAt: "2026-05-23T12:00:00.000Z",
       stale: false,
-    });
+    }, now);
 
     expect(source?.displayName).toBe("Alpha Whale");
     expect(source?.sourcePositionId).toBe("fresh-sol");
