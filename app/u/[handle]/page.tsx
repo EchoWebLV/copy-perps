@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { makeProfileCodePattern } from "@/lib/users/profile-code";
+import { makeProfileCodeColorPattern } from "@/lib/users/profile-code";
 import { normalizeHandleInput } from "@/lib/users/handle";
 
 interface PageParams {
@@ -13,7 +13,7 @@ export default async function PublicProfilePage({ params }: PageParams) {
   if (!normalized.ok) notFound();
 
   const handle = normalized.handle;
-  const pattern = makeProfileCodePattern(handle);
+  const pattern = makeProfileCodeColorPattern(handle);
 
   return (
     <main className="min-h-screen bg-[#0e0d10] px-6 py-10 text-[#fafaf2]">
@@ -25,17 +25,17 @@ export default async function PublicProfilePage({ params }: PageParams) {
           @{handle}
         </h1>
 
-        <div className="mt-8 grid w-full max-w-[280px] gap-[3px] rounded-2xl bg-[#fafaf2] p-4">
+        <div className="mt-8 grid w-full max-w-[280px] gap-[3px] rounded-2xl bg-gradient-to-br from-[#fafaf2] to-[#fff7a8] p-4 shadow-[0_0_44px_rgba(250,229,0,0.2)]">
           <div
             className="grid gap-[3px]"
             style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}
           >
             {pattern.flatMap((row, y) =>
-              row.map((on, x) => (
+              row.map((color, x) => (
                 <span
                   key={`${x}:${y}`}
                   className="aspect-square rounded-[2px]"
-                  style={{ background: on ? "#0e0d10" : "#fafaf2" }}
+                  style={{ background: color ?? "rgba(14, 13, 16, 0.06)" }}
                 />
               )),
             )}

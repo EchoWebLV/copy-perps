@@ -10,7 +10,7 @@ describe("Profile share card", () => {
     );
 
     expect(source).toContain("/api/users/me");
-    expect(source).toContain("makeProfileCodePattern");
+    expect(source).toContain("makeProfileCodeColorPattern");
     expect(source).toContain("buildProfileShareUrl");
     expect(source).toContain("navigator.share");
     expect(source).toContain("CUSTOM CODE");

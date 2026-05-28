@@ -11,7 +11,7 @@ import {
 } from "react";
 import {
   buildProfileShareUrl,
-  makeProfileCodePattern,
+  makeProfileCodeColorPattern,
 } from "@/lib/users/profile-code";
 import {
   ACCENT,
@@ -60,7 +60,7 @@ export function ProfileShareCard({
     ? buildProfileShareUrl(origin, activeHandle)
     : `/u/${activeHandle.replace(/^@+/, "")}`;
   const codePattern = useMemo(
-    () => makeProfileCodePattern(`${activeHandle}:${shareUrl}`),
+    () => makeProfileCodeColorPattern(`${activeHandle}:${shareUrl}`),
     [activeHandle, shareUrl],
   );
 
@@ -197,17 +197,18 @@ export function ProfileShareCard({
               gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
               width: 118,
               height: 118,
-              background: FG,
+              background: `linear-gradient(135deg, ${FG}, #fff7a8)`,
               border: `1px solid ${FAINT}`,
+              boxShadow: "0 0 24px rgba(250, 229, 0, 0.18)",
             }}
             aria-label={`Share code for @${activeHandle}`}
           >
             {codePattern.flatMap((row, y) =>
-              row.map((on, x) => (
+              row.map((color, x) => (
                 <span
                   key={`${x}:${y}`}
                   className="rounded-[1px]"
-                  style={{ background: on ? BG : FG }}
+                  style={{ background: color ?? "rgba(14, 13, 16, 0.06)" }}
                 />
               )),
             )}

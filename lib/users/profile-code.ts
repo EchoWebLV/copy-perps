@@ -1,4 +1,15 @@
 export const PROFILE_CODE_SIZE = 15;
+export const PROFILE_CODE_COLORS = [
+  "#fae500",
+  "#1de78b",
+  "#ff3b54",
+  "#ff8a2a",
+  "#8b5cf6",
+  "#38bdf8",
+] as const;
+
+export type ProfileCodeColor = (typeof PROFILE_CODE_COLORS)[number];
+export type ProfileCodeColorCell = ProfileCodeColor | null;
 
 export function profileSharePath(handle: string): string {
   return `/u/${stripAt(handle)}`;
@@ -29,6 +40,15 @@ export function makeProfileCodePattern(seed: string): boolean[][] {
   return pattern;
 }
 
+export function makeProfileCodeColorPattern(
+  seed: string,
+): ProfileCodeColorCell[][] {
+  const source = seed || "gwk_anon";
+  return makeProfileCodePattern(source).map((row, y) =>
+    row.map((on, x) => (on ? colorForCell(source, x, y) : null)),
+  );
+}
+
 function stripAt(handle: string): string {
   return handle.trim().replace(/^@+/, "");
 }
@@ -49,6 +69,20 @@ function inFinder(x: number, y: number, size: number): boolean {
     (x >= size - 5 && y < 5) ||
     (x < 5 && y >= size - 5)
   );
+}
+
+function colorForCell(seed: string, x: number, y: number): ProfileCodeColor {
+  const hash = hashString(`${seed}:${x}:${y}`);
+  return PROFILE_CODE_COLORS[hash % PROFILE_CODE_COLORS.length];
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function seededRandom(seed: string): () => number {
