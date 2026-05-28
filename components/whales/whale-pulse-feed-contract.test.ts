@@ -66,6 +66,20 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain('<ul className="divide-y"');
   });
 
+  it("adds whale-level 1D win rate and 30D P/L to Pulse cards", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("/api/whales/roster");
+    expect(componentSource).toContain("statsByWhaleId");
+    expect(componentSource).toContain('label="1D Win Rate"');
+    expect(componentSource).toContain('label="30D P/L"');
+    expect(componentSource).toContain("formatWinRate");
+    expect(componentSource).toContain("formatSignedUsd");
+  });
+
   it("keeps the mobile reaction controls on one row", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),

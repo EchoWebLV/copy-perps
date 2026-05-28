@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
-import type { WhalePositionSignal } from "@/lib/types";
+import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import {
   ACCENT,
@@ -34,6 +34,7 @@ import {
 import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
+const ROSTER_STATS_POLL_MS = 30_000;
 
 interface Props {
   initialPositions: WhalePositionSignal[];
@@ -54,10 +55,18 @@ interface PulseApiSocialRecord {
 
 type PulseApiSocial = Record<string, PulseApiSocialRecord>;
 
+interface PulseWhaleStats {
+  winRatePct1d: number | null;
+  pnl30dUsdc: number;
+}
+
 export function WhalePulseFeed({ initialPositions }: Props) {
   const { ready, authenticated, getAccessToken, login } = usePrivy();
   const [positions, setPositions] =
     useState<WhalePositionSignal[]>(initialPositions);
+  const [statsByWhaleId, setStatsByWhaleId] = useState<
+    Record<string, PulseWhaleStats>
+  >({});
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [now, setNow] = useState(0);
 
@@ -75,6 +84,25 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   }, []);
 
   useVisiblePoll(load, POLL_MS);
+
+  const loadWhaleStats = useCallback(async () => {
+    try {
+      const r = await fetch("/api/whales/roster", {
+        cache: "no-store",
+      });
+      if (!r.ok) return;
+      const data = (await r.json()) as { whales: WhaleTraderSignal[] };
+      setStatsByWhaleId(buildPulseWhaleStats(data.whales));
+    } catch {
+      // Keep cards readable when whale profile stats miss a refresh.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWhaleStats();
+  }, [loadWhaleStats]);
+
+  useVisiblePoll(loadWhaleStats, ROSTER_STATS_POLL_MS);
 
   useEffect(() => {
     setNow(Date.now());
@@ -180,6 +208,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                 now={now}
                 slideIndex={index}
                 total={items.length}
+                whaleStats={statsByWhaleId[item.position.whaleId]}
                 selectedReaction={
                   persistedSocial[item.position.positionId]?.myReaction ?? undefined
                 }
@@ -218,6 +247,7 @@ function PulsePositionCard({
   now,
   slideIndex,
   total,
+  whaleStats,
   selectedReaction,
   persistedSocial,
   onReact,
@@ -227,6 +257,7 @@ function PulsePositionCard({
   now: number;
   slideIndex: number;
   total: number;
+  whaleStats?: PulseWhaleStats;
   selectedReaction?: PulseReaction;
   persistedSocial?: PulseApiSocialRecord;
   onReact: (reaction: PulseReaction) => void;
@@ -358,6 +389,29 @@ function PulsePositionCard({
             <Metric
               label="Now"
               value={p.currentMark === null ? "N/A" : fmtPrice(p.currentMark)}
+            />
+          </div>
+
+          <div
+            className="mt-2 grid grid-cols-2 gap-2"
+            style={{ fontFamily: FONT_BODY }}
+          >
+            <Metric
+              label="1D Win Rate"
+              value={formatWinRate(whaleStats?.winRatePct1d ?? null)}
+            />
+            <Metric
+              label="30D P/L"
+              value={
+                whaleStats ? formatSignedUsd(whaleStats.pnl30dUsdc) : "N/A"
+              }
+              color={
+                whaleStats
+                  ? whaleStats.pnl30dUsdc >= 0
+                    ? GREEN
+                    : RED
+                  : FG
+              }
             />
           </div>
 
@@ -580,6 +634,20 @@ function emptySocialCounts(): Record<PulseReaction, number> {
   };
 }
 
+function buildPulseWhaleStats(
+  whales: WhaleTraderSignal[],
+): Record<string, PulseWhaleStats> {
+  return Object.fromEntries(
+    whales.map((whale) => [
+      whale.payload.whaleId,
+      {
+        winRatePct1d: whale.payload.stats.winRatePct1d,
+        pnl30dUsdc: whale.payload.stats.pnl30dUsdc,
+      },
+    ]),
+  );
+}
+
 function buildAiLine(item: PulseItem): string | null {
   const analysis = item.position.analysis;
   if (!analysis) return null;
@@ -672,6 +740,18 @@ function fmtPrice(value: number): string {
 function formatPct(value: number | null): string {
   if (value === null) return "N/A";
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function formatWinRate(value: number | null): string {
+  if (value === null) return "N/A";
+  return `${value.toFixed(0)}%`;
+}
+
+function formatSignedUsd(value: number): string {
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(value).toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  })}`;
 }
 
 function reactionVerb(reaction: PulseReaction): string {
