@@ -9,3 +9,23 @@ export function handleFromPubkey(pubkey: string | null | undefined): string {
   if (!pubkey) return "gwk_anon";
   return `gwk_${pubkey.slice(0, 4)}`;
 }
+
+export type NormalizedHandle =
+  | { ok: true; handle: string }
+  | { ok: false; error: string };
+
+export const HANDLE_RULE =
+  "Handle must be 3 to 24 letters, numbers, or underscores.";
+
+export function normalizeHandleInput(input: unknown): NormalizedHandle {
+  if (typeof input !== "string") {
+    return { ok: false, error: HANDLE_RULE };
+  }
+
+  const handle = input.trim().replace(/^@+/, "").toLowerCase();
+  if (!/^[a-z0-9_]{3,24}$/.test(handle)) {
+    return { ok: false, error: HANDLE_RULE };
+  }
+
+  return { ok: true, handle };
+}

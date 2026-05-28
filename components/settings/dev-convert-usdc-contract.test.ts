@@ -9,7 +9,7 @@ describe("Deposit dev jupUSD conversion", () => {
       "utf8",
     );
 
-    expect(source).toContain("showDevTools");
+    expect(source).toContain("depositDevToolsVisible()");
     expect(source).toContain("CONVERT JUPUSD TO USDC");
     expect(source).toContain("/api/dev/convert-jupusd");
     expect(source).toContain("signAndSubmitTx");

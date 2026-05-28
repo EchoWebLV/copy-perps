@@ -35,4 +35,15 @@ describe("Deposit wallet recovery UI", () => {
 
     expect(source).toContain("!wallet?.address && walletError");
   });
+
+  it("puts legacy feed prefs behind a flag and shows profile sharing", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/(app)/deposit/page.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("feedRailPrefsVisible()");
+    expect(source).toContain("showFeedPrefs");
+    expect(source).toContain("<ProfileShareCard");
+  });
 });

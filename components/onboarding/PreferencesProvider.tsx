@@ -17,6 +17,7 @@ import {
 } from "@/lib/feed/preferences";
 import { RAILS } from "@/lib/feed/rails";
 import { ev } from "@/lib/analytics";
+import { feedRailPrefsVisible } from "@/lib/client-features";
 
 type Mode = "onboarding" | "edit";
 
@@ -36,6 +37,7 @@ const PreferencesContext = createContext<Ctx | null>(null);
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const { ready, authenticated, getAccessToken, login } = usePrivy();
+  const showRailPrefs = feedRailPrefsVisible();
   const [mode, setMode] = useState<Mode>("onboarding");
   const [openState, setOpenState] = useState(false);
   const [prefs, setLocalPrefs] = useState<FeedPrefs>(DEFAULT_PREFS);
@@ -44,6 +46,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   // First-authed-visit auto-trigger. Fetches the user's stored prefs;
   // if onboardingCompletedAt is null, open the wizard in onboarding mode.
   useEffect(() => {
+    if (!showRailPrefs) return;
     if (!ready || !authenticated) return;
     let cancelled = false;
     (async () => {
@@ -64,16 +67,17 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, getAccessToken]);
+  }, [ready, authenticated, getAccessToken, showRailPrefs]);
 
   const open = useCallback(() => {
+    if (!showRailPrefs) return;
     if (!authenticated) {
       login();
       return;
     }
     setMode("edit");
     setOpenState(true);
-  }, [authenticated, login]);
+  }, [authenticated, login, showRailPrefs]);
 
   const close = useCallback(() => setOpenState(false), []);
 
@@ -119,7 +123,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       value={{ prefs, setPrefs: setPrefsAndSave, open, close }}
     >
       {children}
-      {openState && (
+      {openState && showRailPrefs && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#080808] text-white">
           <div className="mx-auto flex min-h-full max-w-md flex-col px-7 pb-10 pt-14">
             {/* eyebrow + masthead */}

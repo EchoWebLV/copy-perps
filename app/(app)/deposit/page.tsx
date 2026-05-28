@@ -14,9 +14,14 @@ import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { usePreferences } from "@/components/onboarding/PreferencesProvider";
+import { ProfileShareCard } from "@/components/settings/ProfileShareCard";
 import { RAILS } from "@/lib/feed/rails";
 import type { FeedPrefs } from "@/lib/feed/preferences";
 import { ev } from "@/lib/analytics";
+import {
+  depositDevToolsVisible,
+  feedRailPrefsVisible,
+} from "@/lib/client-features";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import {
   decodeBase64Tx,
@@ -39,7 +44,8 @@ import {
 const DEFAULT_FUND_AMOUNT_USD = "25";
 const RPC_URL =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
-const showDevTools = process.env.NODE_ENV !== "production";
+const showDevTools = depositDevToolsVisible();
+const showFeedPrefs = feedRailPrefsVisible();
 
 export default function DepositPage() {
   const { ready, authenticated, getAccessToken, login, logout } = usePrivy();
@@ -168,7 +174,7 @@ export default function DepositPage() {
   };
 
   const rail =
-    ready && authenticated ? (
+    ready && authenticated && showFeedPrefs ? (
       <div className="flex flex-col gap-3">
         <div
           className="p-4"
@@ -327,61 +333,65 @@ export default function DepositPage() {
             </div>
           ) : null}
 
+          <ProfileShareCard walletAddress={wallet?.address ?? null} />
+
           {/* Feed prefs */}
-          <div className="mt-6">
-            <Stamp label="FEED" />
-            <div
-              className="mt-2 overflow-hidden"
-              style={{
-                background: PANEL,
-                borderRadius: 18,
-                border: `1px solid ${FAINT}`,
-              }}
-            >
-              {RAILS.map(({ key, label, description, stripe }) => {
-                const enabled = prefs[key];
-                return (
-                  <button
-                    key={key}
-                    onClick={() => togglePref(key)}
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition active:opacity-70"
-                    style={{ borderBottom: `1px solid ${FAINT}` }}
-                  >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: stripe }}
-                    />
-                    <div className="flex-1">
-                      <div className="text-[13px] font-black uppercase tracking-widest">
-                        {label}
-                      </div>
-                      <div
-                        className="text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: DIM }}
-                      >
-                        {description}
-                      </div>
-                    </div>
-                    <div
-                      className="relative h-6 w-10 shrink-0 rounded-full transition"
-                      style={{
-                        background: enabled ? ACCENT : PANEL_2,
-                        border: `1px solid ${FAINT}`,
-                      }}
+          {showFeedPrefs ? (
+            <div className="mt-6">
+              <Stamp label="FEED" />
+              <div
+                className="mt-2 overflow-hidden"
+                style={{
+                  background: PANEL,
+                  borderRadius: 18,
+                  border: `1px solid ${FAINT}`,
+                }}
+              >
+                {RAILS.map(({ key, label, description, stripe }) => {
+                  const enabled = prefs[key];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => togglePref(key)}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition active:opacity-70"
+                      style={{ borderBottom: `1px solid ${FAINT}` }}
                     >
                       <span
-                        className="absolute top-0.5 h-5 w-5 rounded-full transition-all"
-                        style={{
-                          left: enabled ? "calc(100% - 22px)" : "2px",
-                          background: enabled ? BG : FG,
-                        }}
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: stripe }}
                       />
-                    </div>
-                  </button>
-                );
-              })}
+                      <div className="flex-1">
+                        <div className="text-[13px] font-black uppercase tracking-widest">
+                          {label}
+                        </div>
+                        <div
+                          className="text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: DIM }}
+                        >
+                          {description}
+                        </div>
+                      </div>
+                      <div
+                        className="relative h-6 w-10 shrink-0 rounded-full transition"
+                        style={{
+                          background: enabled ? ACCENT : PANEL_2,
+                          border: `1px solid ${FAINT}`,
+                        }}
+                      >
+                        <span
+                          className="absolute top-0.5 h-5 w-5 rounded-full transition-all"
+                          style={{
+                            left: enabled ? "calc(100% - 22px)" : "2px",
+                            background: enabled ? BG : FG,
+                          }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {/* Log out */}
           <button
