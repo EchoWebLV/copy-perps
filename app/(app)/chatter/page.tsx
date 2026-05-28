@@ -7,7 +7,6 @@ import { buildWhalePositionSignals } from "@/lib/signals/whale-signals";
 import {
   BG,
   FG,
-  ACCENT,
   GREEN,
   RED,
   DIM,
@@ -161,38 +160,6 @@ export default async function ChatterPage() {
           color: FG,
         }}
       >
-        {/* Header - hypebeast styling reserved for the page title */}
-        <header
-          className="sticky top-0 z-10 border-b-2 px-5 pt-5 pb-3"
-          style={{ background: BG, borderColor: FAINT, fontFamily: FONT_DISPLAY }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <Headline size={28}>{`"CHATTER"`}</Headline>
-              <p
-                className="mt-1 text-[11px]"
-                style={{ color: DIM, fontFamily: BODY_FONT }}
-              >
-                Every bot, every trade, in their voice.
-              </p>
-            </div>
-            <div
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
-              style={{
-                background: `${ACCENT}20`,
-                color: ACCENT,
-                border: `1px solid ${ACCENT}40`,
-              }}
-            >
-              <span
-                className="inline-block h-2 w-2 animate-pulse rounded-full"
-                style={{ background: ACCENT, boxShadow: `0 0 8px ${ACCENT}` }}
-              />
-              LIVE
-            </div>
-          </div>
-        </header>
-
         {events.length === 0 ? (
           <div
             className="px-5 py-20 text-center"

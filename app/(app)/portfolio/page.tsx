@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { LogOut, RefreshCw } from "lucide-react";
+import { Check, Copy, LogOut, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
@@ -75,6 +75,7 @@ export default function PortfolioPage() {
     useState<PacificaAccountData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<"open" | "closed">("open");
   const isXl = useMediaQuery("(min-width: 1280px)");
 
@@ -216,6 +217,12 @@ export default function PortfolioPage() {
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
   const visiblePositions = tab === "open" ? openPositions : closedPositions;
+  const copyWalletAddress = useCallback(async () => {
+    if (!wallet?.address) return;
+    await navigator.clipboard.writeText(wallet.address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [wallet?.address]);
   const closedPnlSummary = (className: string) =>
     tab === "closed" && closedPositions.length > 0 ? (
       <div
@@ -307,32 +314,9 @@ export default function PortfolioPage() {
   return (
     <AppShell rail={portfolioRail} railTitle="Portfolio">
       <div
-        className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12 lg:max-w-none lg:px-6 lg:pt-6"
+        className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-none lg:px-6 lg:pt-5"
         style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
       >
-        <div className="flex flex-none items-baseline justify-between">
-          <div>
-            <Headline size={30}>{`"PORTFOLIO"`}</Headline>
-            <p
-              className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
-              style={{ color: DIM }}
-            >
-              YOUR LIVE TRADES
-            </p>
-          </div>
-          {authenticated && (
-            <button
-              onClick={() => void load()}
-              disabled={loading}
-              className="rounded-xl p-2 transition active:scale-95 disabled:opacity-50"
-              style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
-              aria-label="Refresh"
-            >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            </button>
-          )}
-        </div>
-
         {!ready && (
           <p className="mt-6 text-sm text-neutral-500">Loading…</p>
         )}
@@ -363,22 +347,35 @@ export default function PortfolioPage() {
         {ready && authenticated && (
           <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-rows-[auto_auto_minmax(0,1fr)]">
             <div
-              className="mt-4 flex-none p-4"
+              className="flex-none p-4"
               style={{
                 background: PANEL,
-                borderRadius: 18,
+                borderRadius: 12,
                 border: `1px solid ${FAINT}`,
               }}
             >
-              <Stamp label="NET WORTH · LIVE" />
-              <div className="mt-1">
-                <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Stamp label="NET WORTH · LIVE" />
+                  <div className="mt-1">
+                    <BigNum size={36}>${totalNetWorth.toFixed(2)}</BigNum>
+                  </div>
+                </div>
+                <button
+                  onClick={() => void load()}
+                  disabled={loading}
+                  className="rounded-lg p-2 transition active:scale-95 disabled:opacity-50"
+                  style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+                  aria-label="Refresh portfolio"
+                >
+                  <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                </button>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <div
                   className="p-3"
-                  style={{ background: PANEL_2, borderRadius: 14 }}
+                  style={{ background: PANEL_2, borderRadius: 10 }}
                 >
                   <div
                     className="text-[10px] font-black uppercase tracking-widest"
@@ -412,7 +409,7 @@ export default function PortfolioPage() {
                 </div>
                 <div
                   className="p-3"
-                  style={{ background: PANEL_2, borderRadius: 14 }}
+                  style={{ background: PANEL_2, borderRadius: 10 }}
                 >
                   <div
                     className="text-[10px] font-black uppercase tracking-widest"
@@ -441,7 +438,7 @@ export default function PortfolioPage() {
                 </div>
                 <div
                   className="p-3"
-                  style={{ background: PANEL_2, borderRadius: 14 }}
+                  style={{ background: PANEL_2, borderRadius: 10 }}
                 >
                   <div
                     className="text-[10px] font-black uppercase tracking-widest"
@@ -455,7 +452,7 @@ export default function PortfolioPage() {
                 </div>
                 <div
                   className="p-3"
-                  style={{ background: PANEL_2, borderRadius: 14 }}
+                  style={{ background: PANEL_2, borderRadius: 10 }}
                 >
                   <div
                     className="text-[10px] font-black uppercase tracking-widest"
@@ -470,24 +467,47 @@ export default function PortfolioPage() {
               </div>
 
               <div
-                className="mt-3 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest"
-                style={{ color: DIM }}
+                className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono">
-                    {truncateAddress(wallet?.address)}
-                  </span>
-                  <span>·</span>
-                  <span>
-                    {openHoldingCount} OPEN · {closedPositions.length} CLOSED
-                  </span>
-                </div>
-                {!isXl && (
-                  <div className="flex items-center gap-2 xl:hidden">
-                    <PacificaWithdrawButton onComplete={load} />
-                    <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+                <div
+                  className="min-w-0 px-3 py-2"
+                  style={{ background: PANEL_2, borderRadius: 10 }}
+                >
+                  <div
+                    className="text-[9px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    Wallet
                   </div>
-                )}
+                  <div
+                    className="mt-1 break-all font-mono text-[11px] font-black uppercase tracking-widest"
+                    style={{ color: wallet?.address ? FG : DIM }}
+                  >
+                    {wallet?.address ?? "Wallet not ready"}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:flex [&>button]:whitespace-nowrap [&>button]:rounded-lg">
+                  <button
+                    onClick={() => void copyWalletAddress()}
+                    disabled={!wallet?.address}
+                    aria-label="COPY ADDRESS"
+                    className="flex items-center justify-center gap-1 border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={13} strokeWidth={3} style={{ color: GREEN }} />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} strokeWidth={2.8} />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                  <PacificaWithdrawButton onComplete={load} />
+                  <WithdrawButton maxUsd={walletUsd ?? 0} onComplete={load} />
+                </div>
               </div>
             </div>
 

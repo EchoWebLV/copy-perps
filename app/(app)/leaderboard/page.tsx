@@ -71,25 +71,19 @@ export default function LeaderboardPage() {
 
   return (
     <AppShell railTitle="Wins">
-      <div className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-12 lg:max-w-none lg:px-6 lg:pt-6">
-        <div className="flex flex-none items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black">Wins</h1>
-            <p className="mt-0.5 text-xs text-neutral-500">
-              Live and final cards from the feed
-            </p>
-          </div>
+      <div className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-none lg:px-6 lg:pt-5">
+        <div className="flex flex-none justify-end">
           <button
             onClick={() => void load()}
             disabled={loading}
             className="rounded-lg bg-white/10 p-2 text-neutral-300 transition active:scale-95 disabled:opacity-50"
-            aria-label="Refresh"
+            aria-label="Refresh wins"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
 
-        <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto">
+        <div className="no-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 pb-24 lg:grid lg:grid-cols-2 lg:items-start lg:pb-6 xl:grid-cols-3">
             {error && (
               <div className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-300 lg:col-span-full">

@@ -7,8 +7,8 @@ import {
   useSignTransaction,
   useWallets,
 } from "@privy-io/react-auth/solana";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Check, LogOut, CreditCard, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LogOut, CreditCard, Zap } from "lucide-react";
 import { Connection } from "@solana/web3.js";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
@@ -50,7 +50,6 @@ export default function DepositPage() {
   const { usdc, jupUsd, refresh } = useWalletBalance(wallet?.address);
   const { prefs, setPrefs } = usePreferences();
   const { fundWallet } = useFundWallet();
-  const [copied, setCopied] = useState(false);
   const [funding, setFunding] = useState(false);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
@@ -89,21 +88,6 @@ export default function DepositPage() {
 
   const togglePref = (key: keyof FeedPrefs) => {
     setPrefs({ ...prefs, [key]: !prefs[key] });
-  };
-
-  const walletStatusText = useMemo(() => {
-    if (wallet?.address) return wallet.address;
-    if (!walletsReady || creatingWallet) return "CREATING APP WALLET...";
-    if (walletError) return "APP WALLET NEEDS SETUP";
-    return "APP WALLET NOT READY";
-  }, [creatingWallet, wallet?.address, walletError, walletsReady]);
-
-  const copy = async () => {
-    if (!wallet?.address) return;
-    await navigator.clipboard.writeText(wallet.address);
-    ev.depositAddressCopied();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
 
   const buyWithCard = async () => {
@@ -194,41 +178,6 @@ export default function DepositPage() {
             border: `1px solid ${FAINT}`,
           }}
         >
-          <Stamp label="Wallet" />
-          <div
-            className="mt-3 break-all font-mono text-[11px]"
-            style={{ color: wallet?.address ? FG : DIM }}
-          >
-            {walletStatusText}
-          </div>
-          {!wallet?.address && walletsReady ? (
-            <button
-              onClick={createAppWallet}
-              disabled={creatingWallet}
-              className="mt-3 w-full rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest active:scale-[0.97] disabled:opacity-40"
-              style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
-            >
-              {creatingWallet ? "CREATING..." : "CREATE APP WALLET"}
-            </button>
-          ) : null}
-          {walletError ? (
-            <p
-              className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
-              style={{ color: "#fb7185" }}
-            >
-              {walletError.slice(0, 120)}
-            </p>
-          ) : null}
-        </div>
-
-        <div
-          className="p-4"
-          style={{
-            background: PANEL,
-            borderRadius: 16,
-            border: `1px solid ${FAINT}`,
-          }}
-        >
           <Stamp label="Feed Preferences" />
           <p
             className="mt-3 text-[11px] font-black uppercase tracking-widest leading-relaxed"
@@ -247,19 +196,9 @@ export default function DepositPage() {
       mainClassName={`${ready && authenticated ? "" : "[&+aside]:hidden"} lg:overflow-y-auto`}
     >
       <div
-        className="flex min-h-screen w-full flex-col px-5 pt-12 pb-32 lg:h-full lg:min-h-0 lg:max-w-3xl lg:px-6 lg:pt-6"
+        className="flex min-h-screen w-full flex-col px-5 pt-4 pb-32 lg:h-full lg:min-h-0 lg:max-w-3xl lg:px-6 lg:pt-5"
         style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
       >
-      <div>
-        <Headline size={30}>{`"SETTINGS"`}</Headline>
-        <p
-          className="mt-1 text-[10px] font-black uppercase tracking-[0.22em]"
-          style={{ color: DIM }}
-        >
-          DEPOSIT · WALLET · FEED
-        </p>
-      </div>
-
       {!ready && (
         <p
           className="mt-6 text-[11px] font-black uppercase tracking-widest"
@@ -297,8 +236,8 @@ export default function DepositPage() {
 
       {ready && authenticated && (
         <>
-          {/* Buy with card — primary CTA */}
-          <div className="mt-5">
+          {/* Buy with card. */}
+          <div>
             <Stamp label="DEPOSIT" />
             <button
               onClick={buyWithCard}
@@ -322,54 +261,24 @@ export default function DepositPage() {
                 </>
               )}
             </button>
-          </div>
-
-          {/* Deposit address card */}
-          <div className="mt-5">
-            <Stamp label="OR SEND USDC (SOLANA)" />
-            <div
-              className="mt-2 p-4"
-              style={{
-                background: PANEL,
-                borderRadius: 18,
-                border: `1px solid ${FAINT}`,
-              }}
-            >
-              <div
-                className="mt-1 break-all font-mono text-[12px]"
-                style={{ color: FG, opacity: 0.85 }}
-              >
-                {walletStatusText}
-              </div>
-              {!wallet?.address && walletsReady ? (
-                <button
-                  onClick={createAppWallet}
-                  disabled={creatingWallet}
-                  className="mt-3 flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
-                  style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
-                >
-                  {creatingWallet ? "CREATING..." : "CREATE APP WALLET"}
-                </button>
-              ) : null}
+            {!wallet?.address && walletsReady ? (
               <button
-                onClick={copy}
-                disabled={!wallet?.address}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
+                onClick={createAppWallet}
+                disabled={creatingWallet}
+                className="mt-3 flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
                 style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
               >
-                {copied ? (
-                  <>
-                    <Check size={14} strokeWidth={3} style={{ color: GREEN }} />
-                    <span style={{ color: GREEN }}>COPIED</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy size={14} strokeWidth={2.8} />
-                    COPY ADDRESS
-                  </>
-                )}
+                {creatingWallet ? "CREATING..." : "CREATE APP WALLET"}
               </button>
-            </div>
+            ) : null}
+            {!wallet?.address && walletError ? (
+              <p
+                className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
+                style={{ color: "#fb7185" }}
+              >
+                {walletError.slice(0, 120)}
+              </p>
+            ) : null}
           </div>
 
           {showDevTools ? (
