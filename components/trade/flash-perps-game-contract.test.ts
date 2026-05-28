@@ -42,4 +42,16 @@ describe("Flash fast perps game contract", () => {
     expect(page).not.toContain("Open a Flash position for live graph");
     expect(page).toContain("pb-[calc(88px+env(safe-area-inset-bottom))]");
   });
+
+  it("labels live Flash close estimates separately from posted collateral", () => {
+    const page = source();
+
+    expect(page).toContain('label={selectedPosition ? "Collateral" : "Stake"}');
+    expect(page).toContain('label={selectedPosition ? "P/L" : "Notional"}');
+    expect(page).toContain("collat {fmtUsd(position.collateralUsd)}");
+    expect(page).toContain("const exitValue = exitValueForPosition(position)");
+    expect(page).toContain("exit {fmtUsd(exitValue)}");
+    expect(page).toContain("Exit {fmtUsd(exitValue)}");
+    expect(page).not.toContain('label={selectedPosition ? "Value" : "Stake"}');
+  });
 });

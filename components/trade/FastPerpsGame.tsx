@@ -99,17 +99,25 @@ function fmtPrice(value: number | null | undefined): string {
   return `$${value.toPrecision(4)}`;
 }
 
-function valueForPosition(position: FlashPosition | null): number {
+function markValueForPosition(position: FlashPosition | null): number {
+  if (!position) return 0;
+  return Math.max(0, position.collateralUsd + (position.pnlUsd ?? 0));
+}
+
+function exitValueForPosition(position: FlashPosition | null): number {
   if (!position) return 0;
   if (position.receiveUsd != null && Number.isFinite(position.receiveUsd)) {
     return Math.max(0, position.receiveUsd);
   }
-  return Math.max(0, position.collateralUsd + (position.pnlUsd ?? 0));
+  return markValueForPosition(position);
 }
 
 function pnlForPosition(position: FlashPosition | null): number {
   if (!position) return 0;
-  return valueForPosition(position) - position.collateralUsd;
+  if (position.pnlUsd != null && Number.isFinite(position.pnlUsd)) {
+    return position.pnlUsd;
+  }
+  return markValueForPosition(position) - position.collateralUsd;
 }
 
 function roiForPosition(position: FlashPosition | null): number {
@@ -148,10 +156,11 @@ export function FastPerpsGame() {
     () => positions.find((p) => p.symbol === market && p.side === side) ?? null,
     [market, positions, side],
   );
-  const graphValue = valueForPosition(selectedPosition);
+  const graphValue = markValueForPosition(selectedPosition);
   const livePnl = pnlForPosition(selectedPosition);
   const liveRoi = roiForPosition(selectedPosition);
   const liquidationMove = liquidationMoveForPosition(selectedPosition);
+  const exitValue = exitValueForPosition(selectedPosition);
   const sideColor = side === "long" ? GREEN : RED;
   const graphColor = !selectedPosition
     ? ACCENT
@@ -354,6 +363,7 @@ export function FastPerpsGame() {
             const active =
               position.symbol === market && position.side === side;
             const pnl = pnlForPosition(position);
+            const exitValue = exitValueForPosition(position);
             return (
               <button
                 key={position.positionPubkey}
@@ -374,19 +384,19 @@ export function FastPerpsGame() {
                     {position.symbol} {position.side}
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
-                    {(position.leverage ?? 0).toFixed(0)}x · stake {fmtUsd(position.collateralUsd)}
+                    {(position.leverage ?? 0).toFixed(0)}x · collat {fmtUsd(position.collateralUsd)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono text-[11px] font-black">
-                    {fmtUsd(valueForPosition(position))}
-                  </div>
                   <div
-                    className="mt-0.5 font-mono text-[10px] font-black"
+                    className="font-mono text-[11px] font-black"
                     style={{ color: pnl >= 0 ? GREEN : RED }}
                   >
                     {pnl >= 0 ? "+" : ""}
                     {fmtUsd(pnl)}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
+                    exit {fmtUsd(exitValue)}
                   </div>
                 </div>
               </button>
@@ -459,9 +469,9 @@ export function FastPerpsGame() {
 
       <div className="mt-2 grid grid-cols-2 gap-2">
         <PreviewMetric
-          label={selectedPosition ? "Value" : "Stake"}
-          value={fmtUsd(selectedPosition ? graphValue : effectiveStake)}
-          color={selectedPosition ? graphColor : FG}
+          label={selectedPosition ? "Collateral" : "Stake"}
+          value={fmtUsd(selectedPosition ? selectedPosition.collateralUsd : effectiveStake)}
+          color={FG}
         />
         <PreviewMetric
           label={selectedPosition ? "P/L" : "Notional"}
@@ -558,6 +568,8 @@ export function FastPerpsGame() {
           Mark {fmtPrice(selectedPosition.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
           {fmtPrice(selectedPosition.liquidationPriceUsd)}
           {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
+          {" · "}
+          Exit {fmtUsd(exitValue)}
           {" · "}
           {liveRoi >= 0 ? "+" : ""}
           {liveRoi.toFixed(1)}%
