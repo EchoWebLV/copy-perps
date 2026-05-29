@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { HLAssetPosition } from "@/lib/hyperliquid/client";
+import type { HLAssetPosition, HLFill } from "@/lib/hyperliquid/client";
 import {
+  deriveHyperliquidPositionOpenTime,
   hyperliquidSideToWhaleSide,
   makeHyperliquidPositionId,
   mapHyperliquidPosition,
@@ -21,6 +22,24 @@ const baseAssetPosition: HLAssetPosition = {
     maxLeverage: 25,
   },
 };
+
+function fill(overrides: Partial<HLFill>): HLFill {
+  return {
+    coin: overrides.coin ?? "ETH",
+    px: overrides.px ?? "2000",
+    sz: overrides.sz ?? "1",
+    side: overrides.side ?? "B",
+    time: overrides.time ?? Date.parse("2026-05-23T11:00:00.000Z"),
+    startPosition: overrides.startPosition ?? "0",
+    dir: overrides.dir ?? "Open Long",
+    closedPnl: overrides.closedPnl ?? "0",
+    hash: overrides.hash ?? "0xhash",
+    oid: overrides.oid ?? 1,
+    crossed: overrides.crossed ?? true,
+    fee: overrides.fee ?? "1",
+    tid: overrides.tid ?? 1,
+  };
+}
 
 describe("hyperliquid source mapping", () => {
   it("maps signed Hyperliquid size to whale side", () => {
@@ -89,5 +108,57 @@ describe("hyperliquid source mapping", () => {
     expect(mapped.side).toBe("short");
     expect(mapped.currentMark).toBe(2500);
     expect(mapped.unrealizedPnlPct).toBe(-12.5);
+  });
+
+  it("derives current position open time from the fill that opened the current side", () => {
+    const openShortAt = Date.parse("2026-05-23T11:20:00.000Z");
+
+    expect(
+      deriveHyperliquidPositionOpenTime({
+        coin: "ETH",
+        side: "short",
+        fills: [
+          fill({
+            side: "B",
+            sz: "2",
+            startPosition: "0",
+            time: Date.parse("2026-05-23T11:00:00.000Z"),
+            dir: "Open Long",
+          }),
+          fill({
+            side: "A",
+            sz: "3",
+            startPosition: "2",
+            time: openShortAt,
+            dir: "Long > Short",
+          }),
+          fill({
+            side: "A",
+            sz: "0.5",
+            startPosition: "-1",
+            time: Date.parse("2026-05-23T11:25:00.000Z"),
+            dir: "Open Short",
+          }),
+        ],
+      }),
+    ).toBe(openShortAt);
+  });
+
+  it("returns null when the position was already open before the fill lookback", () => {
+    expect(
+      deriveHyperliquidPositionOpenTime({
+        coin: "ETH",
+        side: "long",
+        fills: [
+          fill({
+            side: "B",
+            sz: "1",
+            startPosition: "2",
+            time: Date.parse("2026-05-23T11:25:00.000Z"),
+            dir: "Open Long",
+          }),
+        ],
+      }),
+    ).toBeNull();
   });
 });

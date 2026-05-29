@@ -1,4 +1,4 @@
-import type { HLAssetPosition } from "@/lib/hyperliquid/client";
+import type { HLAssetPosition, HLFill } from "@/lib/hyperliquid/client";
 import { makeWhaleId } from "./identity";
 import type { WhalePositionRecord, WhaleSide } from "./types";
 
@@ -47,6 +47,50 @@ export function makeHyperliquidPositionId(args: {
     args.side,
     entryKey,
   ].join(":");
+}
+
+function sideFromSignedSize(size: number): WhaleSide | null {
+  if (size > 0) return "long";
+  if (size < 0) return "short";
+  return null;
+}
+
+function fillEndPosition(fill: HLFill): number | null {
+  const start = Number(fill.startPosition);
+  const size = Math.abs(Number(fill.sz));
+  if (!Number.isFinite(start) || !Number.isFinite(size)) return null;
+  if (fill.side === "B") return start + size;
+  if (fill.side === "A") return start - size;
+  return null;
+}
+
+export function deriveHyperliquidPositionOpenTime(args: {
+  coin: string;
+  side: WhaleSide;
+  fills: HLFill[];
+}): number | null {
+  let openedAtMs: number | null = null;
+  const fills = args.fills
+    .filter((fill) => fill.coin.toUpperCase() === args.coin.toUpperCase())
+    .sort((a, b) => a.time - b.time);
+
+  for (const fill of fills) {
+    const start = Number(fill.startPosition);
+    const end = fillEndPosition(fill);
+    if (!Number.isFinite(start) || end === null || !Number.isFinite(fill.time)) {
+      continue;
+    }
+
+    const beforeSide = sideFromSignedSize(start);
+    const afterSide = sideFromSignedSize(end);
+    if (afterSide === args.side && beforeSide !== args.side) {
+      openedAtMs = fill.time;
+    } else if (beforeSide === args.side && afterSide !== args.side) {
+      openedAtMs = null;
+    }
+  }
+
+  return openedAtMs;
 }
 
 function markFromPositionValue(args: {

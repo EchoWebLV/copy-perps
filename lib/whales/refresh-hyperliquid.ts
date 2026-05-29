@@ -1,6 +1,7 @@
 import {
   getAllMids,
   getClearinghouseState,
+  getUserFillsByTime,
 } from "@/lib/hyperliquid/client";
 import { CURATED_WHALES, truncateEthAddress } from "@/lib/hyperliquid/whales";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/lib/flash/markets";
 import { writeWhaleLiveSnapshot } from "./live-cache";
 import {
+  deriveHyperliquidPositionOpenTime,
   InvalidHyperliquidPositionError,
   mapHyperliquidPosition,
 } from "./hyperliquid-source";
@@ -23,6 +25,7 @@ import type { WhalePositionRecord, WhaleRecord } from "./types";
 
 const CLOSE_GRACE_MS = 90_000;
 const POSITION_REFRESH_CONCURRENCY = 6;
+const OPEN_TIME_LOOKBACK_MS = 90 * 24 * 60 * 60_000;
 
 async function forEachWithConcurrency<T>(
   items: T[],
@@ -108,6 +111,20 @@ export async function refreshHyperliquidWhales(): Promise<{
 
       const openPositionIds: string[] = [];
       const now = new Date(state.time);
+      const sourceNow = Number.isNaN(now.getTime()) ? snapshotObservedAt : now;
+      const sourceFills =
+        (state.assetPositions ?? []).length === 0
+          ? []
+          : await getUserFillsByTime(
+              account,
+              sourceNow.getTime() - OPEN_TIME_LOOKBACK_MS,
+            ).catch((err) => {
+              console.warn(
+                `[whales] Hyperliquid fills failed for ${account}:`,
+                err,
+              );
+              return [];
+            });
       const existingOpenPositions = await getOpenWhalePositionsForSource({
         source: "hyperliquid",
         sourceAccount: account,
@@ -121,7 +138,7 @@ export async function refreshHyperliquidWhales(): Promise<{
             sourceAccount: account,
             assetPosition,
             currentMark: readMark(mids, assetPosition.position.coin),
-            now: Number.isNaN(now.getTime()) ? snapshotObservedAt : now,
+            now: sourceNow,
             copyableOnPacifica: isFlashCopyableMarket(
               assetPosition.position.coin,
             ),
@@ -129,8 +146,15 @@ export async function refreshHyperliquidWhales(): Promise<{
               assetPosition.position.coin,
             ),
           });
+          const fillOpenedAtMs = deriveHyperliquidPositionOpenTime({
+            coin: mapped.market,
+            side: mapped.side,
+            fills: sourceFills,
+          });
           const existing = existingOpenById.get(mapped.id);
-          if (existing) {
+          if (fillOpenedAtMs !== null) {
+            mapped.openedAt = new Date(fillOpenedAtMs);
+          } else if (existing) {
             mapped.openedAt = existing.openedAt;
           }
           await upsertWhalePosition(mapped);

@@ -3,6 +3,7 @@ import type { HLClearinghouseState } from "@/lib/hyperliquid/client";
 
 const getClearinghouseState = vi.fn();
 const getAllMids = vi.fn();
+const getUserFillsByTime = vi.fn();
 const upsertWhale = vi.fn();
 const upsertWhalePosition = vi.fn();
 const markMissingWhalePositionsClosed = vi.fn();
@@ -12,6 +13,7 @@ const writeWhaleLiveSnapshot = vi.fn();
 vi.mock("@/lib/hyperliquid/client", () => ({
   getClearinghouseState,
   getAllMids,
+  getUserFillsByTime,
 }));
 
 vi.mock("./repository", () => ({
@@ -75,6 +77,7 @@ describe("refreshHyperliquidWhales", () => {
         ? clearinghouseState({ assetPositions: [] })
         : clearinghouseState(),
     );
+    getUserFillsByTime.mockResolvedValue([]);
     upsertWhale.mockResolvedValue(undefined);
     upsertWhalePosition.mockResolvedValue(undefined);
     markMissingWhalePositionsClosed.mockResolvedValue(undefined);
@@ -228,6 +231,52 @@ describe("refreshHyperliquidWhales", () => {
           ]
         : [],
     );
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    await refreshHyperliquidWhales();
+
+    expect(upsertWhalePosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "hyperliquid:0xabc:ETH:long:2000000000",
+        openedAt,
+      }),
+    );
+    expect(writeWhaleLiveSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        positions: [
+          expect.objectContaining({
+            id: "hyperliquid:0xabc:ETH:long:2000000000",
+            openedAt,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("uses Hyperliquid fills to recover the true current position open time", async () => {
+    const openedAt = new Date("2026-05-23T11:42:00.000Z");
+    getUserFillsByTime.mockImplementation(async (account: string) =>
+      account === "0xabc"
+        ? [
+            {
+              coin: "ETH",
+              px: "2000",
+              sz: "2",
+              side: "B",
+              time: openedAt.getTime(),
+              startPosition: "0",
+              dir: "Open Long",
+              closedPnl: "0",
+              hash: "0xhash",
+              oid: 1,
+              crossed: true,
+              fee: "1",
+              tid: 1,
+            },
+          ]
+        : [],
+    );
+
     const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
 
     await refreshHyperliquidWhales();
