@@ -3,7 +3,9 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -39,6 +41,10 @@ import {
   type PulseCommentProfile,
   type PulseReaction,
 } from "./pulse-social";
+import {
+  getVisiblePulsePositionId,
+  restoreVisiblePulsePosition,
+} from "./pulse-scroll-stability";
 import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
@@ -103,6 +109,15 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   >({});
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [now, setNow] = useState(0);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const activePositionIdRef = useRef<string | null>(null);
+
+  const rememberVisiblePulsePosition = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    activePositionIdRef.current =
+      getVisiblePulsePositionId(container) ?? activePositionIdRef.current;
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -111,6 +126,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       });
       if (!r.ok) return;
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
+      rememberVisiblePulsePosition();
       setPositions((current) =>
         data.positions.length > 0 || current.length === 0
           ? data.positions
@@ -119,7 +135,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     } catch {
       // Keep the current Pulse tape visible if a refresh misses.
     }
-  }, []);
+  }, [rememberVisiblePulsePosition]);
 
   useVisiblePoll(load, POLL_MS);
 
@@ -152,6 +168,24 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     () => buildPulseItems(positions, now),
     [positions, now],
   );
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container || items.length === 0) {
+      activePositionIdRef.current = null;
+      return;
+    }
+
+    const activePositionId = activePositionIdRef.current;
+    if (
+      activePositionId &&
+      restoreVisiblePulsePosition(container, activePositionId)
+    ) {
+      return;
+    }
+
+    activePositionIdRef.current = getVisiblePulsePositionId(container);
+  }, [items]);
   const positionIds = useMemo(
     () => [...new Set(items.map((item) => item.position.positionId))],
     [items],
@@ -236,11 +270,17 @@ export function WhalePulseFeed({ initialPositions }: Props) {
         <EmptyPulse />
       ) : (
         <div
+          ref={scrollRef}
+          onScroll={rememberVisiblePulsePosition}
           className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
           style={{ scrollSnapStop: "always" }}
         >
           {items.map((item, index) => (
-            <section key={item.id} className="h-full w-full snap-start">
+            <section
+              key={item.id}
+              data-pulse-position-id={item.position.positionId}
+              className="h-full w-full snap-start"
+            >
               <PulsePositionCard
                 item={item}
                 now={now}
