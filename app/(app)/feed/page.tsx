@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function FeedPage() {
   if (whaleSocialEnabled()) {
     return (
-      <AppShell railTitle="Whales">
+      <AppShell railTitle="Whales" hideEmptyRail>
         <WhaleRoster initialWhales={[]} />
         <BottomNav />
       </AppShell>

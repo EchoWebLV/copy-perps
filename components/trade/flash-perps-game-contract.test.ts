@@ -113,12 +113,17 @@ describe("Flash fast perps game contract", () => {
 
   it("groups desktop Scalp controls into a graph column and order ticket", () => {
     const page = source();
+    const route = readFileSync(
+      join(process.cwd(), "app/(app)/trade/page.tsx"),
+      "utf8",
+    );
 
     expect(page).toContain("lg:grid lg:grid-cols-[minmax(0,1fr)_360px]");
     expect(page).toContain('aria-label="Desktop trade controls"');
     expect(page).toContain('aria-label="Desktop order ticket"');
     expect(page).toContain("lg:max-w-none");
     expect(page).toContain("lg:w-auto");
+    expect(route).toContain('<AppShell railTitle="Trade" hideEmptyRail>');
   });
 
   it("shows the user stake separately from Flash posted collateral", () => {

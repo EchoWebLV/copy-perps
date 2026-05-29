@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function TradePage() {
   return (
-    <AppShell railTitle="Trade">
+    <AppShell railTitle="Trade" hideEmptyRail>
       <FastPerpsGame />
       <BottomNav />
     </AppShell>

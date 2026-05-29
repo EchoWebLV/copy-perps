@@ -130,7 +130,7 @@ export default async function ChatterPage() {
     const positions = await buildWhalePositionSignals(1000);
 
     return (
-      <AppShell railTitle="Pulse">
+      <AppShell railTitle="Pulse" hideEmptyRail>
         <WhalePulseFeed initialPositions={positions} />
         <BottomNav />
       </AppShell>
