@@ -3,6 +3,8 @@ export interface FlashStakePosition {
   leverage?: number | null;
   collateralUsd?: number | null;
   entryCostUsd?: number | null;
+  pnlUsd?: number | null;
+  isProfitable?: boolean | null;
 }
 
 const CONFIGURED_FLASH_LEVERAGES = [1, 5, 10, 20, 25, 50, 100, 125, 250, 500];
@@ -17,7 +19,22 @@ function roundUsdc(value: number): number {
   return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
 }
 
-function requestedFlashLeverageFromEffective(leverage: number): number {
+function isProfitablePosition(position: FlashStakePosition): boolean {
+  if (position.isProfitable === true) return true;
+  const pnlUsd = Number(position.pnlUsd);
+  return Number.isFinite(pnlUsd) && pnlUsd > 0;
+}
+
+function requestedFlashLeverageFromEffective(
+  leverage: number,
+  isProfitable: boolean,
+): number {
+  if (isProfitable) {
+    return (
+      CONFIGURED_FLASH_LEVERAGES.find((option) => option >= leverage) ?? leverage
+    );
+  }
+
   const configured = CONFIGURED_FLASH_LEVERAGES.filter(
     (option) => option <= leverage,
   ).at(-1);
@@ -65,7 +82,10 @@ export function flashRequestedLeverageFromPosition(
 
   const leverage = positiveFiniteNumber(position.leverage);
   if (leverage != null) {
-    return requestedFlashLeverageFromEffective(leverage);
+    return requestedFlashLeverageFromEffective(
+      leverage,
+      isProfitablePosition(position),
+    );
   }
 
   return null;
@@ -80,9 +100,9 @@ export function flashStakeUsdFromPosition(
   if (entryCostUsd != null) return roundUsdc(entryCostUsd);
 
   const sizeUsd = positiveFiniteNumber(position.sizeUsd);
-  const leverage = positiveFiniteNumber(position.leverage);
-  if (sizeUsd != null && leverage != null) {
-    return roundUsdc(sizeUsd / requestedFlashLeverageFromEffective(leverage));
+  const leverage = flashRequestedLeverageFromPosition(position);
+  if (sizeUsd != null && leverage != null && leverage > 0) {
+    return roundUsdc(sizeUsd / leverage);
   }
 
   const collateralUsd = positiveFiniteNumber(position.collateralUsd);

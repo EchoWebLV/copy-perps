@@ -69,4 +69,17 @@ describe("flashRequestedLeverageFromPosition", () => {
       }),
     ).toBe(500);
   });
+
+  it("recovers a 500x open from profitable reduced effective leverage", () => {
+    const position = {
+      sizeUsd: 500,
+      leverage: 328,
+      collateralUsd: 1.52,
+      pnlUsd: 0.31,
+      isProfitable: true,
+    };
+
+    expect(flashRequestedLeverageFromPosition(position)).toBe(500);
+    expect(flashStakeUsdFromPosition(position)).toBe(1);
+  });
 });

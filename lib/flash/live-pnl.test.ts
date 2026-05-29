@@ -109,6 +109,27 @@ describe("computeFlashLivePositionView", () => {
     expect(view.isEstimated).toBe(true);
   });
 
+  it("recovers a profitable refreshed 500x position from live price PnL", () => {
+    const view = computeFlashLivePositionView({
+      position: {
+        symbol: "ETH",
+        side: "short",
+        positionPubkey: "pos-profitable-refresh",
+        marketAccount: "market-2",
+        entryPriceUsd: 2000,
+        markPriceUsd: 2000,
+        sizeUsd: 330,
+        collateralUsd: 0.83,
+        leverage: 398,
+        openTime: 1,
+      },
+      liveMarkUsd: 1999,
+    });
+
+    expect(view.stakeUsd).toBeCloseTo(0.66);
+    expect(view.roiPct).toBeGreaterThan(0);
+  });
+
   it("uses exact Flash receive value when no live mark is available", () => {
     const view = computeFlashLivePositionView({
       position: {

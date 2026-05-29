@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deserializeFlashEntryCostCache,
   mergeFlashEntryCostCache,
   rememberFlashEntryCost,
-  seedFlashEntryCostCache,
   type FlashEntryCostPosition,
 } from "./entry-costs";
 
@@ -56,30 +56,17 @@ describe("Flash entry cost cache", () => {
     });
   });
 
-  it("keeps the first observed fallback stake and leverage stable", () => {
-    const cache = new Map();
-
-    seedFlashEntryCostCache(
-      cache,
-      position({ entryCostUsd: 0.83, openFeeUsd: undefined, leverage: 398 }),
-    );
-    seedFlashEntryCostCache(
-      cache,
-      position({ entryCostUsd: 0.77, openFeeUsd: undefined, leverage: 328 }),
-    );
-
-    const [merged] = mergeFlashEntryCostCache(cache, [
-      position({
-        entryCostUsd: undefined,
-        openFeeUsd: undefined,
-        leverage: 328,
-      }),
+  it("drops inferred fallback snapshots that were not captured from an open quote", () => {
+    const cache = deserializeFlashEntryCostCache([
+      {
+        positionPubkey: "flash-sol-long",
+        openTime: Date.parse("2026-05-29T06:00:00.000Z"),
+        entryCostUsd: 0.83,
+        leverage: 398,
+      },
     ]);
 
-    expect(merged).toMatchObject({
-      entryCostUsd: 0.83,
-      leverage: 398,
-    });
+    expect(cache.size).toBe(0);
   });
 
   it("does not apply stale fees to a later position using the same account", () => {

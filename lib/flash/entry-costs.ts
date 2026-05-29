@@ -44,6 +44,17 @@ function hasSnapshotData(position: FlashEntryCostPosition): boolean {
   return hasEntryCost(position) || (leverage != null && leverage > 0);
 }
 
+function hasPersistedOpenQuote(position: FlashEntryCostPosition): boolean {
+  const entryCostUsd = finiteNumber(position.entryCostUsd);
+  const openFeeUsd = finiteNumber(position.openFeeUsd);
+  return (
+    entryCostUsd != null &&
+    entryCostUsd > 0 &&
+    openFeeUsd != null &&
+    openFeeUsd >= 0
+  );
+}
+
 function compatibleOpenTime(
   snapshot: FlashEntryCostSnapshot,
   position: FlashEntryCostPosition,
@@ -74,19 +85,6 @@ export function rememberFlashEntryCost(
     ...(openFeeUsd != null && openFeeUsd >= 0 ? { openFeeUsd } : {}),
     ...(leverage != null && leverage > 0 ? { leverage } : {}),
   });
-}
-
-export function seedFlashEntryCostCache(
-  cache: FlashEntryCostCache,
-  position: FlashEntryCostPosition,
-): void {
-  const key = positionKey(position);
-  if (!key || !hasSnapshotData(position)) return;
-
-  const snapshot = cache.get(key);
-  if (snapshot && compatibleOpenTime(snapshot, position)) return;
-
-  rememberFlashEntryCost(cache, position);
 }
 
 export function forgetFlashEntryCost(
@@ -139,6 +137,7 @@ export function deserializeFlashEntryCostCache(
   for (const item of value) {
     if (typeof item !== "object" || item === null) continue;
     const position = item as FlashEntryCostSnapshot;
+    if (!hasPersistedOpenQuote(position)) continue;
     rememberFlashEntryCost(cache, position);
   }
 

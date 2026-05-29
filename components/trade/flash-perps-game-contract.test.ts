@@ -115,10 +115,10 @@ describe("Flash fast perps game contract", () => {
     const page = source();
 
     expect(page).toContain("flashStakeUsdFromPosition");
-    expect(page).toContain("stakeForPosition(selectedPosition)");
+    expect(page).toContain("stakeForPosition(selectedPosition, selectedPositionView)");
     expect(page).toContain('label="Stake"');
     expect(page).toContain('label={selectedPosition ? "P/L" : "Notional"}');
-    expect(page).toContain("stake {fmtUsd(stakeForPosition(position))}");
+    expect(page).toContain("fmtUsd(stakeForPosition(position, view))");
     expect(page).toContain("const exitValue = view?.exitValueUsd ?? 0");
     expect(page).toContain("selectedPositionView.exitValueUsd");
     expect(page).toContain("exit {fmtUsd(exitValue)}");
@@ -133,15 +133,17 @@ describe("Flash fast perps game contract", () => {
 
     expect(page).toContain("flashRequestedLeverageFromPosition");
     expect(page).toContain("function leverageForPosition");
-    expect(page).toContain("leverageForPosition(position).toFixed(0)");
+    expect(page).toContain("view?: FlashLivePositionView | null");
+    expect(page).toContain("pnlUsd: view.pnlUsd");
+    expect(page).toContain("leverageForPosition(position, view).toFixed(0)");
     expect(page).toContain("leverage: result.trade.leverage");
   });
 
-  it("seeds a fallback entry snapshot for refreshed positions without open metadata", () => {
+  it("does not cache inferred fallback leverage from refreshed positions", () => {
     const page = source();
 
-    expect(page).toContain("seedFlashEntryCostCache");
-    expect(page).toContain("const seeded = mergeFlashEntryCostCache");
-    expect(page).toContain("setPositions(seeded)");
+    expect(page).not.toContain("seedFlashEntryCostCache");
+    expect(page).not.toContain("const seeded = mergeFlashEntryCostCache");
+    expect(page).toContain("setPositions(merged)");
   });
 });

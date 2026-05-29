@@ -107,14 +107,28 @@ export function computeFlashLivePositionView({
     };
   }
 
-  const stakeUsd = flashStakeUsdFromPosition(position) ?? 0;
   const entryMark = positiveNumber(position.entryPriceUsd);
   const quoteMark = positiveNumber(position.markPriceUsd) ?? entryMark;
   const liveMark = positiveNumber(liveMarkUsd);
   const markPriceUsd = liveMark ?? quoteMark ?? entryMark;
   const exactPnlUsd = finiteNumber(position.pnlUsd);
-  const openFeeUsd = openFeeUsdForPosition(position, stakeUsd, exactPnlUsd);
   const isEstimated = liveMark != null && liveMark !== quoteMark;
+  const stakeInferencePnlUsd =
+    markPriceUsd != null && isEstimated
+      ? pricePnlUsd(position, markPriceUsd)
+      : exactPnlUsd;
+  const stakeUsd =
+    flashStakeUsdFromPosition(
+      stakeInferencePnlUsd == null
+        ? position
+        : {
+            ...position,
+            pnlUsd: stakeInferencePnlUsd,
+            isProfitable:
+              position.isProfitable ?? stakeInferencePnlUsd > 0,
+          },
+    ) ?? 0;
+  const openFeeUsd = openFeeUsdForPosition(position, stakeUsd, exactPnlUsd);
 
   let pnlUsd = exactPnlUsd == null ? 0 : exactPnlUsd - openFeeUsd;
   if (markPriceUsd != null && isEstimated) {

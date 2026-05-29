@@ -22,7 +22,6 @@ import {
   pruneFlashEntryCostCache,
   rememberFlashEntryCost,
   serializeFlashEntryCostCache,
-  seedFlashEntryCostCache,
   type FlashEntryCostCache,
 } from "@/lib/flash/entry-costs";
 import { useFlashLiveMarks } from "@/lib/flash/live-prices-context";
@@ -199,12 +198,32 @@ function fmtSignedPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
-function stakeForPosition(position: FlashPosition | null): number {
-  return flashStakeUsdFromPosition(position) ?? 0;
+function positionValueInput(
+  position: FlashPosition | null,
+  view?: FlashLivePositionView | null,
+): FlashPosition | null {
+  if (!position || !view) return position;
+  return {
+    ...position,
+    pnlUsd: view.pnlUsd,
+    isProfitable: view.pnlUsd > 0,
+  };
 }
 
-function leverageForPosition(position: FlashPosition | null): number {
-  return flashRequestedLeverageFromPosition(position) ?? 0;
+function stakeForPosition(
+  position: FlashPosition | null,
+  view?: FlashLivePositionView | null,
+): number {
+  return flashStakeUsdFromPosition(positionValueInput(position, view)) ?? 0;
+}
+
+function leverageForPosition(
+  position: FlashPosition | null,
+  view?: FlashLivePositionView | null,
+): number {
+  return (
+    flashRequestedLeverageFromPosition(positionValueInput(position, view)) ?? 0
+  );
 }
 
 function flashEntryCostStorageKey(walletAddress: string | null | undefined) {
@@ -370,16 +389,8 @@ export function FastPerpsGame() {
       body.positions ?? [],
     );
     pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
-    for (const position of merged) {
-      seedFlashEntryCostCache(entryCostCacheRef.current, {
-        ...position,
-        entryCostUsd: position.entryCostUsd ?? stakeForPosition(position),
-        leverage: leverageForPosition(position) || position.leverage,
-      });
-    }
-    const seeded = mergeFlashEntryCostCache(entryCostCacheRef.current, merged);
     saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
-    setPositions(seeded);
+    setPositions(merged);
   }, [authenticated, getAccessToken, wallet?.address]);
 
   useEffect(() => {
@@ -639,7 +650,9 @@ export function FastPerpsGame() {
                   setMarket(position.symbol);
                   setSide(position.side);
                   setTradeMode(
-                    leverageForPosition(position) > 100 ? "degen" : "standard",
+                    leverageForPosition(position, view) > 100
+                      ? "degen"
+                      : "standard",
                   );
                   setError(null);
                 }}
@@ -654,7 +667,8 @@ export function FastPerpsGame() {
                     {position.symbol} {position.side}
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
-                    {leverageForPosition(position).toFixed(0)}x · stake {fmtUsd(stakeForPosition(position))}
+                    {leverageForPosition(position, view).toFixed(0)}x · stake{" "}
+                    {fmtUsd(stakeForPosition(position, view))}
                   </div>
                 </div>
                 <div className="text-right">
@@ -736,7 +750,7 @@ export function FastPerpsGame() {
         <div className="mt-3 h-[180px] overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
           <LivePerpGraph
             value={graphValue}
-            entryValue={stakeForPosition(selectedPosition)}
+            entryValue={stakeForPosition(selectedPosition, selectedPositionView)}
             color={graphColor}
             activeKey={selectedPosition.positionPubkey}
           />
