@@ -47,15 +47,27 @@ describe("hyperliquid source mapping", () => {
     expect(hyperliquidSideToWhaleSide("-1")).toBe("short");
   });
 
-  it("uses market, side, and entry price for a stable copyable position id", () => {
+  it("uses open time instead of changing entry price for a stable position id", () => {
+    const openedAtMs = Date.parse("2026-05-23T11:42:00.000Z");
+
     expect(
       makeHyperliquidPositionId({
         sourceAccount: "0xabc",
         market: "ETH",
         side: "long",
+        openedAtMs,
         entryPrice: 2265.48,
       }),
-    ).toBe("hyperliquid:0xabc:ETH:long:2265480000");
+    ).toBe("hyperliquid:0xabc:ETH:long:1779536520000");
+    expect(
+      makeHyperliquidPositionId({
+        sourceAccount: "0xabc",
+        market: "ETH",
+        side: "long",
+        openedAtMs,
+        entryPrice: 2265.62,
+      }),
+    ).toBe("hyperliquid:0xabc:ETH:long:1779536520000");
   });
 
   it("maps a Hyperliquid asset position to a whale position record", () => {

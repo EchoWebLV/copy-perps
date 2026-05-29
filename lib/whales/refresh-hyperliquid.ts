@@ -12,6 +12,7 @@ import { writeWhaleLiveSnapshot } from "./live-cache";
 import {
   deriveHyperliquidPositionOpenTime,
   InvalidHyperliquidPositionError,
+  makeHyperliquidPositionId,
   mapHyperliquidPosition,
 } from "./hyperliquid-source";
 import {
@@ -51,6 +52,14 @@ function readMark(
 ): number | null {
   const parsed = Number(mids[symbol]);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function positionFamilyKey(position: {
+  market?: string;
+  side?: WhalePositionRecord["side"];
+}): string | null {
+  if (!position.market || !position.side) return null;
+  return `${position.market.toUpperCase()}:${position.side}`;
 }
 
 export async function refreshHyperliquidWhales(): Promise<{
@@ -132,6 +141,12 @@ export async function refreshHyperliquidWhales(): Promise<{
       const existingOpenById = new Map(
         existingOpenPositions.map((position) => [position.id, position]),
       );
+      const existingOpenByFamily = new Map(
+        existingOpenPositions.flatMap((position) => {
+          const key = positionFamilyKey(position);
+          return key === null ? [] : [[key, position]];
+        }),
+      );
       for (const assetPosition of state.assetPositions ?? []) {
         try {
           const mapped = mapHyperliquidPosition({
@@ -151,12 +166,21 @@ export async function refreshHyperliquidWhales(): Promise<{
             side: mapped.side,
             fills: sourceFills,
           });
-          const existing = existingOpenById.get(mapped.id);
+          const existing =
+            existingOpenById.get(mapped.id) ??
+            existingOpenByFamily.get(positionFamilyKey(mapped) ?? "");
           if (fillOpenedAtMs !== null) {
             mapped.openedAt = new Date(fillOpenedAtMs);
           } else if (existing) {
             mapped.openedAt = existing.openedAt;
           }
+          mapped.id = makeHyperliquidPositionId({
+            sourceAccount: account,
+            market: mapped.market,
+            side: mapped.side,
+            openedAtMs: mapped.openedAt.getTime(),
+            entryPrice: mapped.entryPrice,
+          });
           await upsertWhalePosition(mapped);
           openPositionIds.push(mapped.id);
           snapshotPositions.push(mapped);

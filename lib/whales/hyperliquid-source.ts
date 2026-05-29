@@ -37,15 +37,21 @@ export function makeHyperliquidPositionId(args: {
   sourceAccount: string;
   market: string;
   side: WhaleSide;
-  entryPrice: number;
+  openedAtMs?: number | null;
+  entryPrice?: number | null;
 }): string {
-  const entryKey = Math.round(args.entryPrice * 1_000_000);
+  const openedAtMs = Number(args.openedAtMs);
+  const entryPrice = Number(args.entryPrice);
+  const positionKey =
+    Number.isFinite(openedAtMs) && openedAtMs > 0
+      ? Math.floor(openedAtMs)
+      : Math.round(entryPrice * 1_000_000);
   return [
     "hyperliquid",
     args.sourceAccount,
     args.market.toUpperCase(),
     args.side,
-    entryKey,
+    positionKey,
   ].join(":");
 }
 

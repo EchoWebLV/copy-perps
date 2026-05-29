@@ -45,6 +45,7 @@ import {
   getVisiblePulsePositionId,
   restoreVisiblePulsePosition,
 } from "./pulse-scroll-stability";
+import { mergePulsePositionSignals } from "./pulse-position-retention";
 import { formatWhalePositionAge } from "./whale-position-age";
 
 const POLL_MS = 10_000;
@@ -128,9 +129,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
       rememberVisiblePulsePosition();
       setPositions((current) =>
-        data.positions.length > 0 || current.length === 0
-          ? data.positions
-          : current,
+        mergePulsePositionSignals(current, data.positions, Date.now()),
       );
     } catch {
       // Keep the current Pulse tape visible if a refresh misses.

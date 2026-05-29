@@ -147,15 +147,16 @@ describe("WhalePulseFeed route contract", () => {
     expect(liveSource).not.toContain('{stale ? "STALE" : "FRESH"}');
   });
 
-  it("keeps the last non-empty Pulse tape when a live-position poll returns empty", () => {
+  it("retains recent Pulse cards when a live-position poll returns a partial list", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
+    expect(componentSource).toContain("mergePulsePositionSignals");
     expect(componentSource).toContain("setPositions((current)");
     expect(componentSource).toContain(
-      "data.positions.length > 0 || current.length === 0",
+      "mergePulsePositionSignals(current, data.positions, Date.now())",
     );
   });
 });

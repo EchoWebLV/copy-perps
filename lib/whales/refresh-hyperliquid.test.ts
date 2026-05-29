@@ -101,7 +101,7 @@ describe("refreshHyperliquidWhales", () => {
     });
     expect(upsertWhalePosition).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "hyperliquid:0xabc:ETH:long:2000000000",
+        id: "hyperliquid:0xabc:ETH:long:1779537600000",
         source: "hyperliquid",
         sourceAccount: "0xabc",
         market: "ETH",
@@ -117,7 +117,7 @@ describe("refreshHyperliquidWhales", () => {
       expect.objectContaining({
         source: "hyperliquid",
         sourceAccount: "0xabc",
-        openPositionIds: ["hyperliquid:0xabc:ETH:long:2000000000"],
+        openPositionIds: ["hyperliquid:0xabc:ETH:long:1779537600000"],
       }),
     );
     expect(writeWhaleLiveSnapshot).toHaveBeenCalledWith(
@@ -130,7 +130,7 @@ describe("refreshHyperliquidWhales", () => {
         ],
         positions: [
           expect.objectContaining({
-            id: "hyperliquid:0xabc:ETH:long:2000000000",
+            id: "hyperliquid:0xabc:ETH:long:1779537600000",
           }),
         ],
       }),
@@ -237,7 +237,7 @@ describe("refreshHyperliquidWhales", () => {
 
     expect(upsertWhalePosition).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "hyperliquid:0xabc:ETH:long:2000000000",
+        id: "hyperliquid:0xabc:ETH:long:1779451200000",
         openedAt,
       }),
     );
@@ -245,7 +245,7 @@ describe("refreshHyperliquidWhales", () => {
       expect.objectContaining({
         positions: [
           expect.objectContaining({
-            id: "hyperliquid:0xabc:ETH:long:2000000000",
+            id: "hyperliquid:0xabc:ETH:long:1779451200000",
             openedAt,
           }),
         ],
@@ -283,7 +283,7 @@ describe("refreshHyperliquidWhales", () => {
 
     expect(upsertWhalePosition).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "hyperliquid:0xabc:ETH:long:2000000000",
+        id: "hyperliquid:0xabc:ETH:long:1779536520000",
         openedAt,
       }),
     );
@@ -291,10 +291,68 @@ describe("refreshHyperliquidWhales", () => {
       expect.objectContaining({
         positions: [
           expect.objectContaining({
-            id: "hyperliquid:0xabc:ETH:long:2000000000",
+            id: "hyperliquid:0xabc:ETH:long:1779536520000",
             openedAt,
           }),
         ],
+      }),
+    );
+  });
+
+  it("keeps the same Hyperliquid position id when entry price changes", async () => {
+    const openedAt = new Date("2026-05-23T11:42:00.000Z");
+    getOpenWhalePositionsForSource.mockImplementation(async ({ sourceAccount }) =>
+      sourceAccount === "0xabc"
+        ? [
+            {
+              id: "hyperliquid:0xabc:ETH:long:1779536520000",
+              source: "hyperliquid",
+              sourceAccount,
+              market: "ETH",
+              side: "long",
+              openedAt,
+            },
+          ]
+        : [],
+    );
+    getClearinghouseState.mockImplementation(async (account: string) =>
+      account === "0xempty"
+        ? clearinghouseState({ assetPositions: [] })
+        : clearinghouseState({
+            assetPositions: [
+              {
+                type: "oneWay",
+                position: {
+                  coin: "ETH",
+                  szi: "2",
+                  leverage: { type: "cross", value: 10 },
+                  entryPx: "2010",
+                  positionValue: "4200",
+                  unrealizedPnl: "200",
+                  returnOnEquity: "0.5",
+                  liquidationPx: "1500",
+                  marginUsed: "420",
+                  maxLeverage: 25,
+                },
+              },
+            ],
+          }),
+    );
+
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    await refreshHyperliquidWhales();
+
+    expect(upsertWhalePosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "hyperliquid:0xabc:ETH:long:1779536520000",
+        entryPrice: 2010,
+        openedAt,
+      }),
+    );
+    expect(markMissingWhalePositionsClosed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        openPositionIds: ["hyperliquid:0xabc:ETH:long:1779536520000"],
       }),
     );
   });

@@ -27,6 +27,7 @@ const PNL_HISTORY_CACHE_MS = 5 * 60_000;
 const PNL_HISTORY_CONCURRENCY = 4;
 const LIVE_SNAPSHOT_COLD_START_BUDGET_MS =
   process.env.NODE_ENV === "test" ? 10 : 750;
+const RECENT_POSITION_STALE_GRACE_MS = 60 * 60_000;
 const TRADER_SIGNALS_CACHE_MS = 30_000;
 const TRADER_SIGNALS_EMPTY_CACHE_MS = 1_000;
 const TRADER_SIGNALS_STALE_MS = 5 * 60_000;
@@ -340,13 +341,15 @@ async function buildWhalePositionSignalsFromSnapshot(
   limit: number,
   options: { includeStalePositions?: boolean } = {},
 ): Promise<WhalePositionSignal[]> {
+  const nowMs = Date.now();
   const whaleById = new Map(snapshot.whales.map((whale) => [whale.id, whale]));
   const livePositions = [...snapshot.positions]
     .filter((position) => position.status === "open")
     .filter(
       (position) =>
         options.includeStalePositions ||
-        isSourceFresh(position.lastSeenAt.getTime()),
+        isSourceFresh(position.lastSeenAt.getTime(), undefined, nowMs) ||
+        isRecentlyOpenedPosition(position.openedAt.getTime(), nowMs),
     )
     .filter((position) => isFlashCopyableMarket(position.market))
     .filter((position) => whaleById.get(position.whaleId)?.status === "active")
@@ -426,6 +429,10 @@ async function buildWhalePositionSignalsFromSnapshot(
       },
     } satisfies WhalePositionSignal;
   });
+}
+
+function isRecentlyOpenedPosition(openedAtMs: number, nowMs: number): boolean {
+  return nowMs - openedAtMs < RECENT_POSITION_STALE_GRACE_MS;
 }
 
 export async function buildWhalePositionSignals(

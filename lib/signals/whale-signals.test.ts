@@ -932,6 +932,59 @@ describe("whale signals", () => {
     }
   });
 
+  it("keeps recently opened positions visible when their source is temporarily stale", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        source: "multi",
+        observedAt: new Date("2026-05-23T11:59:50.000Z"),
+        accounts: ["acct-1", "0xabc"],
+        whales: [
+          whale(),
+          whale({
+            id: "hyperliquid:0xabc",
+            source: "hyperliquid",
+            sourceAccount: "0xabc",
+            displayName: "HL Alpha",
+            avatarUrl: null,
+            tags: ["hyperliquid"],
+          }),
+        ],
+        positions: [
+          position(),
+          position({
+            id: "recent-stale-hl",
+            whaleId: "hyperliquid:0xabc",
+            source: "hyperliquid",
+            sourceAccount: "0xabc",
+            market: "SOL",
+            side: "short",
+            openedAt: new Date("2026-05-23T11:35:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:54:00.000Z"),
+          }),
+          position({
+            id: "old-stale-hl",
+            whaleId: "hyperliquid:0xabc",
+            source: "hyperliquid",
+            sourceAccount: "0xabc",
+            market: "ETH",
+            openedAt: new Date("2026-05-23T09:00:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:54:00.000Z"),
+          }),
+        ],
+      }),
+    );
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const positions = await buildWhalePositionSignals();
+
+    expect(positions.map((item) => item.payload.positionId)).toEqual([
+      "pos-1",
+      "recent-stale-hl",
+    ]);
+    expect(positions[1]?.payload.stale).toBe(true);
+  });
+
   it("returns no whale signals when the live cache is empty", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
 
