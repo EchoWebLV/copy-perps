@@ -5,6 +5,9 @@ export interface FlashStakePosition {
   entryCostUsd?: number | null;
 }
 
+const CONFIGURED_FLASH_LEVERAGES = [1, 5, 10, 20, 25, 50, 100, 125, 250, 500];
+const MAX_EFFECTIVE_LEVERAGE_OVERAGE = 0.12;
+
 function positiveFiniteNumber(value: unknown): number | null {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
@@ -12,6 +15,19 @@ function positiveFiniteNumber(value: unknown): number | null {
 
 function roundUsdc(value: number): number {
   return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
+}
+
+function requestedFlashLeverageFromEffective(leverage: number): number {
+  const configured = CONFIGURED_FLASH_LEVERAGES.filter(
+    (option) => option <= leverage,
+  ).at(-1);
+  if (
+    configured != null &&
+    leverage / configured <= 1 + MAX_EFFECTIVE_LEVERAGE_OVERAGE
+  ) {
+    return configured;
+  }
+  return leverage;
 }
 
 export function flashStakeUsdFromPosition(
@@ -25,7 +41,7 @@ export function flashStakeUsdFromPosition(
   const sizeUsd = positiveFiniteNumber(position.sizeUsd);
   const leverage = positiveFiniteNumber(position.leverage);
   if (sizeUsd != null && leverage != null) {
-    return roundUsdc(sizeUsd / leverage);
+    return roundUsdc(sizeUsd / requestedFlashLeverageFromEffective(leverage));
   }
 
   const collateralUsd = positiveFiniteNumber(position.collateralUsd);

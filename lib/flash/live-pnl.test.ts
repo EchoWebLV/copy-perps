@@ -33,6 +33,31 @@ describe("computeFlashLivePositionView", () => {
     expect(view.roiPct).toBeCloseTo(-3);
   });
 
+  it("keeps a refreshed Flash position down by fees when cached fee fields are missing", () => {
+    const view = computeFlashLivePositionView({
+      position: {
+        symbol: "SOL",
+        side: "long",
+        positionPubkey: "pos-refreshed-fee",
+        marketAccount: "market-1",
+        entryPriceUsd: 100,
+        markPriceUsd: 100,
+        sizeUsd: 500,
+        collateralUsd: 0.97,
+        leverage: 515.463918,
+        pnlUsd: 0,
+        receiveUsd: 0.97,
+        openTime: 1,
+      },
+    });
+
+    expect(view.stakeUsd).toBeCloseTo(1);
+    expect(view.pnlUsd).toBeCloseTo(-0.03);
+    expect(view.valueUsd).toBeCloseTo(0.97);
+    expect(view.exitValueUsd).toBeCloseTo(0.97);
+    expect(view.roiPct).toBeCloseTo(-3);
+  });
+
   it("keeps Flash fee adjustment while estimating long PnL from a live mark", () => {
     const view = computeFlashLivePositionView({
       position: {

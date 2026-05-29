@@ -24,6 +24,16 @@ describe("flashStakeUsdFromPosition", () => {
     ).toBe(10);
   });
 
+  it("recovers a $1 Flash stake from refreshed effective leverage after fees", () => {
+    expect(
+      flashStakeUsdFromPosition({
+        sizeUsd: 500,
+        leverage: 515.463918,
+        collateralUsd: 0.97,
+      }),
+    ).toBe(1);
+  });
+
   it("falls back to posted collateral when leverage is unavailable", () => {
     expect(
       flashStakeUsdFromPosition({

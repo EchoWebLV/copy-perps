@@ -48,19 +48,39 @@ function pricePnlUsd(position: FlashLivePosition, markPriceUsd: number): number 
   return size * priceMove;
 }
 
+function nearlyEqualUsd(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.005;
+}
+
+function pnlIsAlreadyNetToStake(
+  position: FlashLivePosition,
+  stakeUsd: number,
+  exactPnlUsd: number | null,
+): boolean {
+  const receiveUsd = positiveNumber(position.receiveUsd);
+  return (
+    receiveUsd != null &&
+    exactPnlUsd != null &&
+    stakeUsd > 0 &&
+    nearlyEqualUsd(stakeUsd + exactPnlUsd, receiveUsd)
+  );
+}
+
 function openFeeUsdForPosition(
   position: FlashLivePosition,
   stakeUsd: number,
+  exactPnlUsd: number | null,
 ): number {
   const openFeeUsd = finiteNumber(position.openFeeUsd);
   if (openFeeUsd != null) return openFeeUsd;
 
-  if (positiveNumber(position.entryCostUsd) == null) {
-    return 0;
-  }
-
   const collateralUsd = positiveNumber(position.collateralUsd);
-  if (stakeUsd > 0 && collateralUsd != null && stakeUsd > collateralUsd) {
+  if (
+    stakeUsd > 0 &&
+    collateralUsd != null &&
+    stakeUsd > collateralUsd &&
+    !pnlIsAlreadyNetToStake(position, stakeUsd, exactPnlUsd)
+  ) {
     return stakeUsd - collateralUsd;
   }
 
@@ -88,12 +108,12 @@ export function computeFlashLivePositionView({
   }
 
   const stakeUsd = flashStakeUsdFromPosition(position) ?? 0;
-  const openFeeUsd = openFeeUsdForPosition(position, stakeUsd);
   const entryMark = positiveNumber(position.entryPriceUsd);
   const quoteMark = positiveNumber(position.markPriceUsd) ?? entryMark;
   const liveMark = positiveNumber(liveMarkUsd);
   const markPriceUsd = liveMark ?? quoteMark ?? entryMark;
   const exactPnlUsd = finiteNumber(position.pnlUsd);
+  const openFeeUsd = openFeeUsdForPosition(position, stakeUsd, exactPnlUsd);
   const isEstimated = liveMark != null && liveMark !== quoteMark;
 
   let pnlUsd = exactPnlUsd == null ? 0 : exactPnlUsd - openFeeUsd;
