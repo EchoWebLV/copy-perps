@@ -5,6 +5,7 @@ export interface FlashEntryCostPosition {
   openTime?: number | null;
   entryCostUsd?: number | null;
   openFeeUsd?: number | null;
+  leverage?: number | null;
 }
 
 export interface FlashEntryCostSnapshot {
@@ -12,6 +13,7 @@ export interface FlashEntryCostSnapshot {
   openTime: number | null;
   entryCostUsd?: number;
   openFeeUsd?: number;
+  leverage?: number;
 }
 
 export type FlashEntryCostCache = Map<string, FlashEntryCostSnapshot>;
@@ -37,6 +39,11 @@ function hasEntryCost(position: FlashEntryCostPosition): boolean {
   );
 }
 
+function hasSnapshotData(position: FlashEntryCostPosition): boolean {
+  const leverage = finiteNumber(position.leverage);
+  return hasEntryCost(position) || (leverage != null && leverage > 0);
+}
+
 function compatibleOpenTime(
   snapshot: FlashEntryCostSnapshot,
   position: FlashEntryCostPosition,
@@ -55,16 +62,31 @@ export function rememberFlashEntryCost(
   position: FlashEntryCostPosition,
 ): void {
   const key = positionKey(position);
-  if (!key || !hasEntryCost(position)) return;
+  if (!key || !hasSnapshotData(position)) return;
 
   const entryCostUsd = finiteNumber(position.entryCostUsd);
   const openFeeUsd = finiteNumber(position.openFeeUsd);
+  const leverage = finiteNumber(position.leverage);
   cache.set(key, {
     positionPubkey: key,
     openTime: finiteNumber(position.openTime),
     ...(entryCostUsd != null && entryCostUsd > 0 ? { entryCostUsd } : {}),
     ...(openFeeUsd != null && openFeeUsd >= 0 ? { openFeeUsd } : {}),
+    ...(leverage != null && leverage > 0 ? { leverage } : {}),
   });
+}
+
+export function seedFlashEntryCostCache(
+  cache: FlashEntryCostCache,
+  position: FlashEntryCostPosition,
+): void {
+  const key = positionKey(position);
+  if (!key || !hasSnapshotData(position)) return;
+
+  const snapshot = cache.get(key);
+  if (snapshot && compatibleOpenTime(snapshot, position)) return;
+
+  rememberFlashEntryCost(cache, position);
 }
 
 export function forgetFlashEntryCost(
@@ -89,16 +111,15 @@ export function mergeFlashEntryCostCache<
   T extends FlashEntryCostPosition,
 >(cache: FlashEntryCostCache, positions: T[]): T[] {
   return positions.map((position) => {
-    if (hasEntryCost(position)) return position;
-
     const key = positionKey(position);
     const snapshot = key ? cache.get(key) : undefined;
     if (!snapshot || !compatibleOpenTime(snapshot, position)) return position;
 
     return {
       ...position,
-      entryCostUsd: snapshot.entryCostUsd,
-      openFeeUsd: snapshot.openFeeUsd,
+      entryCostUsd: position.entryCostUsd ?? snapshot.entryCostUsd,
+      openFeeUsd: position.openFeeUsd ?? snapshot.openFeeUsd,
+      leverage: snapshot.leverage ?? position.leverage,
     };
   });
 }

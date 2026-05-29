@@ -30,6 +30,47 @@ function requestedFlashLeverageFromEffective(leverage: number): number {
   return leverage;
 }
 
+function requestedFlashLeverageFromNotional(
+  sizeUsd: number,
+  entryCostUsd: number,
+): number {
+  const rawLeverage = sizeUsd / entryCostUsd;
+  const configured = CONFIGURED_FLASH_LEVERAGES.reduce((best, option) => {
+    return Math.abs(option - rawLeverage) < Math.abs(best - rawLeverage)
+      ? option
+      : best;
+  }, CONFIGURED_FLASH_LEVERAGES[0]);
+
+  if (
+    configured != null &&
+    Math.abs(rawLeverage - configured) / configured <=
+      MAX_EFFECTIVE_LEVERAGE_OVERAGE
+  ) {
+    return configured;
+  }
+
+  return rawLeverage;
+}
+
+export function flashRequestedLeverageFromPosition(
+  position: FlashStakePosition | null | undefined,
+): number | null {
+  if (!position) return null;
+
+  const sizeUsd = positiveFiniteNumber(position.sizeUsd);
+  const entryCostUsd = positiveFiniteNumber(position.entryCostUsd);
+  if (sizeUsd != null && entryCostUsd != null) {
+    return requestedFlashLeverageFromNotional(sizeUsd, entryCostUsd);
+  }
+
+  const leverage = positiveFiniteNumber(position.leverage);
+  if (leverage != null) {
+    return requestedFlashLeverageFromEffective(leverage);
+  }
+
+  return null;
+}
+
 export function flashStakeUsdFromPosition(
   position: FlashStakePosition | null | undefined,
 ): number | null {

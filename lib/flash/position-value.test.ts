@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { flashStakeUsdFromPosition, type FlashStakePosition } from "./position-value";
+import {
+  flashRequestedLeverageFromPosition,
+  flashStakeUsdFromPosition,
+  type FlashStakePosition,
+} from "./position-value";
 
 describe("flashStakeUsdFromPosition", () => {
   it("prefers the original entry cost when the Flash open quote is available", () => {
@@ -41,5 +45,28 @@ describe("flashStakeUsdFromPosition", () => {
         collateralUsd: 9.5,
       }),
     ).toBe(9.5);
+  });
+});
+
+describe("flashRequestedLeverageFromPosition", () => {
+  it("recovers the opened leverage from notional and original stake", () => {
+    expect(
+      flashRequestedLeverageFromPosition({
+        sizeUsd: 500,
+        leverage: 1953,
+        collateralUsd: 0.35,
+        entryCostUsd: 1,
+      }),
+    ).toBe(500);
+  });
+
+  it("maps Flash quote effective leverage back to the configured option", () => {
+    expect(
+      flashRequestedLeverageFromPosition({
+        sizeUsd: 500,
+        leverage: 515.463918,
+        collateralUsd: 0.97,
+      }),
+    ).toBe(500);
   });
 });

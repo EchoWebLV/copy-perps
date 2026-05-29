@@ -22,10 +22,14 @@ import {
   pruneFlashEntryCostCache,
   rememberFlashEntryCost,
   serializeFlashEntryCostCache,
+  seedFlashEntryCostCache,
   type FlashEntryCostCache,
 } from "@/lib/flash/entry-costs";
 import { useFlashLiveMarks } from "@/lib/flash/live-prices-context";
-import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
+import {
+  flashRequestedLeverageFromPosition,
+  flashStakeUsdFromPosition,
+} from "@/lib/flash/position-value";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
   formatTailSigningError,
@@ -199,6 +203,10 @@ function stakeForPosition(position: FlashPosition | null): number {
   return flashStakeUsdFromPosition(position) ?? 0;
 }
 
+function leverageForPosition(position: FlashPosition | null): number {
+  return flashRequestedLeverageFromPosition(position) ?? 0;
+}
+
 function flashEntryCostStorageKey(walletAddress: string | null | undefined) {
   return walletAddress ? `${FLASH_ENTRY_COST_STORAGE_PREFIX}${walletAddress}` : null;
 }
@@ -362,8 +370,16 @@ export function FastPerpsGame() {
       body.positions ?? [],
     );
     pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
+    for (const position of merged) {
+      seedFlashEntryCostCache(entryCostCacheRef.current, {
+        ...position,
+        entryCostUsd: position.entryCostUsd ?? stakeForPosition(position),
+        leverage: leverageForPosition(position) || position.leverage,
+      });
+    }
+    const seeded = mergeFlashEntryCostCache(entryCostCacheRef.current, merged);
     saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
-    setPositions(merged);
+    setPositions(seeded);
   }, [authenticated, getAccessToken, wallet?.address]);
 
   useEffect(() => {
@@ -498,14 +514,14 @@ export function FastPerpsGame() {
       );
       const result = await requestOpen(useInstantExecution);
       if (result.phase === "sent") {
-        upsertPosition(result.position);
+        upsertPosition({ ...result.position, leverage: result.trade.leverage });
         setStatus("Opened on Flash");
         await loadPositions();
         return;
       }
       setStatus("Signing Flash transaction...");
       await signAndSendFlashTransaction(result.transactionB64);
-      upsertPosition(result.position);
+      upsertPosition({ ...result.position, leverage: result.trade.leverage });
       setStatus("Opened on Flash");
       await loadPositions();
     } catch (err) {
@@ -622,7 +638,9 @@ export function FastPerpsGame() {
                 onClick={() => {
                   setMarket(position.symbol);
                   setSide(position.side);
-                  setTradeMode((position.leverage ?? 0) > 100 ? "degen" : "standard");
+                  setTradeMode(
+                    leverageForPosition(position) > 100 ? "degen" : "standard",
+                  );
                   setError(null);
                 }}
                 className="flex min-w-[168px] items-center justify-between rounded-xl px-3 py-1.5 text-left transition active:scale-[0.98]"
@@ -636,7 +654,7 @@ export function FastPerpsGame() {
                     {position.symbol} {position.side}
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] font-black" style={{ color: DIM }}>
-                    {(position.leverage ?? 0).toFixed(0)}x · stake {fmtUsd(stakeForPosition(position))}
+                    {leverageForPosition(position).toFixed(0)}x · stake {fmtUsd(stakeForPosition(position))}
                   </div>
                 </div>
                 <div className="text-right">

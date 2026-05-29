@@ -182,13 +182,27 @@ function hasOpenSize(position: { sizeAmount: AnchorBN; isActive: boolean }) {
   return position.isActive && !position.sizeAmount.isZero();
 }
 
+function leverageFromPositionCollateral(
+  sizeUsd: number,
+  collateralUsd: number,
+): number | undefined {
+  if (
+    !Number.isFinite(sizeUsd) ||
+    !Number.isFinite(collateralUsd) ||
+    sizeUsd <= 0 ||
+    collateralUsd <= 0
+  ) {
+    return undefined;
+  }
+  return sizeUsd / collateralUsd;
+}
+
 function applyCloseQuoteToSummary(
   summary: FlashPositionSummary,
   quote: Pick<
     ClosePositionQuoteData,
     | "markPrice"
     | "existingLiquidationPrice"
-    | "existingLeverage"
     | "receiveTokenAmountUsd"
     | "profitUsd"
     | "lossUsd"
@@ -201,7 +215,6 @@ function applyCloseQuoteToSummary(
     ...summary,
     markPriceUsd: contractPriceToNumber(quote.markPrice),
     liquidationPriceUsd: contractPriceToNumber(quote.existingLiquidationPrice),
-    leverage: bnToNumber(quote.existingLeverage, BPS_DECIMALS),
     receiveUsd: bnToNumber(quote.receiveTokenAmountUsd, USD_DECIMALS),
     pnlUsd: quote.isProfitable ? profitUsd : -lossUsd,
     isProfitable: quote.isProfitable,
@@ -562,15 +575,18 @@ export class FlashPerpsService {
     market: MarketConfig,
     symbol: FlashMarketSymbol,
   ): FlashPositionSummary {
+    const sizeUsd = bnToNumber(position.sizeUsd, USD_DECIMALS);
+    const collateralUsd = bnToNumber(position.collateralUsd, USD_DECIMALS);
     return {
       symbol,
       side: sideFromMarket(market),
       positionPubkey: positionPk.toBase58(),
       marketAccount: market.marketAccount.toBase58(),
       entryPriceUsd: contractPriceToNumber(position.entryPrice),
-      sizeUsd: bnToNumber(position.sizeUsd, USD_DECIMALS),
-      collateralUsd: bnToNumber(position.collateralUsd, USD_DECIMALS),
+      sizeUsd,
+      collateralUsd,
       collateralSymbol: this.collateralSymbolForMarket(poolConfig, market),
+      leverage: leverageFromPositionCollateral(sizeUsd, collateralUsd),
       openTime: position.openTime.toNumber() * 1000,
     };
   }

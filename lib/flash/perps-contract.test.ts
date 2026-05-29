@@ -17,4 +17,11 @@ describe("Flash perps service pool routing contract", () => {
     expect(text).toContain("this.marketForSymbol(poolConfig, req.market, req.side)");
     expect(text).not.toContain("const FLASH_POOL_NAME");
   });
+
+  it("does not render dynamic close-quote leverage as the opened position leverage", () => {
+    const text = source();
+
+    expect(text).not.toContain("leverage: bnToNumber(quote.existingLeverage");
+    expect(text).toContain("leverageFromPositionCollateral");
+  });
 });

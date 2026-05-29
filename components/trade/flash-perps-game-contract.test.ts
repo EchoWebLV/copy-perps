@@ -127,4 +127,21 @@ describe("Flash fast perps game contract", () => {
     expect(page).not.toContain("collat {fmtUsd(position.collateralUsd)}");
     expect(page).not.toContain('label={selectedPosition ? "Value" : "Stake"}');
   });
+
+  it("shows the requested open leverage instead of refreshed effective leverage", () => {
+    const page = source();
+
+    expect(page).toContain("flashRequestedLeverageFromPosition");
+    expect(page).toContain("function leverageForPosition");
+    expect(page).toContain("leverageForPosition(position).toFixed(0)");
+    expect(page).toContain("leverage: result.trade.leverage");
+  });
+
+  it("seeds a fallback entry snapshot for refreshed positions without open metadata", () => {
+    const page = source();
+
+    expect(page).toContain("seedFlashEntryCostCache");
+    expect(page).toContain("const seeded = mergeFlashEntryCostCache");
+    expect(page).toContain("setPositions(seeded)");
+  });
 });

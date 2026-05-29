@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeFlashEntryCostCache,
   rememberFlashEntryCost,
+  seedFlashEntryCostCache,
   type FlashEntryCostPosition,
 } from "./entry-costs";
 
@@ -30,6 +31,54 @@ describe("Flash entry cost cache", () => {
       positionPubkey: "flash-sol-long",
       entryCostUsd: 1,
       openFeeUsd: 0.1,
+    });
+  });
+
+  it("restores requested leverage over Flash refreshed effective leverage", () => {
+    const cache = new Map();
+    rememberFlashEntryCost(
+      cache,
+      position({ entryCostUsd: 1, openFeeUsd: 0.1, leverage: 500 }),
+    );
+
+    const [merged] = mergeFlashEntryCostCache(cache, [
+      position({
+        entryCostUsd: undefined,
+        openFeeUsd: undefined,
+        leverage: 1953,
+      }),
+    ]);
+
+    expect(merged).toMatchObject({
+      entryCostUsd: 1,
+      openFeeUsd: 0.1,
+      leverage: 500,
+    });
+  });
+
+  it("keeps the first observed fallback stake and leverage stable", () => {
+    const cache = new Map();
+
+    seedFlashEntryCostCache(
+      cache,
+      position({ entryCostUsd: 0.83, openFeeUsd: undefined, leverage: 398 }),
+    );
+    seedFlashEntryCostCache(
+      cache,
+      position({ entryCostUsd: 0.77, openFeeUsd: undefined, leverage: 328 }),
+    );
+
+    const [merged] = mergeFlashEntryCostCache(cache, [
+      position({
+        entryCostUsd: undefined,
+        openFeeUsd: undefined,
+        leverage: 328,
+      }),
+    ]);
+
+    expect(merged).toMatchObject({
+      entryCostUsd: 0.83,
+      leverage: 398,
     });
   });
 
