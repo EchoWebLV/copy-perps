@@ -604,7 +604,7 @@ export function FastPerpsGame() {
 
   return (
     <div
-      className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden px-4 pt-3 pb-[calc(88px+env(safe-area-inset-bottom))] lg:max-w-5xl lg:px-8 lg:py-8"
+      className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden px-4 pt-3 pb-[calc(88px+env(safe-area-inset-bottom))] lg:max-w-none lg:px-8 lg:py-8"
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -692,264 +692,283 @@ export function FastPerpsGame() {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-3 gap-1.5">
-        {FLASH_SCALP_MARKETS.map((nextMarket) => {
-          const active = market === nextMarket;
-          const config = flashMarketConfigForSymbol(nextMarket);
-          return (
-            <button
-              key={nextMarket}
-              type="button"
-              onClick={() => {
-                setMarket(nextMarket);
-                setLeverage(maxLeverageForSelection(nextMarket, tradeMode));
-                setError(null);
-              }}
-              className="min-w-0 rounded-lg px-1.5 py-2 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-              style={{
-                background: active ? ACCENT : PANEL,
-                color: active ? BG : FG,
-                border: `1px solid ${active ? ACCENT : FAINT}`,
-              }}
-              title={config?.displayName ?? nextMarket}
+      <div className="mt-3 flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4">
+        <section
+          aria-label="Desktop trade controls"
+          className="min-h-0 lg:flex lg:flex-col lg:overflow-y-auto"
+        >
+          <div className="grid grid-cols-3 gap-1.5">
+            {FLASH_SCALP_MARKETS.map((nextMarket) => {
+              const active = market === nextMarket;
+              const config = flashMarketConfigForSymbol(nextMarket);
+              return (
+                <button
+                  key={nextMarket}
+                  type="button"
+                  onClick={() => {
+                    setMarket(nextMarket);
+                    setLeverage(maxLeverageForSelection(nextMarket, tradeMode));
+                    setError(null);
+                  }}
+                  className="min-w-0 rounded-lg px-1.5 py-2 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                  style={{
+                    background: active ? ACCENT : PANEL,
+                    color: active ? BG : FG,
+                    border: `1px solid ${active ? ACCENT : FAINT}`,
+                  }}
+                  title={config?.displayName ?? nextMarket}
+                >
+                  {nextMarket}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {(["long", "short"] as const).map((nextSide) => {
+              const active = side === nextSide;
+              const color = nextSide === "long" ? GREEN : RED;
+              const Icon = nextSide === "long" ? ArrowUpRight : ArrowDownRight;
+              return (
+                <button
+                  key={nextSide}
+                  type="button"
+                  onClick={() => {
+                    setSide(nextSide);
+                    setError(null);
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                  style={{
+                    background: active ? `${color}22` : PANEL,
+                    color: active ? color : FG,
+                    border: `1px solid ${active ? color : FAINT}`,
+                  }}
+                >
+                  <Icon size={17} strokeWidth={3} />
+                  {nextSide}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedPosition && (
+            <div
+              className="mt-3 h-[180px] overflow-hidden rounded-2xl lg:h-[280px]"
+              style={{ background: PANEL, border: `1px solid ${FAINT}` }}
             >
-              {nextMarket}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        {(["long", "short"] as const).map((nextSide) => {
-          const active = side === nextSide;
-          const color = nextSide === "long" ? GREEN : RED;
-          const Icon = nextSide === "long" ? ArrowUpRight : ArrowDownRight;
-          return (
-            <button
-              key={nextSide}
-              type="button"
-              onClick={() => {
-                setSide(nextSide);
-                setError(null);
-              }}
-              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-              style={{
-                background: active ? `${color}22` : PANEL,
-                color: active ? color : FG,
-                border: `1px solid ${active ? color : FAINT}`,
-              }}
-            >
-              <Icon size={17} strokeWidth={3} />
-              {nextSide}
-            </button>
-          );
-        })}
-      </div>
-
-      {selectedPosition && (
-        <div className="mt-3 h-[180px] overflow-hidden rounded-2xl" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-          <LivePerpGraph
-            value={graphValue}
-            entryValue={stakeForPosition(selectedPosition, selectedPositionView)}
-            color={graphColor}
-            activeKey={selectedPosition.positionPubkey}
-          />
-        </div>
-      )}
-
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <PreviewMetric
-          label="Stake"
-          value={fmtUsd(selectedPositionView ? selectedPositionView.stakeUsd : effectiveStake)}
-          color={FG}
-        />
-        <PreviewMetric
-          label={selectedPosition ? "P/L" : "Notional"}
-          value={
-            selectedPosition
-              ? `${livePnl >= 0 ? "+" : ""}${fmtUsd(livePnl)}`
-              : fmtUsd(notional)
-          }
-          subvalue={selectedPosition ? fmtSignedPct(liveRoi) : undefined}
-          color={selectedPosition ? graphColor : sideColor}
-        />
-      </div>
-
-      {!selectedPosition && (
-        <>
-          <div className="mt-2 rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-            <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-              Stake
+              <LivePerpGraph
+                value={graphValue}
+                entryValue={stakeForPosition(selectedPosition, selectedPositionView)}
+                color={graphColor}
+                activeKey={selectedPosition.positionPubkey}
+              />
             </div>
-            <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-              {STAKES.map((nextStake) => {
-                const active = !customStake && stake === nextStake;
-                return (
-                  <button
-                    key={nextStake}
-                    type="button"
-                    onClick={() => {
-                      setStake(nextStake);
-                      setCustomStake("");
-                      setError(null);
-                    }}
-                    className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
-                    style={{
-                      background: active ? FG : PANEL_2,
-                      color: active ? BG : FG,
-                      border: `1px solid ${active ? FG : FAINT}`,
-                    }}
-                  >
-                    ${nextStake}
-                  </button>
-                );
-              })}
-            </div>
-            <input
-              inputMode="decimal"
-              value={customStake}
-              onChange={(e) => {
-                setCustomStake(e.target.value);
-                setError(null);
-              }}
-              placeholder="Custom USDC"
-              className="mt-1.5 w-full rounded-lg border bg-black/20 px-3 py-2 text-[12px] font-black text-white outline-none placeholder:text-white/30"
-              style={{ borderColor: FAINT }}
+          )}
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <PreviewMetric
+              label="Stake"
+              value={fmtUsd(
+                selectedPositionView
+                  ? selectedPositionView.stakeUsd
+                  : effectiveStake,
+              )}
+              color={FG}
+            />
+            <PreviewMetric
+              label={selectedPosition ? "P/L" : "Notional"}
+              value={
+                selectedPosition
+                  ? `${livePnl >= 0 ? "+" : ""}${fmtUsd(livePnl)}`
+                  : fmtUsd(notional)
+              }
+              subvalue={selectedPosition ? fmtSignedPct(liveRoi) : undefined}
+              color={selectedPosition ? graphColor : sideColor}
             />
           </div>
+        </section>
 
-          <div className="mt-2 rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
-            <div className="flex items-center justify-between">
-              <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                Leverage
-              </div>
-              <div className="text-[18px] font-black leading-none" style={{ color: sideColor }}>
-                {leverage}x
-              </div>
-            </div>
-            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-              {(["standard", "degen"] as const).map((nextMode) => {
-                const active = tradeMode === nextMode;
-                return (
-                  <button
-                    key={nextMode}
-                    type="button"
-                    onClick={() => {
-                      setTradeMode(nextMode);
-                      setLeverage(maxLeverageForSelection(market, nextMode));
-                      setError(null);
-                    }}
-                    className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                    style={{
-                      background: active ? FG : PANEL_2,
-                      color: active ? BG : FG,
-                      border: `1px solid ${active ? FG : FAINT}`,
-                    }}
-                  >
-                    {nextMode}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-              {leverageOptions.map((nextLeverage) => {
-                const active = leverage === nextLeverage;
-                return (
-                  <button
-                    key={nextLeverage}
-                    type="button"
-                    onClick={() => {
-                      setLeverage(nextLeverage);
-                      setError(null);
-                    }}
-                    className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
-                    style={{
-                      background: active ? sideColor : PANEL_2,
-                      color: active ? BG : FG,
-                      border: `1px solid ${active ? sideColor : FAINT}`,
-                    }}
-                  >
-                    {nextLeverage}x
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-
-      {selectedPosition?.liquidationPriceUsd != null && (
-        <div className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
-          Mark {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
-          {fmtPrice(selectedPosition.liquidationPriceUsd)}
-          {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
-          {" · "}
-          Exit {fmtUsd(exitValue)}
-          {" · "}
-          {fmtSignedPct(liveRoi)}
-        </div>
-      )}
-
-      {(status || error || (!tradeAllowed && !selectedPosition)) && (
-        <div
-          className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest"
-          style={{
-            background: error ? `${RED}18` : PANEL,
-            color: error ? RED : DIM,
-            border: `1px solid ${error ? `${RED}45` : FAINT}`,
-          }}
+        <aside
+          aria-label="Desktop order ticket"
+          className="mt-2 flex min-h-0 flex-1 flex-col lg:mt-0 lg:overflow-y-auto"
         >
-          {error ??
-            status ??
-            FLASH_MIN_NOTIONAL_TEXT}
-        </div>
-      )}
+          {!selectedPosition && (
+            <>
+              <div className="rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
+                <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                  Stake
+                </div>
+                <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+                  {STAKES.map((nextStake) => {
+                    const active = !customStake && stake === nextStake;
+                    return (
+                      <button
+                        key={nextStake}
+                        type="button"
+                        onClick={() => {
+                          setStake(nextStake);
+                          setCustomStake("");
+                          setError(null);
+                        }}
+                        className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
+                        style={{
+                          background: active ? FG : PANEL_2,
+                          color: active ? BG : FG,
+                          border: `1px solid ${active ? FG : FAINT}`,
+                        }}
+                      >
+                        ${nextStake}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  inputMode="decimal"
+                  value={customStake}
+                  onChange={(e) => {
+                    setCustomStake(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Custom USDC"
+                  className="mt-1.5 w-full rounded-lg border bg-black/20 px-3 py-2 text-[12px] font-black text-white outline-none placeholder:text-white/30"
+                  style={{ borderColor: FAINT }}
+                />
+              </div>
 
-      <div className="mt-auto pt-3 lg:pb-0">
-        {!ready ? (
-          <button
-            type="button"
-            disabled
-            className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest"
-            style={{ background: PANEL, color: DIM }}
-          >
-            Loading
-          </button>
-        ) : !authenticated ? (
-          <button
-            type="button"
-            onClick={login}
-            className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-            style={{ background: ACCENT, color: BG }}
-          >
-            Log in to trade
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void (selectedPosition ? closeLive() : openLive())}
-            disabled={!readyToTrade || (!selectedPosition && !tradeAllowed)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
-            style={{
-              background: !readyToTrade
-                ? PANEL
-                : selectedPosition
-                  ? RED
-                  : sideColor,
-              color: readyToTrade ? BG : DIM,
-              boxShadow: readyToTrade
-                ? `0 4px 0 rgba(0,0,0,0.35), inset 0 -2px 0 rgba(0,0,0,0.15)`
-                : "none",
-            }}
-          >
-            {busy && <Loader2 size={16} className="animate-spin" />}
-            {busy
-              ? "Working"
-              : selectedPosition
-                ? `CLOSE ${market}`
-                : `${side.toUpperCase()} ${market} ${leverage}x`}
-          </button>
-        )}
+              <div className="mt-2 rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
+                <div className="flex items-center justify-between">
+                  <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                    Leverage
+                  </div>
+                  <div className="text-[18px] font-black leading-none" style={{ color: sideColor }}>
+                    {leverage}x
+                  </div>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {(["standard", "degen"] as const).map((nextMode) => {
+                    const active = tradeMode === nextMode;
+                    return (
+                      <button
+                        key={nextMode}
+                        type="button"
+                        onClick={() => {
+                          setTradeMode(nextMode);
+                          setLeverage(maxLeverageForSelection(market, nextMode));
+                          setError(null);
+                        }}
+                        className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                        style={{
+                          background: active ? FG : PANEL_2,
+                          color: active ? BG : FG,
+                          border: `1px solid ${active ? FG : FAINT}`,
+                        }}
+                      >
+                        {nextMode}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                  {leverageOptions.map((nextLeverage) => {
+                    const active = leverage === nextLeverage;
+                    return (
+                      <button
+                        key={nextLeverage}
+                        type="button"
+                        onClick={() => {
+                          setLeverage(nextLeverage);
+                          setError(null);
+                        }}
+                        className="rounded-lg px-2 py-2 text-[12px] font-black transition active:scale-[0.97]"
+                        style={{
+                          background: active ? sideColor : PANEL_2,
+                          color: active ? BG : FG,
+                          border: `1px solid ${active ? sideColor : FAINT}`,
+                        }}
+                      >
+                        {nextLeverage}x
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {selectedPosition?.liquidationPriceUsd != null && (
+            <div className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
+              Mark {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
+              {fmtPrice(selectedPosition.liquidationPriceUsd)}
+              {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
+              {" · "}
+              Exit {fmtUsd(exitValue)}
+              {" · "}
+              {fmtSignedPct(liveRoi)}
+            </div>
+          )}
+
+          {(status || error || (!tradeAllowed && !selectedPosition)) && (
+            <div
+              className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={{
+                background: error ? `${RED}18` : PANEL,
+                color: error ? RED : DIM,
+                border: `1px solid ${error ? `${RED}45` : FAINT}`,
+              }}
+            >
+              {error ??
+                status ??
+                FLASH_MIN_NOTIONAL_TEXT}
+            </div>
+          )}
+
+          <div className="mt-auto flex pt-3 lg:justify-end lg:pb-0">
+            {!ready ? (
+              <button
+                type="button"
+                disabled
+                className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest lg:w-auto lg:px-8"
+                style={{ background: PANEL, color: DIM }}
+              >
+                Loading
+              </button>
+            ) : !authenticated ? (
+              <button
+                type="button"
+                onClick={login}
+                className="flex w-full items-center justify-center rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] lg:w-auto lg:px-8"
+                style={{ background: ACCENT, color: BG }}
+              >
+                Log in to trade
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void (selectedPosition ? closeLive() : openLive())}
+                disabled={!readyToTrade || (!selectedPosition && !tradeAllowed)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed lg:w-auto lg:px-8"
+                style={{
+                  background: !readyToTrade
+                    ? PANEL
+                    : selectedPosition
+                      ? RED
+                      : sideColor,
+                  color: readyToTrade ? BG : DIM,
+                  boxShadow: readyToTrade
+                    ? `0 4px 0 rgba(0,0,0,0.35), inset 0 -2px 0 rgba(0,0,0,0.15)`
+                    : "none",
+                }}
+              >
+                {busy && <Loader2 size={16} className="animate-spin" />}
+                {busy
+                  ? "Working"
+                  : selectedPosition
+                    ? `CLOSE ${market}`
+                    : `${side.toUpperCase()} ${market} ${leverage}x`}
+              </button>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );

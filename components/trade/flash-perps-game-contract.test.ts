@@ -111,6 +111,16 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("pb-[calc(88px+env(safe-area-inset-bottom))]");
   });
 
+  it("groups desktop Scalp controls into a graph column and order ticket", () => {
+    const page = source();
+
+    expect(page).toContain("lg:grid lg:grid-cols-[minmax(0,1fr)_360px]");
+    expect(page).toContain('aria-label="Desktop trade controls"');
+    expect(page).toContain('aria-label="Desktop order ticket"');
+    expect(page).toContain("lg:max-w-none");
+    expect(page).toContain("lg:w-auto");
+  });
+
   it("shows the user stake separately from Flash posted collateral", () => {
     const page = source();
 
