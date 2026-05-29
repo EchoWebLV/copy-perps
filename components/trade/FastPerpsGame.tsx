@@ -922,7 +922,7 @@ export function FastPerpsGame() {
             </div>
           )}
 
-          <div className="mt-auto flex pt-3 lg:justify-end lg:pb-0">
+          <div className="mt-auto flex pt-3 lg:mt-3 lg:justify-end lg:pb-0">
             {!ready ? (
               <button
                 type="button"

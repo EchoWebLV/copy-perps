@@ -123,6 +123,7 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain('aria-label="Desktop order ticket"');
     expect(page).toContain("lg:max-w-none");
     expect(page).toContain("lg:w-auto");
+    expect(page).toContain("mt-auto flex pt-3 lg:mt-3");
     expect(route).toContain('<AppShell railTitle="Trade" hideEmptyRail>');
   });
 

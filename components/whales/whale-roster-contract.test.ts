@@ -32,6 +32,16 @@ describe("WhaleRoster feed layout", () => {
     expect(source).toContain("ranked.length");
   });
 
+  it("uses compact signed P/L on desktop cards so large totals do not clip", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("formatCompactSignedWhaleUsd");
+    expect(source).toContain("{formatCompactSignedWhaleUsd(totalPnl)}");
+  });
+
   it("renders a loading shell and starts the roster fetch immediately", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleRoster.tsx"),

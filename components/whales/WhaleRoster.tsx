@@ -415,7 +415,7 @@ function DesktopWhaleCard({
             className="mt-1 truncate text-[21px] font-black tabular-nums leading-none"
             style={{ color: totalPnlColor }}
           >
-            {formatSignedWhaleUsd(totalPnl)}
+            {formatCompactSignedWhaleUsd(totalPnl)}
           </div>
         </div>
         <MiniMetric
@@ -834,6 +834,24 @@ function shortAccount(account: string): string {
 
 function fmtUsd(v: number): string {
   return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+function formatCompactSignedWhaleUsd(value: number): string {
+  const sign = value >= 0 ? "+" : "-";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${sign}$${trimCompact(abs / 1_000_000, 1)}M`;
+  if (abs >= 1_000) {
+    const digits = abs >= 100_000 ? 0 : 1;
+    return `${sign}$${trimCompact(abs / 1_000, digits)}K`;
+  }
+  return formatSignedWhaleUsd(value);
+}
+
+function trimCompact(value: number, maximumFractionDigits: number): string {
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  });
 }
 
 function fmtPct(v: number | null): string {
