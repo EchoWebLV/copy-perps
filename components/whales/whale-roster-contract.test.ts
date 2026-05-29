@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("WhaleRoster feed layout", () => {
-  it("renders whales as one snap-scroll card per screen instead of a multi-column grid", () => {
+  it("keeps the mobile snap feed and adds a desktop card grid", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleRoster.tsx"),
       "utf8",
@@ -11,11 +11,14 @@ describe("WhaleRoster feed layout", () => {
 
     expect(source).toContain("snap-y snap-mandatory");
     expect(source).toContain("h-full w-full snap-start");
-    expect(source).not.toContain("lg:grid-cols");
-    expect(source).not.toContain("auto-rows-max");
+    expect(source).toContain("lg:hidden");
+    expect(source).toContain("hidden h-full min-h-0 flex-col lg:flex");
+    expect(source).toContain("DesktopWhaleCard");
+    expect(source).toContain("xl:grid-cols-3");
+    expect(source).toContain("auto-rows-max");
   });
 
-  it("does not reserve a title band above the whale cards", () => {
+  it("uses a compact desktop header instead of a huge route title band", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleRoster.tsx"),
       "utf8",
@@ -25,6 +28,8 @@ describe("WhaleRoster feed layout", () => {
     expect(source).not.toContain("Ranked source accounts ready to copy");
     expect(source).not.toContain("pt-[150px]");
     expect(source).not.toContain("lg:pt-[118px]");
+    expect(source).toContain("COPYABLE WHALE ACCOUNTS");
+    expect(source).toContain("ranked.length");
   });
 
   it("renders a loading shell and starts the roster fetch immediately", () => {

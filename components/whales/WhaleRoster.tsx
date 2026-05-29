@@ -75,21 +75,61 @@ export function WhaleRoster({ initialWhales }: Props) {
       ) : ranked.length === 0 ? (
         <EmptyRoster />
       ) : (
-        <div className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll">
-          {ranked.map((whale, idx) => (
-            <section
-              key={whale.payload.whaleId}
-              className="flex h-full w-full snap-start items-center justify-center px-3 pt-12 pb-24 lg:px-8 lg:py-8"
-              style={{ scrollSnapStop: "always" }}
+        <>
+          <div className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll lg:hidden">
+            {ranked.map((whale, idx) => (
+              <section
+                key={whale.payload.whaleId}
+                className="flex h-full w-full snap-start items-center justify-center px-3 pt-12 pb-24"
+                style={{ scrollSnapStop: "always" }}
+              >
+                <WhaleCard
+                  whale={whale}
+                  rank={idx + 1}
+                  onTail={(source) => setTailSource(source)}
+                />
+              </section>
+            ))}
+          </div>
+
+          <div className="hidden h-full min-h-0 flex-col lg:flex">
+            <div
+              className="flex flex-none items-center justify-between gap-4 border-b px-6 py-4"
+              style={{ borderColor: FAINT }}
             >
-              <WhaleCard
-                whale={whale}
-                rank={idx + 1}
-                onTail={(source) => setTailSource(source)}
-              />
-            </section>
-          ))}
-        </div>
+              <div>
+                <div
+                  className="text-[10px] font-black uppercase tracking-[0.24em]"
+                  style={{ color: DIM }}
+                >
+                  COPYABLE WHALE ACCOUNTS
+                </div>
+                <div className="mt-1 text-[22px] font-black uppercase leading-none">
+                  {ranked.length} sources online
+                </div>
+              </div>
+              <div
+                className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
+                style={{ background: PANEL, border: `1px solid ${FAINT}`, color: FG }}
+              >
+                Live roster
+              </div>
+            </div>
+
+            <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <div className="grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3">
+                {ranked.map((whale, idx) => (
+                  <DesktopWhaleCard
+                    key={whale.payload.whaleId}
+                    whale={whale}
+                    rank={idx + 1}
+                    onTail={(source) => setTailSource(source)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <TailModal
@@ -279,6 +319,234 @@ function WhaleCard({
           {canTail
             ? `Tail whale (${exposureSummary.copyableCount})`
             : "Unavailable"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function DesktopWhaleCard({
+  whale,
+  rank,
+  onTail,
+}: {
+  whale: WhaleTraderSignal;
+  rank: number;
+  onTail: (source: TailSource) => void;
+}) {
+  const p = whale.payload;
+  const [now, setNow] = useState(0);
+  const exposureSummary = buildWhaleExposureSummary(p.openPositions, now);
+  const lastSeenAtMs = p.lastSeenAt === null ? null : Date.parse(p.lastSeenAt);
+  const fresh =
+    now > 0 &&
+    !p.stale &&
+    lastSeenAtMs !== null &&
+    Number.isFinite(lastSeenAtMs) &&
+    isSourceFresh(lastSeenAtMs, undefined, now);
+  const livePositionStatsOnly = p.stats.statsSource === "live_positions";
+  const hasPortfolioStats = !livePositionStatsOnly;
+  const totalPnl = p.stats.pnlAllTimeUsdc;
+  const totalPnlColor = totalPnl >= 0 ? GREEN : RED;
+  const largest = exposureSummary.largestPosition;
+  const largestTime = largest ? formatWhalePositionTime(largest, now) : null;
+  const largestPnl = largest?.unrealizedPnlPct ?? null;
+  const largestPnlColor =
+    largestPnl === null ? DIM : largestPnl >= 0 ? GREEN : RED;
+  const largestSideColor = largest?.side === "long" ? GREEN : RED;
+  const canTail = exposureSummary.copyableCount > 0;
+
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <article
+      className="relative flex min-h-[420px] flex-col overflow-hidden p-4"
+      style={{
+        background: PANEL,
+        borderRadius: 8,
+        border: `1px solid ${fresh ? FAINT : `${RED}55`}`,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black uppercase tracking-widest"
+          style={{
+            background: rank === 1 ? ACCENT : PANEL_2,
+            color: rank === 1 ? BG : FG,
+          }}
+        >
+          #{rank}
+        </div>
+        <WhaleFingerprintAvatar
+          sourceAccount={p.sourceAccount}
+          label={p.displayName}
+          mood={fresh ? "HUNTING" : "WOUNDED"}
+          size={44}
+          pulse={fresh && p.openPositionsCount > 0}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[18px] font-black uppercase leading-none">
+            {p.displayName}
+          </div>
+          <div
+            className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            <span>{p.source}</span>
+            <span>{shortAccount(p.sourceAccount)}</span>
+            <FreshnessBadge stale={p.stale} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div>
+          <div
+            className="text-[8px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            {livePositionStatsOnly ? "Live P/L" : "Total P/L"}
+          </div>
+          <div
+            className="mt-1 truncate text-[21px] font-black tabular-nums leading-none"
+            style={{ color: totalPnlColor }}
+          >
+            {formatSignedWhaleUsd(totalPnl)}
+          </div>
+        </div>
+        <MiniMetric
+          label="Equity"
+          value={p.stats.equityUsdc > 0 ? fmtUsd(p.stats.equityUsdc) : "N/A"}
+          active={p.stats.equityUsdc > 0}
+        />
+        <MiniMetric
+          label="Open"
+          value={String(exposureSummary.totalCount)}
+          active={exposureSummary.totalCount > 0}
+        />
+      </div>
+
+      <WhalePnlGraph
+        points={p.stats.pnlCurve}
+        totalPnl={totalPnl}
+        positive={totalPnl >= 0}
+        historyLabel={livePositionStatsOnly ? "P&L history" : "All time P&L"}
+        historyValue={
+          livePositionStatsOnly ? "N/A" : formatSignedWhaleUsd(totalPnl)
+        }
+        unavailableLabel={
+          livePositionStatsOnly
+            ? "P&L HISTORY UNAVAILABLE"
+            : "P&L HISTORY WARMING UP"
+        }
+      />
+
+      <div
+        className="mt-3 grid grid-cols-3 overflow-hidden border-y"
+        style={{ borderColor: FAINT }}
+      >
+        <StatCell
+          label="1D"
+          value={formatPeriodPnl(p.stats.pnl1dUsdc, hasPortfolioStats)}
+          color={periodPnlColor(p.stats.pnl1dUsdc, hasPortfolioStats)}
+        />
+        <StatCell
+          label="7D"
+          value={formatPeriodPnl(p.stats.pnl7dUsdc, hasPortfolioStats)}
+          color={periodPnlColor(p.stats.pnl7dUsdc, hasPortfolioStats)}
+        />
+        <StatCell
+          label="30D"
+          value={formatPeriodPnl(p.stats.pnl30dUsdc, hasPortfolioStats)}
+          color={periodPnlColor(p.stats.pnl30dUsdc, hasPortfolioStats)}
+        />
+      </div>
+
+      <div className="mt-3 flex-1 border-t pt-3" style={{ borderColor: FAINT }}>
+        <div
+          className="mb-2 flex items-center justify-between text-[9px] font-black uppercase tracking-widest"
+          style={{ color: DIM }}
+        >
+          <span>Exposure</span>
+          <span>{exposureSummary.copyableCount} copy ready</span>
+        </div>
+
+        {largest ? (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] font-black uppercase tracking-widest">
+                <span>{largest.market}</span>
+                <span style={{ color: largestSideColor }}>{largest.side}</span>
+                <span style={{ color: DIM }}>{largest.leverage}x</span>
+              </div>
+              <div
+                className="mt-1 text-[9px] font-black uppercase tracking-widest"
+                style={{ color: DIM }}
+              >
+                {largestTime?.label === "Seen" ? "Seen" : "Held"}{" "}
+                {largestTime?.value}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-[12px] font-black tabular-nums">
+                {fmtUsd(largest.notionalUsd)}
+              </div>
+              <div
+                className="mt-1 text-[12px] font-black uppercase tracking-widest tabular-nums"
+                style={{ color: largestPnlColor }}
+              >
+                {fmtPct(largestPnl)}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            <Layers size={14} strokeWidth={2.8} />
+            Watching for next open position
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link
+          href="/live?mode=swipe"
+          prefetch={false}
+          className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+          style={{
+            background: PANEL_2,
+            color: FG,
+            border: `1px solid ${FAINT}`,
+          }}
+        >
+          <ArrowRight size={12} strokeWidth={3} />
+          Positions
+        </Link>
+        <button
+          type="button"
+          disabled={!canTail}
+          onClick={() => {
+            const source = buildWhaleTailSource(p, now);
+            if (!source) return;
+            onTail(source);
+          }}
+          className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+          style={{
+            background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
+            color: canTail ? BG : DIM,
+            boxShadow: canTail
+              ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
+              : "none",
+          }}
+        >
+          <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
+          Tail {exposureSummary.copyableCount}
         </button>
       </div>
     </article>
