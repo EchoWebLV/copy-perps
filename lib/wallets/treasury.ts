@@ -2,8 +2,8 @@ import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedInstruction,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+  getAssociatedTokenAddress,
+} from "@/lib/solana/spl";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/jupiter/constants";
 
 // Lazy — same reasoning as lib/wallets/gas.ts. Routes can import this
@@ -26,10 +26,7 @@ function getTreasuryPubkey(): PublicKey {
 
 function getTreasuryUsdcAta(): PublicKey {
   if (_treasuryUsdcAta) return _treasuryUsdcAta;
-  _treasuryUsdcAta = getAssociatedTokenAddressSync(
-    new PublicKey(USDC_MINT),
-    getTreasuryPubkey(),
-  );
+  _treasuryUsdcAta = getAssociatedTokenAddress(getTreasuryPubkey(), usdcMintPk);
   return _treasuryUsdcAta;
 }
 
@@ -49,7 +46,7 @@ export function buildFeeTransferInstructions(params: {
   feeUsdcDollars: number;
   feePayerForAta: PublicKey;
 }): TransactionInstruction[] {
-  const userUsdcAta = getAssociatedTokenAddressSync(usdcMintPk, params.userPubkey);
+  const userUsdcAta = getAssociatedTokenAddress(params.userPubkey, usdcMintPk);
   const amountAtomic = BigInt(
     Math.ceil(params.feeUsdcDollars * 10 ** USDC_DECIMALS),
   );

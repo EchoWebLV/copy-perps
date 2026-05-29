@@ -10,11 +10,16 @@
 // so it stays correct even when a local dev server and the Railway
 // prod server are both up against the shared database.
 
+import { suppressKnownRuntimeWarnings } from "@/lib/runtime/console-noise";
+
 export async function register(): Promise<void> {
   // Only the Node.js server runtime — never the edge runtime. The
   // resolver needs Node APIs (os, crypto) and direct DB access. The
   // dynamic import keeps that Node-only code out of the edge bundle.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  suppressKnownRuntimeWarnings();
+
   const [{ startBotTicker }, { startWhaleTicker }] = await Promise.all([
     import("@/lib/bots/ticker"),
     import("@/lib/whales/ticker"),

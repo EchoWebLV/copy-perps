@@ -7,10 +7,10 @@ import {
 import { createHash } from "crypto";
 import { getConnection } from "@/lib/solana/balance";
 import {
-  getAssociatedTokenAddressSync,
-  TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
+  getAssociatedTokenAddress,
+  TOKEN_PROGRAM_ID,
+} from "@/lib/solana/spl";
 
 const PACIFICA_PROGRAM_ID = new PublicKey(
   "PCFA5iYgmqK6MqPhWNKg7Yv7auX7VZ4Cx7T1eJyrAMH",
@@ -68,7 +68,7 @@ async function getAtaUsdcBalance(
 export async function getWalletUsdcBalance(
   userPubkey: PublicKey,
 ): Promise<number> {
-  const userUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, userPubkey);
+  const userUsdcAta = getAssociatedTokenAddress(userPubkey, USDC_MINT);
   return getAtaUsdcBalance(getConnection(), userUsdcAta);
 }
 
@@ -78,10 +78,7 @@ export async function buildDepositTx(params: {
   userPubkey: PublicKey;
   amountUsdc: number;
 }): Promise<{ transactionB64: string }> {
-  const userUsdcAta = getAssociatedTokenAddressSync(
-    USDC_MINT,
-    params.userPubkey,
-  );
+  const userUsdcAta = getAssociatedTokenAddress(params.userPubkey, USDC_MINT);
   const conn = getConnection();
   const walletUsdc = await getWalletUsdcBalance(params.userPubkey);
   if (walletUsdc + 0.000001 < params.amountUsdc) {

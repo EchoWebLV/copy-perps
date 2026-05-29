@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && npm run build:standalone-assets",
+    "build": "NODE_OPTIONS=\"$NODE_OPTIONS --require ./scripts/suppress-known-warnings.cjs\" next build && npm run build:standalone-assets",
     "build:standalone-assets": "rm -rf .next/standalone/public .next/standalone/.next/static && mkdir -p .next/standalone/.next && cp -R public .next/standalone/public && cp -R .next/static .next/standalone/.next/static",
     "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "typecheck": "tsc --noEmit",

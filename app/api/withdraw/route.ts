@@ -10,8 +10,8 @@ import {
 import {
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedInstruction,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+  getAssociatedTokenAddress,
+} from "@/lib/solana/spl";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
@@ -127,8 +127,8 @@ export async function POST(request: Request) {
 
     const senderPk = new PublicKey(user.solanaPubkey);
     const destinationPk = new PublicKey(body.destination);
-    const senderAta = getAssociatedTokenAddressSync(USDC_MINT_PK, senderPk);
-    const destAta = getAssociatedTokenAddressSync(USDC_MINT_PK, destinationPk);
+    const senderAta = getAssociatedTokenAddress(senderPk, USDC_MINT_PK);
+    const destAta = getAssociatedTokenAddress(destinationPk, USDC_MINT_PK);
     const amountAtomic = BigInt(
       Math.floor(body.amountUsd * 10 ** USDC_DECIMALS),
     );
@@ -216,8 +216,8 @@ export async function POST(request: Request) {
   const senderPk = new PublicKey(user.solanaPubkey);
   const destinationPk = new PublicKey(body.destination);
 
-  const senderAta = getAssociatedTokenAddressSync(USDC_MINT_PK, senderPk);
-  const destAta = getAssociatedTokenAddressSync(USDC_MINT_PK, destinationPk);
+  const senderAta = getAssociatedTokenAddress(senderPk, USDC_MINT_PK);
+  const destAta = getAssociatedTokenAddress(destinationPk, USDC_MINT_PK);
 
   const amountAtomic = BigInt(
     Math.floor(body.amountUsd * 10 ** USDC_DECIMALS),
