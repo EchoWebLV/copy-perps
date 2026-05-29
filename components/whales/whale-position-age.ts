@@ -22,3 +22,26 @@ export function formatWhalePositionAge(openedAtMs: number, nowMs: number): strin
   }
   return `${minutes}M`;
 }
+
+export interface WhalePositionTiming {
+  openedAtMs: number;
+  openedAtKnown?: boolean;
+  lastSeenAtMs: number;
+}
+
+export function formatWhalePositionTime(
+  position: WhalePositionTiming,
+  nowMs: number,
+): { label: "Holding" | "Seen"; value: string } {
+  if (position.openedAtKnown === false) {
+    return {
+      label: "Seen",
+      value: formatWhalePositionAge(position.lastSeenAtMs, nowMs),
+    };
+  }
+
+  return {
+    label: "Holding",
+    value: formatWhalePositionAge(position.openedAtMs, nowMs),
+  };
+}

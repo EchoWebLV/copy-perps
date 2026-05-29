@@ -9,7 +9,7 @@ import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildPnlChartPath } from "./pnl-chart";
 import { formatSignedWhaleUsd } from "./whale-money";
-import { formatWhalePositionAge } from "./whale-position-age";
+import { formatWhalePositionTime } from "./whale-position-age";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
@@ -383,6 +383,7 @@ function WhaleExposurePanel({
   const largestSideColor = largest?.side === "long" ? GREEN : RED;
   const largestPnl = largest?.unrealizedPnlPct ?? null;
   const largestProfit = (largestPnl ?? 0) >= 0;
+  const largestTime = largest ? formatWhalePositionTime(largest, now) : null;
 
   return (
     <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
@@ -429,7 +430,7 @@ function WhaleExposurePanel({
                   <span style={{ color: DIM }}>{largest.leverage}x</span>
                 </div>
                 <div className="mt-1 text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-                  Held {formatWhalePositionAge(largest.openedAtMs, now)}
+                  {largestTime?.label === "Seen" ? "Seen" : "Held"} {largestTime?.value}
                 </div>
               </div>
               <div className="shrink-0 text-right">

@@ -50,9 +50,10 @@ function comparePulseItems(a: PulseItem, b: PulseItem): number {
 function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[] {
   const candidates: PulseItem[] = [];
   const openedAgoMs = Math.max(0, nowMs - position.openedAtMs);
+  const openedAtKnown = position.openedAtKnown !== false;
   const pnl = position.unrealizedPnlPct;
 
-  if (openedAgoMs <= FRESH_OPEN_MS) {
+  if (openedAtKnown && openedAgoMs <= FRESH_OPEN_MS) {
     candidates.push(
       makeItem({
         position,
@@ -163,7 +164,8 @@ function isPositionCopyable(position: PositionPayload): boolean {
 
 function baseScore(position: PositionPayload, nowMs: number): number {
   const ageMinutes = Math.max(0, (nowMs - position.openedAtMs) / 60_000);
-  const recency = Math.max(0, 60 - ageMinutes);
+  const recency =
+    position.openedAtKnown === false ? 0 : Math.max(0, 60 - ageMinutes);
   const size = Math.min(140, Math.log10(Math.max(1, position.notionalUsd)) * 18);
   const leverage = Math.min(60, position.leverage * 1.5);
   const copyable = isPositionCopyable(position) ? 30 : -80;

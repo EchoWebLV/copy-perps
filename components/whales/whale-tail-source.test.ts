@@ -23,6 +23,7 @@ const position = (
   currentMark: market === "ETH" ? 2950 : 104,
   unrealizedPnlPct: market === "ETH" ? 1.2 : 4,
   openedAtMs: 1779540000000,
+  openedAtKnown: true,
   lastSeenAtMs: 1779540300000,
   stale,
   copyableOnPacifica,

@@ -30,7 +30,7 @@ import {
   RED,
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
-import { formatWhalePositionAge } from "./whale-position-age";
+import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 10_000;
 const SENTIMENT_POLL_MS = 30_000;
@@ -392,6 +392,7 @@ function MarketHeatCard({
     heat.bias === "long" ? GREEN : heat.bias === "short" ? RED : ACCENT;
   const topWhaleSide =
     row.topWhale.longNotional >= row.topWhale.shortNotional ? "long" : "short";
+  const newestTime = formatWhalePositionTime(row.newestOpen, now);
 
   return (
     <article
@@ -487,9 +488,9 @@ function MarketHeatCard({
         />
         <LeaderRow
           icon={Clock3}
-          label="Newest Open"
+          label={newestTime.label === "Seen" ? "Recently Seen" : "Newest Open"}
           value={`${shortName(row.newestOpen.displayName)} ${row.newestOpen.side.toUpperCase()}`}
-          detail={`${formatWhalePositionAge(row.newestOpen.openedAtMs, now)} AGO`}
+          detail={`${newestTime.value} AGO`}
           color={sideColor(row.newestOpen.side)}
         />
         <LeaderRow

@@ -30,7 +30,7 @@ import {
   toWhaleEntryChartPosition,
 } from "./whale-entry-chart-position";
 import { buildWhaleLiveTailButtonLabel } from "./whale-live-tail-label";
-import { formatWhalePositionAge } from "./whale-position-age";
+import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 4_000;
 const BODY_FONT = "system-ui, -apple-system, 'Inter', sans-serif";
@@ -228,6 +228,7 @@ function PositionCard({
   const stale =
     p.stale || (now > 0 && !isSourceFresh(p.lastSeenAtMs, undefined, now));
   const canTail = isFlashCopyableMarket(p.market);
+  const positionTime = formatWhalePositionTime(p, now);
 
   useEffect(() => {
     setNow(Date.now());
@@ -293,7 +294,7 @@ function PositionCard({
             />
           </div>
           <div className="text-right text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-            <div>HOLDING {formatWhalePositionAge(p.openedAtMs, now)}</div>
+            <div>{positionTime.label.toUpperCase()} {positionTime.value}</div>
           </div>
         </div>
       </div>

@@ -62,6 +62,10 @@ function positionFamilyKey(position: {
   return `${position.market.toUpperCase()}:${position.side}`;
 }
 
+function hasKnownHyperliquidOpenTime(position: WhalePositionRecord): boolean {
+  return position.raw?.openedAtSource === "source";
+}
+
 export async function refreshHyperliquidWhales(): Promise<{
   whalesSeen: number;
   positionsSeen: number;
@@ -169,11 +173,20 @@ export async function refreshHyperliquidWhales(): Promise<{
           const existing =
             existingOpenById.get(mapped.id) ??
             existingOpenByFamily.get(positionFamilyKey(mapped) ?? "");
+          let openedAtSource: "source" | "observed" = "observed";
           if (fillOpenedAtMs !== null) {
             mapped.openedAt = new Date(fillOpenedAtMs);
+            openedAtSource = "source";
           } else if (existing) {
             mapped.openedAt = existing.openedAt;
+            openedAtSource = hasKnownHyperliquidOpenTime(existing)
+              ? "source"
+              : "observed";
           }
+          mapped.raw = {
+            ...mapped.raw,
+            openedAtSource,
+          };
           mapped.id = makeHyperliquidPositionId({
             sourceAccount: account,
             market: mapped.market,

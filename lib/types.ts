@@ -181,6 +181,7 @@ export interface WhalePositionSignal extends BaseSignal {
     currentMark: number | null;
     unrealizedPnlPct: number | null;
     openedAtMs: number;
+    openedAtKnown: boolean;
     lastSeenAtMs: number;
     stale: boolean;
     copyableOnPacifica?: boolean;

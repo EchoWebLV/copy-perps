@@ -94,6 +94,7 @@ function signal(
       currentMark: 101,
       unrealizedPnlPct: 1,
       openedAtMs: overrides.openedAtMs ?? now - 60_000,
+      openedAtKnown: overrides.openedAtKnown ?? true,
       lastSeenAtMs: overrides.lastSeenAtMs ?? now,
       stale: overrides.stale ?? false,
       copyableOnPacifica: false,

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatWhalePositionAge } from "./whale-position-age";
+import {
+  formatWhalePositionAge,
+  formatWhalePositionTime,
+} from "./whale-position-age";
 
 describe("formatWhalePositionAge", () => {
   it("does not label fresh positions as just now", () => {
@@ -13,5 +16,18 @@ describe("formatWhalePositionAge", () => {
 
   it("renders a neutral loading value before the client clock is available", () => {
     expect(formatWhalePositionAge(1_000, 0)).toBe("...");
+  });
+
+  it("labels unknown Hyperliquid open times as last seen instead of holding", () => {
+    expect(
+      formatWhalePositionTime(
+        {
+          openedAtKnown: false,
+          openedAtMs: 59_000,
+          lastSeenAtMs: 59_000,
+        },
+        60_000,
+      ),
+    ).toEqual({ label: "Seen", value: "<1M" });
   });
 });

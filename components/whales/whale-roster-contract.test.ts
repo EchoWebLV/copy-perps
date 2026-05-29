@@ -53,9 +53,11 @@ describe("WhaleRoster feed layout", () => {
       "utf8",
     );
 
-    expect(source).toContain("formatWhalePositionAge");
+    expect(source).toContain("formatWhalePositionTime");
+    expect(source).toContain("const largestTime = largest ? formatWhalePositionTime(largest, now) : null;");
+    expect(source).toContain('largestTime?.label === "Seen" ? "Seen" : "Held"');
     expect(source).toContain("Held");
-    expect(source).toContain("largest.openedAtMs");
+    expect(source).not.toContain("formatWhalePositionAge");
   });
 
   it("does not present unavailable Hyperliquid portfolio stats as real zeroes", () => {

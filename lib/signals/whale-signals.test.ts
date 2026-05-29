@@ -211,6 +211,7 @@ describe("whale signals", () => {
         currentMark: 63_000,
         unrealizedPnlPct: 12.6,
         openedAtMs: 1779534000000,
+        openedAtKnown: true,
         lastSeenAtMs: 1779537570000,
         stale: false,
         copyableOnPacifica: true,
@@ -983,6 +984,42 @@ describe("whale signals", () => {
       "recent-stale-hl",
     ]);
     expect(positions[1]?.payload.stale).toBe(true);
+  });
+
+  it("marks observed Hyperliquid open times as unknown holding age", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        source: "multi",
+        whales: [
+          whale({
+            id: "hyperliquid:0xabc",
+            source: "hyperliquid",
+            sourceAccount: "0xabc",
+            displayName: "HL Alpha",
+            avatarUrl: null,
+            tags: ["hyperliquid"],
+          }),
+        ],
+        positions: [
+          position({
+            id: "observed-hl",
+            whaleId: "hyperliquid:0xabc",
+            source: "hyperliquid",
+            sourceAccount: "0xabc",
+            raw: { openedAtSource: "observed" },
+            openedAt: new Date("2026-05-23T11:59:30.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:59:30.000Z"),
+          }),
+        ],
+      }),
+    );
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const positions = await buildWhalePositionSignals();
+
+    expect(positions[0]?.payload.positionId).toBe("observed-hl");
+    expect(positions[0]?.payload.openedAtKnown).toBe(false);
   });
 
   it("returns no whale signals when the live cache is empty", async () => {

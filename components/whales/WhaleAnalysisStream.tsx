@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Radio } from "lucide-react";
 import type { WhalePositionSignal } from "@/lib/types";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
-import { formatWhalePositionAge } from "./whale-position-age";
+import { formatWhalePositionTime } from "./whale-position-age";
 import {
   ACCENT,
   BG,
@@ -104,6 +104,7 @@ function AnalysisRow({ position }: { position: WhalePositionSignal }) {
   const p = position.payload;
   const analysis = p.analysis;
   const sideColor = p.side === "long" ? GREEN : RED;
+  const positionTime = formatWhalePositionTime(p, now);
 
   useEffect(() => {
     setNow(Date.now());
@@ -138,7 +139,7 @@ function AnalysisRow({ position }: { position: WhalePositionSignal }) {
               <span style={{ color: DIM }}>{p.leverage}x</span>
             </div>
             <span className="shrink-0 text-[11px]" style={{ color: DIM, fontFamily: BODY_FONT }}>
-              HOLDING {formatWhalePositionAge(p.openedAtMs, now)}
+              {positionTime.label.toUpperCase()} {positionTime.value}
             </span>
           </div>
 

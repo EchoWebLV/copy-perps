@@ -23,6 +23,7 @@ function position(
     currentMark: overrides.currentMark ?? 70_700,
     unrealizedPnlPct: overrides.unrealizedPnlPct ?? 10,
     openedAtMs: overrides.openedAtMs ?? NOW - 5 * 60_000,
+    openedAtKnown: overrides.openedAtKnown ?? true,
     lastSeenAtMs: overrides.lastSeenAtMs ?? NOW - 30_000,
     stale: overrides.stale ?? false,
     copyableOnPacifica: overrides.copyableOnPacifica ?? true,
@@ -191,5 +192,23 @@ describe("buildPulseItems", () => {
     expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "expanded-hype")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "unsupported")).toBeUndefined();
+  });
+
+  it("does not call an observed Hyperliquid position a fresh open", () => {
+    const items = buildPulseItems(
+      [
+        position({
+          positionId: "observed-hl",
+          openedAtKnown: false,
+          openedAtMs: NOW - 30_000,
+          lastSeenAtMs: NOW - 30_000,
+          notionalUsd: 100_000,
+          unrealizedPnlPct: 0,
+        }),
+      ],
+      NOW,
+    );
+
+    expect(items).toEqual([]);
   });
 });

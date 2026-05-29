@@ -24,6 +24,7 @@ function whalePosition(
     currentMark: 157.5,
     unrealizedPnlPct: 4,
     openedAtMs: 1_000,
+    openedAtKnown: true,
     lastSeenAtMs: 2_000,
     stale: false,
     analysis: null,

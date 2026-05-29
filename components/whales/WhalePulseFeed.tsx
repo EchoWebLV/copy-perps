@@ -46,7 +46,7 @@ import {
   restoreVisiblePulsePosition,
 } from "./pulse-scroll-stability";
 import { mergePulsePositionSignals } from "./pulse-position-retention";
-import { formatWhalePositionAge } from "./whale-position-age";
+import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 10_000;
 const ROSTER_STATS_POLL_MS = 30_000;
@@ -350,6 +350,7 @@ function PulsePositionCard({
   const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
   const aiLine = buildAiLine(item);
   const recentReactors = persistedSocial?.recentReactors ?? [];
+  const positionTime = formatWhalePositionTime(p, now);
 
   return (
     <article className="mx-auto flex h-full w-full max-w-2xl flex-col px-5 pt-5 pb-28 lg:max-w-4xl lg:px-8 lg:py-8">
@@ -413,9 +414,9 @@ function PulsePositionCard({
                 className="shrink-0 text-right text-[10px] font-black uppercase"
                 style={{ color: DIM }}
               >
-                <div>Holding</div>
+                <div>{positionTime.label}</div>
                 <div style={{ color: FG }}>
-                  {formatWhalePositionAge(p.openedAtMs, now)}
+                  {positionTime.value}
                 </div>
               </div>
             </div>

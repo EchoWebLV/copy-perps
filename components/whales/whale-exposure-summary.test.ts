@@ -23,6 +23,7 @@ function position(
     currentMark: 101,
     unrealizedPnlPct: 5,
     openedAtMs: 1_000,
+    openedAtKnown: true,
     lastSeenAtMs: 9 * 60_000,
     stale: false,
     analysis: null,

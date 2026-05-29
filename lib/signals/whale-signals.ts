@@ -188,6 +188,11 @@ function maxLeverageForCopy(
   );
 }
 
+function openedAtKnown(position: WhaleLiveSnapshot["positions"][number]): boolean {
+  if (position.source !== "hyperliquid") return true;
+  return position.raw?.openedAtSource === "source";
+}
+
 async function getCachedPnlCurve(
   account: string,
   stats: {
@@ -422,6 +427,7 @@ async function buildWhalePositionSignalsFromSnapshot(
         currentMark: position.currentMark,
         unrealizedPnlPct: position.unrealizedPnlPct,
         openedAtMs,
+        openedAtKnown: openedAtKnown(position),
         lastSeenAtMs,
         stale,
         copyableOnPacifica: isCopyableOnPacifica(position),
