@@ -15,6 +15,15 @@ import {
   computeFlashLivePositionView,
   type FlashLivePositionView,
 } from "@/lib/flash/live-pnl";
+import {
+  deserializeFlashEntryCostCache,
+  forgetFlashEntryCost,
+  mergeFlashEntryCostCache,
+  pruneFlashEntryCostCache,
+  rememberFlashEntryCost,
+  serializeFlashEntryCostCache,
+  type FlashEntryCostCache,
+} from "@/lib/flash/entry-costs";
 import { useFlashLiveMarks } from "@/lib/flash/live-prices-context";
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
@@ -38,6 +47,7 @@ import {
 
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+const FLASH_ENTRY_COST_STORAGE_PREFIX = "gwak:flash-entry-costs:";
 const PRIVY_INSTANT_SIGNER_ID =
   process.env.NEXT_PUBLIC_PRIVY_FLASH_SIGNER_ID ??
   process.env.NEXT_PUBLIC_PRIVY_SIGNER_ID ??
@@ -189,24 +199,34 @@ function stakeForPosition(position: FlashPosition | null): number {
   return flashStakeUsdFromPosition(position) ?? 0;
 }
 
-function preserveFlashEntryFees(
-  next: FlashPosition[],
-  current: FlashPosition[],
-): FlashPosition[] {
-  const currentByPubkey = new Map(
-    current.map((position) => [position.positionPubkey, position]),
+function flashEntryCostStorageKey(walletAddress: string | null | undefined) {
+  return walletAddress ? `${FLASH_ENTRY_COST_STORAGE_PREFIX}${walletAddress}` : null;
+}
+
+function loadFlashEntryCostCache(
+  walletAddress: string | null | undefined,
+): FlashEntryCostCache {
+  const key = flashEntryCostStorageKey(walletAddress);
+  if (!key || typeof window === "undefined") return new Map();
+  try {
+    return deserializeFlashEntryCostCache(
+      JSON.parse(window.localStorage.getItem(key) ?? "[]"),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function saveFlashEntryCostCache(
+  walletAddress: string | null | undefined,
+  cache: FlashEntryCostCache,
+) {
+  const key = flashEntryCostStorageKey(walletAddress);
+  if (!key || typeof window === "undefined") return;
+  window.localStorage.setItem(
+    key,
+    JSON.stringify(serializeFlashEntryCostCache(cache)),
   );
-  return next.map((position) => {
-    const currentPosition = currentByPubkey.get(position.positionPubkey);
-    if (!currentPosition?.entryCostUsd && !currentPosition?.openFeeUsd) {
-      return position;
-    }
-    return {
-      ...position,
-      entryCostUsd: currentPosition.entryCostUsd,
-      openFeeUsd: currentPosition.openFeeUsd,
-    };
-  });
 }
 
 function isFlashScalpMarket(market: Market): market is FlashScalpMarket {
@@ -238,6 +258,7 @@ export function FastPerpsGame() {
   const [sessionSignerWalletAddress, setSessionSignerWalletAddress] = useState<
     string | null
   >(null);
+  const entryCostCacheRef = useRef<FlashEntryCostCache>(new Map());
 
   const effectiveStake = useMemo(() => {
     const parsed = Number(customStake);
@@ -315,6 +336,10 @@ export function FastPerpsGame() {
     }
   }, [sessionSignerWalletAddress, wallet?.address]);
 
+  useEffect(() => {
+    entryCostCacheRef.current = loadFlashEntryCostCache(wallet?.address);
+  }, [wallet?.address]);
+
   const loadPositions = useCallback(async () => {
     if (!authenticated || !wallet?.address) {
       setPositions([]);
@@ -332,9 +357,13 @@ export function FastPerpsGame() {
     });
     if (!resp.ok) return;
     const body = (await resp.json()) as { positions?: FlashPosition[] };
-    setPositions((current) =>
-      preserveFlashEntryFees(body.positions ?? [], current),
+    const merged = mergeFlashEntryCostCache(
+      entryCostCacheRef.current,
+      body.positions ?? [],
     );
+    pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
+    saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
+    setPositions(merged);
   }, [authenticated, getAccessToken, wallet?.address]);
 
   useEffect(() => {
@@ -368,12 +397,17 @@ export function FastPerpsGame() {
     [signAndSendTransaction, wallet],
   );
 
-  const upsertPosition = useCallback((position: FlashPosition) => {
-    setPositions((current) => [
-      ...current.filter((p) => p.positionPubkey !== position.positionPubkey),
-      position,
-    ]);
-  }, []);
+  const upsertPosition = useCallback(
+    (position: FlashPosition) => {
+      rememberFlashEntryCost(entryCostCacheRef.current, position);
+      saveFlashEntryCostCache(wallet?.address, entryCostCacheRef.current);
+      setPositions((current) => [
+        ...current.filter((p) => p.positionPubkey !== position.positionPubkey),
+        position,
+      ]);
+    },
+    [wallet?.address],
+  );
 
   const ensureInstantTrading = useCallback(async (): Promise<boolean> => {
     if (!wallet?.address) throw new Error("wallet not ready");
@@ -506,6 +540,8 @@ export function FastPerpsGame() {
       );
       const result = await requestClose(useInstantExecution);
       if (result.phase === "sent-close") {
+        forgetFlashEntryCost(entryCostCacheRef.current, selectedPosition);
+        saveFlashEntryCostCache(wallet?.address, entryCostCacheRef.current);
         setPositions((current) =>
           current.filter((p) => p.positionPubkey !== selectedPosition.positionPubkey),
         );
@@ -515,6 +551,8 @@ export function FastPerpsGame() {
       }
       setStatus("Signing Flash close...");
       await signAndSendFlashTransaction(result.transactionB64);
+      forgetFlashEntryCost(entryCostCacheRef.current, selectedPosition);
+      saveFlashEntryCostCache(wallet?.address, entryCostCacheRef.current);
       setPositions((current) =>
         current.filter((p) => p.positionPubkey !== selectedPosition.positionPubkey),
       );
@@ -534,6 +572,7 @@ export function FastPerpsGame() {
     requestClose,
     selectedPosition,
     signAndSendFlashTransaction,
+    wallet?.address,
   ]);
 
   return (
