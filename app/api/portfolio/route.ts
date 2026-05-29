@@ -75,6 +75,11 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function optionalFiniteNumber(value: unknown): number | null {
+  if (value == null) return null;
+  return finiteNumber(value);
+}
+
 function isoFromMillis(value: unknown): string | null {
   const n = finiteNumber(value);
   return n == null || n <= 0 ? null : new Date(n).toISOString();
@@ -97,7 +102,10 @@ function flashRowFromPosition(
     Number.isFinite(p.collateralUsd) && p.collateralUsd > 0
       ? p.collateralUsd
       : stakeUsdc;
-  const pnlUsd = Number.isFinite(p.pnlUsd) ? (p.pnlUsd ?? null) : null;
+  const openFeeUsd = optionalFiniteNumber(p.openFeeUsd);
+  const rawPnlUsd = Number.isFinite(p.pnlUsd) ? (p.pnlUsd ?? null) : null;
+  const pnlUsd =
+    rawPnlUsd == null ? null : rawPnlUsd - (openFeeUsd ?? 0);
   const unrealizedPnlPct =
     stakeUsdc != null && pnlUsd != null ? (pnlUsd / stakeUsdc) * 100 : null;
 
@@ -110,6 +118,7 @@ function flashRowFromPosition(
     leverage:
       p.leverage != null && Number.isFinite(p.leverage) ? p.leverage : null,
     stakeUsdc,
+    openFeeUsd,
     leaderAddress: null,
     leaderUsername: null,
     whaleId: null,
@@ -299,9 +308,11 @@ export async function GET(request: Request) {
 
           let unrealizedPnlPct: number | null = null;
           let pnlUsd: number | null = null;
+          const openFeeUsd = optionalFiniteNumber(b.feeUsdc);
           if (mark != null && entry != null && size != null && b.amountUsdc > 0) {
             const direction = livePos?.side === "bid" ? 1 : -1;
-            pnlUsd = (mark - entry) * Math.abs(size) * direction;
+            pnlUsd =
+              (mark - entry) * Math.abs(size) * direction - (openFeeUsd ?? 0);
             unrealizedPnlPct = (pnlUsd / b.amountUsdc) * 100;
           }
 
@@ -313,6 +324,7 @@ export async function GET(request: Request) {
             side: meta.leaderSide,
             leverage: meta.leverage,
             stakeUsdc: b.amountUsdc,
+            openFeeUsd,
             leaderAddress: meta.leaderAddress ?? whaleMeta?.sourceAccount ?? null,
             leaderUsername: null,
             whaleId: whaleMeta?.whaleId ?? null,

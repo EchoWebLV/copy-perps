@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { flashStakeUsdFromPosition } from "./position-value";
+import { flashStakeUsdFromPosition, type FlashStakePosition } from "./position-value";
 
 describe("flashStakeUsdFromPosition", () => {
+  it("prefers the original entry cost when the Flash open quote is available", () => {
+    expect(
+      flashStakeUsdFromPosition({
+        sizeUsd: 500,
+        leverage: 515.463918,
+        collateralUsd: 0.97,
+        entryCostUsd: 1,
+      } as FlashStakePosition & { entryCostUsd: number }),
+    ).toBe(1);
+  });
+
   it("derives the user stake from notional size and leverage", () => {
     expect(
       flashStakeUsdFromPosition({

@@ -95,6 +95,8 @@ export interface FlashPositionSummary {
   liquidationPriceUsd?: number;
   pnlUsd?: number;
   receiveUsd?: number;
+  entryCostUsd?: number;
+  openFeeUsd?: number;
   isProfitable?: boolean;
   openTime: number;
 }
@@ -379,6 +381,8 @@ export class FlashPerpsService {
         markPriceUsd: contractPriceToNumber(quote.entryPrice),
         liquidationPriceUsd: contractPriceToNumber(quote.liquidationPrice),
         leverage: bnToNumber(quote.leverage, BPS_DECIMALS),
+        entryCostUsd: req.amountUsd,
+        openFeeUsd: bnToNumber(quote.totalFeeUsd, USD_DECIMALS),
       },
     };
   }

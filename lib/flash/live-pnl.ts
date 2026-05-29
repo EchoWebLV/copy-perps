@@ -12,6 +12,7 @@ export interface FlashLivePosition extends FlashStakePosition {
   liquidationPriceUsd?: number | null;
   pnlUsd?: number | null;
   receiveUsd?: number | null;
+  openFeeUsd?: number | null;
   openTime?: number | null;
 }
 
@@ -47,6 +48,25 @@ function pricePnlUsd(position: FlashLivePosition, markPriceUsd: number): number 
   return size * priceMove;
 }
 
+function openFeeUsdForPosition(
+  position: FlashLivePosition,
+  stakeUsd: number,
+): number {
+  const openFeeUsd = finiteNumber(position.openFeeUsd);
+  if (openFeeUsd != null) return openFeeUsd;
+
+  if (positiveNumber(position.entryCostUsd) == null) {
+    return 0;
+  }
+
+  const collateralUsd = positiveNumber(position.collateralUsd);
+  if (stakeUsd > 0 && collateralUsd != null && stakeUsd > collateralUsd) {
+    return stakeUsd - collateralUsd;
+  }
+
+  return 0;
+}
+
 export function computeFlashLivePositionView({
   position,
   liveMarkUsd,
@@ -68,6 +88,7 @@ export function computeFlashLivePositionView({
   }
 
   const stakeUsd = flashStakeUsdFromPosition(position) ?? 0;
+  const openFeeUsd = openFeeUsdForPosition(position, stakeUsd);
   const entryMark = positiveNumber(position.entryPriceUsd);
   const quoteMark = positiveNumber(position.markPriceUsd) ?? entryMark;
   const liveMark = positiveNumber(liveMarkUsd);
@@ -75,17 +96,19 @@ export function computeFlashLivePositionView({
   const exactPnlUsd = finiteNumber(position.pnlUsd);
   const isEstimated = liveMark != null && liveMark !== quoteMark;
 
-  let pnlUsd = exactPnlUsd ?? 0;
+  let pnlUsd = exactPnlUsd == null ? 0 : exactPnlUsd - openFeeUsd;
   if (markPriceUsd != null && isEstimated) {
     const livePricePnl = pricePnlUsd(position, markPriceUsd);
     const quotePricePnl = quoteMark == null ? null : pricePnlUsd(position, quoteMark);
     if (livePricePnl != null) {
       const flashAdjustment =
-        exactPnlUsd != null && quotePricePnl != null ? exactPnlUsd - quotePricePnl : 0;
+        exactPnlUsd != null && quotePricePnl != null
+          ? exactPnlUsd - openFeeUsd - quotePricePnl
+          : -openFeeUsd;
       pnlUsd = livePricePnl + flashAdjustment;
     }
   } else if (exactPnlUsd == null && markPriceUsd != null) {
-    pnlUsd = pricePnlUsd(position, markPriceUsd) ?? 0;
+    pnlUsd = (pricePnlUsd(position, markPriceUsd) ?? 0) - openFeeUsd;
   }
 
   const estimatedValueUsd = Math.max(0, stakeUsd + pnlUsd);

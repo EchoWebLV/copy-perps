@@ -61,6 +61,7 @@ type OpenBetRow = {
   betId: string;
   userId: string;
   amountUsdc: number;
+  feeUsdc: number | null;
   meta: unknown;
   userMainPubkey: string | null;
   agentPubkey: string;
@@ -154,6 +155,8 @@ async function closeFollowerBet(
       account: row.userMainPubkey!,
       orderId: fill.order_id,
     });
+    const openFeeUsdc =
+      row.feeUsdc != null && Number.isFinite(row.feeUsdc) ? row.feeUsdc : 0;
     await db
       .update(bets)
       .set({
@@ -162,7 +165,7 @@ async function closeFollowerBet(
         closeTxHash: `pacifica:${fill.order_id}`,
         meta: withLeaderClosedAt(row.meta, options.closeReason),
         ...(realized != null
-          ? { proceedsUsdc: row.amountUsdc + realized }
+          ? { proceedsUsdc: row.amountUsdc + realized - openFeeUsdc }
           : {}),
       })
       .where(
@@ -448,6 +451,7 @@ export async function runMirrorCloseSweep(
       betId: bets.id,
       userId: bets.userId,
       amountUsdc: bets.amountUsdc,
+      feeUsdc: bets.feeUsdc,
       meta: bets.meta,
       userMainPubkey: users.solanaPubkey,
       agentPubkey: agentWallets.agentPubkey,

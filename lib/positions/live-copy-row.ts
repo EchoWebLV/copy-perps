@@ -25,7 +25,13 @@ export function applyLiveMarksToCopyRows(
     }
 
     const direction = row.side === "long" ? 1 : -1;
-    const pnlUsd = round((liveMark - row.entryPrice) * row.amountBase * direction);
+    const openFeeUsd =
+      row.openFeeUsd != null && Number.isFinite(row.openFeeUsd)
+        ? row.openFeeUsd
+        : 0;
+    const pnlUsd = round(
+      (liveMark - row.entryPrice) * row.amountBase * direction - openFeeUsd,
+    );
     const notionalUsd = round(liveMark * row.amountBase);
     const unrealizedPnlPct =
       row.stakeUsdc !== null && row.stakeUsdc > 0

@@ -108,7 +108,10 @@ export async function POST(request: Request) {
       `[bet/copy/close] realized PnL unavailable for order ${fill.order_id}; proceeds left unset`,
     );
   }
-  const proceedsUsdc = realized == null ? null : bet.amountUsdc + realized;
+  const openFeeUsdc =
+    bet.feeUsdc != null && Number.isFinite(bet.feeUsdc) ? bet.feeUsdc : 0;
+  const proceedsUsdc =
+    realized == null ? null : bet.amountUsdc + realized - openFeeUsdc;
 
   await db
     .update(bets)

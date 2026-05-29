@@ -48,4 +48,46 @@ describe("applyLiveMarksToCopyRows", () => {
     });
     expect(rows[0].markPrice).toBeNull();
   });
+
+  it("keeps already-paid open fees in client-side live PnL refreshes", () => {
+    const rows: CopyRowData[] = [
+      {
+        betId: "copy-sol-long",
+        venue: "pacifica",
+        sourceKind: "tail",
+        market: "SOL",
+        side: "long",
+        leverage: 10,
+        stakeUsdc: 5,
+        openFeeUsd: 0.03,
+        leaderAddress: "0x023a",
+        leaderUsername: null,
+        botId: null,
+        botName: null,
+        liveStatus: "open",
+        entryPrice: 100,
+        markPrice: null,
+        pricedAt: null,
+        liquidationPrice: null,
+        amountBase: 0.05,
+        marginUsd: null,
+        marginMode: "cross",
+        notionalUsd: null,
+        pnlUsd: null,
+        unrealizedPnlPct: null,
+        openedAt: "2026-05-28T12:00:00.000Z",
+        positionUpdatedAt: "2026-05-28T12:00:00.000Z",
+        leaderClosedAt: null,
+      },
+    ];
+
+    const result = applyLiveMarksToCopyRows(rows, { SOL: 100 }, {
+      pricedAt: "2026-05-28T12:01:00.000Z",
+    });
+
+    expect(result[0]).toMatchObject({
+      pnlUsd: -0.03,
+      unrealizedPnlPct: -0.6,
+    });
+  });
 });

@@ -81,6 +81,8 @@ interface FlashPosition {
   liquidationPriceUsd?: number;
   pnlUsd?: number;
   receiveUsd?: number;
+  entryCostUsd?: number;
+  openFeeUsd?: number;
   isProfitable?: boolean;
   openTime: number;
 }
@@ -95,6 +97,7 @@ interface FlashPreparedOpenResponse {
     leverage?: number;
     entryPriceUsd?: number;
     liquidationPriceUsd?: number;
+    feesUsd?: number;
   };
   position: FlashPosition;
   trade: {
@@ -184,6 +187,26 @@ function fmtSignedPct(value: number): string {
 
 function stakeForPosition(position: FlashPosition | null): number {
   return flashStakeUsdFromPosition(position) ?? 0;
+}
+
+function preserveFlashEntryFees(
+  next: FlashPosition[],
+  current: FlashPosition[],
+): FlashPosition[] {
+  const currentByPubkey = new Map(
+    current.map((position) => [position.positionPubkey, position]),
+  );
+  return next.map((position) => {
+    const currentPosition = currentByPubkey.get(position.positionPubkey);
+    if (!currentPosition?.entryCostUsd && !currentPosition?.openFeeUsd) {
+      return position;
+    }
+    return {
+      ...position,
+      entryCostUsd: currentPosition.entryCostUsd,
+      openFeeUsd: currentPosition.openFeeUsd,
+    };
+  });
 }
 
 function isFlashScalpMarket(market: Market): market is FlashScalpMarket {
@@ -309,7 +332,9 @@ export function FastPerpsGame() {
     });
     if (!resp.ok) return;
     const body = (await resp.json()) as { positions?: FlashPosition[] };
-    setPositions(body.positions ?? []);
+    setPositions((current) =>
+      preserveFlashEntryFees(body.positions ?? [], current),
+    );
   }, [authenticated, getAccessToken, wallet?.address]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ export interface FlashStakePosition {
   sizeUsd?: number | null;
   leverage?: number | null;
   collateralUsd?: number | null;
+  entryCostUsd?: number | null;
 }
 
 function positiveFiniteNumber(value: unknown): number | null {
@@ -17,6 +18,9 @@ export function flashStakeUsdFromPosition(
   position: FlashStakePosition | null | undefined,
 ): number | null {
   if (!position) return null;
+
+  const entryCostUsd = positiveFiniteNumber(position.entryCostUsd);
+  if (entryCostUsd != null) return roundUsdc(entryCostUsd);
 
   const sizeUsd = positiveFiniteNumber(position.sizeUsd);
   const leverage = positiveFiniteNumber(position.leverage);

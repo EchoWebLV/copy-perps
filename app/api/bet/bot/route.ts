@@ -73,6 +73,11 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
   return null;
 }
 
+function feeUsdcFromFill(fill: { fee?: unknown }): number | null {
+  const fee = Number(fill.fee);
+  return Number.isFinite(fee) ? fee : null;
+}
+
 export async function POST(request: Request) {
   const claims = await verifyPrivyRequest(request);
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -229,6 +234,7 @@ export async function POST(request: Request) {
       userId: user.id,
       type: "copy",
       amountUsdc: body.stakeUsdc,
+      feeUsdc: feeUsdcFromFill(fill),
       status: "confirmed",
       meta: {
         botId: body.botId,

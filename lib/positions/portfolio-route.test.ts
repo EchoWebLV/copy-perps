@@ -215,6 +215,7 @@ describe("GET /api/portfolio", () => {
         userId: "user-1",
         type: "copy",
         amountUsdc: 5,
+        feeUsdc: 0.03,
         status: "confirmed",
         meta: {
           sourceType: "whale",
@@ -264,8 +265,8 @@ describe("GET /api/portfolio", () => {
       positionUpdatedAt: "2026-05-25T17:37:24.087Z",
     });
     expect(body.copyRows[0].notionalUsd).toBeCloseTo(15.0321);
-    expect(body.copyRows[0].pnlUsd).toBeCloseTo(-0.09571);
-    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(-1.9142);
+    expect(body.copyRows[0].pnlUsd).toBeCloseTo(-0.12571);
+    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(-2.5142);
     expect(mocks.getMarksSnapshot).toHaveBeenCalledWith({ maxAgeMs: 3000 });
   });
 
@@ -347,6 +348,8 @@ describe("GET /api/portfolio", () => {
         markPriceUsd: 158,
         sizeUsd: 1000,
         collateralUsd: 9.5,
+        entryCostUsd: 10,
+        openFeeUsd: 0.5,
         leverage: 100,
         liquidationPriceUsd: 161.6,
         pnlUsd: 1.25,
@@ -378,8 +381,9 @@ describe("GET /api/portfolio", () => {
       marginUsd: 9.5,
       marginMode: "isolated",
       notionalUsd: 1000,
-      pnlUsd: 1.25,
-      unrealizedPnlPct: 12.5,
+      pnlUsd: 0.75,
+      unrealizedPnlPct: 7.5,
+      openFeeUsd: 0.5,
       openedAt: "2026-05-28T14:10:00.000Z",
       positionUpdatedAt: "2026-05-28T14:15:00.000Z",
     });

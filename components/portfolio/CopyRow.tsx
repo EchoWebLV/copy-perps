@@ -19,6 +19,7 @@ export interface CopyRowData {
   side: "long" | "short";
   leverage: number | null;
   stakeUsdc: number | null;
+  openFeeUsd?: number | null;
   leaderAddress: string | null;
   leaderUsername: string | null;
   whaleId?: string | null;

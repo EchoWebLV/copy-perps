@@ -106,6 +106,7 @@ function openWhaleBet(meta: WhaleCopyMeta = whaleMeta) {
     betId: "bet-1",
     userId: "user-1",
     amountUsdc: 10,
+    feeUsdc: 0.25,
     meta,
     userMainPubkey: "user-main-1",
     agentPubkey: "agent-1",
@@ -173,7 +174,7 @@ describe("runMirrorCloseSweep whale source closes", () => {
     expect(mocks.updates[0]).toMatchObject({
       status: "closed",
       closeTxHash: "pacifica:close-order-1",
-      proceedsUsdc: 12,
+      proceedsUsdc: 11.75,
     });
     expect(mocks.updates[0]?.meta).toMatchObject({
       sourceType: "whale",

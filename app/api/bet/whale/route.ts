@@ -125,6 +125,11 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
   return null;
 }
 
+function feeUsdcFromFill(fill: { fee?: unknown }): number | null {
+  const fee = Number(fill.fee);
+  return Number.isFinite(fee) ? fee : null;
+}
+
 async function releaseReservationBestEffort(userId: string, market: string) {
   try {
     await releaseTailReservation(userId, market);
@@ -593,6 +598,7 @@ export async function POST(request: Request) {
       .update(bets)
       .set({
         status: "confirmed",
+        feeUsdc: feeUsdcFromFill(fill),
         meta: buildWhaleCopyMeta({
           whaleId: whale.id,
           source: position.source,
