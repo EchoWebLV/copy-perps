@@ -412,7 +412,7 @@ export default function PortfolioPage() {
   ) : null;
 
   return (
-    <AppShell rail={portfolioRail} railTitle="Portfolio">
+    <AppShell rail={portfolioRail} railTitle="Portfolio" hideEmptyRail>
       <div
         className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-none lg:px-6 lg:pt-5"
         style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}

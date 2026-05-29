@@ -46,4 +46,14 @@ describe("Deposit wallet recovery UI", () => {
     expect(source).toContain("showFeedPrefs");
     expect(source).toContain("<ProfileShareCard");
   });
+
+  it("does not reserve an empty desktop rail when settings rail features are hidden", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/(app)/deposit/page.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("hideEmptyRail");
+    expect(source).not.toContain("Select a bot or position");
+  });
 });

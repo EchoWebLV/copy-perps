@@ -79,4 +79,13 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("const REFRESH_MS = 30_000");
     expect(page).not.toContain("const POLL_MS = 3000");
   });
+
+  it("hides the generic desktop context rail when portfolio has no rail content", () => {
+    const page = source();
+
+    expect(page).toContain(
+      '<AppShell rail={portfolioRail} railTitle="Portfolio" hideEmptyRail>',
+    );
+    expect(page).not.toContain("Select a bot or position");
+  });
 });

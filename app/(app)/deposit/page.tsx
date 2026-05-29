@@ -199,6 +199,7 @@ export default function DepositPage() {
     <AppShell
       rail={rail}
       railTitle="Settings"
+      hideEmptyRail
       mainClassName={`${ready && authenticated ? "" : "[&+aside]:hidden"} lg:overflow-y-auto`}
     >
       <div
