@@ -299,6 +299,39 @@ describe("refreshHyperliquidWhales", () => {
     );
   });
 
+  it("does not warn for Hyperliquid 429 state rate limits", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    getClearinghouseState.mockRejectedValue(
+      new Error("Hyperliquid clearinghouseState 429: null"),
+    );
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    const result = await refreshHyperliquidWhales();
+
+    expect(result).toEqual({ whalesSeen: 2, positionsSeen: 0 });
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Hyperliquid state failed"),
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
+  it("does not warn for Hyperliquid 429 fills rate limits", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    getUserFillsByTime.mockRejectedValue(
+      new Error("Hyperliquid userFillsByTime 429: null"),
+    );
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    await refreshHyperliquidWhales();
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Hyperliquid fills failed"),
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
   it("keeps the same Hyperliquid position id when entry price changes", async () => {
     const openedAt = new Date("2026-05-23T11:42:00.000Z");
     getOpenWhalePositionsForSource.mockImplementation(async ({ sourceAccount }) =>

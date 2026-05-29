@@ -66,6 +66,10 @@ function hasKnownHyperliquidOpenTime(position: WhalePositionRecord): boolean {
   return position.raw?.openedAtSource === "source";
 }
 
+function isHyperliquidRateLimitError(err: unknown): boolean {
+  return err instanceof Error && /\b429\b/.test(err.message);
+}
+
 export async function refreshHyperliquidWhales(): Promise<{
   whalesSeen: number;
   positionsSeen: number;
@@ -105,7 +109,9 @@ export async function refreshHyperliquidWhales(): Promise<{
       try {
         state = await getClearinghouseState(account);
       } catch (err) {
-        console.warn(`[whales] Hyperliquid state failed for ${account}:`, err);
+        if (!isHyperliquidRateLimitError(err)) {
+          console.warn(`[whales] Hyperliquid state failed for ${account}:`, err);
+        }
         return;
       }
 
@@ -132,10 +138,12 @@ export async function refreshHyperliquidWhales(): Promise<{
               account,
               sourceNow.getTime() - OPEN_TIME_LOOKBACK_MS,
             ).catch((err) => {
-              console.warn(
-                `[whales] Hyperliquid fills failed for ${account}:`,
-                err,
-              );
+              if (!isHyperliquidRateLimitError(err)) {
+                console.warn(
+                  `[whales] Hyperliquid fills failed for ${account}:`,
+                  err,
+                );
+              }
               return [];
             });
       const existingOpenPositions = await getOpenWhalePositionsForSource({
