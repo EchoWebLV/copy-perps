@@ -268,46 +268,106 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       {items.length === 0 ? (
         <EmptyPulse />
       ) : (
-        <div
-          ref={scrollRef}
-          onScroll={rememberVisiblePulsePosition}
-          className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll"
-          style={{ scrollSnapStop: "always" }}
-        >
-          {items.map((item, index) => (
-            <section
-              key={item.id}
-              data-pulse-position-id={item.position.positionId}
-              className="h-full w-full snap-start"
+        <>
+          <div
+            ref={scrollRef}
+            onScroll={rememberVisiblePulsePosition}
+            className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll lg:hidden"
+            style={{ scrollSnapStop: "always" }}
+          >
+            {items.map((item, index) => (
+              <section
+                key={item.id}
+                data-pulse-position-id={item.position.positionId}
+                className="h-full w-full snap-start"
+              >
+                <PulsePositionCard
+                  item={item}
+                  now={now}
+                  slideIndex={index}
+                  total={items.length}
+                  whaleStats={statsByWhaleId[item.position.whaleId]}
+                  selectedReaction={
+                    persistedSocial[item.position.positionId]?.myReaction ??
+                    undefined
+                  }
+                  persistedSocial={persistedSocial[item.position.positionId]}
+                  onReact={(reaction) => {
+                    if (!requirePulseAuth()) return;
+                    const positionId = item.position.positionId;
+                    const current = persistedSocial[positionId]?.myReaction;
+                    const next = current === reaction ? undefined : reaction;
+                    void postPulseSocial({
+                      positionId,
+                      reaction: next ?? null,
+                    });
+                  }}
+                  onTail={() => {
+                    if (!requirePulseAuth()) return;
+                    setTailSource(toTailSource(item.position, now));
+                  }}
+                />
+              </section>
+            ))}
+          </div>
+
+          <div className="hidden h-full min-h-0 flex-col lg:flex">
+            <div
+              className="flex flex-none items-center justify-between gap-4 border-b px-6 py-4"
+              style={{ borderColor: FAINT }}
             >
-              <PulsePositionCard
-                item={item}
-                now={now}
-                slideIndex={index}
-                total={items.length}
-                whaleStats={statsByWhaleId[item.position.whaleId]}
-                selectedReaction={
-                  persistedSocial[item.position.positionId]?.myReaction ?? undefined
-                }
-                persistedSocial={persistedSocial[item.position.positionId]}
-                onReact={(reaction) => {
-                  if (!requirePulseAuth()) return;
-                  const positionId = item.position.positionId;
-                  const current = persistedSocial[positionId]?.myReaction;
-                  const next = current === reaction ? undefined : reaction;
-                  void postPulseSocial({
-                    positionId,
-                    reaction: next ?? null,
-                  });
-                }}
-                onTail={() => {
-                  if (!requirePulseAuth()) return;
-                  setTailSource(toTailSource(item.position, now));
-                }}
-              />
-            </section>
-          ))}
-        </div>
+              <div>
+                <div
+                  className="text-[10px] font-black uppercase tracking-[0.24em]"
+                  style={{ color: DIM }}
+                >
+                  PULSE TAPE
+                </div>
+                <div className="mt-1 text-[22px] font-black uppercase leading-none">
+                  {items.length} live signals
+                </div>
+              </div>
+              <div
+                className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
+                style={{ background: PANEL, border: `1px solid ${FAINT}`, color: FG }}
+              >
+                Whale positions
+              </div>
+            </div>
+
+            <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <div className="grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3">
+                {items.map((item) => (
+                  <DesktopPulseCard
+                    key={item.id}
+                    item={item}
+                    now={now}
+                    whaleStats={statsByWhaleId[item.position.whaleId]}
+                    selectedReaction={
+                      persistedSocial[item.position.positionId]?.myReaction ??
+                      undefined
+                    }
+                    persistedSocial={persistedSocial[item.position.positionId]}
+                    onReact={(reaction) => {
+                      if (!requirePulseAuth()) return;
+                      const positionId = item.position.positionId;
+                      const current = persistedSocial[positionId]?.myReaction;
+                      const next = current === reaction ? undefined : reaction;
+                      void postPulseSocial({
+                        positionId,
+                        reaction: next ?? null,
+                      });
+                    }}
+                    onTail={() => {
+                      if (!requirePulseAuth()) return;
+                      setTailSource(toTailSource(item.position, now));
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <TailModal
@@ -538,6 +598,191 @@ function PulsePositionCard({
   );
 }
 
+function DesktopPulseCard({
+  item,
+  now,
+  whaleStats,
+  selectedReaction,
+  persistedSocial,
+  onReact,
+  onTail,
+}: {
+  item: PulseItem;
+  now: number;
+  whaleStats?: PulseWhaleStats;
+  selectedReaction?: PulseReaction;
+  persistedSocial?: PulseApiSocialRecord;
+  onReact: (reaction: PulseReaction) => void;
+  onTail: () => void;
+}) {
+  const rawPosition = item.position;
+  const dynamicStale =
+    rawPosition.stale ||
+    (now > 0 && !isSourceFresh(rawPosition.lastSeenAtMs, undefined, now));
+  const p = { ...rawPosition, stale: dynamicStale };
+  const sideColor = p.side === "long" ? GREEN : RED;
+  const profit = (p.unrealizedPnlPct ?? 0) >= 0;
+  const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
+  const aiLine = buildAiLine(item);
+  const recentReactors = persistedSocial?.recentReactors ?? [];
+  const positionTime = formatWhalePositionTime(p, now);
+
+  return (
+    <article
+      className="flex min-h-[430px] flex-col overflow-hidden p-4"
+      style={{
+        background: PANEL_2,
+        borderRadius: 8,
+        border: `1px solid ${FAINT}`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div
+            className="text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            {item.eyebrow}
+          </div>
+          <div
+            className="mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+            style={{
+              background: `${sideColor}18`,
+              color: sideColor,
+              border: `1px solid ${sideColor}45`,
+            }}
+          >
+            {p.market} {p.side} {p.leverage}x
+          </div>
+        </div>
+        <div
+          className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
+          style={{
+            background: p.stale ? `${RED}18` : `${GREEN}18`,
+            color: p.stale ? RED : GREEN,
+            border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
+          }}
+        >
+          {p.stale ? "Stale" : "Live"}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <WhaleFingerprintAvatar
+          sourceAccount={p.sourceAccount}
+          label={p.displayName}
+          mood={p.stale ? "WOUNDED" : "HUNTING"}
+          size={44}
+          pulse={!p.stale}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-black uppercase">
+            {p.displayName}
+          </div>
+          <div
+            className="mt-0.5 text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            {positionTime.label}{" "}
+            <span style={{ color: FG }}>{positionTime.value}</span>
+          </div>
+        </div>
+      </div>
+
+      <h2
+        className="mt-4 text-[23px] font-black uppercase leading-[1.02]"
+        style={{ color: FG }}
+      >
+        <PulseHeadlineText headline={item.headline} />
+      </h2>
+
+      <p
+        className="mt-3 text-[13px] leading-snug"
+        style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.86 }}
+      >
+        {item.context}
+      </p>
+
+      {aiLine ? (
+        <div
+          className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
+          style={{
+            background: PANEL,
+            border: `1px solid ${FAINT}`,
+            color: DIM,
+            fontFamily: FONT_BODY,
+          }}
+        >
+          <MessageCircle
+            size={14}
+            strokeWidth={2.6}
+            className="mt-0.5 shrink-0"
+            style={{ color: ACCENT }}
+          />
+          <span>{aiLine}</span>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid grid-cols-2 gap-2" style={{ fontFamily: FONT_BODY }}>
+        <Metric label="Notional" value={fmtUsd(p.notionalUsd)} />
+        <Metric
+          label="Source P/L"
+          value={formatPct(p.unrealizedPnlPct)}
+          color={profit ? GREEN : RED}
+        />
+        <Metric
+          label="1D Win Rate"
+          value={formatWinRate(whaleStats?.winRatePct1d ?? null)}
+        />
+        <Metric
+          label="30D P/L"
+          value={whaleStats ? formatSignedUsd(whaleStats.pnl30dUsdc) : "N/A"}
+          color={
+            whaleStats ? (whaleStats.pnl30dUsdc >= 0 ? GREEN : RED) : FG
+          }
+        />
+      </div>
+
+      {recentReactors.length > 0 ? (
+        <RecentReactions reactors={recentReactors} />
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {PULSE_REACTIONS.map((reaction) => (
+            <DesktopPulseReactionButton
+              key={reaction}
+              label={reaction}
+              count={counts[reaction]}
+              active={selectedReaction === reaction}
+              onClick={() => onReact(reaction)}
+            />
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onTail}
+          disabled={!item.canTail}
+          className="inline-flex w-auto items-center justify-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+          style={{
+            background: item.canTail ? ACCENT : "rgba(250,250,242,0.08)",
+            color: item.canTail ? BG : DIM,
+            border: `1px solid ${item.canTail ? ACCENT : FAINT}`,
+          }}
+        >
+          {item.canTail ? (
+            <Zap size={13} strokeWidth={3} fill={BG} />
+          ) : (
+            <Eye size={13} strokeWidth={3} />
+          )}
+          {item.canTail ? "Tail" : "Watch"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function PulseHeadlineText({ headline }: { headline: string }) {
   const brushStyle =
     PERCENTAGE_BRUSH_STYLES[getPulseHeadlineBrushVariant(headline)];
@@ -599,6 +844,54 @@ function ReactionButton({
       className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
       style={{
         background: active ? `${color}24` : PANEL_2,
+        color: active || label !== "Tailing" ? color : FG,
+        border: `1px solid ${active ? `${color}70` : label === "Tailing" ? FAINT : `${color}55`}`,
+      }}
+    >
+      {label === "Bullish" ? (
+        <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
+      ) : label === "Bearish" ? (
+        <TrendingDown
+          className="shrink-0"
+          size={12}
+          strokeWidth={3}
+          style={{ color }}
+        />
+      ) : (
+        <Zap
+          className="shrink-0"
+          size={12}
+          strokeWidth={3}
+          fill={active ? ACCENT : "none"}
+        />
+      )}
+      <span>{label}</span>
+      <span style={{ color: active ? color : mutedColor }}>{count}</span>
+    </button>
+  );
+}
+
+function DesktopPulseReactionButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: PulseReaction;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const color = pulseReactionColor(label);
+  const mutedColor = label === "Tailing" ? DIM : `${color}cc`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-auto items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase transition hover:opacity-90 active:scale-[0.97]"
+      style={{
+        background: active ? `${color}24` : PANEL,
         color: active || label !== "Tailing" ? color : FG,
         border: `1px solid ${active ? `${color}70` : label === "Tailing" ? FAINT : `${color}55`}`,
       }}

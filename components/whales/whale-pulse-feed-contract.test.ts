@@ -53,7 +53,7 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain("RISK");
   });
 
-  it("renders Pulse as a one-card-at-a-time vertical snap feed", () => {
+  it("keeps the mobile snap feed and adds a desktop pulse grid", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
@@ -62,7 +62,14 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("snap-y snap-mandatory overflow-y-scroll");
     expect(componentSource).toContain('scrollSnapStop: "always"');
     expect(componentSource).toContain("h-full w-full snap-start");
+    expect(componentSource).toContain("lg:hidden");
+    expect(componentSource).toContain("hidden h-full min-h-0 flex-col lg:flex");
     expect(componentSource).toContain("PulsePositionCard");
+    expect(componentSource).toContain("DesktopPulseCard");
+    expect(componentSource).toContain("xl:grid-cols-3");
+    expect(componentSource).toContain("PULSE TAPE");
+    expect(componentSource).toContain("DesktopPulseReactionButton");
+    expect(componentSource).toContain("inline-flex w-auto");
     expect(componentSource).not.toContain('<ul className="divide-y"');
   });
 
