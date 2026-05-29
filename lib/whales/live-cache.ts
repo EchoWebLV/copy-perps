@@ -114,12 +114,20 @@ function mergeSnapshot(
   if (current === null || next.source === "multi") return next;
 
   const source = next.source;
+  const refreshedAccounts = new Set(next.accounts);
   const whales = [
-    ...current.whales.filter((whale) => whale.source !== source),
+    ...current.whales.filter(
+      (whale) =>
+        whale.source !== source || !refreshedAccounts.has(whale.sourceAccount),
+    ),
     ...next.whales,
   ];
   const positions = [
-    ...current.positions.filter((position) => position.source !== source),
+    ...current.positions.filter(
+      (position) =>
+        position.source !== source ||
+        !refreshedAccounts.has(position.sourceAccount),
+    ),
     ...next.positions,
   ];
 

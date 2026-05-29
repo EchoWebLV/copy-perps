@@ -167,6 +167,75 @@ describe("whale live cache", () => {
     ]);
   });
 
+  it("keeps same-source accounts that were not part of a partial refresh", async () => {
+    const {
+      getWhaleLiveSnapshot,
+      writeWhaleLiveSnapshot,
+    } = await import("./live-cache");
+
+    const alphaWhale = whale({
+      id: "hyperliquid:0xabc",
+      source: "hyperliquid",
+      sourceAccount: "0xabc",
+      displayName: "HL Alpha",
+    });
+    const betaWhale = whale({
+      id: "hyperliquid:0xdef",
+      source: "hyperliquid",
+      sourceAccount: "0xdef",
+      displayName: "HL Beta",
+    });
+    const alphaPosition = position({
+      id: "hyperliquid:0xabc:ETH:long:2000000000",
+      whaleId: "hyperliquid:0xabc",
+      source: "hyperliquid",
+      sourceAccount: "0xabc",
+      market: "ETH",
+      openedAt: new Date("2026-05-23T11:00:00.000Z"),
+    });
+    const betaPosition = position({
+      id: "hyperliquid:0xdef:SOL:short:82000000",
+      whaleId: "hyperliquid:0xdef",
+      source: "hyperliquid",
+      sourceAccount: "0xdef",
+      market: "SOL",
+      side: "short",
+      openedAt: new Date("2026-05-23T10:00:00.000Z"),
+    });
+
+    await writeWhaleLiveSnapshot({
+      source: "hyperliquid",
+      observedAt: new Date("2026-05-23T11:59:40.000Z"),
+      accounts: ["0xabc", "0xdef"],
+      whales: [alphaWhale, betaWhale],
+      positions: [alphaPosition, betaPosition],
+    });
+    await writeWhaleLiveSnapshot({
+      source: "hyperliquid",
+      observedAt: new Date("2026-05-23T11:59:50.000Z"),
+      accounts: ["0xabc"],
+      whales: [alphaWhale],
+      positions: [
+        {
+          ...alphaPosition,
+          currentMark: 2100,
+          lastSeenAt: new Date("2026-05-23T11:59:50.000Z"),
+        },
+      ],
+    });
+
+    const snapshot = await getWhaleLiveSnapshot();
+
+    expect(snapshot?.accounts).toEqual(["0xdef", "0xabc"]);
+    expect(snapshot?.positions.map((item) => item.id)).toEqual([
+      "hyperliquid:0xdef:SOL:short:82000000",
+      "hyperliquid:0xabc:ETH:long:2000000000",
+    ]);
+    expect(snapshot?.positions[0]?.openedAt).toEqual(
+      new Date("2026-05-23T10:00:00.000Z"),
+    );
+  });
+
   it("finds a cached live position with its whale", async () => {
     const {
       getWhaleLivePositionById,
