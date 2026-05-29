@@ -19,6 +19,14 @@ function roundUsdc(value: number): number {
   return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
 }
 
+function configuredFlashLeverage(leverage: number): number | null {
+  return (
+    CONFIGURED_FLASH_LEVERAGES.find(
+      (option) => Math.abs(option - leverage) < 1e-9,
+    ) ?? null
+  );
+}
+
 function isProfitablePosition(position: FlashStakePosition): boolean {
   if (position.isProfitable === true) return true;
   const pnlUsd = Number(position.pnlUsd);
@@ -76,11 +84,17 @@ export function flashRequestedLeverageFromPosition(
 
   const sizeUsd = positiveFiniteNumber(position.sizeUsd);
   const entryCostUsd = positiveFiniteNumber(position.entryCostUsd);
+  const leverage = positiveFiniteNumber(position.leverage);
+  const requestedLeverage =
+    leverage == null ? null : configuredFlashLeverage(leverage);
+  if (entryCostUsd != null && requestedLeverage != null) {
+    return requestedLeverage;
+  }
+
   if (sizeUsd != null && entryCostUsd != null) {
     return requestedFlashLeverageFromNotional(sizeUsd, entryCostUsd);
   }
 
-  const leverage = positiveFiniteNumber(position.leverage);
   if (leverage != null) {
     return requestedFlashLeverageFromEffective(
       leverage,

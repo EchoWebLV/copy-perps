@@ -60,6 +60,20 @@ describe("flashRequestedLeverageFromPosition", () => {
     ).toBe(500);
   });
 
+  it("prefers cached requested leverage over refreshed reduced notional", () => {
+    const position = {
+      sizeUsd: 331,
+      leverage: 500,
+      collateralUsd: 1,
+      entryCostUsd: 1,
+      pnlUsd: -0.16,
+      isProfitable: false,
+    };
+
+    expect(flashRequestedLeverageFromPosition(position)).toBe(500);
+    expect(flashStakeUsdFromPosition(position)).toBe(1);
+  });
+
   it("maps Flash quote effective leverage back to the configured option", () => {
     expect(
       flashRequestedLeverageFromPosition({

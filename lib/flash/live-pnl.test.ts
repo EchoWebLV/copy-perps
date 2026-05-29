@@ -130,6 +130,29 @@ describe("computeFlashLivePositionView", () => {
     expect(view.roiPct).toBeGreaterThan(0);
   });
 
+  it("keeps a losing refreshed 500x position on cached requested leverage", () => {
+    const view = computeFlashLivePositionView({
+      position: {
+        symbol: "ETH",
+        side: "short",
+        positionPubkey: "pos-losing-refresh",
+        marketAccount: "market-2",
+        entryPriceUsd: 2000,
+        markPriceUsd: 2008,
+        sizeUsd: 331,
+        collateralUsd: 1,
+        leverage: 500,
+        entryCostUsd: 1,
+        pnlUsd: -0.16,
+        receiveUsd: 0.84,
+        openTime: 1,
+      },
+    });
+
+    expect(view.stakeUsd).toBeCloseTo(1);
+    expect(view.roiPct).toBeCloseTo(-16);
+  });
+
   it("uses exact Flash receive value when no live mark is available", () => {
     const view = computeFlashLivePositionView({
       position: {
