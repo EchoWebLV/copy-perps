@@ -80,8 +80,24 @@ async function refreshLiveSnapshotWithinBudget(): Promise<boolean> {
 
 async function getWhaleLiveSnapshotOrRefresh(): Promise<WhaleLiveSnapshot | null> {
   const snapshot = await getWhaleLiveSnapshot();
-  if (snapshot !== null && isSourceFresh(snapshot.observedAt.getTime())) {
+  if (
+    snapshot !== null &&
+    isSourceFresh(snapshot.observedAt.getTime()) &&
+    isCompleteLiveSnapshot(snapshot)
+  ) {
     return snapshot;
+  }
+
+  if (snapshot !== null && isSourceFresh(snapshot.observedAt.getTime())) {
+    try {
+      const refreshed = await refreshLiveSnapshotWithinBudget();
+      if (!refreshed) return snapshot;
+    } catch (err) {
+      console.warn("[whales] source-completion refresh failed:", err);
+      return snapshot;
+    }
+
+    return (await getWhaleLiveSnapshot()) ?? snapshot;
   }
 
   if (snapshot !== null) {
@@ -100,6 +116,10 @@ async function getWhaleLiveSnapshotOrRefresh(): Promise<WhaleLiveSnapshot | null
   }
 
   return getWhaleLiveSnapshot();
+}
+
+function isCompleteLiveSnapshot(snapshot: WhaleLiveSnapshot): boolean {
+  return snapshot.source === "multi";
 }
 
 async function forEachWithConcurrency<T>(

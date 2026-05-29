@@ -778,6 +778,51 @@ describe("whale signals", () => {
     expect(signals.map((item) => item.payload.positionId)).toEqual(["pos-1"]);
   });
 
+  it("waits for a complete source snapshot when the fresh cache has only Pacifica", async () => {
+    mocks.getWhaleLiveSnapshot
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce(
+        snapshot({
+          source: "multi",
+          accounts: ["acct-1", "0xabc"],
+          whales: [
+            whale(),
+            whale({
+              id: "hyperliquid:0xabc",
+              source: "hyperliquid",
+              sourceAccount: "0xabc",
+              displayName: "HL Alpha",
+              avatarUrl: null,
+              tags: ["hyperliquid"],
+            }),
+          ],
+          positions: [
+            position(),
+            position({
+              id: "hyperliquid-pos",
+              whaleId: "hyperliquid:0xabc",
+              source: "hyperliquid",
+              sourceAccount: "0xabc",
+              market: "SOL",
+              side: "short",
+              notionalUsd: 80_000,
+              lastSeenAt: new Date("2026-05-23T11:59:45.000Z"),
+            }),
+          ],
+        }),
+      );
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const signals = await buildWhalePositionSignals();
+
+    expect(mocks.refreshWhales).toHaveBeenCalledTimes(1);
+    expect(signals.map((item) => item.payload.source)).toEqual([
+      "hyperliquid",
+      "pacifica",
+    ]);
+  });
+
   it("does not block live positions when a missing-cache refresh is slow", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(null);
     mocks.refreshWhales.mockImplementation(
