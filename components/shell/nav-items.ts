@@ -1,12 +1,17 @@
-import { Flame, Radio, PieChart, Settings, Trophy, Zap } from "lucide-react";
+import {
+  ChartCandlestick,
+  Flame,
+  PieChart,
+  Settings,
+  Zap,
+} from "lucide-react";
 
 export const DESKTOP_NAV_ITEMS = [
   { href: "/feed", label: "Whales", icon: Flame },
+  { href: "/trade", label: "Scalp", icon: ChartCandlestick },
   { href: "/chatter", label: "Pulse", icon: Zap },
-  { href: "/live", label: "Heat", icon: Radio },
-  { href: "/portfolio", label: "Portfolio", icon: PieChart },
+  { href: "/portfolio", label: "Folio", icon: PieChart },
   { href: "/deposit", label: "Settings", icon: Settings },
-  { href: "/leaderboard", label: "Wins", icon: Trophy },
 ] as const;
 
 export type DesktopNavItem = (typeof DESKTOP_NAV_ITEMS)[number];

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ChartCandlestick, Radio, Zap } from "lucide-react";
+import { ChartCandlestick, Zap } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_NAV_ITEMS, isShellNavActive } from "./nav-items";
 
@@ -8,42 +8,40 @@ describe("desktop shell nav contract", () => {
   it("exposes the main app destinations in display order", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/feed",
+      "/trade",
       "/chatter",
-      "/live",
       "/portfolio",
       "/deposit",
-      "/leaderboard",
     ]);
   });
 
   it("labels the main whale trading surfaces without legacy bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Whales",
+      "Scalp",
       "Pulse",
-      "Heat",
-      "Portfolio",
+      "Folio",
       "Settings",
-      "Wins",
     ]);
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).not.toContain(
       "Chatter",
     );
   });
 
-  it("uses the Pulse and Heat icons without changing their routes", () => {
+  it("uses the same primary trade icons on desktop and mobile", () => {
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Scalp")?.icon).toBe(
+      ChartCandlestick,
+    );
     expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Pulse")?.icon).toBe(
       Zap,
     );
-    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Heat")?.icon).toBe(
-      Radio,
-    );
   });
 
-  it("marks feed and live nested paths active", () => {
+  it("marks feed and trade nested paths active", () => {
     expect(isShellNavActive("/feed", "/feed")).toBe(true);
     expect(isShellNavActive("/feed", "/feed?bot=whale")).toBe(true);
     expect(isShellNavActive("/feed", "/feed/whale")).toBe(true);
-    expect(isShellNavActive("/live", "/live?bot=whale")).toBe(true);
+    expect(isShellNavActive("/trade", "/trade?bot=whale")).toBe(true);
   });
 
   it("puts Pulse on the elevated mobile shortcut and benches Heat for Scalp", () => {
@@ -65,6 +63,13 @@ describe("desktop shell nav contract", () => {
     expect(bottomNav).not.toContain("<Zap size={26}");
     expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
     expect(ChartCandlestick).toBeDefined();
+  });
+
+  it("keeps hidden destinations out of the primary desktop nav", () => {
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).not.toContain("/live");
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).not.toContain(
+      "/leaderboard",
+    );
   });
 
   it("does not mark unrelated destinations active", () => {
