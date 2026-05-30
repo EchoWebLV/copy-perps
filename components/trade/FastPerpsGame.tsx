@@ -1121,22 +1121,13 @@ function LivePerpGraph({
         opacity="0.18"
       />
 
-      {/* Channel reference lines from the geometry helper.
-          Line IDs: data-line="tp" | data-line="entry" | data-line="sl" | data-line="liq" */}
+      {/* Channel reference lines from the geometry helper — one per role
+          (tp ceiling / entry baseline / sl floor / liq floor). Each carries its
+          role as a data-line marker for styling and contract tests. */}
       {channel.lines.map((line) => {
         const y = toY(line.valueUsd);
-        // Explicit data-line literals so grep-based contract tests can find them:
-        // data-line="tp"  data-line="entry"  data-line="sl"  data-line="liq"
-        const dataLine =
-          line.id === "tp"
-            ? ("tp" as const)
-            : line.id === "entry"
-              ? ("entry" as const)
-              : line.id === "sl"
-                ? ("sl" as const)
-                : ("liq" as const);
         return (
-          <g key={line.id} data-line={dataLine}>
+          <g key={line.id} data-line={line.id}>
             <line
               x1="0"
               y1={y}

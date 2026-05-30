@@ -75,11 +75,16 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("buildChannel");
     expect(page).toContain("stakeUsd");
     expect(page).toContain("MAX_GRAPH_POINTS");
-    // Channel walls + death-zone rendered from the geometry helper.
-    expect(page).toContain('data-line="tp"');
-    expect(page).toContain('data-line="entry"');
-    expect(page).toContain('data-line="sl"');
-    expect(page).toContain('data-line="liq"');
+    // Each channel line is tagged with its role via data-line, driven by
+    // buildChannel's tp/entry/sl/liq ids (asserted against the live render, not
+    // a comment — deleting the <g> block must fail this test).
+    expect(page).toContain("data-line={line.id}");
+    // The four roles are styled/labelled distinctly: tp ceiling, sl floor, liq,
+    // entry baseline.
+    expect(page).toContain('id === "tp"');
+    expect(page).toContain('id === "sl"');
+    expect(page).toContain('id === "liq"');
+    expect(page).toContain('id === "entry"');
     expect(page).toContain("LIQ");
     // Responsive, not shaky: snappier smoothing constant, soft pulse dot.
     expect(page).toContain("GRAPH_SMOOTHING");
