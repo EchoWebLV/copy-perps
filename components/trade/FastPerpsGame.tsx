@@ -68,6 +68,8 @@ const PRIVY_INSTANT_TRADING_CONFIGURED = Boolean(PRIVY_INSTANT_SIGNER_ID);
 
 const FLASH_SCALP_MARKETS = ["BTC", "ETH", "SOL"] as const satisfies readonly FlashMarketSymbol[];
 const STAKES = [1, 5, 10, 50] as const;
+const TP_PRESETS = [50, 100, 200] as const; // % ROI on collateral
+const SL_PRESETS = [-25, -50, -75] as const;
 const STANDARD_LEVERAGES = [20, 50, 100] as const;
 const DEGEN_LEVERAGES = [125, 250, 500] as const;
 const FLASH_MIN_NOTIONAL_USD = 10;
@@ -101,6 +103,12 @@ interface FlashPosition {
   openFeeUsd?: number;
   isProfitable?: boolean;
   openTime: number;
+  triggers?: {
+    kind: "tp" | "sl";
+    orderId: number;
+    triggerPriceUsd: number;
+    roiPct: number;
+  }[];
 }
 
 interface FlashPreparedOpenResponse {
@@ -340,6 +348,21 @@ export function FastPerpsGame() {
     : livePnl >= 0
       ? GREEN
       : RED;
+  const selectedTriggers = useMemo(() => {
+    const list = selectedPosition?.triggers ?? [];
+    const pick = (kind: "tp" | "sl"): TriggerLevelInput | null => {
+      const found = list.find((t) => t.kind === kind);
+      return found ? { kind, roiPct: found.roiPct } : null;
+    };
+    const orderId = (kind: "tp" | "sl"): number | null =>
+      list.find((t) => t.kind === kind)?.orderId ?? null;
+    return {
+      tp: pick("tp"),
+      sl: pick("sl"),
+      tpOrderId: orderId("tp"),
+      slOrderId: orderId("sl"),
+    };
+  }, [selectedPosition]);
   const readyToTrade = Boolean(ready && authenticated && wallet && !busy);
   const tradeAllowed = notional >= FLASH_MIN_NOTIONAL_USD;
   const leverageOptions = useMemo(
@@ -611,6 +634,122 @@ export function FastPerpsGame() {
     wallet?.address,
   ]);
 
+  const requestTrigger = useCallback(
+    async (kind: "tp" | "sl", roiPct: number) => {
+      if (!selectedPosition) return;
+      const walletAddress = wallet?.address;
+      if (!walletAddress) {
+        setError("Connect a wallet first.");
+        return;
+      }
+      setError(null);
+      setBusy(true);
+      setStatus(kind === "tp" ? "Setting take-profit..." : "Setting stop-loss...");
+      try {
+        const useInstant = await ensureInstantTrading();
+        const orderId =
+          kind === "tp" ? selectedTriggers.tpOrderId : selectedTriggers.slOrderId;
+        const token = await getAccessToken();
+        const res = await fetch("/api/flash/perp/trigger", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            market: selectedPosition.symbol,
+            side: selectedPosition.side,
+            kind,
+            roiPct,
+            orderId: orderId ?? undefined,
+            walletAddress,
+            instant: useInstant,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result?.error ?? "Trigger failed");
+        if (result.phase === "sent-trigger") {
+          setStatus(kind === "tp" ? "Take-profit set" : "Stop-loss set");
+        } else if (result.phase === "sign-trigger") {
+          setStatus("Signing trigger...");
+          await signAndSendFlashTransaction(result.transactionB64);
+          setStatus(kind === "tp" ? "Take-profit set" : "Stop-loss set");
+        }
+        await loadPositions();
+      } catch (err) {
+        setError(formatTailSigningError(err).slice(0, 220));
+        setStatus(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      selectedPosition,
+      selectedTriggers,
+      wallet?.address,
+      ensureInstantTrading,
+      getAccessToken,
+      signAndSendFlashTransaction,
+      loadPositions,
+    ],
+  );
+
+  const cancelTrigger = useCallback(
+    async (kind: "tp" | "sl") => {
+      if (!selectedPosition) return;
+      const orderId =
+        kind === "tp" ? selectedTriggers.tpOrderId : selectedTriggers.slOrderId;
+      const walletAddress = wallet?.address;
+      if (!walletAddress || orderId === null) return;
+      setError(null);
+      setBusy(true);
+      setStatus("Cancelling trigger...");
+      try {
+        const useInstant = await ensureInstantTrading();
+        const token = await getAccessToken();
+        const res = await fetch("/api/flash/perp/trigger", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            market: selectedPosition.symbol,
+            side: selectedPosition.side,
+            kind,
+            orderId,
+            walletAddress,
+            instant: useInstant,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result?.error ?? "Cancel failed");
+        if (result.phase === "sent-trigger-cancel") {
+          setStatus("Trigger cancelled");
+        } else if (result.phase === "sign-trigger-cancel") {
+          setStatus("Signing cancel...");
+          await signAndSendFlashTransaction(result.transactionB64);
+          setStatus("Trigger cancelled");
+        }
+        await loadPositions();
+      } catch (err) {
+        setError(formatTailSigningError(err).slice(0, 220));
+        setStatus(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      selectedPosition,
+      selectedTriggers,
+      wallet?.address,
+      ensureInstantTrading,
+      getAccessToken,
+      signAndSendFlashTransaction,
+      loadPositions,
+    ],
+  );
+
   return (
     <div
       className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden px-4 pt-3 pb-[calc(88px+env(safe-area-inset-bottom))] lg:max-w-none lg:px-8 lg:py-8"
@@ -770,8 +909,8 @@ export function FastPerpsGame() {
                 stakeUsd={stakeForPosition(selectedPosition, selectedPositionView)}
                 color={graphColor}
                 activeKey={selectedPosition.positionPubkey}
-                tp={null}
-                sl={null}
+                tp={selectedTriggers.tp}
+                sl={selectedTriggers.sl}
               />
             </div>
           )}
@@ -809,6 +948,18 @@ export function FastPerpsGame() {
               />
             )}
           </div>
+
+          {selectedPosition && (
+            <TriggerChips
+              triggers={selectedTriggers}
+              disabled={busy}
+              onAdd={(kind) => {
+                const presets = kind === "tp" ? TP_PRESETS : SL_PRESETS;
+                void requestTrigger(kind, presets[1]); // suggested middle preset
+              }}
+              onCancel={(kind) => void cancelTrigger(kind)}
+            />
+          )}
         </section>
 
         <aside
@@ -1021,6 +1172,60 @@ function PreviewMetric({
           {subvalue}
         </div>
       )}
+    </div>
+  );
+}
+
+function TriggerChips({
+  triggers,
+  onAdd,
+  onCancel,
+  disabled,
+}: {
+  triggers: { tp: TriggerLevelInput | null; sl: TriggerLevelInput | null };
+  onAdd: (kind: "tp" | "sl") => void;
+  onCancel: (kind: "tp" | "sl") => void;
+  disabled: boolean;
+}) {
+  const chip = (kind: "tp" | "sl") => {
+    const level = kind === "tp" ? triggers.tp : triggers.sl;
+    const accent = kind === "tp" ? "#39d98a" : "#ffae42";
+    if (!level) {
+      return (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onAdd(kind)}
+          className="flex-1 rounded-lg border border-dashed px-2 py-2 text-[11px] font-bold lg:cursor-ns-resize"
+          style={{ borderColor: "#3a3a42", color: "#7a7a84" }}
+        >
+          {kind === "tp" ? "+ Add TP" : "+ Add SL"}
+        </button>
+      );
+    }
+    return (
+      <div
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[11px] font-bold"
+        style={{ borderColor: accent, color: accent }}
+      >
+        <span>
+          {kind === "tp" ? "TP" : "SL"} {fmtSignedPct(level.roiPct)}
+        </span>
+        <button
+          type="button"
+          aria-label={`Cancel ${kind === "tp" ? "take-profit" : "stop-loss"}`}
+          disabled={disabled}
+          onClick={() => onCancel(kind)}
+        >
+          ✕
+        </button>
+      </div>
+    );
+  };
+  return (
+    <div className="mt-2 flex gap-2">
+      {chip("tp")}
+      {chip("sl")}
     </div>
   );
 }

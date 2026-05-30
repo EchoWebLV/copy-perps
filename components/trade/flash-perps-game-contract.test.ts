@@ -192,4 +192,25 @@ describe("Flash fast perps game contract", () => {
     expect(page).not.toContain("const seeded = mergeFlashEntryCostCache");
     expect(page).toContain("setPositions(merged)");
   });
+
+  it("wires opt-in TP/SL trigger orders with instant auto-sign", () => {
+    const page = source();
+
+    // Off by default: ghost chips until a level is added; liq is never a chip.
+    expect(page).toContain("+ Add TP");
+    expect(page).toContain("+ Add SL");
+    // Active chip with cancel affordance once configured.
+    expect(page).toContain("selectedTriggers");
+    expect(page).toContain("requestTrigger");
+    expect(page).toContain("cancelTrigger");
+    // Talks to the new route and reuses the instant + user-signed phases.
+    expect(page).toContain('fetch("/api/flash/perp/trigger"');
+    expect(page).toContain('result.phase === "sent-trigger"');
+    expect(page).toContain('result.phase === "sent-trigger-cancel"');
+    expect(page).toContain("signAndSendFlashTransaction");
+    // Mobile taps a preset %, desktop can drag — both code paths present.
+    expect(page).toContain("TP_PRESETS");
+    expect(page).toContain("SL_PRESETS");
+    expect(page).toContain("lg:cursor-ns-resize");
+  });
 });
