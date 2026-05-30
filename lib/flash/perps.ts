@@ -691,7 +691,12 @@ export class FlashPerpsService {
     orders.forEach((order, index) => {
       const triggerPriceUsd = contractPriceToNumber(order.triggerPrice);
       if (!Number.isFinite(triggerPriceUsd) || triggerPriceUsd <= 0) return;
-      // 1-based slot ordinal within the kind array (confirmed in a later smoke check).
+      // orderId is the 1-based on-chain slot ordinal. getUserOrderAccounts returns
+      // the full fixed-size order array including empty slots; the price guard above
+      // skips empties WITHOUT renumbering, so `index + 1` stays aligned with the slot
+      // that cancelTriggerOrder/editTriggerOrder address. Do NOT rewrite this as
+      // `.filter().map()` — that would renumber and break orderId. (Slot ordinal
+      // confirmed in the Task 8 smoke check.)
       out.push({ kind, orderId: index + 1, triggerPriceUsd, roiPct: 0 });
     });
   }
