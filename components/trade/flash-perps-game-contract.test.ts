@@ -67,13 +67,23 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain('result.phase === "sent-close"');
   });
 
-  it("renders the old game-style live graph on the trade screen", () => {
+  it("renders the money-channel live graph with TP/SL/liq lines", () => {
     const page = source();
 
     expect(page).toContain("function LivePerpGraph");
     expect(page).toContain("<svg");
-    expect(page).toContain("entryValue");
+    expect(page).toContain("buildChannel");
+    expect(page).toContain("stakeUsd");
     expect(page).toContain("MAX_GRAPH_POINTS");
+    // Channel walls + death-zone rendered from the geometry helper.
+    expect(page).toContain('data-line="tp"');
+    expect(page).toContain('data-line="entry"');
+    expect(page).toContain('data-line="sl"');
+    expect(page).toContain('data-line="liq"');
+    expect(page).toContain("LIQ");
+    // Responsive, not shaky: snappier smoothing constant, soft pulse dot.
+    expect(page).toContain("GRAPH_SMOOTHING");
+    expect(page).not.toContain("* 0.18");
   });
 
   it("drives Scalp PnL and graph from live Flash marks while reconciling exact positions slowly", () => {

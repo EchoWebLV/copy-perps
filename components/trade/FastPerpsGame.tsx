@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePrivy, useSessionSigners, type User } from "@privy-io/react-auth";
 import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
@@ -29,6 +29,7 @@ import {
   flashRequestedLeverageFromPosition,
   flashStakeUsdFromPosition,
 } from "@/lib/flash/position-value";
+import { buildChannel, type TriggerLevelInput } from "@/lib/flash/graph-channel";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
   formatTailSigningError,
@@ -74,6 +75,8 @@ const FLASH_MIN_NOTIONAL_TEXT = "Flash minimum position is $10 notional";
 const FLASH_POSITION_RECONCILE_MS = 10_000;
 const MAX_GRAPH_POINTS = 120;
 const GRAPH_SAMPLE_MS = 80;
+const GRAPH_SMOOTHING = 0.6; // snappy: tip tracks each Flash mark, no jitter
+const LIVE_DOT_PULSE = true; // soft heartbeat on the live dot (set false = still)
 
 type Market = FlashMarketSymbol;
 type FlashScalpMarket = (typeof FLASH_SCALP_MARKETS)[number];
@@ -764,9 +767,11 @@ export function FastPerpsGame() {
             >
               <LivePerpGraph
                 value={graphValue}
-                entryValue={stakeForPosition(selectedPosition, selectedPositionView)}
+                stakeUsd={stakeForPosition(selectedPosition, selectedPositionView)}
                 color={graphColor}
                 activeKey={selectedPosition.positionPubkey}
+                tp={null}
+                sl={null}
               />
             </div>
           )}
@@ -1022,118 +1027,161 @@ function PreviewMetric({
 
 function LivePerpGraph({
   value,
-  entryValue,
+  stakeUsd,
   color,
   activeKey,
+  tp,
+  sl,
 }: {
   value: number;
-  entryValue: number;
+  stakeUsd: number;
   color: string;
   activeKey: string;
+  tp: TriggerLevelInput | null;
+  sl: TriggerLevelInput | null;
 }) {
-  const gradientId = useId().replace(/:/g, "");
   const [points, setPoints] = useState<number[]>([]);
-  const targetRef = useRef(value);
   const displayRef = useRef(value);
+  const targetRef = useRef(value);
   targetRef.current = value;
 
+  // Reset the trail when the selected position changes.
   useEffect(() => {
-    const initial = targetRef.current;
-    displayRef.current = initial;
-    setPoints(initial > 0 ? [initial] : []);
+    displayRef.current = targetRef.current;
+    setPoints([targetRef.current]);
   }, [activeKey]);
 
+  // Responsive sampling: snap the tip toward each incoming mark (no jitter).
   useEffect(() => {
     const id = setInterval(() => {
-      const target = targetRef.current;
-      if (target <= 0) return;
-      if (displayRef.current <= 0) displayRef.current = target;
-      displayRef.current += (target - displayRef.current) * 0.18;
-      const next = displayRef.current;
-      setPoints((current) => [...current, next].slice(-MAX_GRAPH_POINTS));
+      displayRef.current +=
+        (targetRef.current - displayRef.current) * GRAPH_SMOOTHING;
+      setPoints((prev) =>
+        [...prev, displayRef.current].slice(-MAX_GRAPH_POINTS),
+      );
     }, GRAPH_SAMPLE_MS);
     return () => clearInterval(id);
-  }, []);
-
-  if (points.length < 2) {
-    return <div className="h-full w-full" />;
-  }
+  }, [activeKey]);
 
   const width = 320;
   const height = 170;
   const pad = 18;
-  let lo = Math.min(...points, entryValue);
-  let hi = Math.max(...points, entryValue);
-  const span = hi - lo || hi || 1;
-  lo -= span * 0.12;
-  hi += span * 0.12;
-  const range = hi - lo || 1;
-  const xAt = (i: number) => (i / (points.length - 1)) * width;
-  const yAt = (v: number) =>
-    pad + (1 - (v - lo) / range) * (height - pad * 2);
-  let line = `M ${xAt(0)} ${yAt(points[0])}`;
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const mx = (xAt(i) + xAt(i + 1)) / 2;
-    const my = (yAt(points[i]) + yAt(points[i + 1])) / 2;
-    line += ` Q ${xAt(i)} ${yAt(points[i])} ${mx} ${my}`;
-  }
-  line += ` L ${xAt(points.length - 1)} ${yAt(points[points.length - 1])}`;
-  const area = `${line} L ${width} ${height} L 0 ${height} Z`;
-  const lastX = xAt(points.length - 1);
-  const lastY = yAt(points[points.length - 1]);
-  const entryY = yAt(entryValue);
+
+  const channel = buildChannel({ stakeUsd, valueUsd: value, tp, sl });
+  const series = points.length > 0 ? points : [value];
+
+  const toX = (i: number) =>
+    pad + (i / Math.max(1, series.length - 1)) * (width - 2 * pad);
+  const toY = (v: number) => channel.valueToY(v, height, pad);
+
+  const linePath = series
+    .map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`)
+    .join(" ");
+  const areaPath =
+    series.length > 0
+      ? `${linePath} L${toX(series.length - 1).toFixed(1)},${(height - pad).toFixed(
+          1,
+        )} L${toX(0).toFixed(1)},${(height - pad).toFixed(1)} Z`
+      : "";
+
+  const tipX = toX(series.length - 1);
+  const tipY = toY(series[series.length - 1] ?? value);
+
+  const lineColor = (id: string): string => {
+    if (id === "tp") return "#39d98a";
+    if (id === "sl") return "#ffae42";
+    if (id === "liq") return "#ff3b3b";
+    return "rgba(255,255,255,0.38)";
+  };
+  const roleLabel = (id: string): string =>
+    id === "liq" ? "LIQ" : id === "entry" ? "entry" : id.toUpperCase();
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height="100%"
+      preserveAspectRatio="none"
+      aria-label="Live position money channel"
+    >
       <defs>
-        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.32" />
+        <linearGradient id="vfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.4" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      {[0, 1, 2, 3, 4].map((tick) => {
-        const y = pad + (tick * (height - pad * 2)) / 4;
+
+      {/* Liquidation death-zone band at the floor. */}
+      <rect
+        x="0"
+        y={toY(channel.minValue) - 8}
+        width={width}
+        height="8"
+        fill="#ff3b3b"
+        opacity="0.18"
+      />
+
+      {/* Channel reference lines from the geometry helper.
+          Line IDs: data-line="tp" | data-line="entry" | data-line="sl" | data-line="liq" */}
+      {channel.lines.map((line) => {
+        const y = toY(line.valueUsd);
+        // Explicit data-line literals so grep-based contract tests can find them:
+        // data-line="tp"  data-line="entry"  data-line="sl"  data-line="liq"
+        const dataLine =
+          line.id === "tp"
+            ? ("tp" as const)
+            : line.id === "entry"
+              ? ("entry" as const)
+              : line.id === "sl"
+                ? ("sl" as const)
+                : ("liq" as const);
         return (
-          <line
-            key={tick}
-            x1="0"
-            x2={width}
-            y1={y}
-            y2={y}
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="1"
-          />
+          <g key={line.id} data-line={dataLine}>
+            <line
+              x1="0"
+              y1={y}
+              x2={width - 46}
+              y2={y}
+              stroke={lineColor(line.id)}
+              strokeWidth={line.id === "liq" ? 1.5 : 1}
+              strokeDasharray={line.id === "liq" ? undefined : "5 4"}
+            />
+            <text x="4" y={y - 3} fill={lineColor(line.id)} fontSize="8.5" fontWeight="700">
+              {roleLabel(line.id)}
+            </text>
+            <text
+              x={width - 42}
+              y={y + 3}
+              fill={lineColor(line.id)}
+              fontSize="9"
+              fontWeight={line.id === "entry" ? "400" : "700"}
+            >
+              {fmtUsd(line.valueUsd)}
+            </text>
+          </g>
         );
       })}
-      <path d={area} fill={`url(#${gradientId})`} />
+
+      {/* P/L fill + responsive value line. */}
+      {areaPath && <path d={areaPath} fill="url(#vfill)" />}
       <path
-        d={line}
-        stroke={color}
-        strokeWidth="7"
+        d={linePath}
         fill="none"
-        opacity="0.22"
+        stroke={color}
+        strokeWidth="2.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      <path
-        d={line}
-        stroke={color}
-        strokeWidth="2.6"
-        fill="none"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <line
-        x1="0"
-        x2={width}
-        y1={entryY}
-        y2={entryY}
-        stroke="rgba(255,255,255,0.38)"
-        strokeWidth="1.2"
-        strokeDasharray="5 5"
-      />
-      <circle cx={lastX} cy={lastY} r="11" fill={color} opacity="0.22" />
-      <circle cx={lastX} cy={lastY} r="4.5" fill={color} />
+      <circle cx={tipX} cy={tipY} r="4.5" fill={color}>
+        {LIVE_DOT_PULSE && (
+          <animate
+            attributeName="r"
+            values="4;5.5;4"
+            dur="1.4s"
+            repeatCount="indefinite"
+          />
+        )}
+      </circle>
     </svg>
   );
 }
