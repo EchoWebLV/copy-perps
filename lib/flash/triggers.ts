@@ -76,6 +76,8 @@ export function roiPctFromTriggerPrice(input: TriggerRoiFromPriceInput): number 
   if (
     !Number.isFinite(entryPriceUsd) ||
     entryPriceUsd <= 0 ||
+    !Number.isFinite(triggerPriceUsd) ||
+    triggerPriceUsd <= 0 ||
     !Number.isFinite(collateralUsd) ||
     collateralUsd <= 0 ||
     !Number.isFinite(sizeUsd) ||

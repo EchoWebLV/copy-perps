@@ -98,7 +98,7 @@ describe("roiPctFromTriggerPrice", () => {
       collateralUsd: 2,
       side: "short",
     });
-    expect(roi).toBeGreaterThan(0);
+    expect(roi).toBeCloseTo(50, 0); // (2000-1980)/2000 * (100/2) * 100 = 50
   });
 
   it("returns 0 when inputs are degenerate", () => {
@@ -106,6 +106,27 @@ describe("roiPctFromTriggerPrice", () => {
       roiPctFromTriggerPrice({
         entryPriceUsd: 0,
         triggerPriceUsd: 101,
+        sizeUsd: 100,
+        collateralUsd: 1,
+        side: "long",
+      }),
+    ).toBe(0);
+  });
+
+  it("returns 0 for a non-finite or non-positive trigger price", () => {
+    expect(
+      roiPctFromTriggerPrice({
+        entryPriceUsd: 100,
+        triggerPriceUsd: Number.NaN,
+        sizeUsd: 100,
+        collateralUsd: 1,
+        side: "long",
+      }),
+    ).toBe(0);
+    expect(
+      roiPctFromTriggerPrice({
+        entryPriceUsd: 100,
+        triggerPriceUsd: 0,
         sizeUsd: 100,
         collateralUsd: 1,
         side: "long",
