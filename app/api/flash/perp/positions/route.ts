@@ -3,6 +3,7 @@ import {
   FlashPerpsError,
   getFlashPerpsService,
 } from "@/lib/flash/perps";
+import { roiPctFromTriggerPrice, type TriggerOrderView } from "@/lib/flash/triggers";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 
@@ -29,8 +30,29 @@ export async function POST(request: Request) {
   }
 
   try {
-    const positions = await getFlashPerpsService().positionsOf(user.solanaPubkey);
-    return NextResponse.json({ positions });
+    const service = getFlashPerpsService();
+    const positions = await service.positionsOf(user.solanaPubkey);
+    const triggersByPosition = await service
+      .activeTriggersOf(user.solanaPubkey)
+      .catch(() => new Map<string, TriggerOrderView[]>());
+
+    const withTriggers = positions.map((position) => {
+      const raw = triggersByPosition.get(position.positionPubkey);
+      if (!raw || raw.length === 0) return position;
+      const triggers = raw.map((t) => ({
+        ...t,
+        roiPct: roiPctFromTriggerPrice({
+          entryPriceUsd: position.entryPriceUsd,
+          triggerPriceUsd: t.triggerPriceUsd,
+          sizeUsd: position.sizeUsd,
+          collateralUsd: position.collateralUsd,
+          side: position.side,
+        }),
+      }));
+      return { ...position, triggers };
+    });
+
+    return NextResponse.json({ positions: withTriggers });
   } catch (err) {
     if (err instanceof FlashPerpsError) {
       return NextResponse.json({ error: err.message }, { status: 502 });
