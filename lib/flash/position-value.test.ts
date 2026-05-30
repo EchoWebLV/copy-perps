@@ -96,4 +96,38 @@ describe("flashRequestedLeverageFromPosition", () => {
     expect(flashRequestedLeverageFromPosition(position)).toBe(500);
     expect(flashStakeUsdFromPosition(position)).toBe(1);
   });
+
+  it("snaps a fee-reduced 500x open back to 500 even at a small loss (no cached leverage)", () => {
+    expect(
+      flashRequestedLeverageFromPosition({
+        sizeUsd: 500,
+        leverage: 398,
+        collateralUsd: 1.256,
+        pnlUsd: -0.05,
+        isProfitable: false,
+      }),
+    ).toBe(500);
+  });
+
+  it("snaps reduced notional leverage to the nearest configured option", () => {
+    expect(
+      flashRequestedLeverageFromPosition({
+        sizeUsd: 398,
+        leverage: 398,
+        collateralUsd: 1,
+        entryCostUsd: 1,
+      }),
+    ).toBe(500);
+  });
+
+  it("does not over-snap a genuine 250x open up to 500", () => {
+    expect(
+      flashRequestedLeverageFromPosition({
+        sizeUsd: 205,
+        leverage: 205,
+        collateralUsd: 1,
+        entryCostUsd: 1,
+      }),
+    ).toBe(250);
+  });
 });

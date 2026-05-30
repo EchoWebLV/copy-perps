@@ -388,8 +388,14 @@ export function FastPerpsGame() {
       entryCostCacheRef.current,
       body.positions ?? [],
     );
-    pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
-    saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
+    // Only prune when we have a real position list. A transient empty fetch
+    // must not garbage-collect the cached requested leverage — that cache is
+    // what recovers a 500x open from its fee-reduced effective leverage. Real
+    // closes self-clean via forgetFlashEntryCost in closeLive.
+    if (merged.length > 0) {
+      pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
+      saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
+    }
     setPositions(merged);
   }, [authenticated, getAccessToken, wallet?.address]);
 
@@ -765,7 +771,9 @@ export function FastPerpsGame() {
             </div>
           )}
 
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div
+            className={`mt-2 grid gap-2 ${selectedPosition ? "grid-cols-3" : "grid-cols-2"}`}
+          >
             <PreviewMetric
               label="Stake"
               value={fmtUsd(
@@ -785,6 +793,16 @@ export function FastPerpsGame() {
               subvalue={selectedPosition ? fmtSignedPct(liveRoi) : undefined}
               color={selectedPosition ? graphColor : sideColor}
             />
+            {selectedPosition && (
+              // Stake +/- P/L = current money still in the trade. graphValue is
+              // the live position value (valueUsd) the chart already plots, so
+              // this window stays consistent with the graph and the P/L above.
+              <PreviewMetric
+                label="Total"
+                value={fmtUsd(graphValue)}
+                color={FG}
+              />
+            )}
           </div>
         </section>
 

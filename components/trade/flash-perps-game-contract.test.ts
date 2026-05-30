@@ -144,6 +144,21 @@ describe("Flash fast perps game contract", () => {
     expect(page).not.toContain('label={selectedPosition ? "Value" : "Stake"}');
   });
 
+  it("adds a Total window so the user reads current money beside stake and P/L", () => {
+    const page = source();
+
+    // Third metric beside Stake and P/L: the live position value (stake +/-
+    // P/L), driven by the same graphValue the chart plots, so the user knows
+    // how much money is left in the trade.
+    expect(page).toContain('label="Total"');
+    expect(page).toContain("value={fmtUsd(graphValue)}");
+    // Only render the third window for an open position; the order-ticket
+    // preview keeps the two-up Stake/Notional layout.
+    expect(page).toContain(
+      'grid gap-2 ${selectedPosition ? "grid-cols-3" : "grid-cols-2"}',
+    );
+  });
+
   it("shows the requested open leverage instead of refreshed effective leverage", () => {
     const page = source();
 

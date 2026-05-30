@@ -8,7 +8,7 @@ export interface FlashStakePosition {
 }
 
 const CONFIGURED_FLASH_LEVERAGES = [1, 5, 10, 20, 25, 50, 100, 125, 250, 500];
-const MAX_EFFECTIVE_LEVERAGE_OVERAGE = 0.12;
+const LEVERAGE_SNAP_TOLERANCE = 0.04;
 
 function positiveFiniteNumber(value: unknown): number | null {
   const numberValue = Number(value);
@@ -27,54 +27,12 @@ function configuredFlashLeverage(leverage: number): number | null {
   );
 }
 
-function isProfitablePosition(position: FlashStakePosition): boolean {
-  if (position.isProfitable === true) return true;
-  const pnlUsd = Number(position.pnlUsd);
-  return Number.isFinite(pnlUsd) && pnlUsd > 0;
-}
-
-function requestedFlashLeverageFromEffective(
-  leverage: number,
-  isProfitable: boolean,
-): number {
-  if (isProfitable) {
-    return (
-      CONFIGURED_FLASH_LEVERAGES.find((option) => option >= leverage) ?? leverage
-    );
-  }
-
-  const configured = CONFIGURED_FLASH_LEVERAGES.filter(
-    (option) => option <= leverage,
-  ).at(-1);
-  if (
-    configured != null &&
-    leverage / configured <= 1 + MAX_EFFECTIVE_LEVERAGE_OVERAGE
-  ) {
-    return configured;
-  }
-  return leverage;
-}
-
-function requestedFlashLeverageFromNotional(
-  sizeUsd: number,
-  entryCostUsd: number,
-): number {
-  const rawLeverage = sizeUsd / entryCostUsd;
-  const configured = CONFIGURED_FLASH_LEVERAGES.reduce((best, option) => {
-    return Math.abs(option - rawLeverage) < Math.abs(best - rawLeverage)
-      ? option
-      : best;
-  }, CONFIGURED_FLASH_LEVERAGES[0]);
-
-  if (
-    configured != null &&
-    Math.abs(rawLeverage - configured) / configured <=
-      MAX_EFFECTIVE_LEVERAGE_OVERAGE
-  ) {
-    return configured;
-  }
-
-  return rawLeverage;
+function snapToConfiguredLeverage(leverage: number): number {
+  return (
+    CONFIGURED_FLASH_LEVERAGES.find(
+      (option) => leverage <= option * (1 + LEVERAGE_SNAP_TOLERANCE),
+    ) ?? CONFIGURED_FLASH_LEVERAGES[CONFIGURED_FLASH_LEVERAGES.length - 1]
+  );
 }
 
 export function flashRequestedLeverageFromPosition(
@@ -92,14 +50,11 @@ export function flashRequestedLeverageFromPosition(
   }
 
   if (sizeUsd != null && entryCostUsd != null) {
-    return requestedFlashLeverageFromNotional(sizeUsd, entryCostUsd);
+    return snapToConfiguredLeverage(sizeUsd / entryCostUsd);
   }
 
   if (leverage != null) {
-    return requestedFlashLeverageFromEffective(
-      leverage,
-      isProfitablePosition(position),
-    );
+    return snapToConfiguredLeverage(leverage);
   }
 
   return null;
