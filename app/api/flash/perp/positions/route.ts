@@ -34,7 +34,13 @@ export async function POST(request: Request) {
     const positions = await service.positionsOf(user.solanaPubkey);
     const triggersByPosition = await service
       .activeTriggersOf(user.solanaPubkey)
-      .catch(() => new Map<string, TriggerOrderView[]>());
+      .catch((err) => {
+        // Triggers are a decorative enrichment — degrade to "none shown" rather
+        // than failing the whole positions load, but log so a persistent fetch
+        // failure isn't silent.
+        console.warn("[flash/perp/positions] could not load triggers:", err);
+        return new Map<string, TriggerOrderView[]>();
+      });
 
     const withTriggers = positions.map((position) => {
       const raw = triggersByPosition.get(position.positionPubkey);
