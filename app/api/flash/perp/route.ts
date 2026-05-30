@@ -42,6 +42,7 @@ const FLASH_ERROR_STATUS: Record<FlashPerpsError["code"], number> = {
   PositionNotOpen: 404,
   QuoteFailed: 502,
   BuildTxFailed: 502,
+  InvalidTrigger: 400,
 };
 
 function parseMarket(value: unknown) {

@@ -23,6 +23,7 @@ import {
   type CustodyConfig,
   type MarketConfig,
   type OpenPositionQuoteData,
+  type TriggerOrder,
 } from "flash-sdk";
 import {
   FLASH_POOL_NAMES,
@@ -33,6 +34,11 @@ import {
   type FlashPoolName,
   type FlashTradeMode,
 } from "./markets";
+import {
+  roiPctToIntegerPercent,
+  type TriggerKind,
+  type TriggerOrderView,
+} from "./triggers";
 
 const FLASH_CLUSTER = "mainnet-beta";
 const FLASH_COMPUTE_UNITS = 600_000;
@@ -54,7 +60,8 @@ export type FlashPerpsErrorCode =
   | "LeverageTooHigh"
   | "PositionNotOpen"
   | "QuoteFailed"
-  | "BuildTxFailed";
+  | "BuildTxFailed"
+  | "InvalidTrigger";
 
 export class FlashPerpsError extends Error {
   constructor(
@@ -81,6 +88,29 @@ export interface FlashCloseRequest {
   side: FlashSide;
 }
 
+export interface FlashTriggerRequest {
+  trader: string;
+  market: FlashMarketSymbol;
+  side: FlashSide;
+  kind: TriggerKind;
+  /** Validated ROI percent (already clamped by validateTriggerRoi). */
+  roiPct: number;
+  /** When replacing an existing same-kind order, its 1-based slot ordinal. */
+  orderId?: number;
+}
+
+export interface FlashTriggerCancelRequest {
+  trader: string;
+  market: FlashMarketSymbol;
+  side: FlashSide;
+  kind: TriggerKind;
+  orderId: number;
+}
+
+export interface FlashTriggerTxResponse {
+  transaction: string;
+}
+
 export interface FlashPositionSummary {
   symbol: FlashMarketSymbol;
   side: FlashSide;
@@ -99,6 +129,7 @@ export interface FlashPositionSummary {
   openFeeUsd?: number;
   isProfitable?: boolean;
   openTime: number;
+  triggers?: TriggerOrderView[];
 }
 
 export interface FlashTxQuote {
@@ -484,6 +515,185 @@ export class FlashPerpsService {
         quote,
       ),
     };
+  }
+
+  async buildPlaceTriggerOrderTx(
+    req: FlashTriggerRequest,
+  ): Promise<FlashTriggerTxResponse> {
+    const owner = new PublicKey(req.trader);
+    const poolConfig = this.poolConfigForMarket(req.market);
+    const client = this.createClient(owner, poolConfig);
+    const market = this.marketForSymbol(poolConfig, req.market, req.side);
+    const positionPk = poolConfig.getPositionFromMarketPk(
+      owner,
+      market.marketAccount,
+    );
+    const raw = (await client.getUserPositions(owner, poolConfig)).find(
+      (p) => p.pubkey.equals(positionPk) && hasOpenSize(p),
+    );
+    if (!raw) throw new FlashPerpsError("PositionNotOpen");
+    const position = PositionAccount.from(positionPk, raw);
+
+    // Exit fee from a live close quote — feeds getTriggerPriceFromRoiSync.
+    let exitFeeUsd: AnchorBN;
+    try {
+      const quote = await client.getClosePositionQuote(
+        positionPk,
+        position,
+        poolConfig,
+        new BN(0),
+        Privilege.None,
+        this.usdcCustody(poolConfig),
+        null,
+        null,
+        owner,
+      );
+      exitFeeUsd = quote.fees;
+    } catch (err) {
+      throw new FlashPerpsError("QuoteFailed", String(err));
+    }
+
+    const flashSide = sideToFlash(req.side);
+    const roiBn = new BN(roiPctToIntegerPercent(req.roiPct));
+    let triggerOraclePrice: OraclePrice;
+    try {
+      triggerOraclePrice = client.getTriggerPriceFromRoiSync(
+        roiBn,
+        position.collateralUsd,
+        exitFeeUsd,
+        position.sizeAmount,
+        position.sizeDecimals,
+        contractPriceToOracle(position.entryPrice),
+        flashSide,
+      );
+    } catch (err) {
+      throw new FlashPerpsError("InvalidTrigger", String(err));
+    }
+    const triggerPrice = triggerOraclePrice.toContractOraclePrice();
+    const isStopLoss = req.kind === "sl";
+    const collateralSymbol = this.collateralSymbolForMarket(poolConfig, market);
+
+    let txData: { instructions: TransactionInstruction[]; additionalSigners: Signer[] };
+    try {
+      txData =
+        req.orderId !== undefined
+          ? await client.editTriggerOrder(
+              req.market,
+              collateralSymbol,
+              "USDC",
+              flashSide,
+              req.orderId,
+              triggerPrice,
+              position.sizeAmount,
+              isStopLoss,
+              poolConfig,
+            )
+          : await client.placeTriggerOrder(
+              req.market,
+              collateralSymbol,
+              "USDC",
+              flashSide,
+              triggerPrice,
+              position.sizeAmount,
+              isStopLoss,
+              poolConfig,
+            );
+    } catch (err) {
+      throw new FlashPerpsError("BuildTxFailed", String(err));
+    }
+
+    const transaction = await this.serializeInstructions(
+      poolConfig,
+      owner,
+      txData.instructions,
+      txData.additionalSigners,
+      client,
+    );
+    return { transaction };
+  }
+
+  async buildCancelTriggerOrderTx(
+    req: FlashTriggerCancelRequest,
+  ): Promise<FlashTriggerTxResponse> {
+    const owner = new PublicKey(req.trader);
+    const poolConfig = this.poolConfigForMarket(req.market);
+    const client = this.createClient(owner, poolConfig);
+    const market = this.marketForSymbol(poolConfig, req.market, req.side);
+    const collateralSymbol = this.collateralSymbolForMarket(poolConfig, market);
+    const flashSide = sideToFlash(req.side);
+    const isStopLoss = req.kind === "sl";
+
+    let txData: { instructions: TransactionInstruction[]; additionalSigners: Signer[] };
+    try {
+      txData = await client.cancelTriggerOrder(
+        req.market,
+        collateralSymbol,
+        flashSide,
+        req.orderId,
+        isStopLoss,
+        poolConfig,
+      );
+    } catch (err) {
+      throw new FlashPerpsError("BuildTxFailed", String(err));
+    }
+
+    const transaction = await this.serializeInstructions(
+      poolConfig,
+      owner,
+      txData.instructions,
+      txData.additionalSigners,
+      client,
+    );
+    return { transaction };
+  }
+
+  async activeTriggersOf(
+    trader: string,
+  ): Promise<Map<string, TriggerOrderView[]>> {
+    const owner = new PublicKey(trader);
+    const byPosition = new Map<string, TriggerOrderView[]>();
+    for (const poolConfig of this.poolConfigs) {
+      const client = this.createClient(owner, poolConfig);
+      let accounts: Awaited<ReturnType<PerpetualsClient["getUserOrderAccounts"]>>;
+      try {
+        accounts = await client.getUserOrderAccounts(owner, poolConfig);
+      } catch {
+        continue;
+      }
+      for (const account of accounts) {
+        if (!account.isActive) continue;
+        const market = poolConfig.markets.find((m) =>
+          m.marketAccount.equals(account.market),
+        );
+        if (!market) continue;
+        const positionPk = poolConfig
+          .getPositionFromMarketPk(owner, market.marketAccount)
+          .toBase58();
+        const views: TriggerOrderView[] = [];
+        this.collectTriggerViews(account.takeProfitOrders, "tp", views);
+        this.collectTriggerViews(account.stopLossOrders, "sl", views);
+        if (views.length > 0) {
+          byPosition.set(positionPk, [
+            ...(byPosition.get(positionPk) ?? []),
+            ...views,
+          ]);
+        }
+      }
+    }
+    return byPosition;
+  }
+
+  private collectTriggerViews(
+    orders: TriggerOrder[],
+    kind: TriggerKind,
+    out: TriggerOrderView[],
+  ): void {
+    orders.forEach((order, index) => {
+      const triggerPriceUsd = contractPriceToNumber(order.triggerPrice);
+      if (!Number.isFinite(triggerPriceUsd) || triggerPriceUsd <= 0) return;
+      // 1-based slot ordinal within the kind array (confirmed in a later smoke check).
+      out.push({ kind, orderId: index + 1, triggerPriceUsd, roiPct: 0 });
+    });
   }
 
   private poolConfigForMarket(symbol: FlashMarketSymbol): PoolConfig {
