@@ -29,7 +29,11 @@ import {
   flashRequestedLeverageFromPosition,
   flashStakeUsdFromPosition,
 } from "@/lib/flash/position-value";
-import { buildChannel, type TriggerLevelInput } from "@/lib/flash/graph-channel";
+import {
+  buildChannel,
+  type TriggerKind,
+  type TriggerLevelInput,
+} from "@/lib/flash/graph-channel";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import {
   formatTailSigningError,
@@ -85,6 +89,14 @@ type FlashScalpMarket = (typeof FLASH_SCALP_MARKETS)[number];
 type TradeSide = "long" | "short";
 type TradeMode = "standard" | "degen";
 
+// On-chain trigger order attached to a position (from the positions poll).
+interface PositionTrigger {
+  kind: TriggerKind;
+  orderId: number;
+  triggerPriceUsd: number;
+  roiPct: number;
+}
+
 interface FlashPosition {
   symbol: Market;
   side: TradeSide;
@@ -103,12 +115,7 @@ interface FlashPosition {
   openFeeUsd?: number;
   isProfitable?: boolean;
   openTime: number;
-  triggers?: {
-    kind: "tp" | "sl";
-    orderId: number;
-    triggerPriceUsd: number;
-    roiPct: number;
-  }[];
+  triggers?: PositionTrigger[];
 }
 
 interface FlashPreparedOpenResponse {
@@ -350,11 +357,11 @@ export function FastPerpsGame() {
       : RED;
   const selectedTriggers = useMemo(() => {
     const list = selectedPosition?.triggers ?? [];
-    const pick = (kind: "tp" | "sl"): TriggerLevelInput | null => {
+    const pick = (kind: TriggerKind): TriggerLevelInput | null => {
       const found = list.find((t) => t.kind === kind);
       return found ? { kind, roiPct: found.roiPct } : null;
     };
-    const orderId = (kind: "tp" | "sl"): number | null =>
+    const orderId = (kind: TriggerKind): number | null =>
       list.find((t) => t.kind === kind)?.orderId ?? null;
     return {
       tp: pick("tp"),
@@ -635,7 +642,7 @@ export function FastPerpsGame() {
   ]);
 
   const requestTrigger = useCallback(
-    async (kind: "tp" | "sl", roiPct: number) => {
+    async (kind: TriggerKind, roiPct: number) => {
       if (!selectedPosition) return;
       const walletAddress = wallet?.address;
       if (!walletAddress) {
@@ -695,7 +702,7 @@ export function FastPerpsGame() {
   );
 
   const cancelTrigger = useCallback(
-    async (kind: "tp" | "sl") => {
+    async (kind: TriggerKind) => {
       if (!selectedPosition) return;
       const orderId =
         kind === "tp" ? selectedTriggers.tpOrderId : selectedTriggers.slOrderId;
@@ -1183,11 +1190,11 @@ function TriggerChips({
   disabled,
 }: {
   triggers: { tp: TriggerLevelInput | null; sl: TriggerLevelInput | null };
-  onAdd: (kind: "tp" | "sl") => void;
-  onCancel: (kind: "tp" | "sl") => void;
+  onAdd: (kind: TriggerKind) => void;
+  onCancel: (kind: TriggerKind) => void;
   disabled: boolean;
 }) {
-  const chip = (kind: "tp" | "sl") => {
+  const chip = (kind: TriggerKind) => {
     const level = kind === "tp" ? triggers.tp : triggers.sl;
     const accent = kind === "tp" ? "#39d98a" : "#ffae42";
     if (!level) {
@@ -1216,6 +1223,7 @@ function TriggerChips({
           aria-label={`Cancel ${kind === "tp" ? "take-profit" : "stop-loss"}`}
           disabled={disabled}
           onClick={() => onCancel(kind)}
+          className="-my-2 px-2 py-2 leading-none"
         >
           ✕
         </button>
