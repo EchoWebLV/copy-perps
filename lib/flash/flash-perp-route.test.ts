@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   close: vi.fn(),
   positionsOf: vi.fn(),
+  activeTriggersOf: vi.fn(),
 }));
 
 vi.mock("@/lib/privy/server", () => ({
@@ -57,6 +58,7 @@ describe("Flash perp routes", () => {
       open: mocks.open,
       close: mocks.close,
       positionsOf: mocks.positionsOf,
+      activeTriggersOf: mocks.activeTriggersOf,
     });
     mocks.open.mockResolvedValue({
       transaction: "open-tx-b64",
@@ -97,6 +99,7 @@ describe("Flash perp routes", () => {
       },
     });
     mocks.positionsOf.mockResolvedValue([]);
+    mocks.activeTriggersOf.mockResolvedValue(new Map());
     mocks.signAndSendPrivySolanaTransaction.mockResolvedValue({
       signature: "instant-sig",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
