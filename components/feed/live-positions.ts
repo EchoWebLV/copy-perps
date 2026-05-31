@@ -1,6 +1,8 @@
 import type { BotSignal } from "@/lib/types";
-import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
+// Shared position shape for the live entry chart. The bot feeds that used
+// to build these (flattenBotPositions) were removed; LiveEntryChart still
+// reuses this type for its own per-position rendering.
 export interface FlatPosition {
   positionId: string;
   asset: string;
@@ -26,40 +28,4 @@ export interface FlatPosition {
     avatarEmoji: string;
     avatarImageUrl: string | null;
   }>;
-}
-
-export function flattenBotPositions(
-  bots: BotSignal[],
-  filter: string | null,
-): FlatPosition[] {
-  const out: FlatPosition[] = [];
-  for (const bot of bots) {
-    if (filter && bot.payload.botId !== filter) continue;
-    for (const pos of bot.payload.currentPositions) {
-      if (!isFlashCopyableMarket(pos.asset)) continue;
-      out.push({
-        positionId: pos.positionId,
-        asset: pos.asset,
-        side: pos.side,
-        leverage: pos.leverage,
-        entryMark: pos.entryMark,
-        currentMark: pos.currentMark,
-        stakeUsd: pos.stakeUsd,
-        livePaperPnlUsd: pos.livePaperPnlUsd,
-        livePaperPnlPct: pos.livePaperPnlPct,
-        openSinceMs: pos.openSinceMs,
-        narrationOpen: pos.narrationOpen,
-        bot: {
-          botId: bot.payload.botId,
-          botName: bot.payload.botName,
-          avatarEmoji: bot.payload.avatarEmoji,
-          avatarImageUrl: bot.payload.avatarImageUrl,
-          mood: bot.payload.mood,
-        },
-        disagreements: pos.disagreements,
-      });
-    }
-  }
-  out.sort((a, b) => b.openSinceMs - a.openSinceMs);
-  return out;
 }
