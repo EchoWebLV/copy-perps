@@ -1,5 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WhaleTraderSignal } from "@/lib/types";
+
+// In-memory stand-in for the Postgres-backed durable store.
+const store = vi.hoisted(() => ({ blob: {} as Record<string, unknown> }));
+
+vi.mock("./stats-store", () => ({
+  loadStatsBlob: vi.fn(async () => ({ ...store.blob })),
+  saveStatsBlob: vi.fn(async (blob: Record<string, unknown>) => {
+    store.blob = { ...blob };
+  }),
+  clearStatsBlob: vi.fn(async () => {
+    store.blob = {};
+  }),
+}));
+
 import {
   clearWhaleTraderStatsForTests,
   readWhaleTraderStats,

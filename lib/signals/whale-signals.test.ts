@@ -59,6 +59,19 @@ vi.mock("drizzle-orm", () => ({
   })),
 }));
 
+// In-memory stand-in for the Postgres-backed durable stats store. Plain
+// functions (not vi.fn) so the suite's vi.resetAllMocks() doesn't wipe them.
+const statsStore = vi.hoisted(() => ({ blob: {} as Record<string, unknown> }));
+vi.mock("@/lib/whales/stats-store", () => ({
+  loadStatsBlob: async () => ({ ...statsStore.blob }),
+  saveStatsBlob: async (blob: Record<string, unknown>) => {
+    statsStore.blob = { ...blob };
+  },
+  clearStatsBlob: async () => {
+    statsStore.blob = {};
+  },
+}));
+
 function whale(
   overrides: Partial<WhaleLiveSnapshot["whales"][number]> = {},
 ): WhaleLiveSnapshot["whales"][number] {
