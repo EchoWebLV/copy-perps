@@ -23,7 +23,13 @@ import { refreshWhales } from "@/lib/whales/refresh";
 import { isFlashCopyableMarket } from "@/lib/flash/markets";
 
 const PNL_HISTORY_LIMIT = 500;
-const PNL_HISTORY_CACHE_MS = 5 * 60_000;
+// PnL history (Pacifica curves + Hyperliquid portfolio) is slow-moving — a
+// 30-day/all-time curve barely moves in minutes — and both caches are sticky
+// (a failed refresh keeps serving the last good curve). A long TTL therefore
+// has no freshness or reliability downside, and every cache hit is a per-whale
+// REST call we don't spend competing with the live position fetch for HL's
+// rate-limit budget. Kept well above the ~3-min source refresh cadence.
+const PNL_HISTORY_CACHE_MS = 15 * 60_000;
 const PNL_HISTORY_CONCURRENCY = 4;
 const LIVE_SNAPSHOT_COLD_START_BUDGET_MS =
   process.env.NODE_ENV === "test" ? 10 : 750;
@@ -39,6 +45,16 @@ type WhaleTraderStats = WhaleTraderSignal["payload"]["stats"];
 const pnlHistoryCache = new Map<
   string,
   { expiresAt: number; curve: WhalePnlPoint[] }
+>();
+// Hyperliquid portfolio history powers the roster P&L charts. Unlike Pacifica
+// stats (one batched leaderboard call), it is one REST request per whale, and
+// HL rate-limits the whole endpoint at once. Without a cache, a single
+// rate-limited tick blanks every HL whale's chart to "P&L HISTORY UNAVAILABLE".
+// Cache the last good portfolio and keep serving it on failure (sticky) so a
+// transient 429 never collapses the curve.
+const hlPortfolioCache = new Map<
+  string,
+  { expiresAt: number; portfolio: HLPortfolio }
 >();
 let liveRefreshInFlight: Promise<void> | null = null;
 let traderSignalsCache:
@@ -222,6 +238,26 @@ async function getCachedPnlCurve(
     curve,
   });
   return curve;
+}
+
+async function getCachedHyperliquidPortfolio(
+  account: string,
+): Promise<HLPortfolio> {
+  const now = Date.now();
+  const cached = hlPortfolioCache.get(account);
+  if (cached && cached.expiresAt > now) return cached.portfolio;
+
+  const portfolio = await getPortfolio(account).catch(() => null);
+  // A failed or empty fetch (rate limit, timeout) must not blank the chart:
+  // fall back to the last good portfolio if we have one, else empty.
+  if (!portfolio || portfolio.length === 0) {
+    return cached?.portfolio ?? [];
+  }
+  hlPortfolioCache.set(account, {
+    expiresAt: now + PNL_HISTORY_CACHE_MS,
+    portfolio,
+  });
+  return portfolio;
 }
 
 function statsForLeaderboardEntry(entry: PacificaLeaderboardEntry | undefined) {
@@ -493,7 +529,7 @@ async function buildWhaleTraderSignalsFromSnapshot(
         if (whale.source !== "hyperliquid") return;
         portfolioByAccount.set(
           whale.sourceAccount,
-          await getPortfolio(whale.sourceAccount).catch(() => []),
+          await getCachedHyperliquidPortfolio(whale.sourceAccount),
         );
       },
     );
@@ -642,6 +678,7 @@ export async function buildCachedWhaleTraderSignals(): Promise<
 
 export function clearWhaleSignalCachesForTests(): void {
   pnlHistoryCache.clear();
+  hlPortfolioCache.clear();
   traderSignalsCache = null;
   traderSignalsInFlight = null;
   liveRefreshInFlight = null;

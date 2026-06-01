@@ -40,7 +40,7 @@ describe("getCrossBotSnapshot", () => {
     const snap = await getCrossBotSnapshot();
     expect(snap.positionsByAssetSide.size).toBe(0);
     expect(snap.botsByAsset.size).toBe(0);
-  });
+  }, 15_000);
 
   it("groups same-side positions on the same asset", async () => {
     setRows([

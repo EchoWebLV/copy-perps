@@ -1,17 +1,30 @@
 /**
- * Curated set of Hyperliquid addresses tracked for the whale feed.
+ * Hyperliquid addresses tracked for the whale feed.
  *
- * Sourced once from Hyperliquid's public leaderboard (top traders by 30d PnL,
- * filtered to directional traders with positive 7d PnL, account value
- * $250k–$50M, and a sane volume-to-account ratio so HFT/MM bots are excluded).
+ * The refresh pipeline now discovers whales DYNAMICALLY from Hyperliquid's
+ * public leaderboard each tick (see lib/hyperliquid/leaderboard.ts +
+ * refresh-hyperliquid.ts), applying the same filters that originally seeded
+ * this list: directional traders with positive 7d PnL, account value
+ * $250k–$50M, and a sane volume-to-account ratio so HFT/MM bots are excluded.
  *
- * Empty / inactive addresses are tolerated by the refresh pipeline — they
- * just contribute zero cards. Refresh manually every few weeks.
+ * CURATED_WHALES below is no longer the primary source — it is the FALLBACK
+ * roster used when the leaderboard fetch is unavailable (rate-limited, down),
+ * so the feed never goes dark. It is also still polled directly by the
+ * liquidation / whale-open buffers in client.ts. Empty / inactive addresses
+ * are tolerated — they just contribute zero cards.
  */
 export interface CuratedWhale {
   address: string;
   label?: string;
 }
+
+/**
+ * Hand-picked Hyperliquid whales that are ALWAYS surfaced, on top of whatever
+ * dynamic leaderboard discovery turns up that tick. Mirrors Pacifica's
+ * CURATED_PACIFICA_WHALES pin slot. Start empty — add addresses here to force
+ * a specific trader into the feed regardless of their current leaderboard rank.
+ */
+export const PINNED_HYPERLIQUID_WHALES: CuratedWhale[] = [];
 
 export const CURATED_WHALES: CuratedWhale[] = [
   { address: "0xa5b0edf6b55128e0ddae8e51ac538c3188401d41" },

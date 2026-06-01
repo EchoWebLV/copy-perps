@@ -34,9 +34,15 @@ export function formatWhalePositionTime(
   nowMs: number,
 ): { label: "Holding" | "Seen"; value: string } {
   if (position.openedAtKnown === false) {
+    // Open time is unconfirmed (e.g. a freshly-discovered Hyperliquid whale
+    // whose source fills can't pin the entry). We can't claim a real position
+    // age, so we surface how long it has been on our tape instead — the sticky
+    // first-observed openedAt, which is preserved across refresh ticks and
+    // grows over time. lastSeenAt resets to now every tick, so it would freeze
+    // this at "<1M" forever and read as a brand-new position next to a deep P/L.
     return {
       label: "Seen",
-      value: formatWhalePositionAge(position.lastSeenAtMs, nowMs),
+      value: formatWhalePositionAge(position.openedAtMs, nowMs),
     };
   }
 

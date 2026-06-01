@@ -1,9 +1,18 @@
 import {
   getAllMids,
   getClearinghouseState,
+  getLeaderboard,
   getUserFillsByTime,
+  type HLLeaderboard,
 } from "@/lib/hyperliquid/client";
-import { CURATED_WHALES, truncateEthAddress } from "@/lib/hyperliquid/whales";
+import {
+  CURATED_WHALES,
+  PINNED_HYPERLIQUID_WHALES,
+  truncateEthAddress,
+  type CuratedWhale,
+} from "@/lib/hyperliquid/whales";
+import { selectTradeableWhales } from "@/lib/hyperliquid/leaderboard";
+import { cacheGetJson, cacheSetJson } from "@/lib/cache/redis";
 import {
   isFlashCopyableMarket,
   maxFlashLeverageForMarket,
@@ -70,18 +79,89 @@ function isHyperliquidRateLimitError(err: unknown): boolean {
   return err instanceof Error && /\b429\b/.test(err.message);
 }
 
+const DISCOVERY_CACHE_KEY = "copy-perps:whales:hyperliquid:discovery:v1";
+// The leaderboard ranking is slow-moving, so refresh discovery at most every
+// 30 min. Cache-by-volatility: gating the ~30 MB leaderboard pull behind this
+// window frees per-tick rate-limit budget for the fast-moving position fetches.
+const DISCOVERY_FRESH_MS = 30 * 60_000;
+// Keep the last good roster usable for a day so a failed refresh stays sticky
+// (serve stale rather than blank) well past the freshness window.
+const DISCOVERY_STORE_TTL_SECONDS = 24 * 60 * 60;
+// Cap on dynamically discovered whales — bounds per-tick clearinghouse calls so
+// we don't regress the Hyperliquid rate-limit budget.
+const DISCOVERY_LIMIT = 50;
+
+interface DiscoveryCacheEntry {
+  refreshedAt: number;
+  whales: CuratedWhale[];
+}
+
+// Pull the tradeable whale set from Hyperliquid's public leaderboard, cached
+// hard because the payload is ~30 MB and the ranking barely moves tick to tick.
+// Returns null when discovery is unavailable (failed fetch + no cache) so the
+// caller can fall back to the curated roster.
+async function getDiscoveredHyperliquidWhales(): Promise<
+  CuratedWhale[] | null
+> {
+  const now = Date.now();
+  const cached = await cacheGetJson<DiscoveryCacheEntry>(
+    DISCOVERY_CACHE_KEY,
+  ).catch(() => null);
+  if (cached && now - cached.refreshedAt < DISCOVERY_FRESH_MS) {
+    return cached.whales;
+  }
+
+  let board: HLLeaderboard;
+  try {
+    board = await getLeaderboard();
+  } catch (err) {
+    if (!isHyperliquidRateLimitError(err)) {
+      console.warn("[whales] Hyperliquid leaderboard fetch failed:", err);
+    }
+    // Sticky-on-failure: serve the last good roster if we have one.
+    return cached?.whales ?? null;
+  }
+
+  const whales = selectTradeableWhales(board.leaderboardRows ?? [], {
+    limit: DISCOVERY_LIMIT,
+  });
+  if (whales.length === 0) {
+    return cached?.whales ?? null;
+  }
+
+  await cacheSetJson(
+    DISCOVERY_CACHE_KEY,
+    { refreshedAt: now, whales } satisfies DiscoveryCacheEntry,
+    { ttlSeconds: DISCOVERY_STORE_TTL_SECONDS },
+  ).catch(() => undefined);
+  return whales;
+}
+
+// Whale roster for the refresh tick: dynamic leaderboard discovery (plus any
+// hand-pinned whales) when available, falling back to the curated roster so the
+// feed never goes dark.
+async function resolveHyperliquidRoster(): Promise<CuratedWhale[]> {
+  const discovered = await getDiscoveredHyperliquidWhales();
+  if (discovered && discovered.length > 0) {
+    return [...PINNED_HYPERLIQUID_WHALES, ...discovered];
+  }
+  return CURATED_WHALES;
+}
+
 export async function refreshHyperliquidWhales(): Promise<{
   whalesSeen: number;
   positionsSeen: number;
 }> {
+  const roster = await resolveHyperliquidRoster();
   const uniqueWhales = [
     ...new Map(
-      CURATED_WHALES.map((whale) => [whale.address.toLowerCase(), whale]),
+      roster.map((whale) => [whale.address.toLowerCase(), whale]),
     ).values(),
   ];
   const mids = await getAllMids().catch(() => ({} as Record<string, string>));
 
   let positionsSeen = 0;
+  let unreachableAccounts = 0;
   const snapshotObservedAt = new Date();
   const snapshotAccounts: string[] = [];
   const snapshotWhales: WhaleRecord[] = [];
@@ -109,6 +189,7 @@ export async function refreshHyperliquidWhales(): Promise<{
       try {
         state = await getClearinghouseState(account);
       } catch (err) {
+        unreachableAccounts += 1;
         if (!isHyperliquidRateLimitError(err)) {
           console.warn(`[whales] Hyperliquid state failed for ${account}:`, err);
         }
@@ -131,21 +212,7 @@ export async function refreshHyperliquidWhales(): Promise<{
       const openPositionIds: string[] = [];
       const now = new Date(state.time);
       const sourceNow = Number.isNaN(now.getTime()) ? snapshotObservedAt : now;
-      const sourceFills =
-        (state.assetPositions ?? []).length === 0
-          ? []
-          : await getUserFillsByTime(
-              account,
-              sourceNow.getTime() - OPEN_TIME_LOOKBACK_MS,
-            ).catch((err) => {
-              if (!isHyperliquidRateLimitError(err)) {
-                console.warn(
-                  `[whales] Hyperliquid fills failed for ${account}:`,
-                  err,
-                );
-              }
-              return [];
-            });
+      const assetPositions = state.assetPositions ?? [];
       const existingOpenPositions = await getOpenWhalePositionsForSource({
         source: "hyperliquid",
         sourceAccount: account,
@@ -159,7 +226,39 @@ export async function refreshHyperliquidWhales(): Promise<{
           return key === null ? [] : [[key, position]];
         }),
       );
-      for (const assetPosition of state.assetPositions ?? []) {
+      // Fills exist only to discover a position's open time. Once that time is
+      // confirmed from source and persisted, it never changes — so re-pull fills
+      // only when some current position is new or still unconfirmed. Skipping the
+      // redundant 90-day fills query spares a per-whale Hyperliquid call that
+      // would otherwise contend with the clearinghouse (position) fetch for the
+      // shared rate-limit budget.
+      const needsOpenTimeDiscovery = assetPositions.some((assetPosition) => {
+        const signedSize = Number(assetPosition.position.szi);
+        if (!Number.isFinite(signedSize) || signedSize === 0) return true;
+        const family = positionFamilyKey({
+          market: assetPosition.position.coin,
+          side: signedSize > 0 ? "long" : "short",
+        });
+        const existing =
+          family === null ? undefined : existingOpenByFamily.get(family);
+        return existing === undefined || !hasKnownHyperliquidOpenTime(existing);
+      });
+      const sourceFills =
+        assetPositions.length === 0 || !needsOpenTimeDiscovery
+          ? []
+          : await getUserFillsByTime(
+              account,
+              sourceNow.getTime() - OPEN_TIME_LOOKBACK_MS,
+            ).catch((err) => {
+              if (!isHyperliquidRateLimitError(err)) {
+                console.warn(
+                  `[whales] Hyperliquid fills failed for ${account}:`,
+                  err,
+                );
+              }
+              return [];
+            });
+      for (const assetPosition of assetPositions) {
         try {
           const mapped = mapHyperliquidPosition({
             sourceAccount: account,
@@ -239,6 +338,12 @@ export async function refreshHyperliquidWhales(): Promise<{
     } catch (err) {
       console.warn("[whales] Hyperliquid live cache write failed:", err);
     }
+  }
+
+  if (unreachableAccounts > 0) {
+    console.warn(
+      `[whales] Hyperliquid refresh degraded: ${unreachableAccounts}/${uniqueWhales.length} accounts unreachable after retries`,
+    );
   }
 
   return { whalesSeen: uniqueWhales.length, positionsSeen };

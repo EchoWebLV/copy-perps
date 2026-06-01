@@ -30,4 +30,22 @@ describe("formatWhalePositionAge", () => {
       ),
     ).toEqual({ label: "Seen", value: "<1M" });
   });
+
+  it("measures the Seen value from first-observed time, not the last poll", () => {
+    // lastSeenAt resets to now every refresh tick, so it always reads as
+    // snapshot staleness (seconds). The honest "Seen" duration is how long the
+    // position has been on our tape, which is the sticky first-observed
+    // openedAt — it grows over time instead of freezing at "<1M".
+    const now = 10 * 24 * 60 * 60_000;
+    expect(
+      formatWhalePositionTime(
+        {
+          openedAtKnown: false,
+          openedAtMs: now - 3 * 24 * 60 * 60_000, // first spotted 3 days ago
+          lastSeenAtMs: now - 30_000, // last polled 30s ago
+        },
+        now,
+      ),
+    ).toEqual({ label: "Seen", value: "3D" });
+  });
 });

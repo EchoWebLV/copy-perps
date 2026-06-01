@@ -194,13 +194,34 @@ describe("buildPulseItems", () => {
     expect(items.find((item) => item.position.positionId === "unsupported")).toBeUndefined();
   });
 
-  it("does not call an observed Hyperliquid position a fresh open", () => {
+  it("surfaces a recent observed Hyperliquid position without calling it a fresh open", () => {
     const items = buildPulseItems(
       [
         position({
           positionId: "observed-hl",
           openedAtKnown: false,
           openedAtMs: NOW - 30_000,
+          lastSeenAtMs: NOW - 30_000,
+          notionalUsd: 100_000,
+          unrealizedPnlPct: 0,
+        }),
+      ],
+      NOW,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.position.positionId).toBe("observed-hl");
+    expect(items[0]?.kind).not.toBe("fresh_open");
+    expect(items[0]?.kind).toBe("new_on_tape");
+  });
+
+  it("does not surface an observed position once it ages past the fresh window", () => {
+    const items = buildPulseItems(
+      [
+        position({
+          positionId: "observed-old",
+          openedAtKnown: false,
+          openedAtMs: NOW - 30 * 60_000,
           lastSeenAtMs: NOW - 30_000,
           notionalUsd: 100_000,
           unrealizedPnlPct: 0,

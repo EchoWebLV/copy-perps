@@ -4,6 +4,7 @@ import type { HLClearinghouseState } from "@/lib/hyperliquid/client";
 const getClearinghouseState = vi.fn();
 const getAllMids = vi.fn();
 const getUserFillsByTime = vi.fn();
+const getLeaderboard = vi.fn();
 const upsertWhale = vi.fn();
 const upsertWhalePosition = vi.fn();
 const markMissingWhalePositionsClosed = vi.fn();
@@ -14,6 +15,7 @@ vi.mock("@/lib/hyperliquid/client", () => ({
   getClearinghouseState,
   getAllMids,
   getUserFillsByTime,
+  getLeaderboard,
 }));
 
 vi.mock("./repository", () => ({
@@ -27,13 +29,51 @@ vi.mock("./live-cache", () => ({
   writeWhaleLiveSnapshot,
 }));
 
+// Stateful in-memory stand-in for the Redis cache so we can assert the
+// leaderboard discovery is cached across refresh ticks.
+const cacheStore = new Map<string, string>();
+vi.mock("@/lib/cache/redis", () => ({
+  cacheGetJson: vi.fn(async (key: string) => {
+    const raw = cacheStore.get(key);
+    return raw === undefined ? null : JSON.parse(raw);
+  }),
+  cacheSetJson: vi.fn(async (key: string, value: unknown) => {
+    cacheStore.set(key, JSON.stringify(value));
+  }),
+  cacheDelete: vi.fn(async (key: string) => {
+    cacheStore.delete(key);
+  }),
+}));
+
 vi.mock("@/lib/hyperliquid/whales", () => ({
   CURATED_WHALES: [
     { address: "0xabc", label: "HL Alpha" },
     { address: "0xempty", label: "HL Empty" },
   ],
+  PINNED_HYPERLIQUID_WHALES: [],
   truncateEthAddress: (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`,
 }));
+
+// A leaderboard row that clears every filter (in-band equity, positive 7d
+// PnL, modest turnover) so it survives selectTradeableWhales().
+function leaderboardRow(
+  address: string,
+  weekPnl: number,
+  displayName: string | null = null,
+) {
+  return {
+    ethAddress: address,
+    accountValue: "1000000",
+    displayName,
+    prize: 0,
+    windowPerformances: [
+      ["day", { pnl: "1000", roi: "0.01", vlm: "2000000" }],
+      ["week", { pnl: String(weekPnl), roi: "0.05", vlm: "5000000" }],
+      ["month", { pnl: "10000", roi: "0.1", vlm: "20000000" }],
+      ["allTime", { pnl: "50000", roi: "0.5", vlm: "100000000" }],
+    ],
+  };
+}
 
 function clearinghouseState(
   overrides: Partial<HLClearinghouseState> = {},
@@ -71,6 +111,7 @@ function clearinghouseState(
 describe("refreshHyperliquidWhales", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    cacheStore.clear();
     getAllMids.mockResolvedValue({ ETH: "2100" });
     getClearinghouseState.mockImplementation(async (account: string) =>
       account === "0xempty"
@@ -78,6 +119,9 @@ describe("refreshHyperliquidWhales", () => {
         : clearinghouseState(),
     );
     getUserFillsByTime.mockResolvedValue([]);
+    // Default: no leaderboard rows → discovery yields nothing → the pipeline
+    // falls back to the curated roster, which is what the legacy tests assert.
+    getLeaderboard.mockResolvedValue({ leaderboardRows: [] });
     upsertWhale.mockResolvedValue(undefined);
     upsertWhalePosition.mockResolvedValue(undefined);
     markMissingWhalePositionsClosed.mockResolvedValue(undefined);
@@ -299,6 +343,42 @@ describe("refreshHyperliquidWhales", () => {
     );
   });
 
+  it("skips the Hyperliquid fills fetch once every open position has a confirmed source open time", async () => {
+    const openedAt = new Date("2026-05-23T11:42:00.000Z");
+    getOpenWhalePositionsForSource.mockImplementation(async ({ sourceAccount }) =>
+      sourceAccount === "0xabc"
+        ? [
+            {
+              id: "hyperliquid:0xabc:ETH:long:1779536520000",
+              source: "hyperliquid",
+              sourceAccount,
+              market: "ETH",
+              side: "long",
+              openedAt,
+              raw: { openedAtSource: "source" },
+            },
+          ]
+        : [],
+    );
+
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+
+    await refreshHyperliquidWhales();
+
+    // The open time was already confirmed from source on a prior tick, so there
+    // is nothing new to discover. Re-pulling 90 days of fills every tick would
+    // burn a per-whale Hyperliquid call that competes with the clearinghouse
+    // (position) fetch for rate-limit budget — skip it.
+    expect(getUserFillsByTime).not.toHaveBeenCalled();
+    // The confirmed open time is still carried through unchanged.
+    expect(upsertWhalePosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "hyperliquid:0xabc:ETH:long:1779536520000",
+        openedAt,
+      }),
+    );
+  });
+
   it("does not warn for Hyperliquid 429 state rate limits", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     getClearinghouseState.mockRejectedValue(
@@ -388,5 +468,68 @@ describe("refreshHyperliquidWhales", () => {
         openPositionIds: ["hyperliquid:0xabc:ETH:long:1779536520000"],
       }),
     );
+  });
+
+  it("discovers Hyperliquid whales from the leaderboard and uses them as the roster", async () => {
+    getLeaderboard.mockResolvedValue({
+      leaderboardRows: [
+        leaderboardRow("0xWhaleOne", 9000, "Whale One"),
+        leaderboardRow("0xWhaleTwo", 5000),
+      ],
+    });
+    getClearinghouseState.mockImplementation(async () => clearinghouseState());
+
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+    const result = await refreshHyperliquidWhales();
+
+    // The roster is the discovered leaderboard whales (lowercased), not the
+    // curated fallback.
+    expect(result.whalesSeen).toBe(2);
+    expect(upsertWhale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "hyperliquid:0xwhaleone",
+        sourceAccount: "0xwhaleone",
+        displayName: "Whale One",
+      }),
+    );
+    expect(upsertWhale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "hyperliquid:0xwhaletwo",
+        sourceAccount: "0xwhaletwo",
+      }),
+    );
+    // The curated fallback addresses must NOT be polled when discovery works.
+    expect(getClearinghouseState).not.toHaveBeenCalledWith("0xabc");
+  });
+
+  it("caches leaderboard discovery so a follow-up refresh skips the heavy fetch", async () => {
+    getLeaderboard.mockResolvedValue({
+      leaderboardRows: [leaderboardRow("0xWhaleOne", 9000)],
+    });
+
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+    await refreshHyperliquidWhales();
+    await refreshHyperliquidWhales();
+
+    // The ~30 MB leaderboard is pulled once and reused from cache on the
+    // second tick, not re-fetched every refresh.
+    expect(getLeaderboard).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the curated roster when leaderboard discovery is unavailable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    getLeaderboard.mockRejectedValue(
+      new Error("Hyperliquid leaderboard 503: down"),
+    );
+
+    const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
+    const result = await refreshHyperliquidWhales();
+
+    // No cache + failed fetch → fall back to the curated roster so the feed
+    // never goes dark.
+    expect(result.whalesSeen).toBe(2);
+    expect(getClearinghouseState).toHaveBeenCalledWith("0xabc");
+    expect(getClearinghouseState).toHaveBeenCalledWith("0xempty");
+    warn.mockRestore();
   });
 });

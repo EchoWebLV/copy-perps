@@ -9,6 +9,7 @@ const MAX_ITEMS = 80;
 
 export type PulseItemKind =
   | "fresh_open"
+  | "new_on_tape"
   | "big_position"
   | "deep_profit"
   | "pain_trade"
@@ -128,6 +129,30 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `Late entry risk on ${position.market} ${position.side}`,
         context: shorten(position.analysis.entryGapWarning, 132),
+        nowMs,
+      }),
+    );
+  }
+
+  // Catch-all for a freshly observed position whose source open time we could
+  // not confirm (e.g. Hyperliquid fills rate-limited). Without this it would
+  // match no category and silently drop off the tape. We avoid the "fresh open"
+  // label because the open time is observed, not confirmed.
+  if (
+    candidates.length === 0 &&
+    openedAtKnown === false &&
+    openedAgoMs <= FRESH_OPEN_MS
+  ) {
+    candidates.push(
+      makeItem({
+        position,
+        kind: "new_on_tape",
+        score: baseScore(position, nowMs) + 70,
+        eyebrow: "New on the tape",
+        headline:
+          performanceHeadline(position) ??
+          `${position.displayName} just hit the tape with ${position.market} ${position.side} ${position.leverage}x`,
+        context: `${formatUsd(position.notionalUsd)} live on ${position.source}. Freshly spotted — the exact open time isn't confirmed yet.`,
         nowMs,
       }),
     );

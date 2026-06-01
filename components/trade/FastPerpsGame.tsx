@@ -31,6 +31,7 @@ import {
 } from "@/lib/flash/position-value";
 import {
   buildChannel,
+  type ChannelLine,
   type TriggerKind,
   type TriggerLevelInput,
 } from "@/lib/flash/graph-channel";
@@ -83,6 +84,9 @@ const MAX_GRAPH_POINTS = 120;
 const GRAPH_SAMPLE_MS = 80;
 const GRAPH_SMOOTHING = 0.6; // snappy: tip tracks each Flash mark, no jitter
 const LIVE_DOT_PULSE = true; // soft heartbeat on the live dot (set false = still)
+const CURVE_TENSION = 0.16; // Catmull-Rom→bezier smoothing for the live value curve
+const WINDOW_K = 0.7; // auto-range padding: live series fills ~1/(2·K) ≈ 71% of graph height
+const IDLE_LINE = "rgba(250,250,242,0.32)"; // gray live-mark line before a position is open
 
 type Market = FlashMarketSymbol;
 type FlashScalpMarket = (typeof FLASH_SCALP_MARKETS)[number];
@@ -355,6 +359,12 @@ export function FastPerpsGame() {
     : livePnl >= 0
       ? GREEN
       : RED;
+  // Idle hero chart: before a position is open the big left graph plots the
+  // selected market's live mark in gray, so the panel is alive and flips to the
+  // colored money line the moment the user opens.
+  const idleMarkUsd = isFlashScalpMarket(market)
+    ? liveFlashMarks[market]?.priceUsd ?? 0
+    : 0;
   const selectedTriggers = useMemo(() => {
     const list = selectedPosition?.triggers ?? [];
     const pick = (kind: TriggerKind): TriggerLevelInput | null => {
@@ -847,10 +857,10 @@ export function FastPerpsGame() {
         </div>
       )}
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_auto] lg:content-start lg:gap-x-4 lg:gap-y-3">
         <section
           aria-label="Desktop trade controls"
-          className="min-h-0 lg:flex lg:flex-col lg:overflow-y-auto"
+          className="min-h-0 lg:col-start-2 lg:row-start-1"
         >
           <div className="grid grid-cols-3 gap-1.5">
             {FLASH_SCALP_MARKETS.map((nextMarket) => {
@@ -906,24 +916,64 @@ export function FastPerpsGame() {
             })}
           </div>
 
-          {selectedPosition && (
-            <div
-              className="mt-3 h-[180px] overflow-hidden rounded-2xl lg:h-[280px]"
-              style={{ background: PANEL, border: `1px solid ${FAINT}` }}
-            >
-              <LivePerpGraph
-                value={graphValue}
-                stakeUsd={stakeForPosition(selectedPosition, selectedPositionView)}
-                color={graphColor}
-                activeKey={selectedPosition.positionPubkey}
-                tp={selectedTriggers.tp}
-                sl={selectedTriggers.sl}
-              />
-            </div>
-          )}
+        </section>
 
+        <section
+          aria-label="Live chart"
+          className="min-h-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:flex-col"
+        >
+          {/* The hero graph. Idle (no position) it plots the selected market's
+              live mark in gray; the instant a position is open it flips to the
+              colored money line. Desktop always shows it and lets it fill the
+              full column height; mobile only mounts it (h-[180px]) when a
+              position exists so the phone frame stays compact. */}
           <div
-            className={`mt-2 grid gap-2 ${selectedPosition ? "grid-cols-3" : "grid-cols-2"}`}
+            className={`overflow-hidden rounded-2xl ${
+              selectedPosition ? "mt-3 h-[180px]" : "hidden"
+            } lg:mt-0 lg:block lg:h-auto lg:min-h-0 lg:flex-1`}
+            style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+          >
+            <LivePerpGraph
+              idle={!selectedPosition}
+              symbol={market}
+              value={selectedPosition ? graphValue : idleMarkUsd}
+              stakeUsd={
+                selectedPosition
+                  ? stakeForPosition(selectedPosition, selectedPositionView)
+                  : effectiveStake
+              }
+              color={selectedPosition ? graphColor : IDLE_LINE}
+              activeKey={
+                selectedPosition
+                  ? selectedPosition.positionPubkey
+                  : `idle-${market}`
+              }
+              tp={selectedPosition ? selectedTriggers.tp : null}
+              sl={selectedPosition ? selectedTriggers.sl : null}
+              entryPriceUsd={
+                selectedPosition ? selectedPosition.entryPriceUsd : idleMarkUsd
+              }
+              liqPriceUsd={
+                selectedPosition
+                  ? selectedPosition.liquidationPriceUsd ?? null
+                  : null
+              }
+              leverage={
+                selectedPosition
+                  ? leverageForPosition(selectedPosition, selectedPositionView)
+                  : leverage
+              }
+              side={selectedPosition ? selectedPosition.side : side}
+            />
+          </div>
+        </section>
+
+        <aside
+          aria-label="Desktop order ticket"
+          className="mt-2 flex min-h-0 flex-1 flex-col lg:col-start-2 lg:row-start-2 lg:mt-0 lg:overflow-y-auto"
+        >
+          <div
+            className={`grid gap-2 ${selectedPosition ? "grid-cols-3" : "grid-cols-2"}`}
           >
             <PreviewMetric
               label="Stake"
@@ -955,24 +1005,6 @@ export function FastPerpsGame() {
               />
             )}
           </div>
-
-          {selectedPosition && (
-            <TriggerChips
-              triggers={selectedTriggers}
-              disabled={busy}
-              onAdd={(kind) => {
-                const presets = kind === "tp" ? TP_PRESETS : SL_PRESETS;
-                void requestTrigger(kind, presets[1]); // suggested middle preset
-              }}
-              onCancel={(kind) => void cancelTrigger(kind)}
-            />
-          )}
-        </section>
-
-        <aside
-          aria-label="Desktop order ticket"
-          className="mt-2 flex min-h-0 flex-1 flex-col lg:mt-0 lg:overflow-y-auto"
-        >
           {!selectedPosition && (
             <>
               <div className="rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
@@ -1076,16 +1108,84 @@ export function FastPerpsGame() {
             </>
           )}
 
-          {selectedPosition?.liquidationPriceUsd != null && (
-            <div className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest" style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}>
-              Mark {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)} · Liq{" "}
-              {fmtPrice(selectedPosition.liquidationPriceUsd)}
-              {liquidationMove == null ? "" : ` · ${liquidationMove.toFixed(1)}%`}
-              {" · "}
-              Exit {fmtUsd(exitValue)}
-              {" · "}
-              {fmtSignedPct(liveRoi)}
-            </div>
+          {selectedPosition && (
+            <>
+              {/* Mobile keeps the compact one-line strip so the phone view
+                  stays inside its no-scroll frame. */}
+              <div
+                className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest lg:hidden"
+                style={{ background: PANEL, color: DIM, border: `1px solid ${FAINT}` }}
+              >
+                Mark {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)}
+                {" · Liq "}
+                {selectedPosition.liquidationPriceUsd != null
+                  ? fmtPrice(selectedPosition.liquidationPriceUsd)
+                  : "—"}
+                {liquidationMove == null ? "" : ` · ${Math.abs(liquidationMove).toFixed(1)}% away`}
+                {" · "}
+                <span style={{ color: graphColor }}>{fmtSignedPct(liveRoi)}</span>
+              </div>
+
+              {/* Desktop order ticket: live price + risk stats stacked into the
+                  right column so it reads like a real perp terminal instead of a
+                  lone pill floating in dead space. Money (stake / P/L / total)
+                  lives in the left metrics; this side is price + risk + the exit
+                  preview that sits right above CLOSE. */}
+              <div
+                className="hidden rounded-xl p-3 lg:block"
+                style={{ background: PANEL, border: `1px solid ${FAINT}` }}
+              >
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                    Mark
+                  </span>
+                  <span className="text-[15px] font-black tabular-nums" style={{ color: FG }}>
+                    {fmtPrice(selectedPositionView?.markPriceUsd ?? selectedPosition.entryPriceUsd)}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                    Entry
+                  </span>
+                  <span className="text-[15px] font-black tabular-nums" style={{ color: FG }}>
+                    {fmtPrice(selectedPosition.entryPriceUsd)}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: DIM }}>
+                    Liq
+                  </span>
+                  <span className="flex items-baseline gap-1.5 text-[15px] font-black tabular-nums" style={{ color: RED }}>
+                    {selectedPosition.liquidationPriceUsd != null
+                      ? fmtPrice(selectedPosition.liquidationPriceUsd)
+                      : "—"}
+                    {liquidationMove != null && (
+                      <span className="text-[10px] font-bold" style={{ color: DIM }}>
+                        {Math.abs(liquidationMove).toFixed(1)}% away
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div
+                  className="mt-1 flex items-baseline justify-between gap-3 border-t pt-2"
+                  style={{ borderColor: FAINT }}
+                >
+                  <span className="text-[15px] font-black tabular-nums" style={{ color: graphColor }}>
+                    Exit {fmtUsd(exitValue)}
+                  </span>
+                  <span className="text-[12px] font-black" style={{ color: graphColor }}>
+                    {fmtSignedPct(liveRoi)}
+                  </span>
+                </div>
+              </div>
+
+              <TriggerChips
+                triggers={selectedTriggers}
+                disabled={busy}
+                onPlace={(kind, roiPct) => void requestTrigger(kind, roiPct)}
+                onCancel={(kind) => void cancelTrigger(kind)}
+              />
+            </>
           )}
 
           {(status || error || (!tradeAllowed && !selectedPosition)) && (
@@ -1127,7 +1227,7 @@ export function FastPerpsGame() {
                 type="button"
                 onClick={() => void (selectedPosition ? closeLive() : openLive())}
                 disabled={!readyToTrade || (!selectedPosition && !tradeAllowed)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed lg:w-auto lg:px-8"
+                className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:cursor-not-allowed"
                 style={{
                   background: !readyToTrade
                     ? PANEL
@@ -1185,57 +1285,128 @@ function PreviewMetric({
 
 function TriggerChips({
   triggers,
-  onAdd,
+  onPlace,
   onCancel,
   disabled,
 }: {
   triggers: { tp: TriggerLevelInput | null; sl: TriggerLevelInput | null };
-  onAdd: (kind: TriggerKind) => void;
+  onPlace: (kind: TriggerKind, roiPct: number) => void;
   onCancel: (kind: TriggerKind) => void;
   disabled: boolean;
 }) {
+  // Which kind is mid-pick. Tapping "+ Add" opens this inline picker; the
+  // wallet is only asked to sign once the user taps an actual level — so the
+  // level is always chosen *before* any signature is requested.
+  const [picking, setPicking] = useState<TriggerKind | null>(null);
+
   const chip = (kind: TriggerKind) => {
     const level = kind === "tp" ? triggers.tp : triggers.sl;
     const accent = kind === "tp" ? "#39d98a" : "#ffae42";
-    if (!level) {
+    const label = kind === "tp" ? "TP" : "SL";
+
+    // Active trigger already placed: show the level with a cancel affordance.
+    if (level) {
       return (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onAdd(kind)}
-          className="flex-1 rounded-lg border border-dashed px-2 py-2 text-[11px] font-bold lg:cursor-ns-resize"
-          style={{ borderColor: "#3a3a42", color: "#7a7a84" }}
+        <div
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[11px] font-bold"
+          style={{ borderColor: accent, color: accent }}
         >
-          {kind === "tp" ? "+ Add TP" : "+ Add SL"}
-        </button>
+          <span>
+            {label} {fmtSignedPct(level.roiPct)}
+          </span>
+          <button
+            type="button"
+            aria-label={`Cancel ${kind === "tp" ? "take-profit" : "stop-loss"}`}
+            disabled={disabled}
+            onClick={() => onCancel(kind)}
+            className="-my-2 px-2 py-2 leading-none"
+          >
+            ✕
+          </button>
+        </div>
       );
     }
-    return (
-      <div
-        className="flex flex-1 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[11px] font-bold"
-        style={{ borderColor: accent, color: accent }}
-      >
-        <span>
-          {kind === "tp" ? "TP" : "SL"} {fmtSignedPct(level.roiPct)}
-        </span>
-        <button
-          type="button"
-          aria-label={`Cancel ${kind === "tp" ? "take-profit" : "stop-loss"}`}
-          disabled={disabled}
-          onClick={() => onCancel(kind)}
-          className="-my-2 px-2 py-2 leading-none"
+
+    // Mid-pick: choose a level first. Only the tapped preset places + signs.
+    if (picking === kind) {
+      const presets = kind === "tp" ? TP_PRESETS : SL_PRESETS;
+      return (
+        <div
+          className="flex flex-1 items-center gap-1 rounded-lg border px-1 py-1"
+          style={{ borderColor: accent }}
         >
-          ✕
-        </button>
-      </div>
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setPicking(null);
+                onPlace(kind, preset);
+              }}
+              className="flex-1 rounded-md px-1 py-1.5 text-[11px] font-black lg:cursor-ns-resize"
+              style={{ background: `${accent}22`, color: accent }}
+            >
+              {fmtSignedPct(preset)}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="Dismiss level picker"
+            onClick={() => setPicking(null)}
+            className="px-1.5 py-1 text-[11px] leading-none"
+            style={{ color: "#7a7a84" }}
+          >
+            ✕
+          </button>
+        </div>
+      );
+    }
+
+    // Default ghost button: opens the picker — no signature yet.
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setPicking(kind)}
+        className="flex-1 rounded-lg border border-dashed px-2 py-2 text-[11px] font-bold lg:cursor-ns-resize"
+        style={{ borderColor: "#3a3a42", color: "#7a7a84" }}
+      >
+        {kind === "tp" ? "+ Add TP" : "+ Add SL"}
+      </button>
     );
   };
+
   return (
     <div className="mt-2 flex gap-2">
       {chip("tp")}
       {chip("sl")}
     </div>
   );
+}
+
+// Smooth a polyline into a flowing cubic-bezier curve so the live trail reads
+// like a money chart instead of a hand-drawn zig-zag.
+function smoothLine(pts: Array<{ x: number; y: number }>): string {
+  if (pts.length === 0) return "";
+  if (pts.length < 3) {
+    return pts
+      .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join(" ");
+  }
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) * CURVE_TENSION;
+    const c1y = p1.y + (p2.y - p0.y) * CURVE_TENSION;
+    const c2x = p2.x - (p3.x - p1.x) * CURVE_TENSION;
+    const c2y = p2.y - (p3.y - p1.y) * CURVE_TENSION;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
 }
 
 function LivePerpGraph({
@@ -1245,6 +1416,12 @@ function LivePerpGraph({
   activeKey,
   tp,
   sl,
+  entryPriceUsd,
+  liqPriceUsd,
+  leverage,
+  side,
+  idle = false,
+  symbol,
 }: {
   value: number;
   stakeUsd: number;
@@ -1252,6 +1429,16 @@ function LivePerpGraph({
   activeKey: string;
   tp: TriggerLevelInput | null;
   sl: TriggerLevelInput | null;
+  entryPriceUsd: number;
+  liqPriceUsd: number | null;
+  leverage: number;
+  side: TradeSide;
+  // Idle hero state: no open position yet. The graph plots the selected
+  // market's live mark in gray with no money-channel reference lines, so the
+  // panel breathes before the trade and lights up into the colored value line
+  // the moment a position exists.
+  idle?: boolean;
+  symbol?: string;
 }) {
   const [points, setPoints] = useState<number[]>([]);
   const displayRef = useRef(value);
@@ -1276,116 +1463,255 @@ function LivePerpGraph({
     return () => clearInterval(id);
   }, [activeKey]);
 
-  const width = 320;
-  const height = 170;
-  const pad = 18;
+  // Render at the container's real pixel size so a 320-wide viewBox isn't
+  // stretched non-uniformly on desktop (that distortion is what made strokes,
+  // dashes and text look smeared on wide screens).
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 360, h: 200 });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ w: Math.round(rect.width), h: Math.round(rect.height) });
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const width = size.w;
+  const height = size.h;
+  const pad = 16;
+  const floorY = height - pad;
+  const plotH = height - 2 * pad;
 
   const channel = buildChannel({ stakeUsd, valueUsd: value, tp, sl });
   const series = points.length > 0 ? points : [value];
 
+  // Auto-range the Y axis to the live trail rather than the full liq→TP domain.
+  // The fixed domain squashed every tick into a sliver near the top (huge dead
+  // space, no visible amplitude). Centering on the trail with a minimum span +
+  // padding lets the line fill the height and actually move. WINDOW_K sets how
+  // much of the height the data band occupies (≈ 1 / (2·K)).
+  const lo = Math.min(...series);
+  const hi = Math.max(...series);
+  const mid = (lo + hi) / 2;
+  const minSpan = Math.max(Math.abs(value) * 0.05, 0.02);
+  const span = Math.max(hi - lo, minSpan);
+  const winMin = mid - span * WINDOW_K;
+  const winMax = mid + span * WINDOW_K;
+  const winRange = winMax - winMin || 1;
+
   const toX = (i: number) =>
     pad + (i / Math.max(1, series.length - 1)) * (width - 2 * pad);
-  const toY = (v: number) => channel.valueToY(v, height, pad);
+  const toY = (v: number) => {
+    const t = Math.min(1, Math.max(0, (v - winMin) / winRange));
+    return floorY - t * plotH;
+  };
 
-  const linePath = series
-    .map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`)
-    .join(" ");
+  const pts = series.map((v, i) => ({ x: toX(i), y: toY(v) }));
+  const linePath = smoothLine(pts);
+
+  const firstX = pts[0]?.x ?? toX(0);
+  const lastX = pts[pts.length - 1]?.x ?? toX(0);
   const areaPath =
-    series.length > 0
-      ? `${linePath} L${toX(series.length - 1).toFixed(1)},${(height - pad).toFixed(
-          1,
-        )} L${toX(0).toFixed(1)},${(height - pad).toFixed(1)} Z`
+    pts.length > 0
+      ? `${linePath} L${lastX.toFixed(1)},${floorY.toFixed(1)} L${firstX.toFixed(1)},${floorY.toFixed(1)} Z`
       : "";
 
-  const tipX = toX(series.length - 1);
-  const tipY = toY(series[series.length - 1] ?? value);
+  const tip = pts[pts.length - 1] ?? { x: toX(0), y: toY(value) };
+
+  // Translate any channel line's ROI into the SOL price a trader actually reads:
+  //   roi% = priceMove% · leverage · sideSign · 100  ⇒  price = entry·(1 + move)
+  const sideSign = side === "long" ? 1 : -1;
+  const priceForRoi = (roiPct: number): number => {
+    if (!Number.isFinite(entryPriceUsd) || entryPriceUsd <= 0 || leverage <= 0) {
+      return entryPriceUsd;
+    }
+    return entryPriceUsd * (1 + roiPct / (leverage * sideSign * 100));
+  };
+  const priceLabel = (id: string, roiPct: number): string => {
+    if (id === "entry") return fmtPrice(entryPriceUsd);
+    if (id === "liq") return fmtPrice(liqPriceUsd ?? priceForRoi(-100));
+    return fmtPrice(priceForRoi(roiPct));
+  };
 
   const lineColor = (id: string): string => {
     if (id === "tp") return "#39d98a";
     if (id === "sl") return "#ffae42";
     if (id === "liq") return "#ff3b3b";
-    return "rgba(255,255,255,0.38)";
+    return "rgba(255,255,255,0.45)";
   };
   const roleLabel = (id: string): string =>
     id === "liq" ? "LIQ" : id === "entry" ? "entry" : id.toUpperCase();
 
+  // In-window reference levels draw in place; the nearest level above and below
+  // pin to the edges as guard rails (your nearest target + nearest threat) so
+  // they stay informative without re-squashing the line or stacking labels.
+  const inWindow = channel.lines.filter(
+    (l) => l.valueUsd >= winMin && l.valueUsd <= winMax,
+  );
+  const nearestAbove = channel.lines
+    .filter((l) => l.valueUsd > winMax)
+    .sort((a, b) => a.valueUsd - b.valueUsd)[0];
+  const nearestBelow = channel.lines
+    .filter((l) => l.valueUsd < winMin)
+    .sort((a, b) => b.valueUsd - a.valueUsd)[0];
+  // Idle hero shows just the gray live-mark line — no money-channel guard rails
+  // (there is no position to risk yet). They reappear the moment a trade opens.
+  const refLines: Array<{
+    line: ChannelLine;
+    y: number;
+    edge: "top" | "bottom" | null;
+  }> = idle
+    ? []
+    : [
+        ...inWindow.map((line) => ({ line, y: toY(line.valueUsd), edge: null })),
+        ...(nearestAbove
+          ? [{ line: nearestAbove, y: pad, edge: "top" as const }]
+          : []),
+        ...(nearestBelow
+          ? [{ line: nearestBelow, y: floorY, edge: "bottom" as const }]
+          : []),
+      ];
+
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height="100%"
-      preserveAspectRatio="none"
-      aria-label="Live position money channel"
-    >
-      <defs>
-        <linearGradient id="vfill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.4" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
+    <div ref={containerRef} className="h-full w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        aria-label="Live position money channel"
+      >
+        <defs>
+          <linearGradient id="vfill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.34" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+          <filter id="tipGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2.4" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
 
-      {/* Liquidation death-zone band at the floor. */}
-      <rect
-        x="0"
-        y={toY(channel.minValue) - 8}
-        width={width}
-        height="8"
-        fill="#ff3b3b"
-        opacity="0.18"
-      />
+        {/* Area fill under the live curve. */}
+        {areaPath && <path d={areaPath} fill="url(#vfill)" />}
 
-      {/* Channel reference lines from the geometry helper — one per role
-          (tp ceiling / entry baseline / sl floor / liq floor). Each carries its
-          role as a data-line marker for styling and contract tests. */}
-      {channel.lines.map((line) => {
-        const y = toY(line.valueUsd);
-        return (
-          <g key={line.id} data-line={line.id}>
-            <line
-              x1="0"
-              y1={y}
-              x2={width - 46}
-              y2={y}
-              stroke={lineColor(line.id)}
-              strokeWidth={line.id === "liq" ? 1.5 : 1}
-              strokeDasharray={line.id === "liq" ? undefined : "5 4"}
+        {/* Reference levels — in-window lines in place, nearest above/below
+            pinned to the edges as guard rails. Each keeps its role as a
+            data-line marker and is labelled with its SOL price. */}
+        {refLines.map(({ line, y, edge }) => {
+          const stroke = lineColor(line.id);
+          const labelY = edge === "top" ? y + 11 : y - 4;
+          const arrow = edge === "top" ? " ↑" : edge === "bottom" ? " ↓" : "";
+          return (
+            <g key={line.id} data-line={line.id} opacity={edge ? 0.72 : 1}>
+              <line
+                x1={pad}
+                y1={y}
+                x2={width - pad}
+                y2={y}
+                stroke={stroke}
+                strokeWidth={line.id === "liq" ? 1.4 : 1}
+                strokeDasharray={
+                  edge ? "2 4" : line.id === "liq" ? undefined : "4 5"
+                }
+                opacity={line.id === "entry" && !edge ? 0.55 : 0.85}
+              />
+              <text
+                x={pad + 2}
+                y={labelY}
+                fill={stroke}
+                fontSize="9"
+                fontWeight="800"
+                stroke={BG}
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke" }}
+              >
+                {roleLabel(line.id)}
+              </text>
+              <text
+                x={width - pad - 2}
+                y={labelY}
+                textAnchor="end"
+                fill={stroke}
+                fontSize="10"
+                fontWeight="800"
+                stroke={BG}
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke" }}
+              >
+                {priceLabel(line.id, line.roiPct)}
+                {arrow}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Live value curve + glowing tip. */}
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle cx={tip.x} cy={tip.y} r="4" fill={color} filter="url(#tipGlow)">
+          {LIVE_DOT_PULSE && (
+            <animate
+              attributeName="r"
+              values="3.5;5;3.5"
+              dur="1.4s"
+              repeatCount="indefinite"
             />
-            <text x="4" y={y - 3} fill={lineColor(line.id)} fontSize="8.5" fontWeight="700">
-              {roleLabel(line.id)}
+          )}
+        </circle>
+
+        {/* Idle hero label: a LIVE badge + the current mark so the gray pre-trade
+            chart reads as a live ticker, not a dead placeholder. */}
+        {idle && (
+          <>
+            <text
+              x={pad + 2}
+              y={pad + 4}
+              fill="rgba(250,250,242,0.55)"
+              fontSize="9"
+              fontWeight="800"
+              stroke={BG}
+              strokeWidth="2.5"
+              strokeLinejoin="round"
+              style={{ paintOrder: "stroke", letterSpacing: "0.14em" }}
+            >
+              {`LIVE${symbol ? ` ${symbol}` : ""}`}
             </text>
             <text
-              x={width - 42}
-              y={y + 3}
-              fill={lineColor(line.id)}
-              fontSize="9"
-              fontWeight={line.id === "entry" ? "400" : "700"}
+              x={width - pad - 2}
+              y={pad + 4}
+              textAnchor="end"
+              fill={FG}
+              fontSize="11"
+              fontWeight="800"
+              stroke={BG}
+              strokeWidth="2.5"
+              strokeLinejoin="round"
+              style={{ paintOrder: "stroke" }}
             >
-              {fmtUsd(line.valueUsd)}
+              {fmtPrice(value)}
             </text>
-          </g>
-        );
-      })}
-
-      {/* P/L fill + responsive value line. */}
-      {areaPath && <path d={areaPath} fill="url(#vfill)" />}
-      <path
-        d={linePath}
-        fill="none"
-        stroke={color}
-        strokeWidth="2.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx={tipX} cy={tipY} r="4.5" fill={color}>
-        {LIVE_DOT_PULSE && (
-          <animate
-            attributeName="r"
-            values="4;5.5;4"
-            dur="1.4s"
-            repeatCount="indefinite"
-          />
+          </>
         )}
-      </circle>
-    </svg>
+      </svg>
+    </div>
   );
 }

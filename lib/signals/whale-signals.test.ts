@@ -526,6 +526,143 @@ describe("whale signals", () => {
     });
   });
 
+  it("caches Hyperliquid portfolio history so a rate-limited refresh keeps the P&L curve", async () => {
+    const { buildWhaleTraderSignals, clearWhaleSignalCachesForTests } =
+      await import("./whale-signals");
+    clearWhaleSignalCachesForTests();
+
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        whales: [
+          whale({
+            id: "hl-cached",
+            source: "hyperliquid",
+            sourceAccount: "0xc0ffee",
+            displayName: "HL 0xc0ffee",
+            avatarUrl: null,
+            tags: ["hyperliquid"],
+          }),
+        ],
+        accounts: ["0xc0ffee"],
+        positions: [
+          position({
+            id: "hl-cached-pos",
+            whaleId: "hl-cached",
+            source: "hyperliquid",
+            sourceAccount: "0xc0ffee",
+            market: "BTC",
+            side: "long",
+            leverage: 10,
+            notionalUsd: 100_000,
+            unrealizedPnlPct: 25,
+          }),
+        ],
+      }),
+    );
+
+    // Portfolio history resolves on the first refresh only. A later refresh
+    // that hits Hyperliquid's rate limit falls back to the base `[]` mock — the
+    // cache must keep serving the last good curve instead of going UNAVAILABLE.
+    mocks.getPortfolio.mockResolvedValueOnce([
+      [
+        "allTime",
+        {
+          accountValueHistory: [
+            [Date.parse("2026-05-22T12:00:00.000Z"), "49000"],
+            [Date.parse("2026-05-23T12:00:00.000Z"), "50000"],
+          ],
+          pnlHistory: [
+            [Date.parse("2026-05-22T12:00:00.000Z"), "900"],
+            [Date.parse("2026-05-23T12:00:00.000Z"), "1500"],
+          ],
+          vlm: "1000000",
+        },
+      ],
+    ]);
+
+    const first = await buildWhaleTraderSignals();
+    const second = await buildWhaleTraderSignals();
+
+    expect(mocks.getPortfolio).toHaveBeenCalledTimes(1);
+    expect(first[0]?.payload.stats.statsSource).toBe("portfolio");
+    expect(second[0]?.payload.stats).toMatchObject({
+      statsSource: "portfolio",
+      pnlAllTimeUsdc: 1500,
+    });
+    expect(second[0]?.payload.stats.pnlCurve.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the cached Hyperliquid P&L curve past the old five-minute window", async () => {
+    const { buildWhaleTraderSignals, clearWhaleSignalCachesForTests } =
+      await import("./whale-signals");
+    clearWhaleSignalCachesForTests();
+
+    const hlSnapshot = (observedIso: string) =>
+      snapshot({
+        source: "hyperliquid",
+        observedAt: new Date(observedIso),
+        accounts: ["0xdecaf"],
+        whales: [
+          whale({
+            id: "hl-ttl",
+            source: "hyperliquid",
+            sourceAccount: "0xdecaf",
+            displayName: "HL 0xdecaf",
+            avatarUrl: null,
+            tags: ["hyperliquid"],
+          }),
+        ],
+        positions: [
+          position({
+            id: "hl-ttl-pos",
+            whaleId: "hl-ttl",
+            source: "hyperliquid",
+            sourceAccount: "0xdecaf",
+            market: "BTC",
+            side: "long",
+            leverage: 10,
+            notionalUsd: 100_000,
+            unrealizedPnlPct: 25,
+            openedAt: new Date(observedIso),
+            lastSeenAt: new Date(observedIso),
+          }),
+        ],
+      });
+
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      hlSnapshot("2026-05-23T11:59:55.000Z"),
+    );
+    mocks.getPortfolio.mockResolvedValueOnce([
+      [
+        "allTime",
+        {
+          accountValueHistory: [
+            [Date.parse("2026-05-23T12:00:00.000Z"), "50000"],
+          ],
+          pnlHistory: [[Date.parse("2026-05-23T12:00:00.000Z"), "1500"]],
+          vlm: "1000000",
+        },
+      ],
+    ]);
+
+    const first = await buildWhaleTraderSignals();
+    expect(first[0]?.payload.stats.statsSource).toBe("portfolio");
+
+    // Six minutes later — past the previous 5-minute TTL. The snapshot is kept
+    // fresh, so the only thing that could flip the curve to "UNAVAILABLE" is the
+    // portfolio cache expiring. With the longer TTL it must stay a cache hit.
+    vi.setSystemTime(new Date("2026-05-23T12:06:00.000Z"));
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      hlSnapshot("2026-05-23T12:05:55.000Z"),
+    );
+
+    const later = await buildWhaleTraderSignals();
+
+    expect(mocks.getPortfolio).toHaveBeenCalledTimes(1);
+    expect(later[0]?.payload.stats.statsSource).toBe("portfolio");
+    expect(later[0]?.payload.stats.pnlAllTimeUsdc).toBe(1500);
+  });
+
   it("caches trader signals for roster API callers", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
     mocks.getLeaderboard.mockResolvedValue([

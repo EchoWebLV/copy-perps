@@ -1,5 +1,75 @@
 const BASE = "https://api.hyperliquid.xyz/info";
 
+// Hyperliquid's public REST endpoint rate-limits aggressively and occasionally
+// hangs. Bare fetches with no timeout/retry are how curated whales "lose
+// connection": one stalled or 429'd request drops that whale from the refresh
+// tick, and with nothing retrying, its live positions age out of the cache.
+// hlPost gives every whale-refresh call a bounded timeout plus retry/backoff on
+// 429, 5xx, network errors, and timeouts.
+const HL_REQUEST_TIMEOUT_MS = 8_000;
+const HL_MAX_ATTEMPTS = 3; // 1 initial + 2 retries
+
+function hlDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hlBackoffMs(attempt: number, retryAfterHeader: string | null): number {
+  if (retryAfterHeader) {
+    const seconds = Number(retryAfterHeader);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.max(250, seconds * 1000);
+    }
+  }
+  return 500 * Math.pow(2, attempt); // 500ms, 1s
+}
+
+function isRetryableHlStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+async function hlPost<T>(
+  body: unknown,
+  label: string,
+  attempt = 0,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HL_REQUEST_TIMEOUT_MS);
+  let r: Response;
+  try {
+    r = await fetch(BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    // Network failure or our own timeout abort — retry with backoff.
+    if (attempt < HL_MAX_ATTEMPTS - 1) {
+      await hlDelay(hlBackoffMs(attempt, null));
+      return hlPost<T>(body, label, attempt + 1);
+    }
+    throw new Error(
+      `Hyperliquid ${label} request failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (isRetryableHlStatus(r.status) && attempt < HL_MAX_ATTEMPTS - 1) {
+    await hlDelay(hlBackoffMs(attempt, r.headers.get("retry-after")));
+    return hlPost<T>(body, label, attempt + 1);
+  }
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`Hyperliquid ${label} ${r.status}: ${txt}`);
+  }
+  return (await r.json()) as T;
+}
+
 export interface HLPosition {
   coin: string;
   szi: string; // signed; negative = short
@@ -39,17 +109,10 @@ export interface HLClearinghouseState {
 export async function getClearinghouseState(
   user: string,
 ): Promise<HLClearinghouseState> {
-  const r = await fetch(BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "clearinghouseState", user }),
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`Hyperliquid clearinghouseState ${r.status}: ${txt}`);
-  }
-  return (await r.json()) as HLClearinghouseState;
+  return hlPost<HLClearinghouseState>(
+    { type: "clearinghouseState", user },
+    "clearinghouseState",
+  );
 }
 
 export interface HLPortfolioWindow {
@@ -61,28 +124,11 @@ export interface HLPortfolioWindow {
 export type HLPortfolio = Array<[string, HLPortfolioWindow]>;
 
 export async function getPortfolio(user: string): Promise<HLPortfolio> {
-  const r = await fetch(BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "portfolio", user }),
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`Hyperliquid portfolio ${r.status}: ${txt}`);
-  }
-  return (await r.json()) as HLPortfolio;
+  return hlPost<HLPortfolio>({ type: "portfolio", user }, "portfolio");
 }
 
 export async function getAllMids(): Promise<Record<string, string>> {
-  const r = await fetch(BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "allMids" }),
-    cache: "no-store",
-  });
-  if (!r.ok) throw new Error(`Hyperliquid allMids ${r.status}`);
-  return (await r.json()) as Record<string, string>;
+  return hlPost<Record<string, string>>({ type: "allMids" }, "allMids");
 }
 
 // Hyperliquid fill direction strings. "Long > Short" (and vice-versa) are
@@ -117,21 +163,86 @@ export async function getUserFillsByTime(
   user: string,
   startTimeMs: number,
 ): Promise<HLFill[]> {
-  const r = await fetch(BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "userFillsByTime",
-      user,
-      startTime: startTimeMs,
-    }),
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`Hyperliquid userFillsByTime ${r.status}: ${txt}`);
+  return hlPost<HLFill[]>(
+    { type: "userFillsByTime", user, startTime: startTimeMs },
+    "userFillsByTime",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Public leaderboard — whale discovery
+// ---------------------------------------------------------------------------
+//
+// Hyperliquid's leaderboard lives on a separate stats host, NOT the info API
+// (the info endpoint 422s on a "leaderboard" type). It returns EVERY trader —
+// the full payload is ~30 MB — so callers must filter it down and cache the
+// result hard rather than re-pulling it on every refresh tick. The shape is a
+// list of rows, each with windowed (day/week/month/allTime) pnl/roi/vlm.
+const HL_LEADERBOARD_URL =
+  "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard";
+// The leaderboard payload is large; give it a longer ceiling than the info
+// calls so a slow-but-healthy download isn't aborted as a timeout.
+const HL_LEADERBOARD_TIMEOUT_MS = 20_000;
+
+export type HLLeaderboardWindow = "day" | "week" | "month" | "allTime";
+
+export interface HLLeaderboardWindowStats {
+  pnl: string;
+  roi: string;
+  vlm: string;
+}
+
+export interface HLLeaderboardRow {
+  ethAddress: string;
+  accountValue: string;
+  windowPerformances: Array<
+    [HLLeaderboardWindow | string, HLLeaderboardWindowStats]
+  >;
+  prize?: number;
+  displayName?: string | null;
+}
+
+export interface HLLeaderboard {
+  leaderboardRows: HLLeaderboardRow[];
+}
+
+export async function getLeaderboard(attempt = 0): Promise<HLLeaderboard> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    HL_LEADERBOARD_TIMEOUT_MS,
+  );
+  let r: Response;
+  try {
+    r = await fetch(HL_LEADERBOARD_URL, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (attempt < HL_MAX_ATTEMPTS - 1) {
+      await hlDelay(hlBackoffMs(attempt, null));
+      return getLeaderboard(attempt + 1);
+    }
+    throw new Error(
+      `Hyperliquid leaderboard request failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  } finally {
+    clearTimeout(timeout);
   }
-  return (await r.json()) as HLFill[];
+
+  if (isRetryableHlStatus(r.status) && attempt < HL_MAX_ATTEMPTS - 1) {
+    await hlDelay(hlBackoffMs(attempt, r.headers.get("retry-after")));
+    return getLeaderboard(attempt + 1);
+  }
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`Hyperliquid leaderboard ${r.status}: ${txt}`);
+  }
+  return (await r.json()) as HLLeaderboard;
 }
 
 // ---------------------------------------------------------------------------
