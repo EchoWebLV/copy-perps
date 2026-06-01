@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import type { WhaleLiveSnapshot } from "@/lib/whales/live-cache";
+import {
+  clearWhaleTraderStatsForTests,
+  writeWhaleTraderStats,
+} from "@/lib/whales/stats-cache";
 
 const mocks = vi.hoisted(() => {
   const query = {
@@ -112,9 +116,10 @@ function snapshot(
 }
 
 describe("whale signals", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
     vi.setSystemTime(new Date("2026-05-23T12:00:00.000Z"));
+    await clearWhaleTraderStatsForTests();
 
     mocks.analysisRows = [];
     mocks.getLeaderboard.mockResolvedValue([]);
@@ -732,6 +737,42 @@ describe("whale signals", () => {
         },
       });
       expect(mocks.getLeaderboard).toHaveBeenCalledTimes(1);
+    } finally {
+      clearWhaleSignalCachesForTests();
+    }
+  });
+
+  it("hydrates last-good roster stats on cold start instead of showing zeros", async () => {
+    await writeWhaleTraderStats({
+      "whale-1": {
+        equityUsdc: 250_000,
+        openInterestUsdc: 460_000,
+        pnl1dUsdc: 1_234.56,
+        pnl7dUsdc: -50,
+        pnl30dUsdc: 9_000,
+        pnlAllTimeUsdc: 42_000,
+        pnlCurve: [{ t: 1, v: 42_000 }],
+        winRatePct1d: null,
+        totalCloses1d: 0,
+        volume1dUsdc: 1_500_000,
+      },
+    });
+
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(snapshot());
+    // Hang the enriched build so the within-budget cold-start local fallback is
+    // what gets served.
+    mocks.getLeaderboard.mockImplementation(() => new Promise(() => {}));
+
+    const { buildCachedWhaleTraderSignals, clearWhaleSignalCachesForTests } =
+      await import("./whale-signals");
+    clearWhaleSignalCachesForTests();
+
+    try {
+      const result = await buildCachedWhaleTraderSignals();
+
+      expect(result[0]?.payload.stats.pnlAllTimeUsdc).toBe(42_000);
+      expect(result[0]?.payload.stats.equityUsdc).toBe(250_000);
+      expect(result[0]?.payload.stats.pnlCurve).toEqual([{ t: 1, v: 42_000 }]);
     } finally {
       clearWhaleSignalCachesForTests();
     }

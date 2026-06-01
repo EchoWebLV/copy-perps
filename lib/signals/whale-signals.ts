@@ -21,6 +21,10 @@ import {
 } from "@/lib/whales/live-cache";
 import { refreshWhales } from "@/lib/whales/refresh";
 import { isFlashCopyableMarket } from "@/lib/flash/markets";
+import {
+  readWhaleTraderStats,
+  writeWhaleTraderStats,
+} from "@/lib/whales/stats-cache";
 
 const PNL_HISTORY_LIMIT = 500;
 // PnL history (Pacifica curves + Hyperliquid portfolio) is slow-moving — a
@@ -545,6 +549,12 @@ async function buildWhaleTraderSignalsFromSnapshot(
 
   const signals: WhaleTraderSignal[] = [];
   const stamp = new Date().toISOString();
+  // On a cold start the in-memory roster cache is empty, so hydrate each whale's
+  // last-good stats from Redis instead of painting confident "+$0"s.
+  const persistedStats = includeRemoteStats
+    ? null
+    : await readWhaleTraderStats();
+  const statsToPersist: Record<string, WhaleTraderStats> = {};
 
   for (const whale of activeWhales) {
     const list = byWhale.get(whale.id) ?? [];
@@ -555,7 +565,7 @@ async function buildWhaleTraderSignalsFromSnapshot(
         ? Math.max(...list.map((position) => position.payload.lastSeenAtMs))
         : null;
 
-    const stats: WhaleTraderStats =
+    const computedStats: WhaleTraderStats =
       whale.source === "hyperliquid"
         ? statsForHyperliquidPortfolio(
             portfolioByAccount.get(whale.sourceAccount),
@@ -567,6 +577,21 @@ async function buildWhaleTraderSignalsFromSnapshot(
             ),
             pnlCurve: pnlCurveByAccount.get(whale.sourceAccount) ?? [],
           };
+
+    let stats: WhaleTraderStats;
+    if (includeRemoteStats) {
+      stats = computedStats;
+      // Persist only genuinely-fetched stats — never the Hyperliquid
+      // live-position *estimate* (recomputed fresh each cold start), nor a
+      // Pacifica whale we have no leaderboard row for yet.
+      const isRealStats =
+        whale.source === "hyperliquid"
+          ? computedStats.statsSource === "portfolio"
+          : leaderboardByAccount.has(whale.sourceAccount);
+      if (isRealStats) statsToPersist[whale.id] = computedStats;
+    } else {
+      stats = persistedStats?.get(whale.id) ?? computedStats;
+    }
 
     signals.push({
       id: `whale_trader:${whale.id}`,
@@ -590,6 +615,12 @@ async function buildWhaleTraderSignalsFromSnapshot(
         stale:
           list.length === 0 || list.every((position) => position.payload.stale),
       },
+    });
+  }
+
+  if (includeRemoteStats && Object.keys(statsToPersist).length > 0) {
+    void writeWhaleTraderStats(statsToPersist).catch((err) => {
+      console.warn("[whales] stats cache write failed:", err);
     });
   }
 
