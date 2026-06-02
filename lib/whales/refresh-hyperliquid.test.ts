@@ -470,7 +470,7 @@ describe("refreshHyperliquidWhales", () => {
     );
   });
 
-  it("discovers Hyperliquid whales from the leaderboard and uses them as the roster", async () => {
+  it("tracks curated AND leaderboard-discovered whales together", async () => {
     getLeaderboard.mockResolvedValue({
       leaderboardRows: [
         leaderboardRow("0xWhaleOne", 9000, "Whale One"),
@@ -482,9 +482,10 @@ describe("refreshHyperliquidWhales", () => {
     const { refreshHyperliquidWhales } = await import("./refresh-hyperliquid");
     const result = await refreshHyperliquidWhales();
 
-    // The roster is the discovered leaderboard whales (lowercased), not the
-    // curated fallback.
-    expect(result.whalesSeen).toBe(2);
+    // Roster = curated (0xabc, 0xempty) + discovered (0xwhaleone, 0xwhaletwo).
+    // Curated whales hold the bulk of live HL positions, so we no longer swap
+    // them out for the discovered (often-flat) leaderboard set — we track both.
+    expect(result.whalesSeen).toBe(4);
     expect(upsertWhale).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "hyperliquid:0xwhaleone",
@@ -498,8 +499,8 @@ describe("refreshHyperliquidWhales", () => {
         sourceAccount: "0xwhaletwo",
       }),
     );
-    // The curated fallback addresses must NOT be polled when discovery works.
-    expect(getClearinghouseState).not.toHaveBeenCalledWith("0xabc");
+    // Curated whales ARE polled now — they hold the live positions.
+    expect(getClearinghouseState).toHaveBeenCalledWith("0xabc");
   });
 
   it("caches leaderboard discovery so a follow-up refresh skips the heavy fetch", async () => {

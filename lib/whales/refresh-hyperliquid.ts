@@ -31,6 +31,7 @@ import {
   upsertWhalePosition,
 } from "./repository";
 import { makeWhaleId } from "./identity";
+import { mergeHyperliquidRoster } from "./hyperliquid-roster";
 import type { WhalePositionRecord, WhaleRecord } from "./types";
 
 const CLOSE_GRACE_MS = 90_000;
@@ -94,6 +95,15 @@ const DISCOVERY_STORE_TTL_SECONDS = 24 * 60 * 60;
 // we don't regress the Hyperliquid rate-limit budget.
 const DISCOVERY_LIMIT = 50;
 
+// Combined refresh roster cap (curated + discovered). Curated whales hold ~94%
+// of observed HL open interest, so they must always be tracked; discovery fills
+// the rest. Bounds the per-tick clearinghouse fan-out (with the client pacer,
+// ~limit * gap of HL traffic per tick). Env-tunable.
+const HL_ROSTER_LIMIT = (() => {
+  const v = Number(process.env.HL_ROSTER_LIMIT);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 70;
+})();
+
 interface DiscoveryCacheEntry {
   refreshedAt: number;
   whales: CuratedWhale[];
@@ -145,10 +155,16 @@ async function getDiscoveredHyperliquidWhales(): Promise<
 // feed never goes dark.
 async function resolveHyperliquidRoster(): Promise<CuratedWhale[]> {
   const discovered = await getDiscoveredHyperliquidWhales();
-  if (discovered && discovered.length > 0) {
-    return [...PINNED_HYPERLIQUID_WHALES, ...discovered];
-  }
-  return CURATED_WHALES;
+  // Track curated AND discovered: curated whales hold the vast majority of live
+  // HL positions, while leaderboard discovery (ranked by past PnL) skews to
+  // now-flat traders. Merging both — deduped + capped — is what keeps the tape
+  // dense instead of swapping the active curated set out for flat winners.
+  return mergeHyperliquidRoster(
+    CURATED_WHALES,
+    PINNED_HYPERLIQUID_WHALES,
+    discovered,
+    HL_ROSTER_LIMIT,
+  );
 }
 
 export async function refreshHyperliquidWhales(): Promise<{
