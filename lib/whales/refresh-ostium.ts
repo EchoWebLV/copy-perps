@@ -15,10 +15,32 @@ import {
 import type { WhalePositionRecord, WhaleRecord } from "./types";
 
 const CLOSE_GRACE_MS = 90_000;
+const WRITE_CONCURRENCY = 8;
 const TOP_PER_MARKET = (() => {
   const parsed = Number(process.env.OSTIUM_TOP_PER_MARKET);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 15;
 })();
+
+async function forEachWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (;;) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const item = items[index];
+        if (item === undefined) return;
+        await fn(item);
+      }
+    },
+  );
+  await Promise.all(workers);
+}
 
 export async function refreshOstiumWhales(): Promise<{
   whalesSeen: number;
@@ -56,7 +78,10 @@ export async function refreshOstiumWhales(): Promise<{
   const snapshotPositions: WhalePositionRecord[] = [];
   let positionsSeen = 0;
 
-  for (const [account, positions] of byAccount) {
+  await forEachWithConcurrency(
+    [...byAccount.entries()],
+    WRITE_CONCURRENCY,
+    async ([account, positions]) => {
     const displayName = ostiumDisplayName(account);
     const whaleId = makeWhaleId("ostium", account);
     const tags = ["ostium"];
@@ -97,7 +122,8 @@ export async function refreshOstiumWhales(): Promise<{
       createdAt: observedAt,
       updatedAt: observedAt,
     });
-  }
+    },
+  );
 
   if (snapshotAccounts.length > 0) {
     try {
