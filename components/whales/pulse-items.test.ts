@@ -221,7 +221,7 @@ describe("buildPulseItems", () => {
     expect(items[0]?.kind).toBe("new_on_tape");
   });
 
-  it("does not surface an observed position once it ages past the fresh window", () => {
+  it("surfaces an aged, ordinary position as a holding card (so all signals show)", () => {
     const items = buildPulseItems(
       [
         position({
@@ -236,6 +236,29 @@ describe("buildPulseItems", () => {
       NOW,
     );
 
-    expect(items).toEqual([]);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("holding");
+  });
+
+  it("shows a plain held position (small, flat P/L) as a holding card", () => {
+    const items = buildPulseItems(
+      [
+        position({
+          positionId: "boring-zec",
+          market: "ZEC",
+          leverage: 10,
+          notionalUsd: 20_000, // below big-size threshold
+          unrealizedPnlPct: 3, // between pain and deep-profit
+          openedAtMs: NOW - 6 * 60 * 60_000, // not a fresh open
+          openedAtKnown: true,
+          lastSeenAtMs: NOW - 30_000,
+        }),
+      ],
+      NOW,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("holding");
+    expect(items[0]?.canTail).toBe(true); // ZEC is Flash-tailable
   });
 });

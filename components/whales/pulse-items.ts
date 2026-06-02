@@ -5,7 +5,7 @@ const FRESH_OPEN_MS = 15 * 60_000;
 const BIG_POSITION_USD = 500_000;
 const DEEP_PROFIT_PCT = 25;
 const PAIN_PCT = -10;
-const MAX_ITEMS = 80;
+const MAX_ITEMS = 250;
 
 export type PulseItemKind =
   | "fresh_open"
@@ -13,7 +13,8 @@ export type PulseItemKind =
   | "big_position"
   | "deep_profit"
   | "pain_trade"
-  | "entry_gap";
+  | "entry_gap"
+  | "holding";
 
 export interface PulseItem {
   id: string;
@@ -155,6 +156,25 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
           performanceHeadline(position) ??
           `${position.displayName} just hit the tape with ${position.market} ${position.side} ${position.leverage}x`,
         context: `${formatUsd(position.notionalUsd)} live on ${position.source}. Freshly spotted — the exact open time isn't confirmed yet.`,
+        nowMs,
+      }),
+    );
+  }
+
+  // Any other live position — a whale simply *holding* an ordinary-sized
+  // position with modest P/L — still gets a card, so the tape shows every
+  // signal per token, not just the newsworthy moves.
+  if (candidates.length === 0) {
+    candidates.push(
+      makeItem({
+        position,
+        kind: "holding",
+        score: baseScore(position, nowMs),
+        eyebrow: "Holding",
+        headline:
+          performanceHeadline(position) ??
+          `${position.displayName} is holding ${position.market} ${position.side} ${position.leverage}x`,
+        context: `${formatUsd(position.notionalUsd)} ${position.side} on ${position.source}. ${sourcePnlText(pnl)}.`,
         nowMs,
       }),
     );
