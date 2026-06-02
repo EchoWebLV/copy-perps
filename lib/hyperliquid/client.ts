@@ -27,11 +27,48 @@ function isRetryableHlStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+// Hyperliquid rate-limits the info API per IP. Concurrent callers (the whale
+// refresh fans out at concurrency N, each with retries) otherwise burst past the
+// limit and trigger a self-amplifying 429 storm — measured: a 6-wide burst 429s
+// 100% of calls, while ~1 req every 400ms succeeds. Every hlPost reserves a slot
+// on a shared timeline so all info calls are staggered by at least this gap,
+// regardless of caller concurrency. Tunable via env without a code change.
+const HL_MIN_REQUEST_GAP_MS = (() => {
+  const v = Number(process.env.HL_MIN_REQUEST_GAP_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 400;
+})();
+
+let hlNextSlotMs = 0;
+
+// Pure slot math (exported for tests): given the current time and the last
+// reserved slot, return this request's slot and the new tail of the timeline.
+export function reservePaceSlot(
+  nowMs: number,
+  nextSlotMs: number,
+  gapMs: number,
+): { slotMs: number; nextSlotMs: number } {
+  const slotMs = Math.max(nowMs, nextSlotMs);
+  return { slotMs, nextSlotMs: slotMs + gapMs };
+}
+
+async function hlPace(): Promise<void> {
+  if (HL_MIN_REQUEST_GAP_MS <= 0) return;
+  const now = Date.now();
+  const { slotMs, nextSlotMs } = reservePaceSlot(
+    now,
+    hlNextSlotMs,
+    HL_MIN_REQUEST_GAP_MS,
+  );
+  hlNextSlotMs = nextSlotMs;
+  if (slotMs > now) await hlDelay(slotMs - now);
+}
+
 async function hlPost<T>(
   body: unknown,
   label: string,
   attempt = 0,
 ): Promise<T> {
+  await hlPace();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HL_REQUEST_TIMEOUT_MS);
   let r: Response;

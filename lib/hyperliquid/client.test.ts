@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getAllMids } from "./client";
+import { getAllMids, reservePaceSlot } from "./client";
 
 function jsonResponse(
   body: unknown,
@@ -111,5 +111,23 @@ describe("hyperliquid client resilience", () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/\b422\b/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reservePaceSlot", () => {
+  it("staggers reservations that arrive together by the gap", () => {
+    let r = reservePaceSlot(1000, 0, 400);
+    expect(r).toEqual({ slotMs: 1000, nextSlotMs: 1400 });
+    // next request arrives at the same instant -> pushed to the next slot
+    r = reservePaceSlot(1000, r.nextSlotMs, 400);
+    expect(r).toEqual({ slotMs: 1400, nextSlotMs: 1800 });
+    // and again -> staggered another gap
+    r = reservePaceSlot(1050, r.nextSlotMs, 400);
+    expect(r).toEqual({ slotMs: 1800, nextSlotMs: 2200 });
+  });
+
+  it("does not delay a request that arrives after the timeline tail", () => {
+    const r = reservePaceSlot(9000, 2200, 400);
+    expect(r).toEqual({ slotMs: 9000, nextSlotMs: 9400 });
   });
 });

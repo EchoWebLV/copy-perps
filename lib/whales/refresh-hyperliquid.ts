@@ -34,7 +34,10 @@ import { makeWhaleId } from "./identity";
 import type { WhalePositionRecord, WhaleRecord } from "./types";
 
 const CLOSE_GRACE_MS = 90_000;
-const POSITION_REFRESH_CONCURRENCY = 6;
+// Hyperliquid rate-limits the info API per IP harder than Pacifica. Keep the
+// per-tick clearinghouse fan-out low; the shared hlPace() throttle in the client
+// staggers the actual requests, so extra concurrency here only adds queueing.
+const POSITION_REFRESH_CONCURRENCY = 3;
 const OPEN_TIME_LOOKBACK_MS = 90 * 24 * 60 * 60_000;
 
 async function forEachWithConcurrency<T>(
