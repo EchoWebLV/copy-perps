@@ -121,4 +121,21 @@ describe("Flash copyable markets", () => {
     expect(symbols).not.toContain("JitoSOL");
     expect(symbols).not.toContain("XAUt");
   });
+
+  it("aliases source-venue names onto the Flash market they map to", () => {
+    // Hyperliquid / Pacifica name some markets differently than Flash, so
+    // these whale positions were being dropped despite an executable market.
+    expect(normalizeFlashMarket("SP500")).toBe("SPY"); // HL S&P 500 index
+    expect(normalizeFlashMarket("paxg")).toBe("XAU"); // Paxos Gold -> gold
+    expect(normalizeFlashMarket("kBONK")).toBe("BONK"); // HL 1000x BONK quote
+    expect(isFlashCopyableMarket("SP500")).toBe(true);
+    expect(isFlashCopyableMarket("PAXG")).toBe(true);
+    expect(maxFlashLeverageForMarket("PAXG")).toBe(100); // resolves to XAU's ceiling
+    expect(flashPoolNameForMarket("SP500")).toBe("Equity.1");
+
+    // Aliases must not invent markets Flash can't actually trade.
+    expect(normalizeFlashMarket("kPEPE")).toBeNull();
+    expect(normalizeFlashMarket("NEAR")).toBeNull();
+    expect(isFlashCopyableMarket("NEAR")).toBe(false);
+  });
 });

@@ -74,10 +74,22 @@ const FLASH_MARKET_BY_NORMALIZED_SYMBOL = new Map(
   FLASH_MARKETS.map((market) => [market.symbol.toUpperCase(), market]),
 );
 
+// Source venues (Hyperliquid, Pacifica) sometimes name a market differently
+// than Flash even though it's the same tradeable underlying. Map those names
+// onto the Flash market we actually execute, so the whale position becomes
+// copyable instead of being silently dropped by the copyable-market filter.
+const FLASH_MARKET_ALIASES: Record<string, FlashMarketSymbol> = {
+  SP500: "SPY", // Hyperliquid S&P 500 index
+  PAXG: "XAU", // Paxos Gold -> gold
+  KBONK: "BONK", // Hyperliquid 1000x BONK price quote
+};
+
 export function normalizeFlashMarket(value: unknown): FlashMarketSymbol | null {
   if (typeof value !== "string") return null;
+  const key = value.trim().toUpperCase();
   return (
-    FLASH_MARKET_BY_NORMALIZED_SYMBOL.get(value.trim().toUpperCase())?.symbol ??
+    FLASH_MARKET_BY_NORMALIZED_SYMBOL.get(key)?.symbol ??
+    FLASH_MARKET_ALIASES[key] ??
     null
   );
 }
