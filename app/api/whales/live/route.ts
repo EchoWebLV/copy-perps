@@ -11,7 +11,11 @@ export async function GET(request?: Request) {
   }
 
   const limit = parseLimit(request);
-  const positions = await buildWhalePositionSignals(limit);
+  // Surface every market the whales trade (not just Flash-tailable ones); the
+  // UI gates the Tail button per-position via canTail.
+  const positions = await buildWhalePositionSignals(limit, {
+    includeNonCopyable: true,
+  });
   positions.sort((a, b) => b.heatScore - a.heatScore);
   return NextResponse.json({ positions });
 }

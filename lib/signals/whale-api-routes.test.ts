@@ -123,6 +123,8 @@ describe("whale API routes", () => {
 
     await GET(new Request("http://localhost/api/whales/live?limit=1000"));
 
-    expect(mocks.buildWhalePositionSignals).toHaveBeenCalledWith(1000);
+    expect(mocks.buildWhalePositionSignals).toHaveBeenCalledWith(1000, {
+      includeNonCopyable: true,
+    });
   });
 });

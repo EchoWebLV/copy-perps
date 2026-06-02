@@ -77,9 +77,9 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
 
   const sorted = useMemo(
     () =>
-      positions
-        .filter((position) => isFlashCopyableMarket(position.payload.market))
-        .sort((a, b) => b.payload.openedAtMs - a.payload.openedAtMs),
+      [...positions].sort(
+        (a, b) => b.payload.openedAtMs - a.payload.openedAtMs,
+      ),
     [positions],
   );
   const selectedIndex =

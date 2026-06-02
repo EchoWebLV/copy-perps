@@ -164,7 +164,7 @@ describe("buildPulseItems", () => {
     }
   });
 
-  it("keeps stale and expanded Flash markets tail-ready while hiding unsupported markets", () => {
+  it("keeps supported markets tail-ready and surfaces unsupported markets as view-only", () => {
     const items = buildPulseItems(
       [
         position({ positionId: "stale", stale: true, notionalUsd: 1_000_000 }),
@@ -191,7 +191,13 @@ describe("buildPulseItems", () => {
     expect(items.find((item) => item.position.positionId === "stale")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "aged-out")?.canTail).toBe(true);
     expect(items.find((item) => item.position.positionId === "expanded-hype")?.canTail).toBe(true);
-    expect(items.find((item) => item.position.positionId === "unsupported")).toBeUndefined();
+    // Unsupported markets are now visible (so you can SEE the whale's move) but
+    // not tailable on Flash.
+    const unsupported = items.find(
+      (item) => item.position.positionId === "unsupported",
+    );
+    expect(unsupported).toBeDefined();
+    expect(unsupported?.canTail).toBe(false);
   });
 
   it("surfaces a recent observed Hyperliquid position without calling it a fresh open", () => {

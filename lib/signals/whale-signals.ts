@@ -384,7 +384,10 @@ function shouldServeStaleSnapshot(snapshot: WhaleLiveSnapshot): boolean {
 async function buildWhalePositionSignalsFromSnapshot(
   snapshot: WhaleLiveSnapshot,
   limit: number,
-  options: { includeStalePositions?: boolean } = {},
+  options: {
+    includeStalePositions?: boolean;
+    includeNonCopyable?: boolean;
+  } = {},
 ): Promise<WhalePositionSignal[]> {
   const nowMs = Date.now();
   const whaleById = new Map(snapshot.whales.map((whale) => [whale.id, whale]));
@@ -396,7 +399,14 @@ async function buildWhalePositionSignalsFromSnapshot(
         isSourceFresh(position.lastSeenAt.getTime(), undefined, nowMs) ||
         isRecentlyOpenedPosition(position.openedAt.getTime(), nowMs),
     )
-    .filter((position) => isFlashCopyableMarket(position.market))
+    // The feed shows every market so whales' full activity is visible;
+    // tailability is gated downstream (canTail + the Flash route's
+    // UnsupportedMarket guard). Callers that need only executable markets
+    // (the roster) leave includeNonCopyable unset.
+    .filter(
+      (position) =>
+        options.includeNonCopyable || isFlashCopyableMarket(position.market),
+    )
     .filter((position) => whaleById.get(position.whaleId)?.status === "active")
     .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
     .slice(0, limit);
@@ -483,11 +493,13 @@ function isRecentlyOpenedPosition(openedAtMs: number, nowMs: number): boolean {
 
 export async function buildWhalePositionSignals(
   limit = 100,
+  options: { includeNonCopyable?: boolean } = {},
 ): Promise<WhalePositionSignal[]> {
   const snapshot = await getWhaleLiveSnapshotOrRefresh();
   if (snapshot === null) return [];
   return buildWhalePositionSignalsFromSnapshot(snapshot, limit, {
     includeStalePositions: shouldServeStaleSnapshot(snapshot),
+    includeNonCopyable: options.includeNonCopyable,
   });
 }
 

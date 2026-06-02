@@ -282,6 +282,26 @@ describe("whale signals", () => {
     expect(signals[0]?.payload.maxLeverage).toBe(50);
   });
 
+  it("hides non-copyable markets by default but includes them when asked", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        positions: [position(), position({ id: "near-pos", market: "NEAR" })],
+      }),
+    );
+
+    const { buildWhalePositionSignals } = await import("./whale-signals");
+
+    const tailableOnly = await buildWhalePositionSignals();
+    expect(tailableOnly.map((signal) => signal.payload.market)).toEqual(["BTC"]);
+
+    const everything = await buildWhalePositionSignals(100, {
+      includeNonCopyable: true,
+    });
+    expect(
+      [...everything.map((signal) => signal.payload.market)].sort(),
+    ).toEqual(["BTC", "NEAR"]);
+  });
+
   it("groups position signals into sorted trader signals", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(
       snapshot({

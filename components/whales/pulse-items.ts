@@ -33,8 +33,10 @@ export function buildPulseItems(
   positions: WhalePositionSignal[],
   nowMs: number,
 ): PulseItem[] {
+  // Show every market the whales trade — tailability is gated per-item by
+  // `canTail`, so markets Flash can't execute surface as view-only instead of
+  // being hidden from the tape entirely.
   return positions
-    .filter((signal) => isFlashCopyableMarket(signal.payload.market))
     .flatMap((signal) => itemsForPosition(signal.payload, nowMs))
     .sort(comparePulseItems)
     .slice(0, MAX_ITEMS);

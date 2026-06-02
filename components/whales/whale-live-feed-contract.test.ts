@@ -50,13 +50,17 @@ describe("WhaleLiveFeed position card contract", () => {
     expect(source).not.toContain("pl-[80px]");
   });
 
-  it("keeps supported stale cards copyable through snapshot mode", () => {
+  it("surfaces every market but gates tailability per card", () => {
     const source = readFileSync(
       join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
       "utf8",
     );
 
-    expect(source).toContain("isFlashCopyableMarket(position.payload.market)");
+    // The feed no longer hides non-Flash markets...
+    expect(source).not.toContain(
+      "isFlashCopyableMarket(position.payload.market)",
+    );
+    // ...but the Tail button is still gated per position.
     expect(source).toContain("const canTail = isFlashCopyableMarket(p.market);");
     expect(source).not.toContain("const canTail = now > 0 && !stale");
   });
