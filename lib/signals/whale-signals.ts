@@ -613,7 +613,7 @@ async function buildWhaleTraderSignalsFromSnapshot(
       chips: [],
       payload: {
         whaleId: whale.id,
-        source: whale.source as "pacifica" | "hyperliquid",
+        source: whale.source as "pacifica" | "hyperliquid" | "ostium",
         sourceAccount: whale.sourceAccount,
         displayName: whale.displayName,
         avatarUrl: whale.avatarUrl,

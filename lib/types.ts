@@ -136,7 +136,7 @@ export interface WhaleTraderSignal extends BaseSignal {
   type: "whale_trader";
   payload: {
     whaleId: string;
-    source: "pacifica" | "hyperliquid";
+    source: "pacifica" | "hyperliquid" | "ostium";
     sourceAccount: string;
     displayName: string;
     avatarUrl: string | null;
@@ -167,7 +167,7 @@ export interface WhalePositionSignal extends BaseSignal {
   payload: {
     positionId: string;
     whaleId: string;
-    source: "pacifica" | "hyperliquid";
+    source: "pacifica" | "hyperliquid" | "ostium";
     sourceAccount: string;
     displayName: string;
     avatarUrl: string | null;

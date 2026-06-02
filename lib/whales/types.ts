@@ -1,4 +1,4 @@
-export type WhaleSource = "pacifica" | "hyperliquid";
+export type WhaleSource = "pacifica" | "hyperliquid" | "ostium";
 export type WhaleSide = "long" | "short";
 export type WhaleStatus = "active" | "hidden" | "retired";
 export type WhalePositionStatus = "open" | "closed";
