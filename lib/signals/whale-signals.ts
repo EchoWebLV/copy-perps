@@ -507,8 +507,12 @@ async function buildWhaleTraderSignalsFromSnapshot(
   snapshot: WhaleLiveSnapshot,
   includeRemoteStats: boolean,
 ): Promise<WhaleTraderSignal[]> {
+  // Ostium has no trader-stats source yet (no Pacifica/HL leaderboard row), so it
+  // would render as a confident "+$0" roster card. Keep Ostium in the live tape
+  // (buildWhalePositionSignalsFromSnapshot below still sees every source) but out
+  // of the trader roster until we wire real Ostium stats.
   const activeWhales = snapshot.whales.filter(
-    (whale) => whale.status === "active",
+    (whale) => whale.status === "active" && whale.source !== "ostium",
   );
   const positions = await buildWhalePositionSignalsFromSnapshot(snapshot, 1000, {
     includeStalePositions: shouldServeStaleSnapshot(snapshot),

@@ -149,6 +149,69 @@ describe("whale signals", () => {
     mocks.db.select.mockReturnValue(mocks.query);
   });
 
+  it("keeps Ostium out of the trader roster but in the live tape", async () => {
+    mocks.getWhaleLiveSnapshot.mockResolvedValue(
+      snapshot({
+        source: "multi",
+        accounts: ["acct-roster", "ost-acct"],
+        whales: [
+          whale({
+            id: "whale-roster",
+            sourceAccount: "acct-roster",
+            displayName: "RosterLeader",
+          }), // pacifica leader (unique account to avoid PnL-cache cross-test pollution)
+          whale({
+            id: "ostium:ost-acct",
+            source: "ostium",
+            sourceAccount: "ost-acct",
+            displayName: "OST 0xabcd…1234",
+            tags: ["ostium"],
+          }),
+        ],
+        positions: [
+          position({
+            id: "pos-roster",
+            whaleId: "whale-roster",
+            sourceAccount: "acct-roster",
+          }), // pacifica BTC
+          position({
+            id: "ostium:ost-acct:XAU:long:999",
+            whaleId: "ostium:ost-acct",
+            source: "ostium",
+            sourceAccount: "ost-acct",
+            market: "XAU",
+            side: "long",
+            leverage: 20,
+            notionalUsd: 250_000,
+            entryPrice: 4_500,
+            currentMark: 4_530,
+            unrealizedPnlPct: 13.3,
+            openedAt: new Date("2026-05-23T11:50:00.000Z"),
+            lastSeenAt: new Date("2026-05-23T11:59:40.000Z"),
+            raw: {},
+          }),
+        ],
+      }),
+    );
+
+    const { buildWhaleTraderSignals, buildWhalePositionSignals } = await import(
+      "./whale-signals"
+    );
+
+    const roster = await buildWhaleTraderSignals();
+    expect(roster.every((s) => s.payload.source !== "ostium")).toBe(true);
+    expect(roster.some((s) => s.payload.source === "pacifica")).toBe(true);
+
+    const tape = await buildWhalePositionSignals(50, {
+      includeNonCopyable: true,
+    });
+    expect(
+      tape.some(
+        (s) => s.payload.source === "ostium" && s.payload.market === "XAU",
+      ),
+    ).toBe(true);
+  });
+
   it("maps cached live positions with heat and fallback analysis", async () => {
     mocks.getWhaleLiveSnapshot.mockResolvedValue(
       snapshot({
