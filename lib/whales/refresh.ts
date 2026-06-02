@@ -1,42 +1,37 @@
 import { refreshHyperliquidWhales } from "./refresh-hyperliquid";
+import { refreshOstiumWhales } from "./refresh-ostium";
 import { refreshPacificaWhales } from "./refresh-pacifica";
 
-export async function refreshWhales(): Promise<{
-  whalesSeen: number;
-  positionsSeen: number;
-}> {
-  const [pacifica, hyperliquid] = await Promise.allSettled([
-    refreshPacificaWhales(),
-    refreshHyperliquidWhales(),
-  ]);
+type RefreshResult = { whalesSeen: number; positionsSeen: number };
 
-  if (pacifica.status === "rejected" && hyperliquid.status === "rejected") {
+export async function refreshWhales(): Promise<RefreshResult> {
+  const sources: Array<[string, Promise<RefreshResult>]> = [
+    ["Pacifica", refreshPacificaWhales()],
+    ["Hyperliquid", refreshHyperliquidWhales()],
+    ["Ostium", refreshOstiumWhales()],
+  ];
+
+  const settled = await Promise.allSettled(sources.map(([, p]) => p));
+
+  const fulfilled = settled.filter(
+    (r): r is PromiseFulfilledResult<RefreshResult> => r.status === "fulfilled",
+  );
+
+  settled.forEach((result, i) => {
+    if (result.status === "rejected") {
+      console.warn(`[whales] ${sources[i]![0]} refresh failed:`, result.reason);
+    }
+  });
+
+  if (fulfilled.length === 0) {
     throw new AggregateError(
-      [pacifica.reason, hyperliquid.reason],
+      settled.map((r) => (r as PromiseRejectedResult).reason),
       "all whale refresh sources failed",
     );
   }
 
-  if (pacifica.status === "rejected") {
-    console.warn("[whales] Pacifica refresh failed:", pacifica.reason);
-  }
-  if (hyperliquid.status === "rejected") {
-    console.warn("[whales] Hyperliquid refresh failed:", hyperliquid.reason);
-  }
-
-  const values = [pacifica, hyperliquid]
-    .filter(
-      (
-        result,
-      ): result is PromiseFulfilledResult<{
-        whalesSeen: number;
-        positionsSeen: number;
-      }> => result.status === "fulfilled",
-    )
-    .map((result) => result.value);
-
   return {
-    whalesSeen: values.reduce((sum, value) => sum + value.whalesSeen, 0),
-    positionsSeen: values.reduce((sum, value) => sum + value.positionsSeen, 0),
+    whalesSeen: fulfilled.reduce((sum, r) => sum + r.value.whalesSeen, 0),
+    positionsSeen: fulfilled.reduce((sum, r) => sum + r.value.positionsSeen, 0),
   };
 }
