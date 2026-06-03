@@ -36,7 +36,12 @@ export async function inviteCookieToken(): Promise<string> {
     .join("");
 }
 
-const ALLOWLIST_EXACT = new Set(["/invite", "/api/invite", "/api/health"]);
+const ALLOWLIST_EXACT = new Set([
+  "/invite",
+  "/api/invite",
+  "/api/waitlist",
+  "/api/health",
+]);
 const ALLOWLIST_PREFIXES = ["/_next", "/api/cron", "/invite"];
 
 /**

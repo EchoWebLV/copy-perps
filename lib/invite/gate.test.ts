@@ -44,9 +44,10 @@ describe("invite gate helpers", () => {
       expect(isGatedPath("/api/whales/roster")).toBe(true);
     });
 
-    it("never gates the invite screen or its API", () => {
+    it("never gates the invite screen, its API, or the waitlist API", () => {
       expect(isGatedPath("/invite")).toBe(false);
       expect(isGatedPath("/api/invite")).toBe(false);
+      expect(isGatedPath("/api/waitlist")).toBe(false);
     });
 
     it("never gates the Railway healthcheck or cron triggers", () => {
