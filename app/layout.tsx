@@ -8,13 +8,13 @@ import "./globals.css";
 const isVercelDeployment = process.env.VERCEL === "1";
 
 export const metadata: Metadata = {
-  title: "Breach",
-  description: "Watch the bots. Tail the signal.",
+  title: "gwak.gg",
+  description: "Watch the whales. Tail the signal.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Breach",
+    title: "gwak.gg",
   },
 };
 

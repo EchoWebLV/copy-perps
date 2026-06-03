@@ -12,7 +12,7 @@ describe("Mobile presentation route", () => {
 
     expect(source).toContain('src="/feed"');
     expect(source).toContain("<iframe");
-    expect(source).toContain("Breach mobile app");
+    expect(source).toContain("gwak.gg mobile app");
     expect(source).toContain("aspect-[390/844]");
   });
 });

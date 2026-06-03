@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Breach Mobile",
+  title: "gwak.gg Mobile",
 };
 
 export default function MobilePresentationPage() {
@@ -9,7 +9,7 @@ export default function MobilePresentationPage() {
         <div className="pointer-events-none absolute left-1/2 top-[17px] z-10 h-[5px] w-16 -translate-x-1/2 rounded-full bg-white/20" />
         <div className="h-full overflow-hidden rounded-[32px] bg-black">
           <iframe
-            title="Breach mobile app"
+            title="gwak.gg mobile app"
             src="/feed"
             className="h-full w-full border-0 bg-black"
             allow="clipboard-write"

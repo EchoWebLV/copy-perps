@@ -412,7 +412,7 @@ export default function DepositPage() {
               borderRadius: 14,
             }}
           >
-            MADE IN BREACH / 2026
+            MADE IN GWAK.GG / 2026
             <br />
             SERIES 01 OF 12 · v0.1.4-paper
           </div>

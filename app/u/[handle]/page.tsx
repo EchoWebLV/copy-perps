@@ -19,7 +19,7 @@ export default async function PublicProfilePage({ params }: PageParams) {
     <main className="min-h-screen bg-[#0e0d10] px-6 py-10 text-[#fafaf2]">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-sm flex-col justify-center">
         <div className="text-[10px] font-black uppercase tracking-[0.24em] text-[#fafaf2]/55">
-          BREACH PROFILE
+          GWAK.GG PROFILE
         </div>
         <h1 className="mt-4 truncate text-[44px] font-black leading-none">
           @{handle}
@@ -46,7 +46,7 @@ export default async function PublicProfilePage({ params }: PageParams) {
           href="/feed"
           className="mt-8 inline-flex min-h-12 items-center justify-center rounded-xl bg-[#fae500] px-5 text-[12px] font-black uppercase tracking-widest text-[#0e0d10] active:scale-[0.97]"
         >
-          OPEN BREACH
+          OPEN GWAK.GG
         </Link>
       </div>
     </main>

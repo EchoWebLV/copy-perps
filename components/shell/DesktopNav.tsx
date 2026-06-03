@@ -19,9 +19,9 @@ export function DesktopNav() {
         prefetch={false}
         className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl text-[12px] font-black"
         style={{ background: ACCENT, color: BG }}
-        aria-label="Breach whales"
+        aria-label="gwak.gg whales"
       >
-        B
+        G
       </Link>
       <div className="flex flex-1 flex-col gap-2">
         {DESKTOP_NAV_ITEMS.map((item) => {
