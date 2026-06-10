@@ -31,7 +31,7 @@ export async function reserveTailOnMarket(
     RETURNING user_id
   `);
 
-  return result.rows.length > 0;
+  return result.length > 0;
 }
 
 export async function releaseTailReservation(

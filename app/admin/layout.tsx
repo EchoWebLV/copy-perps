@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { isAdminEnabled } from "@/lib/admin/auth";
 
 export const metadata = {
-  title: "Bot Admin · gwak.gg",
+  title: "Admin · gwak.gg",
 };
 
 export default function AdminLayout({
@@ -18,10 +18,10 @@ export default function AdminLayout({
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
             <Link
-              href="/admin/bots"
+              href="/admin/monitor"
               className="text-lg font-semibold tracking-tight text-white hover:text-zinc-200"
             >
-              Bot Admin
+              Admin
             </Link>
             <span className="rounded-full border border-amber-800 bg-amber-900/40 px-2 py-0.5 text-xs text-amber-300">
               dev only
@@ -29,22 +29,10 @@ export default function AdminLayout({
           </div>
           <nav className="flex items-center gap-5 text-sm">
             <Link
-              href="/admin/bots"
-              className="text-zinc-300 hover:text-white"
-            >
-              All bots
-            </Link>
-            <Link
               href="/admin/monitor"
               className="text-zinc-300 hover:text-white"
             >
               Monitor
-            </Link>
-            <Link
-              href="/admin/bots/new"
-              className="text-emerald-400 hover:text-emerald-300"
-            >
-              + Clone variant
             </Link>
             <Link
               href="/feed"

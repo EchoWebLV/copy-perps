@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gwak — Buy / Tail flow (motion)</title>
+<style>
+  :root{
+    --bg:#0e0d10; --panel:#17151b; --panel2:#221f28; --fg:#fafaf2;
+    --dim:rgba(250,250,242,.5); --faint:rgba(250,250,242,.18);
+    --accent:#fae500; --green:#1de78b; --red:#ff3b54;
+    --hl:"Helvetica Neue",Helvetica,"Arial Narrow",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:radial-gradient(130% 120% at 50% -10%,#1a1820 0%,#0a090c 60%);
+    font-family:var(--body);color:var(--fg);overflow:hidden;position:relative;height:100vh}
+  .stage{position:absolute;top:50%;left:50%;transform-origin:center center;
+    transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:24px}
+  .orb{position:absolute;border-radius:50%;filter:blur(85px);opacity:.36;mix-blend-mode:screen;pointer-events:none}
+  .o1{width:360px;height:360px;background:#fae500;left:14%;top:14%;animation:f1 15s ease-in-out infinite}
+  .o2{width:340px;height:340px;background:#1de78b;right:14%;bottom:12%;animation:f2 18s ease-in-out infinite}
+  @keyframes f1{50%{transform:translate(36px,28px) scale(1.1)}}
+  @keyframes f2{50%{transform:translate(-36px,-26px) scale(.92)}}
+  .fillmode{background:#000 !important}
+  .fillmode .orb{display:none}
+  .fillmode .phone{animation:none}
+
+  .hl{font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:-.03em;font-stretch:condensed;line-height:.9}
+  .stamp{font-family:var(--hl);font-weight:900;text-transform:uppercase;font-size:9px;letter-spacing:.22em;color:var(--dim)}
+  .tab{font-variant-numeric:tabular-nums}
+
+  .phone{position:relative;width:336px;height:712px;border-radius:54px;
+    background:linear-gradient(160deg,#26242c,#0b0a0d);padding:12px;
+    box-shadow:0 40px 120px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.05),inset 0 0 0 2px rgba(255,255,255,.03);
+    animation:bob 7s ease-in-out infinite;z-index:2}
+  @keyframes bob{50%{transform:translateY(-8px)}}
+  .phone::after{content:"";position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:104px;height:24px;background:#000;border-radius:0 0 14px 14px;z-index:40}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+
+  .balance{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:30;
+    display:inline-flex;align-items:baseline;gap:7px;border-radius:999px;padding:6px 14px;
+    background:rgba(23,21,27,.82);backdrop-filter:blur(8px);border:1px solid var(--faint);
+    font-family:var(--hl);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.16em}
+  .balance .r{opacity:.5}.balance .v{color:var(--accent)}
+
+  .wc{position:absolute;inset:0;bottom:62px;transition:opacity .2s linear}
+
+  /* backdrop card */
+  .bcard{position:absolute;left:16px;right:16px;top:96px;background:var(--panel);border:1px solid var(--faint);
+    border-radius:20px;padding:16px;transition:opacity .35s,transform .35s;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .brow{display:flex;align-items:center;gap:12px}
+  .av{width:48px;height:48px;border-radius:50%;flex:none;padding:3px;display:grid;place-items:center;
+    background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55}
+  .av .i{width:100%;height:100%;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-family:var(--hl);font-weight:900;font-size:16px;color:#1de78b}
+  .bnm{font-size:24px}
+  .bmeta{margin-top:5px;display:flex;gap:8px;align-items:center}.bmeta .live{color:var(--green)}
+  .bpos{margin-top:15px;padding-top:13px;border-top:1px solid var(--faint);display:flex;justify-content:space-between;align-items:center}
+  .bpos .mk{font-family:var(--hl);font-weight:900;font-size:16px;letter-spacing:.03em;display:flex;gap:8px;align-items:center}
+  .bpos .side{color:var(--green)}.bpos .lev{color:var(--dim)}
+  .bpos .pct{font-family:var(--hl);font-weight:900;font-size:17px;color:var(--green)}
+  .tailbtn{margin-top:15px;width:100%;border:none;border-radius:14px;padding:14px;font-family:var(--hl);font-weight:900;
+    font-size:14px;text-transform:uppercase;letter-spacing:.1em;background:var(--accent);color:var(--bg);
+    display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden;
+    box-shadow:0 3px 0 rgba(250,229,0,.55),inset 0 -2px 0 rgba(0,0,0,.15)}
+  .tailbtn svg{width:15px;height:15px;fill:var(--bg)}
+  .rip{position:absolute;inset:0;margin:auto;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.6);transform:scale(0);opacity:0}
+  .ripon{animation:rip .6s ease-out}
+  @keyframes rip{0%{transform:scale(0);opacity:.7}100%{transform:scale(14);opacity:0}}
+
+  /* sheet */
+  .sheet{position:absolute;left:0;right:0;bottom:0;height:316px;z-index:20;background:var(--panel);
+    border-top:1px solid var(--faint);border-radius:26px 26px 0 0;box-shadow:0 -24px 60px rgba(0,0,0,.55);
+    transform:translateY(112%);transition:transform .5s cubic-bezier(.3,1,.4,1)}
+  .grab{width:40px;height:4px;border-radius:3px;background:var(--faint);margin:13px auto 0}
+  .sblock{position:absolute;inset:0;padding:26px 18px 22px;opacity:0;transition:opacity .3s;display:flex;flex-direction:column}
+  .sblock.on{opacity:1}
+
+  .sheet h3{font-size:25px}
+  .sumrow{margin-top:13px;display:flex;gap:8px;flex-wrap:wrap}
+  .pchip{background:var(--panel2);border:1px solid var(--faint);border-radius:11px;padding:8px 12px;
+    font-family:var(--hl);font-weight:900;font-size:12px;letter-spacing:.05em}
+  .pchip b{color:var(--green)}
+  .stakes{margin-top:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+  .stk{border-radius:13px;padding:14px 0;text-align:center;font-family:var(--hl);font-weight:900;font-size:16px;
+    background:var(--panel2);border:1px solid var(--faint)}
+  .stk.on{background:rgba(250,229,0,.14);border-color:var(--accent);color:var(--accent)}
+  .confirm{margin-top:auto;width:100%;border:none;border-radius:15px;padding:16px;font-family:var(--hl);font-weight:900;
+    font-size:16px;text-transform:uppercase;letter-spacing:.12em;background:var(--accent);color:var(--bg);
+    display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden;
+    box-shadow:0 4px 0 rgba(250,229,0,.55),inset 0 -2px 0 rgba(0,0,0,.15)}
+  .confirm svg{width:16px;height:16px;fill:var(--bg)}
+
+  .center{align-items:center;justify-content:center;text-align:center}
+  .spin{width:46px;height:46px;border-radius:50%;border:4px solid var(--faint);border-top-color:var(--accent);animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .opning{margin-top:16px;font-family:var(--hl);font-weight:900;font-size:15px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim)}
+
+  .check{width:62px;height:62px;border-radius:50%;background:var(--green);display:grid;place-items:center;
+    box-shadow:0 0 34px rgba(29,231,139,.5);animation:pop .4s ease-out}
+  @keyframes pop{0%{transform:scale(.6)}55%{transform:scale(1.12)}100%{transform:scale(1)}}
+  .check svg{width:32px;height:32px;stroke:var(--bg);stroke-width:4;fill:none}
+  .done-t{margin-top:14px;font-size:27px}
+  .done-s{margin-top:6px}.done-s b{color:var(--accent)}
+  .donepos{margin-top:16px;width:100%;border-radius:14px;background:var(--panel2);border:1px solid rgba(29,231,139,.3);
+    padding:12px 14px;display:flex;justify-content:space-between;align-items:center}
+  .donepos .mk{font-family:var(--hl);font-weight:900;font-size:14px;display:flex;gap:7px;align-items:center}
+  .donepos .side{color:var(--green)}.donepos .lev{color:var(--dim)}
+  .donepos .pl{font-family:var(--hl);font-weight:900;font-size:16px;color:var(--green);border-radius:5px;padding:1px 5px}
+
+  @keyframes pulseup{0%{color:var(--green);text-shadow:0 0 14px rgba(29,231,139,1);background-color:rgba(29,231,139,.22)}100%{text-shadow:none;background-color:transparent}}
+  .gup{animation:pulseup .45s ease-out}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;height:62px;padding-bottom:12px;z-index:30;background:var(--bg);
+    border-top:2px solid var(--faint);display:flex;align-items:stretch;justify-content:space-around}
+  .nt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg);opacity:.4;position:relative}
+  .nt.on{opacity:1}
+  .nt.on::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:26px;height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .nt svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="orb o1"></div><div class="orb o2"></div>
+
+    <div class="phone"><div class="screen">
+      <div class="balance"><span class="r">Ready</span><span class="v">$1,240.00</span></div>
+
+      <div class="wc" id="wc">
+        <div class="bcard" id="card">
+          <div class="brow">
+            <div class="av"><div class="i">SW</div></div>
+            <div>
+              <div class="bnm hl">Solwhale</div>
+              <div class="bmeta stamp"><span>Pacifica</span><span class="live">● Live</span></div>
+            </div>
+          </div>
+          <div class="bpos">
+            <div class="mk"><span>SOL-PERP</span><span class="side">long</span><span class="lev">5x</span></div>
+            <div class="pct tab">+18.4%</div>
+          </div>
+          <button class="tailbtn" id="tailbtn"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tail Solwhale<span class="rip" id="rip1"></span></button>
+        </div>
+
+        <div class="sheet" id="sheet">
+          <div class="grab"></div>
+
+          <div class="sblock on" id="sStake">
+            <h3 class="hl">Tail Solwhale</h3>
+            <div class="stamp">Mirror their open position, one tap</div>
+            <div class="sumrow">
+              <span class="pchip">SOL-PERP</span><span class="pchip"><b>Long</b></span>
+              <span class="pchip">5x</span><span class="pchip">Entry $172.40</span>
+            </div>
+            <div class="stamp" style="margin-top:16px">Stake</div>
+            <div class="stakes"><div class="stk">$10</div><div class="stk">$25</div><div class="stk on">$50</div><div class="stk">$100</div></div>
+            <button class="confirm" id="confirm"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Confirm tail →<span class="rip" id="rip2"></span></button>
+          </div>
+
+          <div class="sblock center" id="sOpening">
+            <div class="spin"></div>
+            <div class="opning">Opening on Pacifica…</div>
+          </div>
+
+          <div class="sblock center" id="sDone">
+            <div class="check"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+            <div class="done-t hl">Tailed</div>
+            <div class="done-s stamp">You're now copying <b>Solwhale</b></div>
+            <div class="donepos">
+              <div class="mk"><span>SOL-PERP</span><span class="side">long</span><span class="lev">5x</span></div>
+              <div class="pl tab" id="donepl">+$0.00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav">
+        <div class="nt on"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><rect x="6" y="8" width="5" height="8" rx="1"/><rect x="13" y="5" width="5" height="11" rx="1"/><path d="M8.5 4v4M8.5 16v4M15.5 2v3M15.5 16v4"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+    </div></div>
+  </div>
+
+<script>
+  const wc=document.getElementById('wc'),card=document.getElementById('card'),sheet=document.getElementById('sheet'),
+        tailbtn=document.getElementById('tailbtn'),confirm=document.getElementById('confirm'),
+        rip1=document.getElementById('rip1'),rip2=document.getElementById('rip2'),
+        sStake=document.getElementById('sStake'),sOpening=document.getElementById('sOpening'),sDone=document.getElementById('sDone'),
+        donepl=document.getElementById('donepl');
+
+  const PERIOD=10000;
+  const T0=performance.now();
+  let prev='';
+  function show(el,on){el.classList.toggle('on',on);}
+  function ripple(el){el.classList.remove('ripon');void el.offsetWidth;el.classList.add('ripon');}
+
+  (function frame(){
+    const t=(performance.now()-T0)%PERIOD;
+    // fade hides the loop reset
+    let op=1; if(t<450) op=t/450; else if(t>PERIOD-700) op=Math.max(0,(PERIOD-t)/700);
+    wc.style.opacity=op;
+
+    // phase
+    let name;
+    if(t<2200) name='decision';
+    else if(t<4600) name='stake';
+    else if(t<6000) name='opening';
+    else name='done';
+
+    const sheetUp = name!=='decision';
+    sheet.style.transform = sheetUp ? 'translateY(0)' : 'translateY(112%)';
+    card.style.opacity = sheetUp ? 0.35 : 1;
+    card.style.transform = sheetUp ? 'scale(.985)' : 'none';
+    show(sStake, name==='stake');
+    show(sOpening, name==='opening');
+    show(sDone, name==='done');
+
+    if(name!==prev){
+      if(name==='stake') ripple(rip1);     // tapped Tail on the card
+      if(name==='opening') ripple(rip2);   // tapped Confirm
+      prev=name;
+    }
+
+    // live P/L ticks up once it's tailed
+    if(name==='done'){
+      const x=Math.min(1,(t-6000)/2400);
+      donepl.textContent='+$'+(0.62*(1-Math.pow(1-x,3))).toFixed(2);
+      const g=Math.floor(t/500);
+      if(g!==frame._g){frame._g=g;donepl.classList.remove('gup');void donepl.offsetWidth;donepl.classList.add('gup');}
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  function fit(){
+    const st=document.querySelector('.stage'), ph=document.querySelector('.phone');
+    const fill=location.search.includes('fill');
+    if(fill){document.body.classList.add('fillmode');ph.style.zoom=((window.innerHeight*0.985)/712).toFixed(4);st.style.transform='translate(-50%,-50%)';return;}
+    const k=Math.min(1,(window.innerHeight-20)/st.offsetHeight,(window.innerWidth-20)/st.offsetWidth);
+    st.style.transform='translate(-50%,-50%) scale('+k.toFixed(4)+')';
+  }
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);fit();
+</script>
+</body>
+</html>

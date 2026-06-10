@@ -10,7 +10,6 @@ import { getMark, getMarksSnapshot } from "@/lib/data/marks";
 import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/perps";
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import type { PacificaPosition } from "@/lib/pacifica/types";
-import { getBot } from "@/lib/bots";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import {
   buildPortfolioSummary,
@@ -332,7 +331,7 @@ export async function GET(request: Request) {
             autoCloseOnSourceClose: whaleMeta?.autoCloseOnSourceClose ?? false,
             closeReason: whaleMeta?.closeReason ?? null,
             botId: meta.botId ?? null,
-            botName: meta.botId ? (getBot(meta.botId)?.name ?? meta.botId) : null,
+            botName: meta.botId ?? null,
             liveStatus,
             entryPrice: entry,
             markPrice: mark,

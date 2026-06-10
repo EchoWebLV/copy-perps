@@ -1,11 +1,9 @@
-import { neon } from "@neondatabase/serverless";
+import { sql as pg } from "@/lib/db";
 
 const LEASE_TTL_SECONDS = 180;
 
 function client() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL not set");
-  return neon(url);
+  return pg;
 }
 
 export async function ensureWhaleLeaseTable(): Promise<void> {

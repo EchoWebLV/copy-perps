@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gwak — Whales (motion 1:1)</title>
+<style>
+  :root{
+    --bg:#0e0d10; --panel:#17151b; --panel2:#221f28; --fg:#fafaf2;
+    --dim:rgba(250,250,242,.5); --faint:rgba(250,250,242,.18);
+    --accent:#fae500; --green:#1de78b; --red:#ff3b54;
+    --hl:"Helvetica Neue",Helvetica,"Arial Narrow",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:radial-gradient(130% 120% at 50% -10%,#1a1820 0%,#0a090c 60%);
+    font-family:var(--body);color:var(--fg);overflow:hidden;position:relative;height:100vh}
+  .stage{position:absolute;top:50%;left:50%;transform-origin:center center;
+    transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:24px}
+  .orb{position:absolute;border-radius:50%;filter:blur(85px);opacity:.36;mix-blend-mode:screen;pointer-events:none}
+  .o1{width:360px;height:360px;background:#fae500;left:14%;top:14%;animation:f1 15s ease-in-out infinite}
+  .o2{width:340px;height:340px;background:#1de78b;right:14%;bottom:12%;animation:f2 18s ease-in-out infinite}
+  @keyframes f1{50%{transform:translate(36px,28px) scale(1.1)}}
+  @keyframes f2{50%{transform:translate(-36px,-26px) scale(.92)}}
+  /* video export mode: pure black, no glow, no bob, phone fills the frame */
+  .fillmode{background:#000 !important}
+  .fillmode .orb{display:none}
+  .fillmode .phone{animation:none}
+
+  .hl{font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:-.03em;font-stretch:condensed;line-height:.9}
+  .stamp{font-family:var(--hl);font-weight:900;text-transform:uppercase;font-size:9px;letter-spacing:.22em;color:var(--dim)}
+  .tab{font-variant-numeric:tabular-nums}
+
+  .phone{position:relative;width:336px;height:712px;border-radius:54px;
+    background:linear-gradient(160deg,#26242c,#0b0a0d);padding:12px;
+    box-shadow:0 40px 120px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.05),inset 0 0 0 2px rgba(255,255,255,.03);
+    animation:bob 7s ease-in-out infinite;z-index:2}
+  @keyframes bob{50%{transform:translateY(-8px)}}
+  .phone::after{content:"";position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:104px;height:24px;background:#000;border-radius:0 0 14px 14px;z-index:40}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+
+  .balance{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:30;
+    display:inline-flex;align-items:baseline;gap:7px;border-radius:999px;padding:6px 14px;
+    background:rgba(23,21,27,.82);backdrop-filter:blur(8px);border:1px solid var(--faint);
+    font-family:var(--hl);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.16em}
+  .balance .r{opacity:.5}.balance .v{color:var(--accent)}
+
+  /* real snap feed */
+  .feed{position:absolute;inset:0;bottom:62px;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
+  .feed::-webkit-scrollbar{display:none}
+  .snapcard{height:100%;scroll-snap-align:start;scroll-snap-stop:always;
+    display:flex;align-items:center;justify-content:center;padding:72px 16px 12px}
+
+  .wcard{position:relative;width:100%;background:var(--panel);border-radius:20px;border:1px solid var(--faint);
+    padding:16px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .rank{position:absolute;top:0;left:0;border-radius:0 0 13px 0;padding:5px 11px;
+    font-family:var(--hl);font-weight:900;font-size:12px;letter-spacing:.08em;background:var(--accent);color:var(--bg)}
+  .whorow{display:flex;align-items:center;gap:12px;padding-left:34px;min-height:50px}
+  .avt{width:50px;height:50px;border-radius:50%;flex:none;padding:3px;display:grid;place-items:center;animation:ringpulse 2.4s cubic-bezier(.4,0,.6,1) infinite}
+  @keyframes ringpulse{0%,100%{opacity:1}50%{opacity:.74}}
+  .avt .inner{width:100%;height:100%;border-radius:50%;background:var(--bg);display:grid;place-items:center;
+    font-family:var(--hl);font-weight:900;font-size:17px}
+  .who{min-width:0;flex:1}
+  .nm{font-size:25px}
+  .meta{margin-top:5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .meta .live{color:var(--green)}
+  .blink{animation:blink 1.5s steps(2,jump-none) infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+  .agent{font-family:var(--hl);font-weight:900;font-size:8.5px;letter-spacing:.14em;color:var(--accent);
+    border:1px solid rgba(250,229,0,.5);border-radius:5px;padding:2px 6px}
+
+  .pl{margin-top:13px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+  .plbig{margin-top:6px;font-family:var(--hl);font-weight:900;font-size:33px;line-height:.82;letter-spacing:-.02em;
+    color:var(--green);border-radius:6px;padding:1px 5px;margin-left:-5px;display:inline-block}
+  .eq{text-align:right}
+  .eqv{margin-top:6px;font-family:var(--hl);font-weight:900;font-size:19px}
+
+  .chart{margin-top:13px;border-radius:13px;background:var(--bg);border:1px solid var(--faint);padding:8px 12px}
+  .chart .ch-top{display:flex;justify-content:space-between;margin-bottom:6px}
+  .chart svg{display:block;width:100%;height:42px}
+
+  .statgrid{margin-top:13px;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--faint);border-bottom:1px solid var(--faint)}
+  .scell{text-align:center;padding:8px 4px;border-right:1px solid var(--faint)}
+  .scell:last-child{border-right:none}
+  .scell .v{margin-top:4px;font-family:var(--hl);font-weight:900;font-size:14px;color:var(--green)}
+
+  .posrow{margin-top:13px;padding-top:12px;border-top:1px solid var(--faint)}
+  .posrow .ph{display:flex;justify-content:space-between;margin-bottom:9px}
+  .posrow .r{display:flex;justify-content:space-between;align-items:center}
+  .posrow .mk{font-family:var(--hl);font-weight:900;font-size:16px;letter-spacing:.03em;display:flex;gap:8px;align-items:center}
+  .posrow .side{color:var(--green)}.posrow .short{color:var(--red)}.posrow .lev{color:var(--dim)}
+  .posrow .pct{font-family:var(--hl);font-weight:900;font-size:17px;color:var(--green);border-radius:5px;padding:1px 5px;display:inline-block}
+
+  .btns{margin-top:14px;display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+  .btn{border:none;border-radius:14px;padding:13px 6px;font-family:var(--hl);font-weight:900;font-size:11.5px;
+    text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .12s}
+  .btn:active,.btn.tap{transform:scale(.96)}
+  .btn-d{background:var(--panel2);color:var(--fg);border:1px solid var(--faint)}
+  .btn-y{background:var(--accent);color:var(--bg);box-shadow:0 3px 0 rgba(250,229,0,.55),inset 0 -2px 0 rgba(0,0,0,.15)}
+
+  /* live pulse glow — from your globals.css */
+  @keyframes pulseup{
+    0%{color:var(--green);text-shadow:0 0 14px rgba(29,231,139,1),0 0 28px rgba(29,231,139,.5);
+       box-shadow:0 0 0 2px rgba(29,231,139,.6),0 0 18px 2px rgba(29,231,139,.4);background-color:rgba(29,231,139,.2)}
+    60%{text-shadow:0 0 8px rgba(29,231,139,.7);box-shadow:0 0 0 1px rgba(29,231,139,.3)}
+    100%{text-shadow:none;box-shadow:none;background-color:transparent}}
+  @keyframes pulsedn{
+    0%{color:var(--red);text-shadow:0 0 14px rgba(255,59,84,1),0 0 28px rgba(255,59,84,.5);
+       box-shadow:0 0 0 2px rgba(255,59,84,.6),0 0 18px 2px rgba(255,59,84,.4);background-color:rgba(255,59,84,.2)}
+    60%{text-shadow:0 0 8px rgba(255,59,84,.7);box-shadow:0 0 0 1px rgba(255,59,84,.3)}
+    100%{text-shadow:none;box-shadow:none;background-color:transparent}}
+  .gup{animation:pulseup .45s ease-out}
+  .gdn{animation:pulsedn .45s ease-out}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;height:62px;padding-bottom:12px;z-index:30;background:var(--bg);
+    border-top:2px solid var(--faint);display:flex;align-items:stretch;justify-content:space-around}
+  .nt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg);opacity:.4;position:relative}
+  .nt.on{opacity:1}
+  .nt.on::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:26px;height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .nt svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="orb o1"></div><div class="orb o2"></div>
+
+    <div class="phone"><div class="screen">
+      <div class="balance"><span class="r">Ready</span><span class="v">$1,240.00</span></div>
+
+      <div class="feed" id="feed">
+
+        <!-- 1 · SOLWHALE -->
+        <section class="snapcard"><div class="wcard">
+          <div class="rank">#1</div>
+          <div class="whorow">
+            <div class="avt" style="background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55"><div class="inner" style="color:#1de78b">SW</div></div>
+            <div class="who"><div class="nm hl">Solwhale</div>
+              <div class="meta stamp"><span>Pacifica</span><span>7xKp…3mN2</span><span class="live"><span class="blink">●</span> Live</span></div></div>
+          </div>
+          <div class="pl">
+            <div><div class="stamp">Total P/L</div><div class="plbig tab" id="pnl0">+$48,210</div></div>
+            <div class="eq"><div class="stamp">Equity</div><div class="eqv tab">$214K</div></div>
+          </div>
+          <div class="chart"><div class="ch-top"><span class="stamp">All time P&L</span><span class="stamp" style="color:var(--green)">+$48,210</span></div>
+            <svg viewBox="0 0 320 54" preserveAspectRatio="none"><path d="M0,48 L40,43 L80,45 L120,34 L160,36 L200,23 L240,25 L280,11 L320,5 L320,54 L0,54 Z" fill="#1de78b" opacity=".12"/><path d="M0,48 L40,43 L80,45 L120,34 L160,36 L200,23 L240,25 L280,11 L320,5" fill="none" stroke="#1de78b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+          <div class="statgrid"><div class="scell"><div class="stamp">1D</div><div class="v tab">+$2,140</div></div><div class="scell"><div class="stamp">7D</div><div class="v tab">+$8,920</div></div><div class="scell"><div class="stamp">30D</div><div class="v tab">+$31,400</div></div></div>
+          <div class="posrow"><div class="ph"><span class="stamp">Open position</span><span class="stamp">3 copyable</span></div>
+            <div class="r"><div class="mk"><span>SOL-PERP</span><span class="side">long</span><span class="lev">5x</span></div><div class="pct tab" id="pct0">+18.4%</div></div></div>
+          <div class="btns"><button class="btn btn-d">▸ Positions</button><button class="btn btn-y">⚡ Tail whale (3)</button></div>
+        </div></section>
+
+        <!-- 2 · GWAK AI -->
+        <section class="snapcard"><div class="wcard">
+          <div class="rank">#2</div>
+          <div class="whorow">
+            <div class="avt" style="background:conic-gradient(from 0deg,#fae500,#fae500cc,#fae500,#fae50088,#fae500);box-shadow:0 0 16px #fae50055"><div class="inner" style="color:#fae500">AI</div></div>
+            <div class="who"><div class="nm hl" style="display:flex;align-items:center;gap:9px">Gwak AI <span class="agent">Agent</span></div>
+              <div class="meta stamp"><span>Momentum</span><span>Verified</span><span class="live"><span class="blink">●</span> Live</span></div></div>
+          </div>
+          <div class="pl">
+            <div><div class="stamp">Total P/L</div><div class="plbig tab" id="pnl1">+$31,540</div></div>
+            <div class="eq"><div class="stamp">Equity</div><div class="eqv tab">$120K</div></div>
+          </div>
+          <div class="chart"><div class="ch-top"><span class="stamp">All time P&L</span><span class="stamp" style="color:var(--green)">+$31,540</span></div>
+            <svg viewBox="0 0 320 54" preserveAspectRatio="none"><path d="M0,46 L40,39 L80,42 L120,30 L160,23 L200,27 L240,16 L280,18 L320,7 L320,54 L0,54 Z" fill="#1de78b" opacity=".12"/><path d="M0,46 L40,39 L80,42 L120,30 L160,23 L200,27 L240,16 L280,18 L320,7" fill="none" stroke="#1de78b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+          <div class="statgrid"><div class="scell"><div class="stamp">1D</div><div class="v tab">+$1,680</div></div><div class="scell"><div class="stamp">7D</div><div class="v tab">+$6,310</div></div><div class="scell"><div class="stamp">30D</div><div class="v tab">+$22,900</div></div></div>
+          <div class="posrow"><div class="ph"><span class="stamp">Open position</span><span class="stamp">2 copyable</span></div>
+            <div class="r"><div class="mk"><span>BTC-PERP</span><span class="side">long</span><span class="lev">3x</span></div><div class="pct tab" id="pct1">+9.2%</div></div></div>
+          <div class="btns"><button class="btn btn-d">▸ Positions</button><button class="btn btn-y">⚡ Tail agent (2)</button></div>
+        </div></section>
+
+        <!-- 3 · DEGENKING -->
+        <section class="snapcard"><div class="wcard">
+          <div class="rank">#3</div>
+          <div class="whorow">
+            <div class="avt" style="background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55"><div class="inner" style="color:#1de78b">DK</div></div>
+            <div class="who"><div class="nm hl">Degenking</div>
+              <div class="meta stamp"><span>Hyperliquid</span><span>0x9f…21aD</span><span class="live"><span class="blink">●</span> Live</span></div></div>
+          </div>
+          <div class="pl">
+            <div><div class="stamp">Total P/L</div><div class="plbig tab" id="pnl2">+$127,800</div></div>
+            <div class="eq"><div class="stamp">Equity</div><div class="eqv tab">$540K</div></div>
+          </div>
+          <div class="chart"><div class="ch-top"><span class="stamp">All time P&L</span><span class="stamp" style="color:var(--green)">+$127,800</span></div>
+            <svg viewBox="0 0 320 54" preserveAspectRatio="none"><path d="M0,50 L40,46 L80,40 L120,42 L160,30 L200,33 L240,20 L280,22 L320,9 L320,54 L0,54 Z" fill="#1de78b" opacity=".12"/><path d="M0,50 L40,46 L80,40 L120,42 L160,30 L200,33 L240,20 L280,22 L320,9" fill="none" stroke="#1de78b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+          <div class="statgrid"><div class="scell"><div class="stamp">1D</div><div class="v tab">+$6,420</div></div><div class="scell"><div class="stamp">7D</div><div class="v tab">+$24,100</div></div><div class="scell"><div class="stamp">30D</div><div class="v tab">+$88,300</div></div></div>
+          <div class="posrow"><div class="ph"><span class="stamp">Open position</span><span class="stamp">4 copyable</span></div>
+            <div class="r"><div class="mk"><span>ETH-PERP</span><span class="short">short</span><span class="lev">10x</span></div><div class="pct tab" id="pct2">+24.1%</div></div></div>
+          <div class="btns"><button class="btn btn-d">▸ Positions</button><button class="btn btn-y">⚡ Tail whale (4)</button></div>
+        </div></section>
+
+      </div>
+
+      <div class="nav">
+        <div class="nt on"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><rect x="6" y="8" width="5" height="8" rx="1"/><rect x="13" y="5" width="5" height="11" rx="1"/><path d="M8.5 4v4M8.5 16v4M15.5 2v3M15.5 16v4"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+    </div></div>
+  </div>
+
+<script>
+  const feed=document.querySelector('#feed');
+  let secs=[...document.querySelectorAll('.snapcard')];
+
+  // perfect loop: clone the first card to the end so the wrap is invisible
+  const dup=secs[0].cloneNode(true);
+  dup.querySelectorAll('[id]').forEach(e=>{const m=e.id.match(/^(.*?)(\d+)$/);if(m)e.id=m[1]+(Number(m[2])+secs.length);});
+  feed.appendChild(dup);
+  secs=[...feed.querySelectorAll('.snapcard')];
+
+  // one periodic clock drives everything -> the recorded period (N*DWELL) loops seamlessly
+  const N=secs.length, DWELL=3000, PERIOD=N*DWELL, NP=6000;
+  const PNL=[{id:'pnl0',b:48210,a:70},{id:'pnl1',b:31540,a:55},{id:'pnl2',b:127800,a:120},{id:'pnl3',b:48210,a:70}];
+  const PCT=[{id:'pct0',b:18.4,a:.4},{id:'pct1',b:9.2,a:.3},{id:'pct2',b:24.1,a:.5},{id:'pct3',b:18.4,a:.4}];
+  const commas=n=>Math.round(n).toLocaleString('en-US');
+  let lastIdx=-1,lastGlow=-1;
+  const T0=performance.now();
+  (function frame(){
+    const t=(performance.now()-T0)%PERIOD;
+    const idx=Math.floor(t/DWELL)%N;
+    if(idx!==lastIdx){feed.scrollTo({top:secs[idx].offsetTop,behavior:idx<lastIdx?'auto':'smooth'});lastIdx=idx;} // wrap = instant (dup == card0)
+    const STEP=1000, step=Math.floor(t/STEP);   // tick ~once a second, not every frame
+    if(step!==lastGlow){
+      lastGlow=step;
+      const s=Math.sin(2*Math.PI*(step*STEP)/NP);
+      PNL.forEach(n=>{const e=document.getElementById(n.id);if(e)e.textContent='+$'+commas(n.b+n.a*s);});
+      PCT.forEach(n=>{const e=document.getElementById(n.id);if(e)e.textContent='+'+(n.b+n.a*s).toFixed(1)+'%';});
+      const e=document.getElementById('pnl'+idx);if(e){e.classList.remove('gup');void e.offsetWidth;e.classList.add('gup');}
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  // fit to any window
+  function fit(){
+    const st=document.querySelector('.stage');
+    const ph=document.querySelector('.phone');
+    const fill=location.search.includes('fill');   // ?fill = fill a 9:16 frame for video export
+    if(fill){
+      document.body.classList.add('fillmode');
+      ph.style.zoom=((window.innerHeight*0.985)/712).toFixed(4); // native crisp upscale, NOT transform (no blur)
+      st.style.transform='translate(-50%,-50%)';
+      return;
+    }
+    const k=Math.min(1,(window.innerHeight-20)/st.offsetHeight,(window.innerWidth-20)/st.offsetWidth);
+    st.style.transform='translate(-50%,-50%) scale('+k.toFixed(4)+')';
+  }
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);fit();
+</script>
+</body>
+</html>

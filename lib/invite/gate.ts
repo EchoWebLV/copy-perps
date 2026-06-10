@@ -37,6 +37,7 @@ export async function inviteCookieToken(): Promise<string> {
 }
 
 const ALLOWLIST_EXACT = new Set([
+  "/", // public marketing landing — its CTAs lead into the gate
   "/invite",
   "/api/invite",
   "/api/waitlist",

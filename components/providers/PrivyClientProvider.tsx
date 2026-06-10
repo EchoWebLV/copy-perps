@@ -39,9 +39,9 @@ export function PrivyClientProvider({ children }: { children: ReactNode }) {
           accentColor: "#22c55e",
           walletChainType: "solana-only",
           showWalletLoginFirst: false,
-          logo: undefined,
+          logo: "https://gwak.gg/icon.png",
         },
-        loginMethods: ["email", "wallet", "google", "twitter"],
+        loginMethods: ["email", "wallet"],
         externalWallets: {
           solana: { connectors: toSolanaWalletConnectors() },
         },

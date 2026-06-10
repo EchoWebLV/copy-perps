@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gwak — +100% (motion)</title>
+<style>
+  :root{
+    --bg:#0e0d10; --panel:#17151b; --panel2:#221f28; --fg:#fafaf2;
+    --dim:rgba(250,250,242,.5); --faint:rgba(250,250,242,.18);
+    --accent:#fae500; --green:#1de78b; --red:#ff3b54;
+    --hl:"Helvetica Neue",Helvetica,"Arial Narrow",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:radial-gradient(130% 120% at 50% -10%,#1a1820 0%,#0a090c 60%);
+    font-family:var(--body);color:var(--fg);overflow:hidden;position:relative;height:100vh}
+  .stage{position:absolute;top:50%;left:50%;transform-origin:center center;
+    transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:24px}
+  .orb{position:absolute;border-radius:50%;filter:blur(85px);opacity:.36;mix-blend-mode:screen;pointer-events:none}
+  .o1{width:360px;height:360px;background:#1de78b;left:14%;top:18%;animation:f1 15s ease-in-out infinite}
+  .o2{width:340px;height:340px;background:#1de78b;right:14%;bottom:12%;animation:f2 18s ease-in-out infinite}
+  @keyframes f1{50%{transform:translate(36px,28px) scale(1.1)}}
+  @keyframes f2{50%{transform:translate(-36px,-26px) scale(.92)}}
+  .fillmode{background:#000 !important}
+  .fillmode .orb{display:none}
+  .fillmode .phone{animation:none}
+
+  .hl{font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:-.03em;font-stretch:condensed;line-height:.9}
+  .stamp{font-family:var(--hl);font-weight:900;text-transform:uppercase;font-size:9px;letter-spacing:.22em;color:var(--dim)}
+  .tab{font-variant-numeric:tabular-nums}
+
+  .phone{position:relative;width:336px;height:712px;border-radius:54px;
+    background:linear-gradient(160deg,#26242c,#0b0a0d);padding:12px;
+    box-shadow:0 40px 120px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.05),inset 0 0 0 2px rgba(255,255,255,.03);
+    animation:bob 7s ease-in-out infinite;z-index:2}
+  @keyframes bob{50%{transform:translateY(-8px)}}
+  .phone::after{content:"";position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:104px;height:24px;background:#000;border-radius:0 0 14px 14px;z-index:40}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+
+  .balance{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:30;
+    display:inline-flex;align-items:baseline;gap:7px;border-radius:999px;padding:6px 14px;
+    background:rgba(23,21,27,.82);backdrop-filter:blur(8px);border:1px solid var(--faint);
+    font-family:var(--hl);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.16em}
+  .balance .r{opacity:.5}.balance .v{color:var(--accent)}
+
+  .wc{position:absolute;inset:0;bottom:62px;padding:78px 16px 14px;display:flex;flex-direction:column;gap:13px;transition:opacity .2s linear}
+
+  .whead{display:flex;align-items:center;gap:11px}
+  .av{width:42px;height:42px;border-radius:50%;flex:none;padding:3px;display:grid;place-items:center;
+    background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55}
+  .av .i{width:100%;height:100%;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-family:var(--hl);font-weight:900;font-size:14px;color:#1de78b}
+  .whead .who .t{font-family:var(--hl);font-weight:900;font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+  .whead .who .t b{color:var(--accent)}
+  .sidepill{margin-top:5px;display:inline-flex;border-radius:999px;padding:3px 9px;font-family:var(--hl);font-weight:900;
+    font-size:10px;text-transform:uppercase;letter-spacing:.05em;background:rgba(29,231,139,.12);color:var(--green);border:1px solid rgba(29,231,139,.4)}
+  .whead .time{margin-left:auto;text-align:right}
+  .whead .time .v{font-family:var(--hl);font-weight:900;font-size:11px;margin-top:3px}
+
+  .chart{flex:1;min-height:0;position:relative;border-radius:16px;overflow:hidden;background:var(--panel);border:1px solid var(--faint)}
+  .chart svg{position:absolute;inset:0;width:100%;height:100%}
+  .chart .badge{position:absolute;top:10px;left:12px;font-family:var(--hl);font-weight:900;font-size:9px;letter-spacing:.18em;color:var(--dim);display:flex;align-items:center;gap:5px}
+  .chart .badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .doubled{position:absolute;top:10px;right:12px;font-family:var(--hl);font-weight:900;font-size:11px;letter-spacing:.08em;
+    color:var(--bg);background:var(--green);border-radius:7px;padding:4px 8px;opacity:0;transform:scale(.8);
+    transition:opacity .25s,transform .25s;box-shadow:0 0 22px rgba(29,231,139,.5)}
+
+  .pnl{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+  .pnl .l{font-family:var(--hl);font-weight:900;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+  .pnl .big{font-family:var(--hl);font-weight:900;font-size:54px;line-height:.85;letter-spacing:-.02em;color:var(--green);
+    border-radius:8px;padding:2px 7px;margin-left:-7px;display:inline-block}
+  .pnl .pct{font-family:var(--hl);font-weight:900;font-size:20px;color:var(--green)}
+
+  .chips{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .chip{border-radius:11px;background:var(--panel);border:1px solid var(--faint);padding:9px 10px}
+  .chip .l{font-family:var(--hl);font-weight:900;font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .chip .v{margin-top:3px;font-family:var(--hl);font-weight:900;font-size:15px}
+
+  @keyframes pulseup{
+    0%{color:var(--green);text-shadow:0 0 16px rgba(29,231,139,1),0 0 32px rgba(29,231,139,.6);
+       box-shadow:0 0 0 2px rgba(29,231,139,.6),0 0 22px 3px rgba(29,231,139,.45);background-color:rgba(29,231,139,.22)}
+    60%{text-shadow:0 0 9px rgba(29,231,139,.7)}
+    100%{text-shadow:none;box-shadow:none;background-color:transparent}}
+  .gup{animation:pulseup .5s ease-out}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;height:62px;padding-bottom:12px;z-index:30;background:var(--bg);
+    border-top:2px solid var(--faint);display:flex;align-items:stretch;justify-content:space-around}
+  .nt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg);opacity:.4;position:relative}
+  .nt.on{opacity:1}
+  .nt.on::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:26px;height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .nt svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="orb o1"></div><div class="orb o2"></div>
+
+    <div class="phone"><div class="screen">
+      <div class="balance"><span class="r">Ready</span><span class="v">$1,240.00</span></div>
+
+      <div class="wc" id="wc">
+        <div class="whead">
+          <div class="av"><div class="i">SW</div></div>
+          <div class="who">
+            <div class="t">Copying <b>Solwhale</b></div>
+            <div class="sidepill">SOL-PERP long 5x</div>
+          </div>
+          <div class="time"><div class="stamp">Held</div><div class="v">4m</div></div>
+        </div>
+
+        <div class="chart">
+          <div class="badge"><span class="dot"></span>Live position</div>
+          <div class="doubled" id="doubled">2× · Doubled</div>
+          <svg viewBox="0 0 320 200" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="vf" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1de78b" stop-opacity=".34"/>
+                <stop offset="100%" stop-color="#1de78b" stop-opacity=".02"/>
+              </linearGradient>
+              <clipPath id="reveal"><rect id="clip" x="0" y="0" width="0" height="200"/></clipPath>
+            </defs>
+            <g clip-path="url(#reveal)">
+              <path id="area" fill="url(#vf)"/>
+              <path id="line" fill="none" stroke="#1de78b" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+            </g>
+            <circle id="tip" r="5" fill="#1de78b"/>
+          </svg>
+        </div>
+
+        <div class="pnl">
+          <div class="l">Profit</div>
+          <div class="big tab" id="big">+$0.00</div>
+          <div class="pct tab" id="pct">+0.0%</div>
+        </div>
+
+        <div class="chips">
+          <div class="chip"><div class="l">Stake</div><div class="v tab">$500</div></div>
+          <div class="chip"><div class="l">Value</div><div class="v tab" id="val">$500</div></div>
+          <div class="chip"><div class="l">Entry</div><div class="v tab">$172.40</div></div>
+        </div>
+      </div>
+
+      <div class="nav">
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><rect x="6" y="8" width="5" height="8" rx="1"/><rect x="13" y="5" width="5" height="11" rx="1"/><path d="M8.5 4v4M8.5 16v4M15.5 2v3M15.5 16v4"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div class="nt on"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+    </div></div>
+  </div>
+
+<script>
+  const line=document.getElementById('line'),area=document.getElementById('area'),tip=document.getElementById('tip'),
+        clip=document.getElementById('clip'),big=document.getElementById('big'),pct=document.getElementById('pct'),
+        val=document.getElementById('val'),wc=document.getElementById('wc'),doubled=document.getElementById('doubled');
+
+  // up-trending pump path (bottom-left -> top-right with a couple pullbacks)
+  const D="M0,186 C30,178 52,184 80,170 C108,156 122,162 150,140 C176,120 196,128 224,96 C250,68 268,76 300,42 C310,32 316,28 320,22";
+  line.setAttribute('d',D);
+  area.setAttribute('d',D+" L320,200 L0,200 Z");
+  const LEN=line.getTotalLength();
+
+  const STAKE=500, PERIOD=10000, CLIMB=6500, FADE=900, FADEIN=550;
+  const T0=performance.now();
+  let lastGlow=-1;
+
+  (function frame(){
+    const t=(performance.now()-T0)%PERIOD;
+    const x=Math.min(1,t/CLIMB);
+    const p=1-Math.pow(1-x,3);                 // eased 0..1 -> +100%
+    // opacity fades in at start, out at end -> the loop reset is invisible
+    let op=1;
+    if(t<FADEIN) op=t/FADEIN;
+    else if(t>PERIOD-FADE) op=Math.max(0,(PERIOD-t)/FADE);
+    wc.style.opacity=op;
+    // reveal the chart left->right, tip rides the draw front
+    clip.setAttribute('width',(p*320).toFixed(1));
+    const pt=line.getPointAtLength(Math.max(0.001,p)*LEN);
+    tip.setAttribute('cx',pt.x); tip.setAttribute('cy',pt.y);
+    // numbers
+    big.textContent='+$'+(STAKE*p).toFixed(2);
+    pct.textContent='+'+(100*p).toFixed(1)+'%';
+    val.textContent='$'+Math.round(STAKE*(1+p));
+    doubled.style.opacity = p>0.93?1:0;
+    doubled.style.transform = p>0.93?'scale(1)':'scale(.8)';
+    // glow the number ~ twice a second while climbing
+    const g=Math.floor(t/550);
+    if(g!==lastGlow && t<CLIMB+700){lastGlow=g;big.classList.remove('gup');void big.offsetWidth;big.classList.add('gup');}
+    requestAnimationFrame(frame);
+  })();
+
+  function fit(){
+    const st=document.querySelector('.stage'), ph=document.querySelector('.phone');
+    const fill=location.search.includes('fill');
+    if(fill){document.body.classList.add('fillmode');ph.style.zoom=((window.innerHeight*0.985)/712).toFixed(4);st.style.transform='translate(-50%,-50%)';return;}
+    const k=Math.min(1,(window.innerHeight-20)/st.offsetHeight,(window.innerWidth-20)/st.offsetWidth);
+    st.style.transform='translate(-50%,-50%) scale('+k.toFixed(4)+')';
+  }
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);fit();
+</script>
+</body>
+</html>

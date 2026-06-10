@@ -214,7 +214,14 @@ export interface BotSignal extends BaseSignal {
     freeBalanceUsd: number;
     // Deterministic visual state — computed each signal build, no LLM.
     // null when admin has disabled mood badges via thought_settings.
-    mood: import("./bots/mood").MoodBadge | null;
+    mood:
+      | "BUSTED"
+      | "WOUNDED"
+      | "ON_STREAK"
+      | "LOADED"
+      | "HUNTING"
+      | "DORMANT"
+      | null;
     busted: boolean;
     currentPositions: Array<{
       positionId: string;

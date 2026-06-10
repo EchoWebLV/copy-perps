@@ -38,10 +38,13 @@ describe("invite gate helpers", () => {
 
   describe("isGatedPath", () => {
     it("gates app pages", () => {
-      expect(isGatedPath("/")).toBe(true);
       expect(isGatedPath("/feed")).toBe(true);
       expect(isGatedPath("/trade")).toBe(true);
       expect(isGatedPath("/api/whales/roster")).toBe(true);
+    });
+
+    it("never gates the public landing page", () => {
+      expect(isGatedPath("/")).toBe(false);
     });
 
     it("never gates the invite screen, its API, or the waitlist API", () => {

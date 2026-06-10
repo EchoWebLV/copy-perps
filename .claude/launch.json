@@ -2,9 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "paperbots",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "name": "dev-local",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "DISABLE_BOT_TICKER=true DISABLE_WHALE_TICKER=true DISABLE_WHALE_SOURCE_MONITOR=true npm run dev"
+      ],
       "port": 3000
     }
   ]

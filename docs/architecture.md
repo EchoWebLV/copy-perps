@@ -288,7 +288,7 @@ Folio · Settings**. Each flag-branching page is marked below.
 ```mermaid
 flowchart TB
     subgraph pages["app/"]
-        landing["page.tsx — redirect('/feed')"]
+        landing["page.tsx — public marketing landing (CTAs → /feed, gate sends outsiders to /invite)"]
         mobile["u/[handle] — public profile"]
         subgraph appgrp["(app)/ — authed shell (AppShell + BottomNav)"]
             feed["feed (nav: Whales)<br/>ON: WhaleRoster · OFF: BotRoster"]

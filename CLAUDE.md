@@ -223,6 +223,6 @@ The spec also lists several future-state pieces (SSE feed stream, `/history` pag
 - Server: `verifyPrivyRequest(request)` in [lib/privy/server.ts](lib/privy/server.ts) calls `privyServer.verifyAuthToken` and returns `{ userId, appId, sessionId }` or `null`.
 - After login, `<UserEnsure />` ([components/auth/UserEnsure.tsx](components/auth/UserEnsure.tsx)) POSTs to `/api/users/me` to upsert the `users` row and sync `solanaPubkey`. The whole authed UI is wrapped in `<AuthGate>` which shows a login wall if `!authenticated`.
 
-### Landing page caveat
+### Landing page
 
-[app/page.tsx](app/page.tsx) is currently a 2-day countdown to launch with `SHOW_LOGIN = false`. Flip that constant to re-enable the Login / Enter buttons. The countdown auto-hides once the launch time passes.
+[app/page.tsx](app/page.tsx) renders the public marketing landing ([components/landing/Landing.tsx](components/landing/Landing.tsx)). `/` is allowlisted in [lib/invite/gate.ts](lib/invite/gate.ts); every "Enter the app" CTA points at `/feed`, so the invite middleware sends visitors without the invite cookie to `/invite` (code entry + waitlist email signup) and lets invited users straight in.

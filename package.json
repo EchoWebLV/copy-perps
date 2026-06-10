@@ -33,6 +33,7 @@
     "flash-sdk": "^15.16.14",
     "lucide-react": "^0.460.0",
     "next": "^16.0.0",
+    "postgres": "^3.4.9",
     "posthog-js": "^1.372.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

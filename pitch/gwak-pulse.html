@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gwak — Pulse (motion 1:1)</title>
+<style>
+  :root{
+    --bg:#0e0d10; --panel:#17151b; --panel2:#221f28; --fg:#fafaf2;
+    --dim:rgba(250,250,242,.5); --faint:rgba(250,250,242,.18);
+    --accent:#fae500; --green:#1de78b; --red:#ff3b54;
+    --hl:"Helvetica Neue",Helvetica,"Arial Narrow",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:radial-gradient(130% 120% at 50% -10%,#1a1820 0%,#0a090c 60%);
+    font-family:var(--body);color:var(--fg);overflow:hidden;position:relative;height:100vh}
+  .stage{position:absolute;top:50%;left:50%;transform-origin:center center;
+    transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:24px}
+  .orb{position:absolute;border-radius:50%;filter:blur(85px);opacity:.36;mix-blend-mode:screen;pointer-events:none}
+  .o1{width:360px;height:360px;background:#fae500;left:14%;top:14%;animation:f1 15s ease-in-out infinite}
+  .o2{width:340px;height:340px;background:#1de78b;right:14%;bottom:12%;animation:f2 18s ease-in-out infinite}
+  @keyframes f1{50%{transform:translate(36px,28px) scale(1.1)}}
+  @keyframes f2{50%{transform:translate(-36px,-26px) scale(.92)}}
+  .fillmode{background:#000 !important}
+  .fillmode .orb{display:none}
+  .fillmode .phone{animation:none}
+
+  .hl{font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:-.03em;font-stretch:condensed;line-height:.9}
+  .stamp{font-family:var(--hl);font-weight:900;text-transform:uppercase;font-size:9px;letter-spacing:.22em;color:var(--dim)}
+  .tab{font-variant-numeric:tabular-nums}
+
+  .phone{position:relative;width:336px;height:712px;border-radius:54px;
+    background:linear-gradient(160deg,#26242c,#0b0a0d);padding:12px;
+    box-shadow:0 40px 120px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.05),inset 0 0 0 2px rgba(255,255,255,.03);
+    animation:bob 7s ease-in-out infinite;z-index:2}
+  @keyframes bob{50%{transform:translateY(-8px)}}
+  .phone::after{content:"";position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:104px;height:24px;background:#000;border-radius:0 0 14px 14px;z-index:40}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+
+  .balance{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:30;
+    display:inline-flex;align-items:baseline;gap:7px;border-radius:999px;padding:6px 14px;
+    background:rgba(23,21,27,.82);backdrop-filter:blur(8px);border:1px solid var(--faint);
+    font-family:var(--hl);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.16em}
+  .balance .r{opacity:.5}.balance .v{color:var(--accent)}
+
+  .feed{position:absolute;inset:0;bottom:62px;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
+  .feed::-webkit-scrollbar{display:none}
+  .snapcard{height:100%;scroll-snap-align:start;scroll-snap-stop:always;
+    display:flex;flex-direction:column;justify-content:center;padding:72px 14px 14px}
+
+  /* pulse card */
+  .phead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;padding:0 4px}
+  .phead .ttl{font-size:26px}
+  .phead .eb{margin-top:4px}
+  .status{flex:none;border-radius:999px;padding:5px 11px;font-family:var(--hl);font-weight:900;font-size:10px;
+    text-transform:uppercase;letter-spacing:.06em;background:rgba(29,231,139,.1);color:var(--green);border:1px solid rgba(29,231,139,.4)}
+  .blink{animation:blink 1.5s steps(2,jump-none) infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .pinner{background:var(--panel2);border:1px solid var(--faint);border-radius:20px;padding:16px;
+    display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .pavrow{display:flex;align-items:flex-start;gap:11px}
+  .avt{width:48px;height:48px;border-radius:50%;flex:none;padding:3px;display:grid;place-items:center;
+    animation:ringpulse 2.4s cubic-bezier(.4,0,.6,1) infinite}
+  @keyframes ringpulse{0%,100%{opacity:1}50%{opacity:.74}}
+  .avt .inner{width:100%;height:100%;border-radius:50%;background:var(--bg);display:grid;place-items:center;
+    font-family:var(--hl);font-weight:900;font-size:16px}
+  .pwho{min-width:0;flex:1}
+  .pname{font-size:13px;font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:7px}
+  .agent{font-family:var(--hl);font-weight:900;font-size:8px;letter-spacing:.12em;color:var(--accent);border:1px solid rgba(250,229,0,.5);border-radius:5px;padding:1px 5px}
+  .sidepill{margin-top:6px;display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 9px;
+    font-family:var(--hl);font-weight:900;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .ptime{flex:none;text-align:right}
+  .ptime .v{color:var(--fg);font-family:var(--hl);font-weight:900;font-size:11px;margin-top:3px}
+
+  .pheadline{margin-top:15px;font-family:var(--hl);font-weight:900;text-transform:uppercase;
+    font-size:23px;line-height:1.02;letter-spacing:-.01em;color:var(--fg)}
+  .brush{display:inline-block;color:#0e0d10;padding:.04em .36em;margin:0 .05em;border-radius:4px;
+    background:linear-gradient(94deg,rgba(255,244,95,.92),#fae500 42%,rgba(255,189,47,.96));
+    clip-path:polygon(3% 18%,96% 5%,100% 47%,94% 88%,8% 96%,0 58%);
+    transform:rotate(-1.8deg);box-shadow:0 0 24px rgba(250,229,0,.32);text-shadow:0 1px 0 rgba(255,255,255,.28)}
+
+  .pctx{margin-top:11px;font-family:var(--body);font-size:13px;line-height:1.35;color:var(--fg);opacity:.86}
+
+  .pmetrics{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:var(--body)}
+  .pmetric{border-radius:11px;background:var(--bg);border:1px solid var(--faint);padding:9px 11px}
+  .pmetric .l{font-family:var(--hl);font-weight:900;font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:var(--dim)}
+  .pmetric .v{margin-top:3px;font-family:var(--hl);font-weight:900;font-size:14px}
+
+  .preacts{margin-top:15px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+  .react{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:32px;border-radius:999px;
+    font-family:var(--hl);font-weight:900;font-size:10px;text-transform:uppercase;background:var(--panel);border:1px solid var(--faint)}
+  .react svg{width:12px;height:12px;stroke-width:3;fill:none}
+  .react .c{font-variant-numeric:tabular-nums}
+  .pop{animation:pop .4s ease-out}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+
+  .ptail{margin-top:11px;width:100%;border:none;border-radius:13px;padding:13px;font-family:var(--hl);
+    font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:.1em;background:var(--accent);
+    color:var(--bg);display:flex;align-items:center;justify-content:center;gap:7px;
+    box-shadow:0 3px 0 rgba(250,229,0,.55),inset 0 -2px 0 rgba(0,0,0,.15)}
+  .ptail svg{width:14px;height:14px;fill:var(--bg)}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;height:62px;padding-bottom:12px;z-index:30;background:var(--bg);
+    border-top:2px solid var(--faint);display:flex;align-items:stretch;justify-content:space-around}
+  .nt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg);opacity:.4;position:relative}
+  .nt.on{opacity:1}
+  .nt.on::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:26px;height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .nt svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="orb o1"></div><div class="orb o2"></div>
+
+    <div class="phone"><div class="screen">
+      <div class="balance"><span class="r">Ready</span><span class="v">$1,240.00</span></div>
+
+      <div class="feed" id="feed">
+
+        <!-- 1 -->
+        <section class="snapcard"><div>
+          <div class="phead">
+            <div><div class="ttl hl">Pulse</div><div class="eb stamp">Fresh entry · Pacifica</div></div>
+            <div class="status">01/03 <span class="blink">●</span> Live</div>
+          </div>
+          <div class="pinner">
+            <div class="pavrow">
+              <div class="avt" style="background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55"><div class="inner" style="color:#1de78b">SW</div></div>
+              <div class="pwho"><div class="pname">Solwhale</div>
+                <div class="sidepill" style="background:rgba(29,231,139,.12);color:var(--green);border:1px solid rgba(29,231,139,.4)">SOL-PERP long 5x</div></div>
+              <div class="ptime"><div class="stamp">Seen</div><div class="v">2m</div></div>
+            </div>
+            <div class="pheadline">Solwhale is up <span class="brush">+18.4%</span> on a SOL long</div>
+            <div class="pctx">Fresh 5x long, $42K notional. Riding the breakout off support.</div>
+            <div class="pmetrics">
+              <div class="pmetric"><div class="l">Notional</div><div class="v tab">$42K</div></div>
+              <div class="pmetric"><div class="l">Source P/L</div><div class="v tab" style="color:var(--green)">+18.4%</div></div>
+            </div>
+            <div class="preacts">
+              <div class="react" style="color:var(--accent)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tailing <span class="c" id="r0a">128</span></div>
+              <div class="react" style="color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg><span class="c" id="r0b">312</span></div>
+              <div class="react" style="color:var(--red)"><svg viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 7 7M21 16v-5h-5"/></svg><span class="c" id="r0c">14</span></div>
+            </div>
+            <button class="ptail"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tail this position</button>
+          </div>
+        </div></section>
+
+        <!-- 2 -->
+        <section class="snapcard"><div>
+          <div class="phead">
+            <div><div class="ttl hl">Pulse</div><div class="eb stamp">Big winner · Hyperliquid</div></div>
+            <div class="status">02/03 <span class="blink">●</span> Live</div>
+          </div>
+          <div class="pinner">
+            <div class="pavrow">
+              <div class="avt" style="background:conic-gradient(from 0deg,#1de78b,#1de78bcc,#1de78b,#1de78b88,#1de78b);box-shadow:0 0 16px #1de78b55"><div class="inner" style="color:#1de78b">DK</div></div>
+              <div class="pwho"><div class="pname">Degenking</div>
+                <div class="sidepill" style="background:rgba(255,59,84,.12);color:var(--red);border:1px solid rgba(255,59,84,.4)">ETH-PERP short 10x</div></div>
+              <div class="ptime"><div class="stamp">Held</div><div class="v">1h 12m</div></div>
+            </div>
+            <div class="pheadline">Degenking is up <span class="brush">+24.1%</span> shorting ETH</div>
+            <div class="pctx">10x short paying off hard as ETH fades into the close.</div>
+            <div class="pmetrics">
+              <div class="pmetric"><div class="l">Notional</div><div class="v tab">$128K</div></div>
+              <div class="pmetric"><div class="l">Source P/L</div><div class="v tab" style="color:var(--green)">+24.1%</div></div>
+            </div>
+            <div class="preacts">
+              <div class="react" style="color:var(--accent)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tailing <span class="c" id="r1a">341</span></div>
+              <div class="react" style="color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg><span class="c" id="r1b">88</span></div>
+              <div class="react" style="color:var(--red)"><svg viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 7 7M21 16v-5h-5"/></svg><span class="c" id="r1c">510</span></div>
+            </div>
+            <button class="ptail"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tail this position</button>
+          </div>
+        </div></section>
+
+        <!-- 3 -->
+        <section class="snapcard"><div>
+          <div class="phead">
+            <div><div class="ttl hl">Pulse</div><div class="eb stamp">Agent signal · Momentum</div></div>
+            <div class="status">03/03 <span class="blink">●</span> Live</div>
+          </div>
+          <div class="pinner">
+            <div class="pavrow">
+              <div class="avt" style="background:conic-gradient(from 0deg,#fae500,#fae500cc,#fae500,#fae50088,#fae500);box-shadow:0 0 16px #fae50055"><div class="inner" style="color:#fae500">AI</div></div>
+              <div class="pwho"><div class="pname">Gwak AI <span class="agent">Agent</span></div>
+                <div class="sidepill" style="background:rgba(29,231,139,.12);color:var(--green);border:1px solid rgba(29,231,139,.4)">BTC-PERP long 3x</div></div>
+              <div class="ptime"><div class="stamp">Seen</div><div class="v">4m</div></div>
+            </div>
+            <div class="pheadline">Gwak AI opened a <span class="brush">+9.2%</span> BTC long</div>
+            <div class="pctx">Systematic momentum agent, building a track record on-chain.</div>
+            <div class="pmetrics">
+              <div class="pmetric"><div class="l">Notional</div><div class="v tab">$58K</div></div>
+              <div class="pmetric"><div class="l">Source P/L</div><div class="v tab" style="color:var(--green)">+9.2%</div></div>
+            </div>
+            <div class="preacts">
+              <div class="react" style="color:var(--accent)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tailing <span class="c" id="r2a">204</span></div>
+              <div class="react" style="color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg><span class="c" id="r2b">167</span></div>
+              <div class="react" style="color:var(--red)"><svg viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 7 7M21 16v-5h-5"/></svg><span class="c" id="r2c">22</span></div>
+            </div>
+            <button class="ptail"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Tail this agent</button>
+          </div>
+        </div></section>
+
+      </div>
+
+      <div class="nav">
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><rect x="6" y="8" width="5" height="8" rx="1"/><rect x="13" y="5" width="5" height="11" rx="1"/><path d="M8.5 4v4M8.5 16v4M15.5 2v3M15.5 16v4"/></svg></div>
+        <div class="nt on"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+    </div></div>
+  </div>
+
+<script>
+  const feed=document.querySelector('#feed');
+  let secs=[...document.querySelectorAll('.snapcard')];
+
+  // perfect loop: clone the first card to the end so the wrap is invisible
+  const dup=secs[0].cloneNode(true);
+  dup.querySelectorAll('[id]').forEach(e=>{const m=e.id.match(/^r(\d+)([a-c])$/);if(m)e.id='r'+(Number(m[1])+secs.length)+m[2];});
+  feed.appendChild(dup);
+  secs=[...feed.querySelectorAll('.snapcard')];
+
+  // one periodic clock -> the recorded period loops seamlessly
+  const N=secs.length, DWELL=3000, PERIOD=N*DWELL, NP=6000;
+  const RC=[['r0a',128,0],['r0b',312,1],['r0c',14,2],['r1a',341,0],['r1b',88,1],['r1c',510,2],['r2a',204,0],['r2b',167,1],['r2c',22,2],['r3a',128,0],['r3b',312,1],['r3c',14,2]];
+  let lastIdx=-1,lastPop=-1;
+  const T0=performance.now();
+  (function frame(){
+    const t=(performance.now()-T0)%PERIOD;
+    const idx=Math.floor(t/DWELL)%N;
+    if(idx!==lastIdx){feed.scrollTo({top:secs[idx].offsetTop,behavior:idx<lastIdx?'auto':'smooth'});lastIdx=idx;} // wrap = instant (dup == card0)
+    const STEP=1500, step=Math.floor(t/STEP);   // tick reactions every 1.5s, not every frame
+    if(step!==lastPop){
+      lastPop=step;
+      RC.forEach(([id,b,ph])=>{const e=document.getElementById(id);if(e)e.textContent=Math.round(b+6*Math.sin(2*Math.PI*(step*STEP)/NP+ph*2.1));});
+      ['a','b','c'].forEach(suf=>{const e=document.getElementById('r'+idx+suf);if(e){e.classList.remove('pop');void e.offsetWidth;e.classList.add('pop');}});
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  // fit to any window (+?fill for 9:16 video export)
+  function fit(){
+    const st=document.querySelector('.stage');
+    const ph=document.querySelector('.phone');
+    const fill=location.search.includes('fill');
+    if(fill){
+      document.body.classList.add('fillmode');
+      ph.style.zoom=((window.innerHeight*0.985)/712).toFixed(4); // native crisp upscale, NOT transform (no blur)
+      st.style.transform='translate(-50%,-50%)';
+      return;
+    }
+    const k=Math.min(1,(window.innerHeight-20)/st.offsetHeight,(window.innerWidth-20)/st.offsetWidth);
+    st.style.transform='translate(-50%,-50%) scale('+k.toFixed(4)+')';
+  }
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);fit();
+</script>
+</body>
+</html>

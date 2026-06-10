@@ -22,30 +22,30 @@ describe("tail reservation", () => {
   });
 
   it("returns true when the atomic reservation returns a row", async () => {
-    mocks.execute.mockResolvedValueOnce({ rows: [] });
-    mocks.execute.mockResolvedValueOnce({ rows: [{ user_id: "user-1" }] });
+    mocks.execute.mockResolvedValueOnce([]);
+    mocks.execute.mockResolvedValueOnce([{ user_id: "user-1" }]);
 
     await expect(reserveTailOnMarket("user-1", "ETH")).resolves.toBe(true);
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 
   it("returns false when the atomic reservation returns no rows", async () => {
-    mocks.execute.mockResolvedValueOnce({ rows: [] });
-    mocks.execute.mockResolvedValueOnce({ rows: [] });
+    mocks.execute.mockResolvedValueOnce([]);
+    mocks.execute.mockResolvedValueOnce([]);
 
     await expect(reserveTailOnMarket("user-1", "ETH")).resolves.toBe(false);
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 
   it("releases an existing reservation", async () => {
-    mocks.execute.mockResolvedValue({ rows: [] });
+    mocks.execute.mockResolvedValue([]);
 
     await expect(releaseTailReservation("user-1", "ETH")).resolves.toBeUndefined();
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 
   it("blocks a reservation until manual review", async () => {
-    mocks.execute.mockResolvedValue({ rows: [] });
+    mocks.execute.mockResolvedValue([]);
 
     await expect(blockTailReservation("user-1", "ETH")).resolves.toBeUndefined();
     expect(mocks.execute).toHaveBeenCalledTimes(2);

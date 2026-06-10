@@ -6,16 +6,14 @@
 // rate-limited enriched build re-warms. Self-provisioning: ensureTable() runs
 // an idempotent CREATE TABLE, mirroring lib/bots/ticker-lease.ts — no migration.
 
-import { neon } from "@neondatabase/serverless";
+import { sql as pg } from "@/lib/db";
 import type { WhaleTraderSignal } from "@/lib/types";
 
 type WhaleTraderStats = WhaleTraderSignal["payload"]["stats"];
 export type StatsByWhaleId = Record<string, WhaleTraderStats>;
 
 function client() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL not set");
-  return neon(url);
+  return pg;
 }
 
 let ensured: Promise<void> | null = null;

@@ -33,7 +33,6 @@ const mocks = vi.hoisted(() => {
     findUncreditedPacificaDeposits: vi.fn(),
     getMarksSnapshot: vi.fn(),
     getMark: vi.fn(),
-    getBot: vi.fn(),
     getFlashPerpsService: vi.fn(),
     flashPositionsOf: vi.fn(),
     savePortfolioSnapshotForUser: vi.fn(),
@@ -67,9 +66,6 @@ vi.mock("@/lib/pacifica/deposit-reconcile", () => ({
 vi.mock("@/lib/data/marks", () => ({
   getMarksSnapshot: mocks.getMarksSnapshot,
   getMark: mocks.getMark,
-}));
-vi.mock("@/lib/bots", () => ({
-  getBot: mocks.getBot,
 }));
 vi.mock("@/lib/flash/perps", () => ({
   getFlashPerpsService: mocks.getFlashPerpsService,
@@ -120,7 +116,6 @@ describe("GET /api/portfolio", () => {
     });
     mocks.getMarksSnapshot.mockResolvedValue(new Map());
     mocks.getMark.mockResolvedValue(null);
-    mocks.getBot.mockReturnValue(null);
     mocks.getFlashPerpsService.mockReturnValue({
       positionsOf: mocks.flashPositionsOf,
     });

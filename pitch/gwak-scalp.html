@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gwak — Scalp (motion 1:1)</title>
+<style>
+  :root{
+    --bg:#0e0d10; --panel:#17151b; --panel2:#221f28; --fg:#fafaf2;
+    --dim:rgba(250,250,242,.5); --faint:rgba(250,250,242,.18);
+    --accent:#fae500; --green:#1de78b; --red:#ff3b54;
+    --hl:"Helvetica Neue",Helvetica,"Arial Narrow",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:radial-gradient(130% 120% at 50% -10%,#1a1820 0%,#0a090c 60%);
+    font-family:var(--body);color:var(--fg);overflow:hidden;position:relative;height:100vh}
+  .stage{position:absolute;top:50%;left:50%;transform-origin:center center;
+    transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:24px}
+  .orb{position:absolute;border-radius:50%;filter:blur(85px);opacity:.36;mix-blend-mode:screen;pointer-events:none}
+  .o1{width:360px;height:360px;background:#fae500;left:14%;top:14%;animation:f1 15s ease-in-out infinite}
+  .o2{width:340px;height:340px;background:#1de78b;right:14%;bottom:12%;animation:f2 18s ease-in-out infinite}
+  @keyframes f1{50%{transform:translate(36px,28px) scale(1.1)}}
+  @keyframes f2{50%{transform:translate(-36px,-26px) scale(.92)}}
+  .fillmode{background:#000 !important}
+  .fillmode .orb{display:none}
+  .fillmode .phone{animation:none}
+
+  .hl{font-family:var(--hl);font-weight:900;text-transform:uppercase;letter-spacing:-.03em;font-stretch:condensed;line-height:.9}
+  .stamp{font-family:var(--hl);font-weight:900;text-transform:uppercase;font-size:9px;letter-spacing:.22em;color:var(--dim)}
+  .tab{font-variant-numeric:tabular-nums}
+
+  .phone{position:relative;width:336px;height:712px;border-radius:54px;
+    background:linear-gradient(160deg,#26242c,#0b0a0d);padding:12px;
+    box-shadow:0 40px 120px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.05),inset 0 0 0 2px rgba(255,255,255,.03);
+    animation:bob 7s ease-in-out infinite;z-index:2}
+  @keyframes bob{50%{transform:translateY(-8px)}}
+  .phone::after{content:"";position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:104px;height:24px;background:#000;border-radius:0 0 14px 14px;z-index:40}
+  .screen{position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+
+  .balance{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:30;
+    display:inline-flex;align-items:baseline;gap:7px;border-radius:999px;padding:6px 14px;
+    background:rgba(23,21,27,.82);backdrop-filter:blur(8px);border:1px solid var(--faint);
+    font-family:var(--hl);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.16em}
+  .balance .r{opacity:.5}.balance .v{color:var(--accent)}
+
+  .scontent{position:absolute;inset:0;bottom:62px;padding:78px 15px 12px;display:flex;flex-direction:column;gap:9px}
+
+  .stop{display:flex;align-items:flex-start;justify-content:space-between}
+  .stop .sym{font-size:34px;margin-top:2px}
+  .stop .sub{margin-top:4px}
+  .walletbtn{width:36px;height:36px;border-radius:11px;background:var(--panel);border:1px solid var(--faint);
+    display:grid;place-items:center;flex:none}
+  .walletbtn svg{width:17px;height:17px;stroke:var(--fg);fill:none;stroke-width:2.4}
+
+  .mkt{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mkt button{border-radius:9px;padding:8px 0;font-family:var(--hl);font-weight:900;font-size:11px;
+    text-transform:uppercase;letter-spacing:.1em;background:var(--panel);color:var(--fg);border:1px solid var(--faint)}
+  .mkt button.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+
+  .side{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .side button{display:flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:11px 0;
+    font-family:var(--hl);font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:.1em;
+    background:var(--panel);color:var(--fg);border:1px solid var(--faint)}
+  .side button svg{width:16px;height:16px;stroke-width:3;fill:none}
+  .side button.long{background:rgba(29,231,139,.13);color:var(--green);border-color:var(--green)}
+  .side button.short{color:var(--fg)}
+
+  .chart{flex:1;min-height:0;position:relative;border-radius:14px;overflow:hidden;background:var(--panel);border:1px solid var(--faint)}
+  .chart svg{position:absolute;inset:0;width:100%;height:100%}
+  .chart .badge{position:absolute;top:9px;left:11px;font-family:var(--hl);font-weight:900;font-size:9px;letter-spacing:.18em;color:var(--dim);display:flex;align-items:center;gap:5px}
+  .chart .badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.25s steps(2,jump-none) infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .chart .price{position:absolute;top:8px;right:11px;font-family:var(--hl);font-weight:900;font-size:14px;color:var(--fg)}
+
+  .smetrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+  .smetric{border-radius:11px;background:var(--panel);border:1px solid var(--faint);padding:8px 10px}
+  .smetric .l{font-family:var(--hl);font-weight:900;font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .smetric .v{margin-top:3px;font-family:var(--hl);font-weight:900;font-size:17px}
+
+  .lev{border-radius:12px;background:var(--panel);border:1px solid var(--faint);padding:9px 10px}
+  .lev .lh{display:flex;align-items:center;justify-content:space-between}
+  .lev .lh .lbl{font-family:var(--hl);font-weight:900;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .lev .lh .big{font-family:var(--hl);font-weight:900;font-size:18px;color:var(--green)}
+  .lev .chips{margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .lev .chips button{border-radius:8px;padding:8px 0;font-family:var(--hl);font-weight:900;font-size:12px;
+    background:var(--panel2);color:var(--fg);border:1px solid var(--faint)}
+  .lev .chips button.on{background:var(--green);color:var(--bg);border-color:var(--green)}
+
+  .cta{width:100%;border:none;border-radius:14px;padding:15px;font-family:var(--hl);font-weight:900;
+    font-size:15px;text-transform:uppercase;letter-spacing:.1em;background:var(--green);color:var(--bg);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 4px 0 rgba(0,0,0,.35),inset 0 -2px 0 rgba(0,0,0,.15)}
+  .cta svg{width:16px;height:16px;stroke:var(--bg);stroke-width:3;fill:none}
+
+  .nav{position:absolute;bottom:0;left:0;right:0;height:62px;padding-bottom:12px;z-index:30;background:var(--bg);
+    border-top:2px solid var(--faint);display:flex;align-items:stretch;justify-content:space-around}
+  .nt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg);opacity:.4;position:relative}
+  .nt.on{opacity:1}
+  .nt.on::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:26px;height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .nt svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="orb o1"></div><div class="orb o2"></div>
+
+    <div class="phone"><div class="screen">
+      <div class="balance"><span class="r">Ready</span><span class="v">$1,240.00</span></div>
+
+      <div class="scontent">
+        <div class="stop">
+          <div>
+            <div class="stamp">Trade · Flash perps</div>
+            <div class="sym hl">SOL</div>
+            <div class="sub stamp">Solana · degen · instant</div>
+          </div>
+          <div class="walletbtn"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2M3 9h14a2 2 0 012 2"/></svg></div>
+        </div>
+
+        <div class="mkt"><button>BTC</button><button>ETH</button><button class="on">SOL</button></div>
+
+        <div class="side">
+          <button class="long"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>Long</button>
+          <button class="short"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 17H8M17 17V8"/></svg>Short</button>
+        </div>
+
+        <div class="chart">
+          <div class="badge"><span class="dot"></span>Live SOL</div>
+          <div class="price tab" id="price">$172.40</div>
+          <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="vf" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1de78b" stop-opacity=".30"/>
+                <stop offset="100%" stop-color="#1de78b" stop-opacity=".02"/>
+              </linearGradient>
+            </defs>
+            <path id="area" fill="url(#vf)"/>
+            <path id="line" fill="none" stroke="#1de78b" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle id="tip" r="4.5" fill="#1de78b"/>
+          </svg>
+        </div>
+
+        <div class="smetrics">
+          <div class="smetric"><div class="l">Stake</div><div class="v tab">$1</div></div>
+          <div class="smetric"><div class="l">Notional</div><div class="v tab">$500</div></div>
+          <div class="smetric"><div class="l">Max lev</div><div class="v tab" style="color:var(--green)">500x</div></div>
+        </div>
+
+        <div class="lev">
+          <div class="lh"><span class="lbl">Leverage</span><span class="big">500x</span></div>
+          <div class="chips"><button>125x</button><button>250x</button><button class="on">500x</button></div>
+        </div>
+
+        <button class="cta"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>Long SOL 500x</button>
+      </div>
+
+      <div class="nav">
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a3 3 0 006 0c0-2-1-3-1-3 2 1 3 3 3 6a6 6 0 01-12 0c0-4 4-5 6-10z"/></svg></div>
+        <div class="nt on"><svg viewBox="0 0 24 24"><rect x="6" y="8" width="5" height="8" rx="1"/><rect x="13" y="5" width="5" height="11" rx="1"/><path d="M8.5 4v4M8.5 16v4M15.5 2v3M15.5 16v4"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <div class="nt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+    </div></div>
+  </div>
+
+<script>
+  const W=320,H=180,PAD=14,N=70;
+  const line=document.getElementById('line'),area=document.getElementById('area'),tip=document.getElementById('tip'),price=document.getElementById('price');
+  const PERIOD=10000;                 // loop period -> record 10s
+  const T0=performance.now();
+  let lastStep=-1;
+
+  function yAt(x,ph){ // x in 0..1, periodic in ph (loops when ph advances an integer)
+    return 0.5
+      + 0.20*Math.sin(2*Math.PI*(x*2 + ph))
+      + 0.11*Math.sin(2*Math.PI*(x*3.5 + 2*ph))
+      + 0.05*Math.sin(2*Math.PI*(x*6 + 3*ph));
+  }
+
+  (function frame(){
+    const t=(performance.now()-T0)%PERIOD;
+    const ph=(t/PERIOD)*3;            // scroll 3 wavelengths over one loop
+    let d='', pts=[];
+    for(let i=0;i<N;i++){
+      const x=i/(N-1);
+      const px=PAD + x*(W-2*PAD);
+      const py=PAD + (1-yAt(x,ph))*(H-2*PAD);
+      pts.push([px,py]);
+      d+=(i?'L':'M')+px.toFixed(1)+','+py.toFixed(1);
+    }
+    line.setAttribute('d',d);
+    const last=pts[pts.length-1];
+    area.setAttribute('d',d+`L${last[0].toFixed(1)},${H} L${pts[0][0].toFixed(1)},${H} Z`);
+    tip.setAttribute('cx',last[0]); tip.setAttribute('cy',last[1]);
+    // price ticks once a second, periodic so it loops
+    const step=Math.floor(t/1000);
+    if(step!==lastStep){lastStep=step;const p=172.40+1.8*Math.sin(2*Math.PI*step*1000/2000);price.textContent='$'+p.toFixed(2);}
+    requestAnimationFrame(frame);
+  })();
+
+  function fit(){
+    const st=document.querySelector('.stage'), ph=document.querySelector('.phone');
+    const fill=location.search.includes('fill');
+    if(fill){
+      document.body.classList.add('fillmode');
+      ph.style.zoom=((window.innerHeight*0.985)/712).toFixed(4);
+      st.style.transform='translate(-50%,-50%)';
+      return;
+    }
+    const k=Math.min(1,(window.innerHeight-20)/st.offsetHeight,(window.innerWidth-20)/st.offsetWidth);
+    st.style.transform='translate(-50%,-50%) scale('+k.toFixed(4)+')';
+  }
+  window.addEventListener('resize',fit);window.addEventListener('load',fit);fit();
+</script>
+</body>
+</html>

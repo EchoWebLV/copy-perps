@@ -307,8 +307,28 @@ export async function getLeaderboard(attempt = 0): Promise<HLLeaderboard> {
 // Phase 2: upgrade to WS subscription to the "trades" channel for a true
 // global liquidation stream once the resolver runs in a long-lived process.
 //
-import type { LiquidationEvent, WhaleOpenEvent } from "@/lib/bots/types";
 import { CURATED_WHALES } from "@/lib/hyperliquid/whales";
+
+// Whale event types — formerly in lib/bots/types. The bot arena that also
+// consumed them has been removed, so they now live with their only
+// consumer: the live liquidation feed + whale-open buffers below.
+export interface LiquidationEvent {
+  asset: string;
+  side: "long" | "short"; // which side got liquidated
+  notionalUsd: number;
+  ts: number; // unix ms
+  source: "hyperliquid";
+}
+
+export interface WhaleOpenEvent {
+  asset: string;
+  side: "long" | "short";
+  notionalUsd: number;
+  px: number;
+  ts: number;
+  whaleAddress: string;
+  source: "hyperliquid";
+}
 
 let _buffer: LiquidationEvent[] = [];
 let _lastFetchMs = 0;

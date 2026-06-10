@@ -286,3 +286,87 @@ body {
     transform: none;
   }
 }
+
+/* ── Public landing page (/) ──────────────────────────────────────────
+   Same surface family as the app: welcome-mesh substrate, acid-yellow
+   CTAs, factory stamps. Everything below is presentation-only. */
+
+/* Infinite tape: content is rendered twice, track slides one copy-width. */
+@keyframes landing-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.landing-marquee {
+  width: max-content;
+  animation: landing-marquee 38s linear infinite;
+}
+.landing-marquee-slow {
+  width: max-content;
+  animation: landing-marquee 52s linear infinite reverse;
+}
+.landing-marquee-wrap:hover .landing-marquee,
+.landing-marquee-wrap:hover .landing-marquee-slow {
+  animation-play-state: paused;
+}
+
+/* Gentle bob for the floating P/L chips around the phone mock. */
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.landing-float { animation: landing-float 5.5s ease-in-out infinite; }
+
+/* Phone mock leans in, straightens on hover. */
+.landing-phone {
+  transform: rotate(-2.5deg);
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.landing-phone:hover { transform: rotate(0deg) scale(1.01); }
+
+/* Periodic highlight sweep across the primary CTA. */
+.landing-cta-shine { position: relative; overflow: hidden; }
+.landing-cta-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-130%);
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 65%
+  );
+  animation: landing-shine 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes landing-shine {
+  0%, 64% { transform: translateX(-130%); }
+  100% { transform: translateX(130%); }
+}
+
+/* Scroll-in reveal; .is-in is added by an IntersectionObserver. */
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.landing-reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-marquee,
+  .landing-marquee-slow,
+  .landing-float {
+    animation: none;
+  }
+  .landing-cta-shine::after { animation: none; }
+  .landing-phone { transform: none; }
+  .landing-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
