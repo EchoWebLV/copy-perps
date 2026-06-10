@@ -20,7 +20,7 @@ export function DesktopContextRail({
             className="rounded-xl p-4 text-[11px] font-black uppercase tracking-widest"
             style={{ background: PANEL, border: `1px solid ${FAINT}`, color: FG }}
           >
-            Select a bot or position to see details.
+            Select a whale or position to see details.
           </div>
         )}
       </div>

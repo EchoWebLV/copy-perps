@@ -23,6 +23,7 @@ import {
   PANEL,
   PANEL_2,
   RED,
+  STREAK,
   Stamp,
 } from "@/components/v2/ui";
 import {
@@ -401,9 +402,11 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
 }
 
 function FreshnessBadge({ stale }: { stale: boolean }) {
+  // "Delayed" = our snapshot is aging, not that the trade is dead — amber,
+  // not alarm-red.
   return (
-    <span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest" style={{ background: stale ? `${RED}18` : `${GREEN}18`, color: stale ? RED : GREEN, border: `1px solid ${stale ? `${RED}45` : `${GREEN}45`}` }}>
-      {stale ? "STALE" : "LIVE"}
+    <span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest" style={{ background: stale ? `${STREAK}14` : `${GREEN}18`, color: stale ? STREAK : GREEN, border: `1px solid ${stale ? `${STREAK}38` : `${GREEN}45`}` }}>
+      {stale ? "DELAYED" : "LIVE"}
     </span>
   );
 }

@@ -22,7 +22,7 @@ export function BalancePill() {
           boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
         }}
       >
-        LOG IN TO BET
+        LOG IN TO TAIL
       </button>
     );
   }

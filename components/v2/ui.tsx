@@ -15,10 +15,12 @@ export const GREEN = "#1de78b"; // P/L positive — vibrant trading-app green
 export const RED = "#ff3b54"; // P/L negative
 export const STREAK = "#ff8a2a"; // streak fire orange
 
+// var(--font-archivo) is loaded via next/font in app/layout.tsx — a real
+// webfont so the brand renders identically on Apple/Android/Windows.
 export const FONT_DISPLAY =
-  "'Helvetica Neue', Helvetica, 'Arial Narrow', sans-serif";
+  "var(--font-archivo), 'Helvetica Neue', Helvetica, sans-serif";
 export const FONT_BODY =
-  "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif";
+  "var(--font-archivo), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Reusable atoms

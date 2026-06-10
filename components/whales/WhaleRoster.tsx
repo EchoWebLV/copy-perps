@@ -28,6 +28,7 @@ import {
   PANEL,
   PANEL_2,
   RED,
+  STREAK,
 } from "@/components/v2/ui";
 
 const POLL_MS = 30_000;
@@ -546,7 +547,11 @@ function DesktopWhaleCard({
           }}
         >
           <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
-          Tail {exposureSummary.copyableCount}
+          {canTail
+            ? `Tail ${exposureSummary.copyableCount} position${
+                exposureSummary.copyableCount === 1 ? "" : "s"
+              }`
+            : "Unavailable"}
         </button>
       </div>
     </article>
@@ -777,9 +782,11 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
 }
 
 function FreshnessBadge({ stale }: { stale: boolean }) {
+  // "Delayed" = our snapshot of this whale is aging, not that the trade is
+  // dead — amber, not alarm-red.
   return (
-    <span style={{ color: stale ? RED : GREEN }}>
-      {stale ? "STALE" : "LIVE"}
+    <span style={{ color: stale ? STREAK : GREEN }}>
+      {stale ? "DELAYED" : "LIVE"}
     </span>
   );
 }

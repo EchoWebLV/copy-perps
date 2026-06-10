@@ -14,6 +14,7 @@ import {
   maxFlashLeverageForMarket,
 } from "@/lib/flash/markets";
 import { useLiveMark } from "@/lib/pacifica/live-context";
+import { formatPriceUsd, formatUsd } from "@/components/whales/whale-money";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
 import {
@@ -147,10 +148,18 @@ function b64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-function fmtPrice(v: number): string {
-  if (v >= 1000) return `$${v.toFixed(2)}`;
-  if (v >= 1) return `$${v.toFixed(3)}`;
-  return `$${v.toPrecision(4)}`;
+const fmtPrice = formatPriceUsd;
+
+/** Rough isolated-margin liquidation mark: entry ± entry/leverage. */
+function approxLiqPrice(
+  entry: number,
+  side: "long" | "short",
+  leverage: number,
+): number | null {
+  if (!Number.isFinite(entry) || entry <= 0 || leverage <= 1) return null;
+  return side === "long"
+    ? entry * (1 - 1 / leverage)
+    : entry * (1 + 1 / leverage);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -644,6 +653,21 @@ export function TailModal({ open, onClose, source }: Props) {
 
   const isWhaleBundle =
     source.kind === "whale" && whaleTailPositions.length > 1;
+  // Honest bundle summary: mixed-asset tails have no single side/leverage/
+  // mark, so describe the mix instead of pretending.
+  const bundleLongCount = executableWhalePositions.filter(
+    (p) => p.side === "long",
+  ).length;
+  const bundleShortCount = executableWhalePositions.filter(
+    (p) => p.side === "short",
+  ).length;
+  const bundleLeverages = executableWhalePositions.map((p) => p.leverage);
+  const bundleLevMin = bundleLeverages.length
+    ? Math.min(...bundleLeverages)
+    : 0;
+  const bundleLevMax = bundleLeverages.length
+    ? Math.max(...bundleLeverages)
+    : 0;
   const displayPosition = activeWhalePosition;
   const displayAsset =
     source.kind === "whale"
@@ -739,31 +763,65 @@ export function TailModal({ open, onClose, source }: Props) {
           </button>
         </div>
 
-        {/* Position summary */}
-        <div className="mx-5 mb-4 rounded-2xl bg-white/[0.03] border border-white/5 p-4 grid grid-cols-3 gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-              Asset
+        {/* Position summary. Bundles get mix stats — a single side/lev/mark
+            would be fiction across different assets. */}
+        {isWhaleBundle ? (
+          <div className="mx-5 mb-4 rounded-2xl bg-white/[0.03] border border-white/5 p-4 grid grid-cols-3 gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Positions
+              </div>
+              <div className="text-sm font-semibold text-white">
+                {executableWhalePositions.length}/{whaleTailPositions.length} ready
+              </div>
             </div>
-            <div className="text-sm font-semibold text-white">
-              {displayAsset}
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Mix
+              </div>
+              <div className="text-sm font-semibold">
+                <span className="text-emerald-400">{bundleLongCount}L</span>
+                <span className="text-white/30"> / </span>
+                <span className="text-rose-400">{bundleShortCount}S</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Leverage
+              </div>
+              <div className="text-sm font-semibold text-white">
+                {bundleLevMin === bundleLevMax
+                  ? `${bundleLevMax}×`
+                  : `${bundleLevMin}–${bundleLevMax}×`}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-              Side
+        ) : (
+          <div className="mx-5 mb-4 rounded-2xl bg-white/[0.03] border border-white/5 p-4 grid grid-cols-3 gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Asset
+              </div>
+              <div className="text-sm font-semibold text-white">
+                {displayAsset}
+              </div>
             </div>
-            <div className={`text-sm font-semibold ${sideColor}`}>
-              {displaySide} {displayLeverage}×
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Side
+              </div>
+              <div className={`text-sm font-semibold ${sideColor}`}>
+                {displaySide} {displayLeverage}×
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                Mark
+              </div>
+              <div className="text-sm font-semibold text-white">{markText}</div>
             </div>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-              Mark
-            </div>
-            <div className="text-sm font-semibold text-white">{markText}</div>
-          </div>
-        </div>
+        )}
 
         {/* Success state */}
         {success ? (
@@ -953,6 +1011,16 @@ export function TailModal({ open, onClose, source }: Props) {
                           </div>
                           <div className="mt-0.5 text-[10px] uppercase tracking-widest text-white/35">
                             Entry {fmtPrice(position.entryMark)}
+                            {(() => {
+                              const liq = approxLiqPrice(
+                                position.entryMark,
+                                position.side,
+                                position.leverage,
+                              );
+                              return liq === null
+                                ? null
+                                : ` · Liq ≈ ${fmtPrice(liq)}`;
+                            })()}
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
@@ -983,7 +1051,7 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="flex justify-between text-white/60">
                 <span>Notional</span>
                 <span className="text-white">
-                  ${notional.toFixed(2)}{" "}
+                  {formatUsd(notional)}{" "}
                   {source.kind === "whale"
                     ? isSingleWhalePosition
                       ? `(${boundedWhaleLeverage}× of $${effectiveStake.toFixed(2)})`
@@ -994,6 +1062,18 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="flex justify-between text-white/60">
                 <span>Est. taker fee</span>
                 <span className="text-white">${estFeeUsd.toFixed(3)}</span>
+              </div>
+              <div className="flex justify-between text-white/60">
+                <span>Liq. buffer</span>
+                <span className="text-white">
+                  {source.kind === "whale" && !isSingleWhalePosition
+                    ? bundleLevMax > 0
+                      ? `~${(100 / bundleLevMax).toFixed(1)}%–${(
+                          100 / Math.max(1, bundleLevMin)
+                        ).toFixed(1)}% adverse move`
+                      : "—"
+                    : `~${(100 / Math.max(1, displayLeverage)).toFixed(1)}% adverse move`}
+                </span>
               </div>
               <div className="flex justify-between text-white/60">
                 <span>You're following</span>

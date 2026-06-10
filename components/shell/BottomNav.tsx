@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartCandlestick, Flame, Settings, PieChart } from "lucide-react";
+import { ChartCandlestick, Flame, Wallet, PieChart } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
@@ -14,7 +14,8 @@ const LEFT_TABS = [
 ];
 const RIGHT_TABS = [
   { href: "/portfolio", icon: PieChart, label: "Folio" },
-  { href: "/deposit", icon: Settings, label: "Settings" },
+  // The page at /deposit is wallet funding + withdrawals, not settings.
+  { href: "/deposit", icon: Wallet, label: "Wallet" },
 ];
 
 export function BottomNav() {
@@ -56,12 +57,15 @@ export function BottomNav() {
             className="absolute -top-5 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-[3px]"
             style={{
               background: BG,
-              borderColor: ACCENT,
+              // Only the active tab gets the full acid ring + glow —
+              // otherwise the mascot reads as "you are here" on every page.
+              borderColor: pulseActive ? ACCENT : `${ACCENT}55`,
               boxShadow: pulseActive
                 ? `0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
-                : `0 8px 24px ${ACCENT}55, inset 0 -3px 0 rgba(0,0,0,0.18)`,
+                : `0 6px 18px rgba(0,0,0,0.55), inset 0 -3px 0 rgba(0,0,0,0.18)`,
               transform: pulseActive ? "scale(1.05)" : "scale(1)",
-              transition: "transform 200ms, box-shadow 200ms",
+              opacity: pulseActive ? 1 : 0.82,
+              transition: "transform 200ms, box-shadow 200ms, opacity 200ms",
             }}
           >
             <Image

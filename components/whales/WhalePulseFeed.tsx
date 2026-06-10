@@ -27,6 +27,7 @@ import {
   PANEL,
   PANEL_2,
   RED,
+  STREAK,
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
 import {
@@ -46,6 +47,7 @@ import {
   restoreVisiblePulsePosition,
 } from "./pulse-scroll-stability";
 import { mergePulsePositionSignals } from "./pulse-position-retention";
+import { formatPriceUsd, formatUsd } from "./whale-money";
 import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 10_000;
@@ -427,13 +429,13 @@ function PulsePositionCard({
         <div
           className="shrink-0 rounded-full px-3 py-1.5 text-right text-[10px] font-black uppercase"
           style={{
-            background: p.stale ? `${RED}18` : `${GREEN}18`,
-            color: p.stale ? RED : GREEN,
-            border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
+            background: p.stale ? `${STREAK}14` : `${GREEN}18`,
+            color: p.stale ? STREAK : GREEN,
+            border: `1px solid ${p.stale ? `${STREAK}38` : `${GREEN}45`}`,
           }}
         >
           {String(slideIndex + 1).padStart(2, "0")} /{" "}
-          {String(total).padStart(2, "0")} {p.stale ? "Stale" : "Live"}
+          {String(total).padStart(2, "0")} {p.stale ? "Mark delayed" : "Live"}
         </div>
       </div>
 
@@ -517,44 +519,20 @@ function PulsePositionCard({
             </div>
           ) : null}
 
+          {/* Only render stats we actually have — a grid half-full of
+              N/A reads as broken, not informative. */}
           <div
-            className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            className="mt-4 grid grid-cols-2 gap-2"
             style={{ fontFamily: FONT_BODY }}
           >
-            <Metric label="Notional" value={fmtUsd(p.notionalUsd)} />
-            <Metric
-              label="Source P/L"
-              value={formatPct(p.unrealizedPnlPct)}
-              color={profit ? GREEN : RED}
-            />
-            <Metric label="Entry" value={fmtPrice(p.entryPrice)} />
-            <Metric
-              label="Now"
-              value={p.currentMark === null ? "N/A" : fmtPrice(p.currentMark)}
-            />
-          </div>
-
-          <div
-            className="mt-2 grid grid-cols-2 gap-2"
-            style={{ fontFamily: FONT_BODY }}
-          >
-            <Metric
-              label="1D Win Rate"
-              value={formatWinRate(whaleStats?.winRatePct1d ?? null)}
-            />
-            <Metric
-              label="30D P/L"
-              value={
-                whaleStats ? formatSignedUsd(whaleStats.pnl30dUsdc) : "N/A"
-              }
-              color={
-                whaleStats
-                  ? whaleStats.pnl30dUsdc >= 0
-                    ? GREEN
-                    : RED
-                  : FG
-              }
-            />
+            {availableMetrics(p, whaleStats, profit).map((m) => (
+              <Metric
+                key={m.label}
+                label={m.label}
+                value={m.value}
+                color={m.color}
+              />
+            ))}
           </div>
 
           {recentReactors.length > 0 ? (
@@ -658,12 +636,12 @@ function DesktopPulseCard({
         <div
           className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
           style={{
-            background: p.stale ? `${RED}18` : `${GREEN}18`,
-            color: p.stale ? RED : GREEN,
-            border: `1px solid ${p.stale ? `${RED}45` : `${GREEN}45`}`,
+            background: p.stale ? `${STREAK}14` : `${GREEN}18`,
+            color: p.stale ? STREAK : GREEN,
+            border: `1px solid ${p.stale ? `${STREAK}38` : `${GREEN}45`}`,
           }}
         >
-          {p.stale ? "Stale" : "Live"}
+          {p.stale ? "Mark delayed" : "Live"}
         </div>
       </div>
 
@@ -724,23 +702,9 @@ function DesktopPulseCard({
       ) : null}
 
       <div className="mt-4 grid grid-cols-2 gap-2" style={{ fontFamily: FONT_BODY }}>
-        <Metric label="Notional" value={fmtUsd(p.notionalUsd)} />
-        <Metric
-          label="Source P/L"
-          value={formatPct(p.unrealizedPnlPct)}
-          color={profit ? GREEN : RED}
-        />
-        <Metric
-          label="1D Win Rate"
-          value={formatWinRate(whaleStats?.winRatePct1d ?? null)}
-        />
-        <Metric
-          label="30D P/L"
-          value={whaleStats ? formatSignedUsd(whaleStats.pnl30dUsdc) : "N/A"}
-          color={
-            whaleStats ? (whaleStats.pnl30dUsdc >= 0 ? GREEN : RED) : FG
-          }
-        />
+        {availableMetrics(p, whaleStats, profit).map((m) => (
+          <Metric key={m.label} label={m.label} value={m.value} color={m.color} />
+        ))}
       </div>
 
       {recentReactors.length > 0 ? (
@@ -866,7 +830,9 @@ function ReactionButton({
         />
       )}
       <span>{label}</span>
-      <span style={{ color: active ? color : mutedColor }}>{count}</span>
+      {count > 0 ? (
+        <span style={{ color: active ? color : mutedColor }}>{count}</span>
+      ) : null}
     </button>
   );
 }
@@ -914,7 +880,9 @@ function DesktopPulseReactionButton({
         />
       )}
       <span>{label}</span>
-      <span style={{ color: active ? color : mutedColor }}>{count}</span>
+      {count > 0 ? (
+        <span style={{ color: active ? color : mutedColor }}>{count}</span>
+      ) : null}
     </button>
   );
 }
@@ -1134,14 +1102,49 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
   }, [load, intervalMs]);
 }
 
-function fmtUsd(value: number): string {
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
+const fmtUsd = formatUsd;
+const fmtPrice = formatPriceUsd;
 
-function fmtPrice(value: number): string {
-  if (value >= 1000) return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  if (value >= 1) return `$${value.toFixed(2)}`;
-  return `$${value.toPrecision(4)}`;
+/** Stat tiles for a pulse card, omitting anything we can't compute —
+ *  a grid half-full of N/A reads as broken, not informative. */
+function availableMetrics(
+  p: {
+    notionalUsd: number;
+    unrealizedPnlPct: number | null;
+    entryPrice: number;
+    currentMark: number | null;
+  },
+  whaleStats: PulseWhaleStats | undefined,
+  profit: boolean,
+): { label: string; value: string; color?: string }[] {
+  const metrics: { label: string; value: string; color?: string }[] = [
+    { label: "Notional", value: fmtUsd(p.notionalUsd) },
+  ];
+  if (p.unrealizedPnlPct !== null) {
+    metrics.push({
+      label: "Source P/L",
+      value: formatPct(p.unrealizedPnlPct),
+      color: profit ? GREEN : RED,
+    });
+  }
+  metrics.push({ label: "Entry", value: fmtPrice(p.entryPrice) });
+  if (p.currentMark !== null) {
+    metrics.push({ label: "Now", value: fmtPrice(p.currentMark) });
+  }
+  if (whaleStats?.winRatePct1d != null) {
+    metrics.push({
+      label: "1D Win Rate",
+      value: formatWinRate(whaleStats.winRatePct1d),
+    });
+  }
+  if (whaleStats) {
+    metrics.push({
+      label: "30D P/L",
+      value: formatSignedUsd(whaleStats.pnl30dUsdc),
+      color: whaleStats.pnl30dUsdc >= 0 ? GREEN : RED,
+    });
+  }
+  return metrics;
 }
 
 function formatPct(value: number | null): string {
