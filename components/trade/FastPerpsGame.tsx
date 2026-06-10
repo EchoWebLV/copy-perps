@@ -86,7 +86,6 @@ const GRAPH_SMOOTHING = 0.6; // snappy: tip tracks each Flash mark, no jitter
 const LIVE_DOT_PULSE = true; // soft heartbeat on the live dot (set false = still)
 const CURVE_TENSION = 0.16; // Catmull-Rom→bezier smoothing for the live value curve
 const WINDOW_K = 0.7; // auto-range padding: live series fills ~1/(2·K) ≈ 71% of graph height
-const IDLE_LINE = "rgba(250,250,242,0.32)"; // gray live-mark line before a position is open
 
 type Market = FlashMarketSymbol;
 type FlashScalpMarket = (typeof FLASH_SCALP_MARKETS)[number];
@@ -923,13 +922,12 @@ export function FastPerpsGame() {
           className="min-h-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:flex-col"
         >
           {/* The hero graph. Idle (no position) it plots the selected market's
-              live mark in gray; the instant a position is open it flips to the
-              colored money line. Desktop always shows it and lets it fill the
-              full column height; mobile only mounts it (h-[180px]) when a
-              position exists so the phone frame stays compact. */}
+              live mark tinted by the chosen side; with a position open it
+              flips to the colored money line. Mobile shows a compact idle
+              chart too — picking a side with no price on screen was blind. */}
           <div
             className={`overflow-hidden rounded-2xl ${
-              selectedPosition ? "mt-3 h-[180px]" : "hidden"
+              selectedPosition ? "mt-3 h-[180px]" : "mt-3 h-[140px]"
             } lg:mt-0 lg:block lg:h-auto lg:min-h-0 lg:flex-1`}
             style={{ background: PANEL, border: `1px solid ${FAINT}` }}
           >
@@ -942,7 +940,13 @@ export function FastPerpsGame() {
                   ? stakeForPosition(selectedPosition, selectedPositionView)
                   : effectiveStake
               }
-              color={selectedPosition ? graphColor : IDLE_LINE}
+              color={
+                selectedPosition
+                  ? graphColor
+                  : side === "long"
+                    ? `${GREEN}9e`
+                    : `${RED}9e`
+              }
               activeKey={
                 selectedPosition
                   ? selectedPosition.positionPubkey

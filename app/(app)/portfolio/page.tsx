@@ -422,25 +422,69 @@ export default function PortfolioPage() {
         )}
 
         {ready && !authenticated && (
-          <div className="mt-12 text-center">
-            <Headline size={26}>{`"LOG IN"`}</Headline>
-            <p
-              className="mt-2 text-[11px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
+          <div className="relative mt-4 min-h-0 flex-1">
+            {/* Ghost of the real portfolio behind the wall — sells what's
+                inside instead of a bare prompt on black. */}
+            <div
+              className="pointer-events-none select-none space-y-3 blur-[5px]"
+              style={{ opacity: 0.55 }}
+              aria-hidden
             >
-              TO SEE YOUR POSITIONS
-            </p>
-            <button
-              onClick={login}
-              className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
+              <div className="space-y-2">
+                <div className="h-3 w-28 rounded-md" style={{ background: PANEL_2 }} />
+                <div className="h-9 w-44 rounded-md" style={{ background: PANEL_2 }} />
+              </div>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border p-4"
+                  style={{ background: PANEL, borderColor: FAINT }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full" style={{ background: PANEL_2 }} />
+                      <div className="space-y-1.5">
+                        <div className="h-3.5 w-28 rounded" style={{ background: PANEL_2 }} />
+                        <div className="h-2.5 w-20 rounded" style={{ background: PANEL_2 }} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 text-right">
+                      <div
+                        className="ml-auto h-3.5 w-16 rounded"
+                        style={{ background: i === 1 ? `${RED}33` : `${GREEN}33` }}
+                      />
+                      <div className="ml-auto h-2.5 w-12 rounded" style={{ background: PANEL_2 }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              className="absolute inset-0"
               style={{
-                background: ACCENT,
-                color: BG,
-                boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+                background: `linear-gradient(180deg, transparent 0%, ${BG}f2 78%, ${BG} 100%)`,
               }}
-            >
-              LOG IN
-            </button>
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <Headline size={26}>{`"LOG IN"`}</Headline>
+              <p
+                className="mt-2 text-[11px] font-black uppercase tracking-widest"
+                style={{ color: DIM }}
+              >
+                Your positions live here
+              </p>
+              <button
+                onClick={login}
+                className="mt-6 rounded-2xl px-6 py-3 text-[13px] font-black uppercase tracking-widest active:scale-[0.97]"
+                style={{
+                  background: ACCENT,
+                  color: BG,
+                  boxShadow: `0 4px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+                }}
+              >
+                LOG IN
+              </button>
+            </div>
           </div>
         )}
 

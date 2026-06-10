@@ -30,6 +30,7 @@ import {
   RED,
 } from "@/components/v2/ui";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
+import { WhaleViewSwitch } from "./WhaleViewSwitch";
 import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 10_000;
@@ -211,6 +212,7 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <WhaleViewSwitch active="heat" />
               <Link
                 href="/trade"
                 className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition active:scale-[0.97]"
@@ -237,24 +239,7 @@ export function WhaleMarketHeatmap({ initialPositions }: Props) {
             </div>
           </header>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <SummaryTile label="Markets" value={String(summary.marketCount)} />
-            <SummaryTile
-              label="Long"
-              value={formatUsd(summary.longNotional)}
-              color={GREEN}
-            />
-            <SummaryTile
-              label="Short"
-              value={formatUsd(summary.shortNotional)}
-              color={RED}
-            />
-            <SummaryTile
-              label="Net"
-              value={formatSignedUsd(summary.netNotional)}
-              color={summary.netNotional >= 0 ? GREEN : RED}
-            />
-          </div>
+          <HeatSummaryBar summary={summary} />
 
           {rows.length === 0 ? (
             <EmptyHeat />
@@ -517,31 +502,65 @@ function MarketHeatCard({
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-  color = FG,
+/** One long/short pressure bar for the whole tape — the same visual
+ *  grammar the per-market cards already use, so the page reads top-down. */
+function HeatSummaryBar({
+  summary,
 }: {
-  label: string;
-  value: string;
-  color?: string;
+  summary: {
+    marketCount: number;
+    longNotional: number;
+    shortNotional: number;
+    netNotional: number;
+  };
 }) {
+  const total = summary.longNotional + summary.shortNotional;
+  const longPct = total > 0 ? (summary.longNotional / total) * 100 : 50;
   return (
     <div
-      className="rounded-lg border p-3"
+      className="rounded-2xl border p-4"
       style={{ background: PANEL, borderColor: FAINT }}
     >
-      <div
-        className="text-[10px] font-black uppercase tracking-[0.18em]"
-        style={{ color: DIM }}
-      >
-        {label}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          className="text-[10px] font-black uppercase tracking-[0.18em]"
+          style={{ color: DIM }}
+        >
+          {summary.marketCount} markets · public positioning
+        </div>
+        <div
+          className="rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest tabular-nums"
+          style={{
+            borderColor: FAINT,
+            color: summary.netNotional >= 0 ? GREEN : RED,
+            background: PANEL_2,
+          }}
+        >
+          Net {formatSignedUsd(summary.netNotional)}
+        </div>
       </div>
       <div
-        className="mt-1 text-[22px] font-black uppercase leading-none tabular-nums"
-        style={{ color }}
+        className="mt-3 flex h-3 w-full overflow-hidden rounded-full"
+        style={{ background: PANEL_2 }}
+        role="img"
+        aria-label={`Long ${longPct.toFixed(0)} percent, short ${(100 - longPct).toFixed(0)} percent`}
       >
-        {value}
+        <div
+          style={{ width: `${longPct}%`, background: GREEN }}
+          className="h-full"
+        />
+        <div
+          style={{ width: `${100 - longPct}%`, background: RED }}
+          className="h-full"
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[11px] font-black uppercase tracking-widest tabular-nums">
+        <span style={{ color: GREEN }}>
+          ↗ Long {formatUsd(summary.longNotional)} · {longPct.toFixed(0)}%
+        </span>
+        <span style={{ color: RED }}>
+          {(100 - longPct).toFixed(0)}% · Short {formatUsd(summary.shortNotional)} ↘
+        </span>
       </div>
     </div>
   );

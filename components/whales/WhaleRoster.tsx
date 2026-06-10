@@ -12,6 +12,7 @@ import { formatSignedWhaleUsd } from "./whale-money";
 import { formatWhalePositionTime } from "./whale-position-age";
 import { buildWhaleTailSource } from "./whale-tail-source";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
+import { WhaleViewSwitch } from "./WhaleViewSwitch";
 import {
   buildWhaleExposureSummary,
   type WhaleExposureSummary,
@@ -32,6 +33,35 @@ import {
 } from "@/components/v2/ui";
 
 const POLL_MS = 30_000;
+
+type RosterSortKey = "heat" | "pnl1d" | "pnl7d" | "pnl30d" | "equity";
+type RosterSourceFilter = "all" | "pacifica" | "hyperliquid";
+
+const ROSTER_SORTERS: Record<
+  RosterSortKey,
+  (w: WhaleTraderSignal) => number
+> = {
+  heat: (w) => w.heatScore,
+  pnl1d: (w) => w.payload.stats.pnl1dUsdc,
+  pnl7d: (w) => w.payload.stats.pnl7dUsdc,
+  pnl30d: (w) => w.payload.stats.pnl30dUsdc,
+  equity: (w) => w.payload.stats.equityUsdc,
+};
+
+const ROSTER_SORT_OPTIONS: { key: RosterSortKey; label: string }[] = [
+  // "Hot", not "Heat" — the Heat *view* chip sits right next to this group.
+  { key: "heat", label: "Hot" },
+  { key: "pnl1d", label: "1D" },
+  { key: "pnl7d", label: "7D" },
+  { key: "pnl30d", label: "30D" },
+  { key: "equity", label: "Equity" },
+];
+
+const ROSTER_SOURCE_OPTIONS: { key: RosterSourceFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pacifica", label: "PAC" },
+  { key: "hyperliquid", label: "HL" },
+];
 
 interface Props {
   initialWhales: WhaleTraderSignal[];
@@ -59,10 +89,17 @@ export function WhaleRoster({ initialWhales }: Props) {
 
   useVisiblePoll(load, POLL_MS);
 
-  const ranked = useMemo(
-    () => [...whales].sort((a, b) => b.heatScore - a.heatScore),
-    [whales],
-  );
+  const [sortKey, setSortKey] = useState<RosterSortKey>("heat");
+  const [sourceFilter, setSourceFilter] = useState<RosterSourceFilter>("all");
+
+  const ranked = useMemo(() => {
+    const filtered =
+      sourceFilter === "all"
+        ? whales
+        : whales.filter((w) => w.payload.source === sourceFilter);
+    const value = ROSTER_SORTERS[sortKey];
+    return [...filtered].sort((a, b) => value(b) - value(a));
+  }, [whales, sortKey, sourceFilter]);
 
   return (
     <div
@@ -71,17 +108,25 @@ export function WhaleRoster({ initialWhales }: Props) {
     >
       <BalancePill />
 
+      {/* Mobile wayfinding: view switch + sort, one swipeable strip. */}
+      <div className="no-scrollbar absolute top-[52px] left-0 right-0 z-30 flex items-center gap-2 overflow-x-auto px-3 pb-1 lg:hidden">
+        <WhaleViewSwitch active="roster" className="shrink-0" />
+        <RosterSortChips sortKey={sortKey} onChange={setSortKey} />
+      </div>
+
       {!loaded && ranked.length === 0 ? (
         <LoadingRoster />
-      ) : ranked.length === 0 ? (
+      ) : whales.length === 0 ? (
         <EmptyRoster />
+      ) : ranked.length === 0 ? (
+        <FilteredEmpty onReset={() => setSourceFilter("all")} />
       ) : (
         <>
           <div className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll lg:hidden">
             {ranked.map((whale, idx) => (
               <section
                 key={whale.payload.whaleId}
-                className="flex h-full w-full snap-start items-center justify-center px-3 pt-12 pb-24"
+                className="flex h-full w-full snap-start items-center justify-center px-3 pt-24 pb-24"
                 style={{ scrollSnapStop: "always" }}
               >
                 <WhaleCard
@@ -109,11 +154,13 @@ export function WhaleRoster({ initialWhales }: Props) {
                   {ranked.length} sources online
                 </div>
               </div>
-              <div
-                className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest"
-                style={{ background: PANEL, border: `1px solid ${FAINT}`, color: FG }}
-              >
-                Live roster
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <WhaleViewSwitch active="roster" />
+                <RosterSortChips sortKey={sortKey} onChange={setSortKey} />
+                <RosterSourceChips
+                  sourceFilter={sourceFilter}
+                  onChange={setSourceFilter}
+                />
               </div>
             </div>
 
@@ -204,7 +251,7 @@ function WhaleCard({
       style={{
         background: PANEL,
         borderRadius: 18,
-        border: `1px solid ${fresh ? FAINT : `${RED}55`}`,
+        border: `1px solid ${fresh ? FAINT : `${STREAK}45`}`,
       }}
     >
       <div
@@ -365,11 +412,11 @@ function DesktopWhaleCard({
 
   return (
     <article
-      className="relative flex min-h-[420px] flex-col overflow-hidden p-4"
+      className="card-hover relative flex min-h-[420px] flex-col overflow-hidden p-4"
       style={{
         background: PANEL,
         borderRadius: 8,
-        border: `1px solid ${fresh ? FAINT : `${RED}55`}`,
+        border: `1px solid ${fresh ? FAINT : `${STREAK}45`}`,
       }}
     >
       <div className="flex items-start gap-3">
@@ -825,11 +872,151 @@ function EmptyRoster() {
 
 function LoadingRoster() {
   return (
+    <>
+      {/* Mobile: one card-shaped skeleton where the first whale will land. */}
+      <div className="flex h-full w-full items-center justify-center px-3 pt-12 pb-24 lg:hidden">
+        <SkeletonWhaleCard />
+      </div>
+      {/* Desktop: a grid of skeletons matching the real layout. */}
+      <div className="hidden h-full min-h-0 flex-col px-6 pt-6 lg:flex">
+        <div className="mb-5 space-y-2">
+          <div className="skeleton-block h-3 w-44 rounded-md" />
+          <div className="skeleton-block h-7 w-64 rounded-md" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 overflow-hidden xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonWhaleCard key={i} />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RosterSortChips({
+  sortKey,
+  onChange,
+}: {
+  sortKey: RosterSortKey;
+  onChange: (key: RosterSortKey) => void;
+}) {
+  return (
+    <div
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border p-1"
+      style={{ background: PANEL, borderColor: FAINT }}
+      role="group"
+      aria-label="Sort whales"
+    >
+      {ROSTER_SORT_OPTIONS.map((option) => {
+        const active = option.key === sortKey;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            aria-pressed={active}
+            className="rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+            style={{
+              background: active ? PANEL_2 : "transparent",
+              color: active ? FG : DIM,
+              border: `1px solid ${active ? FAINT : "transparent"}`,
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RosterSourceChips({
+  sourceFilter,
+  onChange,
+}: {
+  sourceFilter: RosterSourceFilter;
+  onChange: (key: RosterSourceFilter) => void;
+}) {
+  return (
+    <div
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border p-1"
+      style={{ background: PANEL, borderColor: FAINT }}
+      role="group"
+      aria-label="Filter by source"
+    >
+      {ROSTER_SOURCE_OPTIONS.map((option) => {
+        const active = option.key === sourceFilter;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            aria-pressed={active}
+            className="rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+            style={{
+              background: active ? PANEL_2 : "transparent",
+              color: active ? FG : DIM,
+              border: `1px solid ${active ? FAINT : "transparent"}`,
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilteredEmpty({ onReset }: { onReset: () => void }) {
+  return (
     <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-5 text-center">
-      <Headline size={30}>{`"LOADING WHALES"`}</Headline>
-      <p className="mt-3 text-[12px] font-black uppercase tracking-widest" style={{ color: DIM }}>
-        Pulling live source accounts
+      <Headline size={26}>{`"NO WHALES HERE"`}</Headline>
+      <p
+        className="mt-3 text-[12px] font-black uppercase tracking-widest"
+        style={{ color: DIM }}
+      >
+        Nothing from this source right now
       </p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-5 rounded-2xl px-5 py-2.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+        style={{ background: ACCENT, color: BG }}
+      >
+        Show all sources
+      </button>
+    </div>
+  );
+}
+
+function SkeletonWhaleCard() {
+  return (
+    <div
+      className="w-full max-w-[520px] rounded-3xl border p-5"
+      style={{ background: PANEL, borderColor: FAINT }}
+      aria-hidden
+    >
+      <div className="flex items-center gap-3">
+        <div className="skeleton-block h-12 w-12 rounded-full" />
+        <div className="flex-1 space-y-2">
+          <div className="skeleton-block h-4 w-2/5 rounded-md" />
+          <div className="skeleton-block h-3 w-3/5 rounded-md" />
+        </div>
+      </div>
+      <div className="mt-5 flex items-end justify-between">
+        <div className="skeleton-block h-9 w-2/5 rounded-md" />
+        <div className="skeleton-block h-5 w-1/4 rounded-md" />
+      </div>
+      <div className="skeleton-block mt-4 h-24 w-full rounded-2xl" />
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="skeleton-block h-10 rounded-xl" />
+        <div className="skeleton-block h-10 rounded-xl" />
+        <div className="skeleton-block h-10 rounded-xl" />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="skeleton-block h-11 rounded-xl" />
+        <div className="skeleton-block h-11 rounded-xl" />
+      </div>
     </div>
   );
 }

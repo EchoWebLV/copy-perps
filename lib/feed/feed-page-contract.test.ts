@@ -10,7 +10,11 @@ describe("feed page contract", () => {
     );
 
     expect(source).toContain("WhaleRoster");
-    expect(source).toContain("initialWhales={[]}");
+    // SSR hydration: roster is fetched server-side (with a hard time budget)
+    // so a warm cache paints whales on first byte instead of a loader.
+    expect(source).toContain("buildCompactRosterWithTimeout");
+    expect(source).toContain("initialWhales={initialWhales}");
+    expect(source).not.toContain("initialWhales={[]}");
     expect(source).toContain('<AppShell railTitle="Whales" hideEmptyRail>');
     expect(source).not.toContain("buildWhaleTraderSignals");
     expect(source).not.toContain("WhaleLiveFeed");

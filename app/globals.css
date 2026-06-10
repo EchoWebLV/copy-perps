@@ -357,11 +357,12 @@ body {
   100% { background-position: 200% 0; }
 }
 .skeleton-block {
+  /* One step above the panel surface so blocks read on PANEL cards. */
   background: linear-gradient(
     100deg,
-    #17151b 40%,
-    #221f28 50%,
-    #17151b 60%
+    #221f28 40%,
+    #322d3b 50%,
+    #221f28 60%
   );
   background-size: 200% 100%;
   animation: skeleton-sweep 1.6s ease-in-out infinite;

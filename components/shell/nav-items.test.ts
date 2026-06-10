@@ -8,6 +8,7 @@ describe("desktop shell nav contract", () => {
   it("exposes the main app destinations in display order", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/feed",
+      "/live",
       "/trade",
       "/chatter",
       "/portfolio",
@@ -18,10 +19,12 @@ describe("desktop shell nav contract", () => {
   it("labels the main whale trading surfaces without legacy bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Whales",
+      "Heat",
       "Scalp",
       "Pulse",
       "Folio",
-      "Settings",
+      // /deposit is funding + withdrawals, so the tab says Wallet.
+      "Wallet",
     ]);
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).not.toContain(
       "Chatter",
@@ -59,14 +62,14 @@ describe("desktop shell nav contract", () => {
     expect(bottomNav).toContain('href="/chatter"');
     expect(bottomNav).toContain('aria-label="Pulse open positions"');
     expect(bottomNav).toContain('src="/nav-swipe-face-yellow.png"');
-    expect(bottomNav).toContain("borderColor: ACCENT");
+    // The mascot ring only lights up when Pulse is the active tab.
+    expect(bottomNav).toContain("borderColor: pulseActive ? ACCENT");
     expect(bottomNav).not.toContain("<Zap size={26}");
     expect(bottomNav).not.toContain('aria-label="Swipe open positions"');
     expect(ChartCandlestick).toBeDefined();
   });
 
-  it("keeps hidden destinations out of the primary desktop nav", () => {
-    expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).not.toContain("/live");
+  it("keeps unfinished destinations out of the primary desktop nav", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).not.toContain(
       "/leaderboard",
     );

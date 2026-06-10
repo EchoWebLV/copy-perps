@@ -82,8 +82,11 @@ describe("WhalePulseFeed route contract", () => {
 
     expect(componentSource).toContain("/api/whales/roster");
     expect(componentSource).toContain("statsByWhaleId");
-    expect(componentSource).toContain('label="1D Win Rate"');
-    expect(componentSource).toContain('label="30D P/L"');
+    // Tiles render through availableMetrics so N/A stats are omitted
+    // instead of shown as dead cells.
+    expect(componentSource).toContain("function availableMetrics");
+    expect(componentSource).toContain('label: "1D Win Rate"');
+    expect(componentSource).toContain('label: "30D P/L"');
     expect(componentSource).toContain("formatWinRate");
     expect(componentSource).toContain("formatSignedUsd");
   });
@@ -147,10 +150,12 @@ describe("WhalePulseFeed route contract", () => {
       "utf8",
     );
 
-    expect(componentSource).toContain('{p.stale ? "Stale" : "Live"}');
+    // Staleness reads as a data-freshness note (amber), not a dead trade
+    // (red): "Mark delayed"/"DELAYED" vs "Live"/"LIVE".
+    expect(componentSource).toContain('{p.stale ? "Mark delayed" : "Live"}');
     expect(componentSource).not.toContain('{p.stale ? "Stale" : "Fresh"}');
-    expect(rosterSource).toContain('{stale ? "STALE" : "LIVE"}');
-    expect(liveSource).toContain('{stale ? "STALE" : "LIVE"}');
+    expect(rosterSource).toContain('{stale ? "DELAYED" : "LIVE"}');
+    expect(liveSource).toContain('{stale ? "DELAYED" : "LIVE"}');
     expect(rosterSource).not.toContain('{stale ? "STALE" : "FRESH"}');
     expect(liveSource).not.toContain('{stale ? "STALE" : "FRESH"}');
   });

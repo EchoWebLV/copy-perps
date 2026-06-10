@@ -8,6 +8,7 @@ import { isSourceFresh } from "@/lib/whales/identity";
 import { LiveEntryChart } from "@/components/feed/LiveEntryChart";
 import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { BalancePill } from "@/components/shell/BalancePill";
+import { WhaleViewSwitch } from "./WhaleViewSwitch";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { isFlashCopyableMarket } from "@/lib/flash/markets";
 import { WhaleFingerprintAvatar } from "./WhaleFingerprintAvatar";
@@ -111,6 +112,11 @@ export function WhaleLiveFeed({ initialPositions }: Props) {
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
       <BalancePill />
+
+      {/* Wayfinding back to Roster/Heat — the tape view was a dead end. */}
+      <div className="absolute top-[52px] left-1/2 z-30 -translate-x-1/2 lg:left-auto lg:right-6 lg:top-5 lg:translate-x-0">
+        <WhaleViewSwitch active="tape" />
+      </div>
 
       {sorted.length === 0 ? (
         <EmptyLive />
@@ -238,7 +244,8 @@ function PositionCard({
   }, []);
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-12 pb-24 lg:px-8 lg:pt-8 lg:pb-8" style={{ background: BG }}>
+    // pt-24 clears the floating balance pill + view-switch strip on mobile.
+    <div className="relative flex h-full w-full flex-col overflow-hidden px-5 pt-24 pb-24 lg:px-8 lg:pt-8 lg:pb-8" style={{ background: BG }}>
       <div className="flex min-h-0 flex-1 flex-col pr-1">
         <div className="flex items-baseline justify-between">
           <Stamp
