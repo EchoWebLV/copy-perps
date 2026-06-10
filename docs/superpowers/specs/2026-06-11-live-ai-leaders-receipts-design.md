@@ -69,7 +69,7 @@ These facts were verified against the working tree / git history and constrain t
             │        │                 │  auto-close: server signs via  ▼                           │
             │        │                 │  Privy session signers     Solana base layer               │
             │        │                 └──► fills + bets rows           │                           │
-            │        └──► Telegram bot (alerts / overrides)             ▼                           │
+            │        │                                                  ▼                           │
             │                                                   Receipts UI (ws onAccountChange,    │
             │                                                   ms-latency tape + Solscan links)    │
             └───────────────────────────────────────────────────────────────────────────────────────┘
@@ -198,14 +198,7 @@ receipts rendered side-by-side; each commit gets a "verify on Solscan" link. A p
 shareable receipts page per leader (no auth) is the marketing surface. Later: "Magic
 Actions" post-commit calls maintaining an on-chain Copy-PnL leaderboard.
 
-### Phase 5 — Telegram bot
-
-- Alerts: leader open/close, follower fill confirmations with receipt links.
-- Commands: pause copying, close position now (routes through the same session-signer
-  close path), status.
-- Completes the Blitz "Idea 1" card bullet-for-bullet and doubles as retention channel.
-
-### Phase 6 — Stretch: private copy-sizing (Private ER)
+### Phase 5 — Stretch: private copy-sizing (Private ER)
 
 Follower stake sizes hidden in a Private Ephemeral Rollup; fills publicly provable
 (receipt carries a hash + size bucket instead of exact size). Aligns with the privacy
@@ -257,7 +250,7 @@ momentum across Blitz v2–v4 winners. Only after the public journal is solid.
 2. **M2 — Live leader**: Phase 2. Pulse trades real money, admin-only visibility, track record accumulating.
 3. **M3 — Copyable**: Phase 3. Bot leader card public; session-signer auto-close working.
 4. **M4 — Receipts**: Phase 4 on devnet ER → the Blitz v6 / Magic Incubator entry artifact; mainnet ER after a week of stability.
-5. **M5 — Telegram** (Phase 5), then privacy stretch (Phase 6).
+5. **M5 — Privacy stretch** (Phase 5), once the public journal is proven.
 
 ## 9. Decisions log
 
@@ -268,4 +261,6 @@ momentum across Blitz v2–v4 winners. Only after the public journal is solid.
 - Journal: per-leader fixed-capacity PDA with epoch rollover; follower identity hashed
   in receipts.
 - Devnet ER first, mainnet ER second. Bot's actual trading is mainnet Flash from day one.
+- **No Telegram bot** (user decision 2026-06-11). Alerts/auto-close fallbacks are in-app
+  only; the Blitz idea card's Telegram bullet is deliberately dropped.
 - Blitz v5 (June 12–14) is NOT a deadline; target Blitz v6+/Magic Incubator with M4.
