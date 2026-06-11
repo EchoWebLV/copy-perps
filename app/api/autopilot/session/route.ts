@@ -4,6 +4,7 @@ import { ensureUser } from "@/lib/users/ensure";
 import {
   AutopilotSessionError,
   getActiveSession,
+  getLatestSession,
   MAX_BUDGET_USD,
   MIN_BUDGET_USD,
   sessionStats,
@@ -102,7 +103,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const user = await ensureUser(claims.userId, null);
-  const session = await getActiveSession(user.id);
+  // Fall back to the newest ended session so the panel can show WHY the
+  // engine stopped (stopped / exhausted / target) instead of silently
+  // resetting to the start form.
+  const session =
+    (await getActiveSession(user.id)) ?? (await getLatestSession(user.id));
   if (!session) {
     return NextResponse.json({ session: null, stats: null });
   }

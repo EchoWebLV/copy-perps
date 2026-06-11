@@ -299,7 +299,7 @@ export function AutopilotPanel() {
             </div>
             <div>
               <div className="text-[9px] font-black uppercase" style={{ color: DIM }}>
-                Realized P/L
+                Realized P/L (worst-case)
               </div>
               <div
                 className="text-[15px] font-black"
@@ -317,6 +317,9 @@ export function AutopilotPanel() {
             style={{ color: DIM }}
           >
             {TIER_COPY[session.tier].title} · {stats?.closedCount ?? 0} closed
+          </div>
+          <div className="mt-0.5 text-[9px] font-bold" style={{ color: DIM }}>
+            Stop-loss exits count as full stake loss until chain-verified.
           </div>
           {(stats?.openBets ?? []).map((bet) => (
             <div
@@ -366,7 +369,8 @@ export function AutopilotPanel() {
                       : DIM,
               }}
             >
-              Last session: {session.status} ({fmtUsd(session.realizedPnlUsd)})
+              Last session: {session.status} (
+              {fmtUsd(stats?.realizedPnlUsd ?? session.realizedPnlUsd)})
             </div>
           )}
           <div className="mt-2">

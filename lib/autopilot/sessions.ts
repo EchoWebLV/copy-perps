@@ -98,8 +98,26 @@ export function clampBudget(budgetUsd: number): number {
   if (!Number.isFinite(budgetUsd)) {
     throw new AutopilotSessionError("invalid-budget", "budget must be a number");
   }
-  const clamped = Math.min(MAX_BUDGET_USD, Math.max(MIN_BUDGET_USD, budgetUsd));
+  // Below-minimum is a user mistake, not a request to bet more — reject
+  // instead of silently raising the stake to $5. Above max still clamps
+  // down (capping exposure is the safe direction).
+  if (budgetUsd < MIN_BUDGET_USD) {
+    throw new AutopilotSessionError(
+      "invalid-budget",
+      `budget must be at least $${MIN_BUDGET_USD}`,
+    );
+  }
+  const clamped = Math.min(MAX_BUDGET_USD, budgetUsd);
   return Math.floor(clamped * 100) / 100;
+}
+
+/** Postgres unique_violation — postgres-js exposes the SQLSTATE on err.code. */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "23505"
+  );
 }
 
 export async function startSession(args: {
@@ -118,15 +136,29 @@ export async function startSession(args: {
       "An autopilot session is already running. Stop it first.",
     );
   }
-  const [row] = await db
-    .insert(autopilotSessions)
-    .values({
-      userId: args.userId,
-      budgetUsd,
-      tier: args.tier,
-      status: "active",
-    })
-    .returning();
+  // The pre-check above is the cheap fast path; the partial unique index
+  // (autopilot_sessions_one_active_per_user_idx) is the real guarantee —
+  // two concurrent starts both pass the pre-check, one insert loses here.
+  let row: typeof autopilotSessions.$inferSelect | undefined;
+  try {
+    [row] = await db
+      .insert(autopilotSessions)
+      .values({
+        userId: args.userId,
+        budgetUsd,
+        tier: args.tier,
+        status: "active",
+      })
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new AutopilotSessionError(
+        "active-session-exists",
+        "An autopilot session is already running. Stop it first.",
+      );
+    }
+    throw err;
+  }
   if (!row) throw new Error("autopilot session insert failed");
   return toSession(row);
 }
@@ -211,6 +243,23 @@ export async function getActiveSession(
         eq(autopilotSessions.status, "active"),
       ),
     )
+    .orderBy(desc(autopilotSessions.startedAt))
+    .limit(1);
+  return row ? toSession(row) : null;
+}
+
+/**
+ * Newest session for the user REGARDLESS of status. Lets the UI surface
+ * why the last run ended (stopped / exhausted / target) after the engine
+ * flips it out of 'active' between polls.
+ */
+export async function getLatestSession(
+  userId: string,
+): Promise<AutopilotSession | null> {
+  const [row] = await db
+    .select()
+    .from(autopilotSessions)
+    .where(eq(autopilotSessions.userId, userId))
     .orderBy(desc(autopilotSessions.startedAt))
     .limit(1);
   return row ? toSession(row) : null;

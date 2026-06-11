@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
   stopSession: vi.fn(),
   getActiveSession: vi.fn(),
+  getLatestSession: vi.fn(),
   sessionStats: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ vi.mock("@/lib/autopilot/sessions", async (importOriginal) => {
     startSession: mocks.startSession,
     stopSession: mocks.stopSession,
     getActiveSession: mocks.getActiveSession,
+    getLatestSession: mocks.getLatestSession,
     sessionStats: mocks.sessionStats,
   };
 });
@@ -68,6 +70,7 @@ describe("autopilot session route", () => {
     });
     mocks.startSession.mockResolvedValue(SESSION);
     mocks.getActiveSession.mockResolvedValue(SESSION);
+    mocks.getLatestSession.mockResolvedValue(null);
     mocks.stopSession.mockResolvedValue({ ...SESSION, status: "stopped" });
     mocks.sessionStats.mockResolvedValue({
       realizedPnlUsd: 0,
@@ -146,12 +149,35 @@ describe("autopilot session route", () => {
     expect(body.stats.closedCount).toBe(0);
   });
 
-  it("GET returns null when no session is active", async () => {
+  it("GET returns null when the user has no sessions at all", async () => {
     mocks.getActiveSession.mockResolvedValue(null);
     const res = await GET(request("GET"));
     const body = await res.json();
     expect(body.session).toBeNull();
     expect(body.stats).toBeNull();
+  });
+
+  it("GET falls back to the newest ended session with its stats", async () => {
+    mocks.getActiveSession.mockResolvedValue(null);
+    mocks.getLatestSession.mockResolvedValue({
+      ...SESSION,
+      status: "exhausted",
+      realizedPnlUsd: -100,
+      endedAt: new Date("2026-06-11T13:00:00Z"),
+    });
+    mocks.sessionStats.mockResolvedValue({
+      realizedPnlUsd: -100,
+      closedCount: 7,
+      openBets: [],
+    });
+    const res = await GET(request("GET"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.session.id).toBe("sess-1");
+    expect(body.session.status).toBe("exhausted");
+    expect(body.stats.realizedPnlUsd).toBe(-100);
+    expect(body.stats.closedCount).toBe(7);
+    expect(mocks.sessionStats).toHaveBeenCalledWith("sess-1");
   });
 
   it("DELETE stops and documents the keep-positions-open choice", async () => {

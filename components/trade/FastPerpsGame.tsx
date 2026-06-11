@@ -308,6 +308,10 @@ export function FastPerpsGame() {
     string | null
   >(null);
   const [autopilotMode, setAutopilotMode] = useState(false);
+  // True while the server says an autopilot session is running — drives the
+  // "manual trades can merge with autopilot positions" warning on the
+  // Manual view. Set by the mount probe below.
+  const [autopilotSessionActive, setAutopilotSessionActive] = useState(false);
   const entryCostCacheRef = useRef<FlashEntryCostCache>(new Map());
 
   const effectiveStake = useMemo(() => {
@@ -424,6 +428,7 @@ export function FastPerpsGame() {
           session?: { status?: string } | null;
         };
         if (!cancelled && body.session?.status === "active") {
+          setAutopilotSessionActive(true);
           setAutopilotMode(true);
         }
       } catch {
@@ -1065,6 +1070,20 @@ export function FastPerpsGame() {
             <AutopilotPanel />
           ) : (
             <>
+              {autopilotSessionActive && (
+                <div
+                  className="mt-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+                  style={{
+                    background: PANEL,
+                    color: DIM,
+                    border: `1px solid ${FAINT}`,
+                  }}
+                >
+                  Autopilot is running. Manual trades on BTC / ETH / SOL can
+                  merge with its positions — switch to the Autopilot tab to
+                  manage it.
+                </div>
+              )}
               {!selectedPosition && (
             <>
               <div className="rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>

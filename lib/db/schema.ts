@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -417,5 +418,10 @@ export const autopilotSessions = pgTable(
       t.userId,
       t.startedAt,
     ),
+    // DB-enforced "one active session per user" — the startSession
+    // pre-check is only a fast path; concurrent starts race past it.
+    activeUserIdx: uniqueIndex("autopilot_sessions_one_active_per_user_idx")
+      .on(t.userId)
+      .where(sql`status = 'active'`),
   }),
 );

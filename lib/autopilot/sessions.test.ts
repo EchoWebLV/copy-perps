@@ -19,6 +19,7 @@ import {
   AutopilotSessionError,
   clampBudget,
   getActiveSession,
+  getLatestSession,
   listActiveSessions,
   listOpenAutopilotBets,
   recentClosedAutopilotResults,
@@ -113,11 +114,14 @@ describe("autopilot sessions", () => {
     mocks.insert.mockReturnValue(insertChain([sessionRow()]));
   });
 
-  it("clampBudget clamps to $5..$200 and rejects junk", () => {
+  it("clampBudget caps above $200, rejects below $5 and junk", () => {
     expect(clampBudget(50)).toBe(50);
-    expect(clampBudget(1)).toBe(5);
+    expect(clampBudget(5)).toBe(5);
     expect(clampBudget(1000)).toBe(200);
     expect(clampBudget(9.999)).toBe(9.99);
+    // Sub-minimum is a user mistake — reject, never silently raise to $5.
+    expect(() => clampBudget(1)).toThrow(AutopilotSessionError);
+    expect(() => clampBudget(1)).toThrow(/at least \$5/);
     expect(() => clampBudget(Number.NaN)).toThrow(AutopilotSessionError);
   });
 
@@ -143,6 +147,31 @@ describe("autopilot sessions", () => {
     await expect(
       startSession({ userId: "user-1", budgetUsd: 100, tier: "yolo" }),
     ).rejects.toMatchObject({ code: "invalid-tier" });
+  });
+
+  it("startSession maps a unique-violation race to active-session-exists", async () => {
+    // Pre-check sees nothing (selectChain([]) default), but the insert
+    // loses the race against the partial unique index — Postgres 23505.
+    mocks.insert.mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error("duplicate key value"), { code: "23505" }),
+          ),
+      }),
+    });
+    await expect(
+      startSession({ userId: "user-1", budgetUsd: 100, tier: "cruise" }),
+    ).rejects.toMatchObject({ code: "active-session-exists" });
+  });
+
+  it("getLatestSession returns ended sessions too", async () => {
+    mocks.select.mockReturnValue(
+      selectChain([sessionRow({ status: "exhausted", endedAt: NOW })]),
+    );
+    const session = await getLatestSession("user-1");
+    expect(session?.status).toBe("exhausted");
   });
 
   it("getActiveSession maps the row", async () => {
