@@ -165,3 +165,26 @@ to the base layer.
 - npm (package-lock.json) instead of the template's yarn — matches the parent
   repo's package manager; anchor only shells out to the `[scripts] test` line,
   so the package manager choice doesn't affect `anchor test`.
+
+## Spike B — oracle feed read (PASS, 2026-06-11)
+
+- `npx tsx scripts/arena/_spike-oracle-read.ts` → SOLUSD feed PDA
+  `ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu` on `https://devnet.magicblock.app`:
+  owner `PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd`, dataLen 134,
+  price offset 73 (i64 LE) / publish_ts offset 93 (i64 LE) confirmed, **age 0s**.
+- Account fixture dumped to `arena-program/tests/fixtures/solusd-feed.json` for
+  local-validator tests.
+
+## Oracle derivation + MAINNET (confirmed 2026-06-11)
+
+- MagicBlock confirmed direct PDA reads (their answer + https://pyth-template.magicblock.app/).
+- Derivation: seeds `["price_feed", "pyth-lazer", ascii(lazerFeedId)]` under
+  `PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd`. Feed ids: BTC/USD=1, ETH/USD=2,
+  SOL/USD=6 — verified to reproduce all three published devnet addresses.
+  NOTE the third seed is the DECIMAL STRING of the feed id ("6"), not the symbol
+  and not little-endian bytes.
+- PDAs are cluster-independent → mainnet uses the SAME addresses. Verified live:
+  mainnet base layer shows the SOL feed delegated (owner DELeG…), and regional
+  mainnet ER endpoints `https://as.magicblock.app` / `eu.` / `us.` serve it with
+  age 0s. `https://router.magicblock.app` errored on plain getAccountInfo — use
+  the regional endpoints (pin validator identity at Phase-1.5 delegation).
