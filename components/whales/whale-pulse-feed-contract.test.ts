@@ -141,23 +141,11 @@ describe("WhalePulseFeed route contract", () => {
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
-    const rosterSource = readFileSync(
-      join(process.cwd(), "components/whales/WhaleRoster.tsx"),
-      "utf8",
-    );
-    const liveSource = readFileSync(
-      join(process.cwd(), "components/whales/WhaleLiveFeed.tsx"),
-      "utf8",
-    );
 
     // Staleness reads as a data-freshness note (amber), not a dead trade
-    // (red): "Mark delayed"/"DELAYED" vs "Live"/"LIVE".
+    // (red): "Mark delayed" vs "Live".
     expect(componentSource).toContain('{p.stale ? "Mark delayed" : "Live"}');
     expect(componentSource).not.toContain('{p.stale ? "Stale" : "Fresh"}');
-    expect(rosterSource).toContain('{stale ? "DELAYED" : "LIVE"}');
-    expect(liveSource).toContain('{stale ? "DELAYED" : "LIVE"}');
-    expect(rosterSource).not.toContain('{stale ? "STALE" : "FRESH"}');
-    expect(liveSource).not.toContain('{stale ? "STALE" : "FRESH"}');
   });
 
   it("retains recent Pulse cards when a live-position poll returns a partial list", () => {

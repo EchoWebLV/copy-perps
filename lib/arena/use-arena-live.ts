@@ -1,11 +1,11 @@
-// lib/arena/use-arena-live.ts — live ER state for the arena page.
+// lib/arena/use-arena-live.ts — live ER state for the arena page + /feed.
 //
 // Seed via one getMultipleAccountsInfo on the ER endpoint, then subscribe to
 // every account with onAccountChange (ER ws). The router-ws forwarding gotcha
 // (spec §13) applies: if no ws update arrives within WS_GRACE_MS of mount we
-// fall back to visibility-aware polling (same 4s cadence as WhaleLiveFeed)
-// while keeping the subscriptions alive as best-effort — a late ws push
-// upgrades the mode back to "ws" and stops the poll. Staleness is a UI state,
+// fall back to visibility-aware polling (4s cadence) while keeping the
+// subscriptions alive as best-effort — a late ws push upgrades the mode back
+// to "ws" and stops the poll. Staleness is a UI state,
 // never hidden: consumers run isStale() over market.lastPublishTsMs (oracle
 // freshness) and/or lastUpdateMs (transport freshness).
 "use client";
@@ -24,7 +24,7 @@ import { botPda } from "./personas";
 /** No ws delivery within this window of mount → assume the ER ws path is
  *  dead-on-arrival (router forwarding gotcha) and start polling. */
 export const WS_GRACE_MS = 15_000;
-/** Poll cadence while in "poll" mode — matches WhaleLiveFeed. */
+/** Poll cadence while in "poll" mode. */
 export const POLL_MS = 4_000;
 /** Default isStale() window: 2 missed 15s oracle ticks. */
 export const STALE_AFTER_MS = 30_000;
@@ -201,7 +201,7 @@ export function useArenaLive(): ArenaLive {
       }
     };
 
-    // Inline useVisiblePoll semantics (components/whales/WhaleRoster.tsx):
+    // Inline useVisiblePoll semantics (components/feed/UnifiedFeed.tsx):
     // run immediately when visible, tick every POLL_MS, skip ticks while
     // hidden, and tear the interval down entirely on visibilitychange→hidden.
     const startPollTimer = () => {

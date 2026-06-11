@@ -1,8 +1,8 @@
 "use client";
 
 // Live arena roster: consumes useArenaLive() (REST seed → ER ws → poll
-// fallback) and renders one BotCard per configured persona. Mirrors the
-// WhaleRoster header/grid patterns on the v2 tokens. NOTE the hook contract:
+// fallback) and renders one BotCard per configured persona, on the v2
+// tokens. NOTE the hook contract:
 // `bots` is pre-keyed per persona with null placeholders, and mode "loading"
 // can still carry data after the REST seed — loading-with-data is renderable,
 // only the transport indicator stays a skeleton.
@@ -101,7 +101,7 @@ export function ArenaRoster() {
         ) : (
           <>
             {/* Mobile: full-width stat-card stack (these are dashboards, not
-                stories — no 100vh snap). Desktop: WhaleRoster's grid. */}
+                stories — no 100vh snap). Desktop: card grid. */}
             <div className="flex flex-col gap-3 lg:grid lg:auto-rows-max lg:grid-cols-2 lg:gap-3 xl:grid-cols-3">
               {botNames.map((name) => (
                 <BotCard

@@ -17,19 +17,13 @@ describe("Whale fingerprint avatar contract", () => {
     expect(source).not.toContain("conic-gradient");
   });
 
-  it("uses source-account fingerprints in whale roster cards", () => {
-    const source = readComponent("components/whales/WhaleRoster.tsx");
+  it("falls back to source-account fingerprints in unified feed cards", () => {
+    const source = readComponent("components/feed/UnifiedFeed.tsx");
 
     expect(source).toContain("WhaleFingerprintAvatar");
     expect(source).toContain("sourceAccount={p.sourceAccount}");
-    expect(source).not.toContain("imageUrl={p.avatarUrl}");
-  });
-
-  it("uses source-account fingerprints in live position cards", () => {
-    const source = readComponent("components/whales/WhaleLiveFeed.tsx");
-
-    expect(source).toContain("WhaleFingerprintAvatar");
-    expect(source).toContain("sourceAccount={p.sourceAccount}");
+    // avatarUrl renders as a plain <img> when curated; the fingerprint is
+    // the fallback identity, never a StoryAvatar imageUrl.
     expect(source).not.toContain("imageUrl={p.avatarUrl}");
   });
 

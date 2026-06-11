@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
-import { WhaleRoster } from "@/components/whales/WhaleRoster";
+import { UnifiedFeed } from "@/components/feed/UnifiedFeed";
 import { whaleSocialEnabled } from "@/lib/features";
 import { buildCompactRosterWithTimeout } from "@/lib/signals/roster-compact";
 
@@ -11,16 +11,18 @@ export const dynamic = "force-dynamic";
 // + poll takes over.
 const SSR_ROSTER_BUDGET_MS = 1500;
 
-// /feed is the primary whale list: source accounts, total P/L, open
-// positions, and tail actions. The swipeable per-position view lives on /live.
+// /feed is the unified feed: whale source accounts AND on-chain arena bots
+// as one stacked-card list, filtered by entity pills with a compact
+// 1D/7D/30D/Equity sort. Bots hydrate client-side from the ER (the chain
+// is the API); whales SSR from the stats cache when it's warm.
 export default async function FeedPage() {
   const initialWhales = whaleSocialEnabled()
     ? await buildCompactRosterWithTimeout(SSR_ROSTER_BUDGET_MS)
     : [];
 
   return (
-    <AppShell railTitle="Whales" hideEmptyRail>
-      <WhaleRoster initialWhales={initialWhales} />
+    <AppShell railTitle="Feed" hideEmptyRail>
+      <UnifiedFeed initialWhales={initialWhales} />
       <BottomNav />
     </AppShell>
   );
