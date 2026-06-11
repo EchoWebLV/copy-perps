@@ -23,3 +23,8 @@ anchor-debug = []
 # Pins are SETTLED — see arena-program/PINS.md (Spike A PASS, 2026-06-11).
 anchor-lang = "1.0.2"
 ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor"] }
+
+[dev-dependencies]
+# Test-only: fixture parity against fixtures/arena/strategy-cases.json.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
