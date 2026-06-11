@@ -262,6 +262,28 @@ merkle-root compaction into the index account if rent matters at scale.
 `#[ephemeral]` / `#[delegate]` / `#[commit]` + `MagicIntentBundleBuilder` (0.15.x
 API; older `commit_accounts` helpers deprecated).
 
+**In-ER verification (baseline, not optional):** `append_receipt` is not a dumb log
+write. On a follower receipt, the program matches it against the leader receipt in
+the same epoch (same market, same side, price within tolerance, timestamp within
+window) and flags it `verified_mirror` — the PROGRAM certifies the copy, not our
+server. On every append it also updates per-leader running aggregates held in the
+epoch account (follower count, aggregate divergence, copy-PnL) — a live, on-chain-
+computed leader scoreboard at ER latency. ~50 lines of Anchor; it is the difference
+between "fast log" and "copy-trading verified inside the Ephemeral Rollup" (the
+hackathon-grade mechanic).
+
+**Deferred — on-chain copy engine ("rung 3", decision 2026-06-11: NOT built now).**
+The stronger-still version moves the fan-out decision itself into the ER program
+(subscriptions as delegated accounts; program computes each follower's size and
+emits copy orders; server merely executes). Deliberately deferred: it forces
+dual-source-of-truth sync between on-chain subscription state and Postgres (where
+allocations must also live, since deposits/withdrawals/pauses happen off-chain), the
+purity claim leaks anyway (the ER cannot see live follower Flash balances, so the
+server must still validate/skip), and its audience is judges rather than users —
+receipts + in-ER verification already answer the real user trust question. Revisit
+only after M4 ships, as a scoped sprint on top of Phase 3b state, if a specific
+Blitz edition or incubator conversation makes it decisive.
+
 **Toolchain / pins (verified June 2026):** Rust 1.89.0, Solana 3.1.9, Anchor 1.0.2;
 `ephemeral-rollups-sdk` pinned to whatever `magicblock-engine-examples/anchor-counter`
 pins (0.14.3 at writing; docs describe 0.15.x — never mix doc snippets with example
@@ -389,6 +411,10 @@ who opt into privacy over verifiability. Only after the public journal is proven
 - **Both follow modes, sequenced** (user decision 2026-06-11): position-copy ships
   first (M3), subscription tailing is designed in as Phase 3b / M5 — not deferred to
   a future spec.
+- **In-ER verification is the Phase 4 baseline; the on-chain copy engine is
+  deliberately deferred** (user decision 2026-06-11): mirror-matching + live
+  aggregates run inside the ER program; moving the fan-out decision on-chain is
+  recorded as a future option, revisited only post-M4 for a specific event.
 - **No Telegram bot** (user decision 2026-06-11). Alerts/auto-close fallbacks are
   in-app only.
 - Blitz v5 (June 12–14) is NOT a deadline; target Blitz v6+/Magic Incubator with M4.
