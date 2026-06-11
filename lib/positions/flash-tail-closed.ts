@@ -56,7 +56,10 @@ export function closedFlashTailCopyRows(
       autoCloseOnSourceClose: false,
       closeReason: meta.closeReason,
       botId: meta.botId,
-      botName: meta.sourceKind === "bot" ? meta.sourceName : null,
+      botName:
+        meta.sourceKind === "bot" || meta.sourceKind === "autopilot"
+          ? meta.sourceName
+          : null,
       liveStatus: "closed",
       entryPrice: meta.entryPriceUsd,
       markPrice: null,

@@ -134,8 +134,9 @@ function flashRowFromPosition(
     closeReason: null,
     botId: tailBet?.meta?.botId ?? null,
     botName:
-      tailBet?.meta?.sourceKind === "bot"
-        ? (tailBet.meta.sourceName ?? null)
+      tailBet?.meta?.sourceKind === "bot" ||
+      tailBet?.meta?.sourceKind === "autopilot"
+        ? (tailBet?.meta?.sourceName ?? null)
         : null,
     liveStatus: "open" satisfies CopyLiveStatus,
     entryPrice: p.entryPriceUsd,

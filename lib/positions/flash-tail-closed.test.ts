@@ -125,6 +125,28 @@ describe("closedFlashTailCopyRows", () => {
     expect(rows[0].unrealizedPnlPct).toBeNull();
   });
 
+  it("labels closed autopilot rows via botName", () => {
+    const rows = closedFlashTailCopyRows([
+      betRow({
+        id: "bet-ap",
+        amountUsdc: 5,
+        proceedsUsdc: 7.5,
+        meta: flashTailMeta({
+          sourceKind: "autopilot",
+          whaleId: null,
+          botId: null,
+          sourceName: "Autopilot",
+          sourcePositionId: null,
+          autopilotSessionId: "sess-1",
+        }),
+      }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].botName).toBe("Autopilot");
+    expect(rows[0].whaleName).toBeNull();
+    expect(rows[0].pnlUsd).toBe(2.5);
+  });
+
   it("skips other bet types, non-closed statuses, and junk meta", () => {
     const rows = closedFlashTailCopyRows([
       betRow({ type: "copy" }),
