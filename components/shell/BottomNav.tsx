@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, ChartCandlestick, Flame, Wallet, PieChart } from "lucide-react";
+import { ChartCandlestick, Flame, Wallet, PieChart } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
@@ -13,7 +13,6 @@ const LEFT_TABS = [
   { href: "/trade", icon: ChartCandlestick, label: "Scalp" },
 ];
 const RIGHT_TABS = [
-  { href: "/arena", icon: Bot, label: "Arena" },
   { href: "/portfolio", icon: PieChart, label: "Folio" },
   // The page at /deposit is wallet funding + withdrawals, not settings.
   { href: "/deposit", icon: Wallet, label: "Wallet" },
