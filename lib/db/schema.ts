@@ -78,12 +78,14 @@ export const fills = pgTable(
     action: text("action").notNull(), // 'open' | 'close'
     market: text("market").notNull(),
     side: text("side").notNull(), // 'long' | 'short'
+    // Money columns are nullable: quote-estimate rows may lack any of them
+    // at confirm time; the reconcile sweep backfills from the parsed tx.
     fillUsd: doublePrecision("fill_usd"),
     priceUsd: doublePrecision("price_usd"),
     feeUsd: doublePrecision("fee_usd"),
     txSig: text("tx_sig").notNull(),
     source: text("source").notNull().default("quote-estimate"), // 'quote-estimate' | 'chain'
-    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    filledAt: timestamp("filled_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     sigActionIdx: uniqueIndex("fills_sig_action_idx").on(t.txSig, t.action),
