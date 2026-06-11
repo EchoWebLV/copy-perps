@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 pub mod candles;
+pub mod paper;
 pub mod state;
 pub mod strategy;
 
