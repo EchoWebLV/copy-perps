@@ -261,6 +261,54 @@ describe("arena", () => {
     }
   });
 
+  it("initializes the crank payer PDA", async () => {
+    const [crankPayerPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("crank-payer")],
+      program.programId,
+    );
+    await program.methods
+      .initCrankPayer()
+      .accountsPartial({
+        config: configPda,
+        crankPayer: crankPayerPda,
+        admin: provider.wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    const info = await provider.connection.getAccountInfo(crankPayerPda);
+    assert.isNotNull(info);
+    assert.isTrue(
+      info!.owner.equals(program.programId),
+      "crank payer must be program-owned (delegatable)",
+    );
+    assert.isAbove(info!.lamports, 0, "rent-exempt lamports expected");
+    const cp = await program.account.crankPayer.fetch(crankPayerPda);
+    assert.isAbove(cp.bump, 0);
+  });
+
+  it("rejects crank-payer delegation without a pinned ER validator", async () => {
+    // Same rule as delegate_market: the require! fires before the delegation
+    // CPI, so it asserts on the legacy validator with no delegation program.
+    const [crankPayerPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("crank-payer")],
+      program.programId,
+    );
+    try {
+      await program.methods
+        .delegateCrankPayer()
+        .accountsPartial({
+          config: configPda,
+          admin: provider.wallet.publicKey,
+          crankPayer: crankPayerPda,
+        })
+        .rpc();
+      assert.fail("expected MissingValidator");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "MissingValidator");
+    }
+  });
+
   it("rejects bot params outside the domain", async () => {
     try {
       await program.methods

@@ -74,6 +74,19 @@ pub struct ArenaConfig {
     pub bump: u8,
 }
 
+// Lamport reservoir that pays commit_state's Magic intent bundle once
+// delegated to the ER (the magic_fee_vault + delegated-fee-payer pattern —
+// see lib.rs commit_state and PINS.md "magic_fee_vault commits"). The data
+// payload is just the bump: what matters is that the account is a
+// program-owned PDA (delegatable via the er-sdk `del` constraint, exactly
+// like rewards-delegated-vrf's reward_list payer) that holds lamports.
+// Borsh like ArenaConfig — 9 bytes, no SBF stack concern.
+#[account]
+#[derive(InitSpace)]
+pub struct CrankPayer {
+    pub bump: u8,
+}
+
 /// 3608 bytes, align 8. Account data = 8-byte discriminator + this.
 ///
 /// | offset | size | field                  |

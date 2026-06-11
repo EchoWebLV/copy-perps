@@ -10,7 +10,11 @@
 import * as anchor from "@coral-xyz/anchor";
 import { BN, Program, web3 } from "@coral-xyz/anchor";
 import { assert } from "chai";
-import { GetCommitmentSignature } from "@magicblock-labs/ephemeral-rollups-sdk";
+import {
+  GetCommitmentSignature,
+  delegationRecordPdaFromDelegatedAccount,
+  magicFeeVaultPdaFromValidator,
+} from "@magicblock-labs/ephemeral-rollups-sdk";
 import { Arena } from "../target/types/arena";
 
 const ENABLED = process.env.ARENA_DELEGATION_TEST === "1";
@@ -93,6 +97,17 @@ const MAX_AGE_SECS = new BN("10000000000");
     [Buffer.from("bot"), Buffer.from(RIDER_ID)],
     program.programId,
   );
+  const [crankPayerPda] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("crank-payer")],
+    program.programId,
+  );
+  // commit_state's fee-vault accounts (magic_fee_vault + delegated payer —
+  // PINS.md "magic_fee_vault commits"): the delegation record of the
+  // committed market and the fee vault of the validator it is delegated to,
+  // both PDAs under the delegation program.
+  const marketDelegationRecord =
+    delegationRecordPdaFromDelegatedAccount(marketPda);
+  const magicFeeVault = magicFeeVaultPdaFromValidator(LOCAL_ER_VALIDATOR);
   const botMetas = [scalperPda, riderPda].map((pubkey) => ({
     pubkey,
     isSigner: false,
@@ -185,6 +200,50 @@ const MAX_AGE_SECS = new BN("10000000000");
     await new Promise((r) => setTimeout(r, 3000));
   });
 
+  it("initializes, funds and delegates the crank payer", async () => {
+    await program.methods
+      .initCrankPayer()
+      .accountsPartial({
+        config: configPda,
+        crankPayer: crankPayerPda,
+        admin: provider.wallet.publicKey,
+        systemProgram: web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    // Fund BEFORE delegating: base-layer lamports ride into the ER as the
+    // payer's spendable balance (devnet top-ups after delegation go through
+    // scripts/arena/fund-crank-payer.ts's lamports shuttle instead — the
+    // local base validator has no ephemeral SPL token program to run it).
+    const fundTx = new web3.Transaction().add(
+      web3.SystemProgram.transfer({
+        fromPubkey: provider.wallet.publicKey,
+        toPubkey: crankPayerPda,
+        lamports: 100_000_000, // 0.1 SOL of commit budget
+      }),
+    );
+    await provider.sendAndConfirm(fundTx);
+
+    await program.methods
+      .delegateCrankPayer()
+      .accountsPartial({
+        config: configPda,
+        admin: provider.wallet.publicKey,
+        crankPayer: crankPayerPda,
+      })
+      .remainingAccounts([
+        { pubkey: LOCAL_ER_VALIDATOR, isSigner: false, isWritable: false },
+      ])
+      .rpc({ skipPreflight: true });
+
+    const info = await provider.connection.getAccountInfo(crankPayerPda);
+    assert.isTrue(
+      info!.owner.equals(DELEGATION_PROGRAM_ID),
+      "crank payer should be owned by the delegation program",
+    );
+    await new Promise((r) => setTimeout(r, 3000));
+  });
+
   it("ticks via the ER and folds a price into the delegated market", async () => {
     const tx = await program.methods
       .tick(0)
@@ -202,13 +261,61 @@ const MAX_AGE_SECS = new BN("10000000000");
     assert.equal(ms.ring[ms.head].updates, 1);
   });
 
-  it("commits ER state to the base layer", async () => {
+  it("rejects a commit whose fee vault does not match the validator", async () => {
+    // A vault derived from any other "validator" must trip InvalidFeeVault
+    // (the handler re-derives from the market's delegation record). Sent
+    // raw + status-polled: anchor's sendAndConfirm mangles ER-side failures
+    // into an opaque "Unknown action" error, hiding the program log.
+    const bogusVault = magicFeeVaultPdaFromValidator(provider.wallet.publicKey);
+    let tx = await program.methods
+      .commitState(0)
+      .accountsPartial({
+        payer: provider.wallet.publicKey,
+        marketState: marketPda,
+        delegationRecord: marketDelegationRecord,
+        magicFeeVault: bogusVault,
+        crankPayer: crankPayerPda,
+      })
+      .remainingAccounts(botMetas)
+      .transaction();
+    tx.feePayer = erProvider.wallet.publicKey;
+    tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+    tx = await erProvider.wallet.signTransaction(tx);
+    const sig = await erConnection.sendRawTransaction(tx.serialize(), {
+      skipPreflight: true,
+    });
+    let err: unknown = null;
+    for (let i = 0; i < 30; i++) {
+      const st = (await erConnection.getSignatureStatus(sig)).value;
+      if (st?.err) {
+        err = st.err;
+        break;
+      }
+      if (st?.confirmationStatus) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    assert.isNotNull(err, "commit with a bogus fee vault must fail");
+    const logs =
+      (await erConnection.getTransaction(sig, {
+        maxSupportedTransactionVersion: 0,
+      }))?.meta?.logMessages ?? [];
+    assert.isTrue(
+      logs.some((l) => l.includes("InvalidFeeVault")),
+      `expected InvalidFeeVault in logs:\n${logs.join("\n")}`,
+    );
+  });
+
+  it("commits ER state to the base layer via the magic fee vault", async () => {
     const erBefore = await erProgram.account.marketState.fetch(marketPda);
+    const payerBefore = await erConnection.getBalance(crankPayerPda);
     const tx = await program.methods
       .commitState(0)
       .accountsPartial({
         payer: provider.wallet.publicKey,
         marketState: marketPda,
+        delegationRecord: marketDelegationRecord,
+        magicFeeVault,
+        crankPayer: crankPayerPda,
       })
       .remainingAccounts(botMetas)
       .transaction();
@@ -226,6 +333,14 @@ const MAX_AGE_SECS = new BN("10000000000");
     // Still delegated: commit_state must NOT undelegate.
     const info = await provider.connection.getAccountInfo(marketPda);
     assert.isTrue(info!.owner.equals(DELEGATION_PROGRAM_ID));
+    // The bundle payer is the crank-payer PDA: its ER balance must not have
+    // grown (paid path debits it; the sponsored path would leave it intact —
+    // we log rather than assert an exact fee, which is validator-specific).
+    const payerAfter = await erConnection.getBalance(crankPayerPda);
+    console.log(
+      `      crank payer ER balance: ${payerBefore} -> ${payerAfter} (delta ${payerAfter - payerBefore})`,
+    );
+    assert.isAtMost(payerAfter, payerBefore, "payer must not gain lamports");
   });
 
   it("undelegates market + bots back to the base layer", async () => {

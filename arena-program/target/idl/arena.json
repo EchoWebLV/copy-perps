@@ -14,7 +14,17 @@
         "accounts passed as remaining_accounts) to the base layer WITHOUT",
         "undelegating. Deliberately permissionless: the crank keypair is not",
         "the admin (Task 14), and a commit can only persist state, never",
-        "mutate it — the magic program rejects non-delegated accounts anyway."
+        "mutate it — the magic program rejects non-delegated accounts anyway.",
+        "(Accepted cost of staying permissionless: each commit drips lamports",
+        "from the crank-payer PDA, so a spammer can drain it at the per-commit",
+        "fee rate. Reviewed + accepted — the arena then merely stops",
+        "persisting until refunded; ER state is unaffected.)",
+        "",
+        "Pays its own commit via the magic_fee_vault + delegated-fee-payer",
+        "pattern (delegation.md \"Option 2\"): the bundle payer is the delegated",
+        "crank-payer PDA signing via seeds, with the validator's fee vault",
+        "attached, which lifts MagicBlock's 10-sponsored-commits-per-account",
+        "quota (the 0xa0000000 \"commit nonce 10/10\" failure mode)."
       ],
       "discriminator": [
         201,
@@ -29,12 +39,62 @@
       "accounts": [
         {
           "name": "payer",
+          "docs": [
+            "ER transaction gas payer (any keypair). The Magic intent bundle",
+            "itself is paid by crank_payer below, not this signer."
+          ],
           "writable": true,
           "signer": true
         },
         {
           "name": "market_state",
           "writable": true
+        },
+        {
+          "name": "delegation_record",
+          "docs": [
+            "canonical [\"delegation\", market_state] PDA under the delegation",
+            "program; the handler reads the validator from bytes 8..40 to derive",
+            "the expected fee vault."
+          ]
+        },
+        {
+          "name": "magic_fee_vault",
+          "docs": [
+            "against the delegation record's validator. Writable: lamports are",
+            "debited on each paid commit."
+          ],
+          "writable": true
+        },
+        {
+          "name": "crank_payer",
+          "docs": [
+            "the program signs the Magic CPI with its seeds",
+            "(build_and_invoke_signed), so no keypair signature is needed.",
+            "UncheckedAccount because on the ER its owner shows as this program",
+            "(delegated clone) while the lamport-payer role needs no data access."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "magic_program",
@@ -274,6 +334,226 @@
           }
         }
       ]
+    },
+    {
+      "name": "delegate_crank_payer",
+      "docs": [
+        "Base-layer instruction: delegate the crank-payer PDA to the ER so its",
+        "lamports become the ER-side balance commit_state spends from.",
+        "Admin-gated; validator pin via the first remaining account is",
+        "mandatory (same rule as delegate_market/delegate_bot) — and here it",
+        "also keeps the payer on the SAME validator as the market, which the",
+        "fee vault derivation in commit_state assumes."
+      ],
+      "discriminator": [
+        101,
+        248,
+        200,
+        170,
+        79,
+        56,
+        0,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "buffer_crank_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "crank_payer"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                82,
+                88,
+                52,
+                99,
+                40,
+                236,
+                89,
+                24,
+                89,
+                167,
+                12,
+                24,
+                207,
+                100,
+                194,
+                22,
+                101,
+                177,
+                160,
+                240,
+                129,
+                248,
+                170,
+                198,
+                67,
+                58,
+                242,
+                100,
+                209,
+                18,
+                84,
+                223
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_crank_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "crank_payer"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_crank_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "crank_payer"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "crank_payer",
+          "docs": [
+            "program via the er-sdk `del` constraint."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "delegate_market",
@@ -632,6 +912,87 @@
       ]
     },
     {
+      "name": "init_crank_payer",
+      "docs": [
+        "Base-layer instruction: create the crank-payer PDA — a program-owned",
+        "lamport reservoir that pays commit_state's Magic intent bundle once",
+        "delegated (no per-account sponsored-commit quota on that path).",
+        "Admin-gated. Mirrors the documented delegated-fee-payer pattern",
+        "(delegation.md \"Option 2\" / rewards-delegated-vrf's reward_list):",
+        "the payer is a regular program-owned data PDA, delegated like any",
+        "other account; its lamports ride into the ER at delegation and are",
+        "topped up afterwards via the base-layer lamports shuttle",
+        "(scripts/arena/fund-crank-payer.ts)."
+      ],
+      "discriminator": [
+        159,
+        168,
+        244,
+        36,
+        223,
+        242,
+        189,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "crank_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_market",
       "discriminator": [
         33,
@@ -898,6 +1259,19 @@
       ]
     },
     {
+      "name": "CrankPayer",
+      "discriminator": [
+        103,
+        143,
+        24,
+        167,
+        216,
+        244,
+        217,
+        32
+      ]
+    },
+    {
       "name": "MarketState",
       "discriminator": [
         0,
@@ -936,6 +1310,16 @@
       "code": 6004,
       "name": "MissingValidator",
       "msg": "delegation requires the ER validator pinned as the first remaining account"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidDelegationRecord",
+      "msg": "delegation record missing, malformed, or not the canonical PDA"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidFeeVault",
+      "msg": "magic fee vault does not match the delegation record's validator"
     }
   ],
   "types": [
@@ -1167,6 +1551,18 @@
                 4
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CrankPayer",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

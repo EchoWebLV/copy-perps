@@ -16,6 +16,7 @@ declare_id!("6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"); // replaced after f
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const MARKET_SEED: &[u8] = b"market";
 pub const BOT_SEED: &[u8] = b"bot";
+pub const CRANK_PAYER_SEED: &[u8] = b"crank-payer";
 
 #[ephemeral]
 #[program]
@@ -139,6 +140,42 @@ pub mod arena {
         Ok(())
     }
 
+    /// Base-layer instruction: create the crank-payer PDA — a program-owned
+    /// lamport reservoir that pays commit_state's Magic intent bundle once
+    /// delegated (no per-account sponsored-commit quota on that path).
+    /// Admin-gated. Mirrors the documented delegated-fee-payer pattern
+    /// (delegation.md "Option 2" / rewards-delegated-vrf's reward_list):
+    /// the payer is a regular program-owned data PDA, delegated like any
+    /// other account; its lamports ride into the ER at delegation and are
+    /// topped up afterwards via the base-layer lamports shuttle
+    /// (scripts/arena/fund-crank-payer.ts).
+    pub fn init_crank_payer(ctx: Context<InitCrankPayer>) -> Result<()> {
+        ctx.accounts.crank_payer.bump = ctx.bumps.crank_payer;
+        Ok(())
+    }
+
+    /// Base-layer instruction: delegate the crank-payer PDA to the ER so its
+    /// lamports become the ER-side balance commit_state spends from.
+    /// Admin-gated; validator pin via the first remaining account is
+    /// mandatory (same rule as delegate_market/delegate_bot) — and here it
+    /// also keeps the payer on the SAME validator as the market, which the
+    /// fee vault derivation in commit_state assumes.
+    pub fn delegate_crank_payer(ctx: Context<DelegateCrankPayer>) -> Result<()> {
+        require!(
+            !ctx.remaining_accounts.is_empty(),
+            ArenaError::MissingValidator
+        );
+        ctx.accounts.delegate_crank_payer(
+            &ctx.accounts.admin,
+            &[CRANK_PAYER_SEED],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
+
     // ---- ER delegation lifecycle (er-sdk 0.14.3, anchor-counter patterns) --
 
     /// Base-layer instruction: delegate the MarketState PDA to the ER.
@@ -184,19 +221,54 @@ pub mod arena {
     /// undelegating. Deliberately permissionless: the crank keypair is not
     /// the admin (Task 14), and a commit can only persist state, never
     /// mutate it — the magic program rejects non-delegated accounts anyway.
+    /// (Accepted cost of staying permissionless: each commit drips lamports
+    /// from the crank-payer PDA, so a spammer can drain it at the per-commit
+    /// fee rate. Reviewed + accepted — the arena then merely stops
+    /// persisting until refunded; ER state is unaffected.)
+    ///
+    /// Pays its own commit via the magic_fee_vault + delegated-fee-payer
+    /// pattern (delegation.md "Option 2"): the bundle payer is the delegated
+    /// crank-payer PDA signing via seeds, with the validator's fee vault
+    /// attached, which lifts MagicBlock's 10-sponsored-commits-per-account
+    /// quota (the 0xa0000000 "commit nonce 10/10" failure mode).
     pub fn commit_state<'info>(
         ctx: Context<'info, CommitState<'info>>,
         _market_id: u8,
     ) -> Result<()> {
+        // The fee vault is scoped to the validator running the ER. Read the
+        // validator out of market_state's delegation record — layout
+        // [8 discriminator][32 authority = validator][..] — and require the
+        // passed vault to be the canonical ["magic-fee-vault", validator]
+        // PDA under the delegation program. The record's own address is
+        // pinned by the account constraint, so its bytes are trustworthy.
+        let validator = {
+            let record = ctx.accounts.delegation_record.try_borrow_data()?;
+            require!(record.len() >= 40, ArenaError::InvalidDelegationRecord);
+            Pubkey::try_from(&record[8..40])
+                .map_err(|_| error!(ArenaError::InvalidDelegationRecord))?
+        };
+        let (expected_fee_vault, _) = Pubkey::find_program_address(
+            &[b"magic-fee-vault", validator.as_ref()],
+            &ephemeral_rollups_sdk::id(),
+        );
+        require_keys_eq!(
+            ctx.accounts.magic_fee_vault.key(),
+            expected_fee_vault,
+            ArenaError::InvalidFeeVault
+        );
+
         let mut accounts = vec![ctx.accounts.market_state.to_account_info()];
         accounts.extend(ctx.remaining_accounts.iter().cloned());
+        let crank_payer_seeds: &[&[u8]] =
+            &[CRANK_PAYER_SEED, &[ctx.bumps.crank_payer]];
         MagicIntentBundleBuilder::new(
-            ctx.accounts.payer.to_account_info(),
+            ctx.accounts.crank_payer.to_account_info(),
             ctx.accounts.magic_context.to_account_info(),
             ctx.accounts.magic_program.to_account_info(),
         )
+        .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
         .commit(&accounts)
-        .build_and_invoke()?;
+        .build_and_invoke_signed(&[crank_payer_seeds])?;
         Ok(())
     }
 
@@ -349,10 +421,50 @@ pub struct DelegateBot<'info> {
     pub bot_state: UncheckedAccount<'info>,
 }
 
+#[derive(Accounts)]
+pub struct InitCrankPayer<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + CrankPayer::INIT_SPACE,
+        seeds = [CRANK_PAYER_SEED],
+        bump
+    )]
+    pub crank_payer: Account<'info, CrankPayer>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegateCrankPayer<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: PDA address enforced by seeds; handed to the delegation
+    /// program via the er-sdk `del` constraint.
+    #[account(mut, del, seeds = [CRANK_PAYER_SEED], bump)]
+    pub crank_payer: UncheckedAccount<'info>,
+}
+
 #[commit]
 #[derive(Accounts)]
 #[instruction(market_id: u8)]
 pub struct CommitState<'info> {
+    /// ER transaction gas payer (any keypair). The Magic intent bundle
+    /// itself is paid by crank_payer below, not this signer.
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(
@@ -361,6 +473,27 @@ pub struct CommitState<'info> {
         bump = market_state.load()?.bump
     )]
     pub market_state: AccountLoader<'info, MarketState>,
+    /// CHECK: market_state's delegation record — address pinned to the
+    /// canonical ["delegation", market_state] PDA under the delegation
+    /// program; the handler reads the validator from bytes 8..40 to derive
+    /// the expected fee vault.
+    #[account(
+        address = ephemeral_rollups_sdk::pda::delegation_record_pda_from_delegated_account(&market_state.key())
+            @ ArenaError::InvalidDelegationRecord
+    )]
+    pub delegation_record: UncheckedAccount<'info>,
+    /// CHECK: the validator's magic fee vault, validated in the handler
+    /// against the delegation record's validator. Writable: lamports are
+    /// debited on each paid commit.
+    #[account(mut)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
+    /// CHECK: PDA address enforced by seeds. The delegated bundle payer —
+    /// the program signs the Magic CPI with its seeds
+    /// (build_and_invoke_signed), so no keypair signature is needed.
+    /// UncheckedAccount because on the ER its owner shows as this program
+    /// (delegated clone) while the lamport-payer role needs no data access.
+    #[account(mut, seeds = [CRANK_PAYER_SEED], bump)]
+    pub crank_payer: UncheckedAccount<'info>,
 }
 
 #[commit]
@@ -395,4 +528,8 @@ pub enum ArenaError {
     WrongFeed,
     #[msg("delegation requires the ER validator pinned as the first remaining account")]
     MissingValidator,
+    #[msg("delegation record missing, malformed, or not the canonical PDA")]
+    InvalidDelegationRecord,
+    #[msg("magic fee vault does not match the delegation record's validator")]
+    InvalidFeeVault,
 }
