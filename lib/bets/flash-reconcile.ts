@@ -158,7 +158,9 @@ function defaultDeps(): ReconcileDeps {
               status: "failed",
               meta: { ...truth.meta, reconciledAt: truth.nowIso },
             })
-            .where(eq(bets.id, truth.betId));
+            // CAS: only while still 'confirmed' — a concurrent close confirm
+            // must not be clobbered by this stale meta snapshot.
+            .where(and(eq(bets.id, truth.betId), eq(bets.status, "confirmed")));
         } else {
           // close tx failed → the position is still open
           await db
@@ -175,7 +177,7 @@ function defaultDeps(): ReconcileDeps {
                 proceedsSource: null,
               },
             })
-            .where(eq(bets.id, truth.betId));
+            .where(and(eq(bets.id, truth.betId), eq(bets.status, "closed")));
         }
         return;
       }
@@ -199,7 +201,7 @@ function defaultDeps(): ReconcileDeps {
                 reconciledAt: truth.nowIso,
               },
             })
-            .where(eq(bets.id, truth.betId));
+            .where(and(eq(bets.id, truth.betId), eq(bets.status, "closed")));
           return;
         }
         await db
@@ -212,12 +214,14 @@ function defaultDeps(): ReconcileDeps {
               reconciledAt: truth.nowIso,
             },
           })
-          .where(eq(bets.id, truth.betId));
+          .where(and(eq(bets.id, truth.betId), eq(bets.status, "closed")));
       } else {
         await db
           .update(bets)
           .set({ meta: { ...truth.meta, reconciledAt: truth.nowIso } })
-          .where(eq(bets.id, truth.betId));
+          // CAS: skip if a close confirm landed since the snapshot — the
+          // close-reconcile pass will verify this bet instead.
+          .where(and(eq(bets.id, truth.betId), eq(bets.status, "confirmed")));
       }
 
       if (truth.usdcDelta !== null) {

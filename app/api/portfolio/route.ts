@@ -429,9 +429,11 @@ export async function GET(request: Request) {
   );
   // Newest confirmed flash-tail bet per market:side (userBets is newest-
   // first; first-wins keeps the live one — Flash holds one position per
-  // owner+market+side). Known window: a confirmed bet whose position died
-  // externally (liquidation, lost close postback) mis-attributes a later
-  // Scalp open on the same key until the reconcile sweep expires it.
+  // owner+market+side). Known limitation: a confirmed bet whose position
+  // died externally (liquidation, trigger close, lost close postback)
+  // mis-attributes a later Scalp open on the same key. No expiry exists
+  // yet — sweep-side expiry of externally-closed positions is a planned
+  // follow-up.
   const flashTailByKey = new Map<
     string,
     { id: string; meta: ReturnType<typeof parseFlashTailMeta> }
