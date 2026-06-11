@@ -30,11 +30,11 @@ pub fn try_open(
     if bot
         .positions
         .iter()
-        .any(|p| p.active && p.market_id == market_id)
+        .any(|p| p.active != 0 && p.market_id == market_id)
     {
         return false;
     }
-    let Some(slot) = bot.positions.iter().position(|p| !p.active) else {
+    let Some(slot) = bot.positions.iter().position(|p| p.active == 0) else {
         return false;
     };
     let stake = mul_div(bot.balance_micro, bot.params.stake_frac_bps as u64, BPS);
@@ -62,7 +62,7 @@ pub fn try_open(
     bot.balance_micro -= stake + fee;
     bot.fees_micro = bot.fees_micro.saturating_add(fee);
     bot.positions[slot] = Position {
-        active: true,
+        active: 1,
         market_id,
         side: side as u8,
         entry_price: entry,
@@ -71,6 +71,7 @@ pub fn try_open(
         opened_ts: ts,
         ticks_held: 0,
         liq_price: liq,
+        _pad: [0; 7],
     };
     push_tape(
         bot,
@@ -85,6 +86,7 @@ pub fn try_open(
             } else {
                 ACT_OPEN_SHORT
             },
+            _pad: [0; 5],
         },
     );
     true
@@ -100,7 +102,7 @@ pub fn close(
     action: u8,
 ) -> bool {
     let pos = bot.positions[idx];
-    if !pos.active {
+    if pos.active == 0 {
         return false;
     }
     let long = pos.side == 0;
@@ -140,7 +142,7 @@ pub fn close(
     if bot.balance_micro > bot.equity_high_micro {
         bot.equity_high_micro = bot.balance_micro
     }
-    bot.positions[idx].active = false;
+    bot.positions[idx].active = 0;
     push_tape(
         bot,
         TapeEntry {
@@ -150,6 +152,7 @@ pub fn close(
             stake_micro: pos.stake_micro,
             conviction: 0,
             action,
+            _pad: [0; 5],
         },
     );
     true
@@ -159,7 +162,7 @@ pub fn close(
 pub fn maintain(bot: &mut Bot, cfg: &ArenaConfig, market_id: u8, mark: u64, ts: i64) {
     for idx in 0..MAX_POSITIONS {
         let pos = bot.positions[idx];
-        if !pos.active || pos.market_id != market_id {
+        if pos.active == 0 || pos.market_id != market_id {
             continue;
         }
         let long = pos.side == 0;
@@ -219,7 +222,7 @@ mod tests {
                 read_span: 1,
                 breakout_bps: 60,
                 activity_mult_bps: 14_000,
-                trend_filter: true,
+                trend_filter: 1,
                 stake_frac_bps: 1_000, // 10%
                 leverage: 10,
                 max_hold_ticks: 2,
@@ -236,6 +239,7 @@ mod tests {
             tape_head: 0,
             tape: [TapeEntry::default(); TAPE_LEN],
             bump: 0,
+            _pad: [0; 5],
         }
     }
 
@@ -254,7 +258,7 @@ mod tests {
         assert_eq!(bot.balance_micro, 899_400_000); // 1e9 - 100_000_000 - 600_000
         assert_eq!(bot.fees_micro, 600_000);
         let pos = bot.positions[0];
-        assert!(pos.active);
+        assert_eq!(pos.active, 1);
         assert_eq!(pos.market_id, 0);
         assert_eq!(pos.side, 0);
         assert_eq!(pos.entry_price, 10_005_000_000);
@@ -303,7 +307,7 @@ mod tests {
         let mut bot = test_bot(START_BALANCE);
         assert!(try_open(&mut bot, &cfg, 0, Side::Long, PRICE, 1_000));
         maintain(&mut bot, &cfg, 0, 10_105_050_000, 1_010);
-        assert!(!bot.positions[0].active);
+        assert_eq!(bot.positions[0].active, 0);
         assert_eq!(bot.balance_micro, 899_400_000 + 108_895_000);
         assert_eq!(bot.trades, 1);
         assert_eq!(bot.wins, 1);
@@ -330,11 +334,11 @@ mod tests {
         let entry = bot.positions[0].entry_price;
 
         maintain(&mut bot, &cfg, 0, entry, 1_002);
-        assert!(bot.positions[0].active);
+        assert_eq!(bot.positions[0].active, 1);
         assert_eq!(bot.positions[0].ticks_held, 1);
 
         maintain(&mut bot, &cfg, 0, entry, 1_004);
-        assert!(!bot.positions[0].active);
+        assert_eq!(bot.positions[0].active, 0);
         assert_eq!(bot.balance_micro, 899_400_000 + 98_900_000);
         assert_eq!(bot.trades, 1);
         assert_eq!(bot.wins, 0);
@@ -351,7 +355,7 @@ mod tests {
         assert!(try_open(&mut bot, &cfg, 0, Side::Long, PRICE, 1_000));
         // Gap well through liq (9_054_525_000): mark <= liq triggers.
         maintain(&mut bot, &cfg, 0, 9_000_000_000, 1_020);
-        assert!(!bot.positions[0].active);
+        assert_eq!(bot.positions[0].active, 0);
         assert_eq!(bot.balance_micro, 899_400_000); // zero credit back
         assert_eq!(bot.trades, 1);
         assert_eq!(bot.wins, 0);
@@ -370,7 +374,7 @@ mod tests {
         assert!(try_open(&mut bot, &cfg, 0, Side::Short, PRICE, 1_000));
         // liq = 10_944_525_000; mark >= liq triggers.
         maintain(&mut bot, &cfg, 0, 11_000_000_000, 1_020);
-        assert!(!bot.positions[0].active);
+        assert_eq!(bot.positions[0].active, 0);
         assert_eq!(bot.balance_micro, 899_400_000);
         assert_eq!(bot.gross_pnl_micro, -100_000_000);
         assert_eq!(bot.tape[1].action, ACT_LIQUIDATED);
@@ -400,7 +404,7 @@ mod tests {
         assert!(!try_open(&mut bot, &cfg, 0, Side::Long, PRICE, 1_000));
         assert_eq!(bot.balance_micro, 9_000_000);
         assert_eq!(bot.seq, 0);
-        assert!(bot.positions.iter().all(|p| !p.active));
+        assert!(bot.positions.iter().all(|p| p.active == 0));
     }
 
     #[test]
@@ -419,7 +423,7 @@ mod tests {
         let cfg = test_cfg();
         let mut bot = test_bot(START_BALANCE);
         for (i, p) in bot.positions.iter_mut().enumerate() {
-            p.active = true;
+            p.active = 1;
             p.market_id = (i + 1) as u8; // other markets, so already-in-market doesn't fire
         }
         assert!(!try_open(&mut bot, &cfg, 0, Side::Long, PRICE, 1_000));
@@ -436,7 +440,7 @@ mod tests {
         assert!(!try_open(&mut bot, &cfg, 0, Side::Short, PRICE, 1_001));
         assert_eq!(bot.balance_micro, balance_after_first);
         assert_eq!(bot.seq, 1); // only the first open taped
-        assert_eq!(bot.positions.iter().filter(|p| p.active).count(), 1);
+        assert_eq!(bot.positions.iter().filter(|p| p.active != 0).count(), 1);
     }
 
     #[test]

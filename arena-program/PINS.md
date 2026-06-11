@@ -248,7 +248,49 @@ to the base layer.
   `[TapeEntry; 64]` arrays on that function's own stack before the value ever
   reaches the heap Box). The diagnostics are identical with and without Box.
 
-### Options for the controller (measured, not yet chosen)
+### RESOLVED (2026-06-11): option 1 (zero_copy) chosen by the controller and shipped
+
+MarketState and Bot migrated to `#[account(zero_copy)]` + `AccountLoader`
+(nested Bucket/Position/TapeEntry/StrategyParams are `#[zero_copy]` Pod;
+ArenaConfig stays Borsh). bool fields became u8 (`Position.active`,
+`StrategyParams.trend_filter`); fields reordered widest-first with explicit
+`_pad` arrays so there is **zero implicit padding** — Borsh field-order bytes
+== repr(C) bytes, which matters because @coral-xyz/anchor 0.32.1 ignores the
+IDL `serialization: bytemuck` flag and decodes with plain Borsh layouts.
+Byte layouts documented per-struct in state.rs and locked by
+`state::tests::zero_copy_layouts_locked` (Bucket 56 B, Position 48 B,
+TapeEntry 32 B, StrategyParams 16 B, MarketState 3608 B, Bot 2328 B —
+account data = 8-byte discriminator + struct).
+
+Measurements after the migration (same toolchain as the BLOCKED table above):
+
+- `anchor-1.0.2 build` (forced clean recompile of the arena crate):
+  **zero stack-offset diagnostics** (previously
+  `MarketState::try_deserialize_unchecked` 7232 B and
+  `Bot::try_deserialize_unchecked` 4608 B over the 4096 B limit). The Borsh
+  deserialize frames no longer exist — AccountLoader maps account bytes in
+  place.
+- `anchor-1.0.2 test --validator legacy`: **6/6 passing** (ping, fixture,
+  init_config, init_market, init_bot ×2 round-trip, BadParams rejection).
+  Previously 3 passing / 3 failing with stack AccessViolations in
+  init_market/init_bot.
+- `cargo test -p arena`: 29 green (28 prior + the new layout-lock test).
+
+Gotchas hit during the migration (recorded for Phase-2/UI work):
+
+- `#[derive(AnchorSerialize)]` on a `#[zero_copy]` struct fails under the
+  `idl-build` feature: both generate an `IdlBuild` impl (E0119).
+  StrategyParams (it doubles as the `init_bot` ix arg) therefore implements
+  AnchorSerialize/AnchorDeserialize **manually** as raw Pod bytes — valid
+  precisely because the struct has zero padding.
+- The safe `#[zero_copy]` expansion derives `::bytemuck::Pod` against the
+  LOCAL crate's bytemuck, so `bytemuck = { version = "1.17", features =
+  ["derive", "min_const_generics"] }` is now a direct dependency (lockfile
+  already resolved 1.25.0 via anchor-lang; no lock churn beyond the dep edge).
+- `init_bot` now also requires `max_hold_ticks >= 1` (hardening review:
+  0 would close every position on the tick after open).
+
+### Options for the controller (measured, superseded by the resolution above)
 
 1. **zero_copy (`AccountLoader`)** — the standard fix for accounts this size.
    Structural: `bool` fields (`MarketCfg.active`, `Position.active`,

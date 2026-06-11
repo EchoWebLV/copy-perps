@@ -13,6 +13,7 @@ pub fn fold_price(ms: &mut MarketState, price: u64, publish_ts: i64, bucket_secs
             start_ts: bucket_start(publish_ts, bucket_secs),
             updates: 1,
             path_len: 0,
+            _pad: [0; 4],
         };
     } else if publish_ts < cur.start_ts + bucket_secs {
         let delta = price.abs_diff(cur.close);
@@ -42,6 +43,7 @@ pub fn fold_price(ms: &mut MarketState, price: u64, publish_ts: i64, bucket_secs
                 start_ts: start,
                 updates: 0,
                 path_len: 0,
+                _pad: [0; 4],
             };
         }
         ms.head = head_now as u16;
@@ -116,11 +118,12 @@ mod tests {
             head: 0,
             ring: [Bucket::default(); RING_LEN],
             bump: 0,
+            _pad: [0; 4],
         }
     }
 
     fn mk_bucket(o: u64, h: u64, l: u64, c: u64, start_ts: i64, path_len: u64) -> Bucket {
-        Bucket { open: o, high: h, low: l, close: c, start_ts, updates: 1, path_len }
+        Bucket { open: o, high: h, low: l, close: c, start_ts, updates: 1, path_len, _pad: [0; 4] }
     }
 
     #[test]

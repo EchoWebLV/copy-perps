@@ -57,7 +57,8 @@ pub fn decide_ring_momentum(candles: &[StratCandle], p: &StrategyParams) -> Opti
     }
 
     // Trend filter, kept for brain.ts fidelity — only bites on malformed candles.
-    if p.trend_filter {
+    // (u8 0/1 since the migration to Pod-compatible structs; semantics unchanged.)
+    if p.trend_filter != 0 {
         let first = candles[0].c;
         if first == 0 {
             return None;
@@ -133,7 +134,8 @@ mod parity {
                 read_span: 1,
                 breakout_bps: case.params.breakout_bps,
                 activity_mult_bps: case.params.activity_mult_bps,
-                trend_filter: case.params.trend_filter,
+                // Fixture JSON stays bool; the Pod struct is u8 — map at parse time.
+                trend_filter: u8::from(case.params.trend_filter),
                 stake_frac_bps: 0,
                 leverage: 1,
                 max_hold_ticks: 0,
@@ -181,7 +183,7 @@ mod parity {
                 read_span: 1,
                 breakout_bps: bo,
                 activity_mult_bps: long_case.params.activity_mult_bps,
-                trend_filter: long_case.params.trend_filter,
+                trend_filter: u8::from(long_case.params.trend_filter),
                 stake_frac_bps: 0,
                 leverage: 1,
                 max_hold_ticks: 0,

@@ -57,7 +57,9 @@ pub mod arena {
             feed,
             active: true,
         };
-        let ms = &mut ctx.accounts.market_state;
+        // load_init: writes the discriminator; the fresh account data is
+        // already zeroed, so every other field starts at its zero value.
+        let ms = &mut ctx.accounts.market_state.load_init()?;
         ms.market_id = market_id;
         ms.bump = ctx.bumps.market_state;
         Ok(())
@@ -75,7 +77,10 @@ pub mod arena {
         );
         require!(params.leverage >= 1, ArenaError::BadParams);
         require!(params.stake_frac_bps <= 10_000, ArenaError::BadParams);
-        let bot = &mut ctx.accounts.bot;
+        // max_hold_ticks == 0 would close every position on the tick after
+        // open (paper::maintain checks ticks_held >= max_hold_ticks).
+        require!(params.max_hold_ticks >= 1, ArenaError::BadParams);
+        let bot = &mut ctx.accounts.bot.load_init()?;
         bot.persona_id = persona_id;
         bot.params = params;
         bot.balance_micro = starting_balance_micro;
@@ -88,10 +93,12 @@ pub mod arena {
 #[derive(Accounts)]
 pub struct Ping {}
 
-// SBF stack caveat (PINS.md, Tasks 6–9): MarketState / Bot Borsh-deserialize
-// frames blow the 4096-byte SBF stack limit when the Account value lives on
-// the stack. Every Accounts struct therefore Boxes these accounts (ArenaConfig
-// too, for uniformity) so Anchor deserializes onto the heap.
+// SBF stack caveat (PINS.md, "Task 10 BLOCKED"): MarketState / Bot are
+// zero_copy and MUST be accessed via AccountLoader — their Borsh deserialize
+// frames (7232 B / 4608 B) blow the 4096-byte SBF stack limit, and Boxing
+// does not help because the overflow is in the callee
+// try_deserialize_unchecked frame. ArenaConfig (8 + 327 B) stays a regular
+// Borsh Account; it is Boxed only to keep the Accounts-struct frames small.
 #[derive(Accounts)]
 pub struct InitConfig<'info> {
     #[account(
@@ -120,11 +127,11 @@ pub struct InitMarket<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + MarketState::INIT_SPACE,
+        space = 8 + std::mem::size_of::<MarketState>(),
         seeds = [MARKET_SEED, &[market_id]],
         bump
     )]
-    pub market_state: Box<Account<'info, MarketState>>,
+    pub market_state: AccountLoader<'info, MarketState>,
     #[account(mut)]
     pub admin: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -142,11 +149,11 @@ pub struct InitBot<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + Bot::INIT_SPACE,
+        space = 8 + std::mem::size_of::<Bot>(),
         seeds = [BOT_SEED, &persona_id],
         bump
     )]
-    pub bot: Box<Account<'info, Bot>>,
+    pub bot: AccountLoader<'info, Bot>,
     #[account(mut)]
     pub admin: Signer<'info>,
     pub system_program: Program<'info, System>,

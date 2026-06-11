@@ -19,11 +19,13 @@ export const personaId = (name: string): number[] => {
 export const SCALPER_ID = personaId("scalper.v1");
 export const RIDER_ID = personaId("rider.v1");
 
+// trendFilter is u8 0/1, not bool: StrategyParams lives inside the zero_copy
+// Bot account, and bytemuck Pod has no bool.
 export const SCALPER_PARAMS = {
   readSpan: 1,
   breakoutBps: 60,
   activityMultBps: 14000,
-  trendFilter: true,
+  trendFilter: 1,
   stakeFracBps: 1000,
   leverage: 100,
   maxHoldTicks: 90,
@@ -34,7 +36,7 @@ export const RIDER_PARAMS = {
   readSpan: 4,
   breakoutBps: 80,
   activityMultBps: 14000,
-  trendFilter: true,
+  trendFilter: 1,
   stakeFracBps: 1000,
   leverage: 20,
   maxHoldTicks: 240,
