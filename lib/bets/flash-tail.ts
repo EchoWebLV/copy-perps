@@ -66,10 +66,21 @@ export async function confirmFlashTailOpen(args: {
   if (!bet || bet.status !== "pending") return false;
 
   const nextMeta: FlashTailMeta = { ...bet.meta, openSignature: args.signature };
-  await db
+  // Compare-and-set: the status predicate in the WHERE makes concurrent
+  // confirms race-safe — only the call that actually flips the row writes
+  // the fill.
+  const updated = await db
     .update(bets)
     .set({ status: "confirmed", txHash: args.signature, meta: nextMeta })
-    .where(eq(bets.id, args.betId));
+    .where(
+      and(
+        eq(bets.id, args.betId),
+        eq(bets.userId, args.userId),
+        eq(bets.status, "pending"),
+      ),
+    )
+    .returning();
+  if (updated.length === 0) return false;
 
   await db
     .insert(fills)
@@ -103,7 +114,7 @@ export async function confirmFlashTailClose(args: {
     closeReason: "manual",
     proceedsSource: "quote-estimate",
   };
-  await db
+  const updated = await db
     .update(bets)
     .set({
       status: "closed",
@@ -112,7 +123,15 @@ export async function confirmFlashTailClose(args: {
       proceedsUsdc: args.receiveUsdEstimate,
       meta: nextMeta,
     })
-    .where(eq(bets.id, args.betId));
+    .where(
+      and(
+        eq(bets.id, args.betId),
+        eq(bets.userId, args.userId),
+        eq(bets.status, "confirmed"),
+      ),
+    )
+    .returning();
+  if (updated.length === 0) return false;
 
   await db
     .insert(fills)
