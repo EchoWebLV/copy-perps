@@ -1,0 +1,13 @@
+.anchor/
+.DS_Store
+*.rs.bk
+node_modules/
+test-ledger/
+.yarn/
+
+# Build artifacts — but keep the program keypair tracked (mirrors
+# anchor-counter; stable program id across sessions/worktrees).
+target/*
+!target/deploy/
+target/deploy/*
+!target/deploy/arena-keypair.json

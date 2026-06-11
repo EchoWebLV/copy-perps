@@ -142,3 +142,26 @@ to the base layer.
   (via `GetCommitmentSignature`).
 - ER fee payer worked with the base-layer wallet (0.686 SOL) — no separate ER
   funding step was needed on devnet.
+
+## Task 4: workspace scaffold (2026-06-11)
+
+- Layout mirrors `~/spikes/magicblock-engine-examples/anchor-counter` @ e4bf31d
+  (Anchor.toml / workspace Cargo.toml / package.json / tsconfig), program renamed
+  to `arena`, pins exactly as above (anchor-lang 1.0.2 + er-sdk 0.14.3).
+  Cargo.lock pinned er-sdk to **0.14.3 exactly** (`cargo update --precise`) —
+  plain "0.14.3" caret-resolved to 0.14.4, which is not what Spike A validated.
+- `declare_id!` uses `6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC` — a real
+  generated keypair (tracked at `target/deploy/arena-keypair.json`, mirroring how
+  anchor-counter tracks its deploy keypair). The plan's placeholder
+  `Arena111…111` decodes to 31 bytes (invalid pubkey, rejected by `declare_id!`),
+  and localnet `anchor test` requires declared id == deployed id anyway.
+- Test harness is plain local-validator ts-mocha (`tests/arena.ts` pings), NOT
+  the template's `../fullstack-test.sh` (that needs the ephemeral validator;
+  delegation tests come later). Run as:
+  `~/.avm/bin/anchor-1.0.2 test --validator legacy`
+  — anchor 1.0's default localnet runner is **surfpool** (not installed);
+  `--validator legacy` selects solana-test-validator. The validator type is a
+  CLI-only flag (no Anchor.toml key for it in 1.0.2).
+- npm (package-lock.json) instead of the template's yarn — matches the parent
+  repo's package manager; anchor only shells out to the `[scripts] test` line,
+  so the package manager choice doesn't affect `anchor test`.
