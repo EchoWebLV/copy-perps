@@ -13,6 +13,7 @@ type WhaleTickerDeps = {
   acquireWhaleTickerLease: typeof import("./ticker-lease").acquireWhaleTickerLease;
   ensureWhaleLeaseTable: typeof import("./ticker-lease").ensureWhaleLeaseTable;
   startWhaleSourceMonitor: typeof import("./source-monitor").startWhaleSourceMonitor;
+  runFlashReconcileSweep: typeof import("../bets/flash-reconcile").runFlashReconcileSweep;
 };
 
 let depsPromise: Promise<WhaleTickerDeps> | null = null;
@@ -40,6 +41,7 @@ async function loop(): Promise<void> {
     ensureWhaleLeaseTable,
     refreshWhales,
     startWhaleSourceMonitor,
+    runFlashReconcileSweep,
   } = await loadWhaleTickerDeps();
 
   let tableReady = false;
@@ -93,6 +95,18 @@ async function loop(): Promise<void> {
     } catch (err) {
       console.error("[whales] refresh failed:", err);
     }
+
+    try {
+      const sweep = await runFlashReconcileSweep({ timeBoxMs: 10_000 });
+      if (sweep.checked > 0 || sweep.reaped > 0) {
+        console.log(
+          `[whales] flash reconcile: ${sweep.checked} checked, ${sweep.reaped} reaped`,
+        );
+      }
+    } catch (err) {
+      console.error("[whales] flash reconcile failed:", err);
+    }
+
     await sleep(REFRESH_GAP_MS);
   }
 }
@@ -102,11 +116,13 @@ function loadWhaleTickerDeps(): Promise<WhaleTickerDeps> {
     import("./refresh"),
     import("./ticker-lease"),
     import("./source-monitor"),
-  ]).then(([refresh, lease, sourceMonitor]) => ({
+    import("../bets/flash-reconcile"),
+  ]).then(([refresh, lease, sourceMonitor, flashReconcile]) => ({
     refreshWhales: refresh.refreshWhales,
     acquireWhaleTickerLease: lease.acquireWhaleTickerLease,
     ensureWhaleLeaseTable: lease.ensureWhaleLeaseTable,
     startWhaleSourceMonitor: sourceMonitor.startWhaleSourceMonitor,
+    runFlashReconcileSweep: flashReconcile.runFlashReconcileSweep,
   }));
   return depsPromise;
 }
