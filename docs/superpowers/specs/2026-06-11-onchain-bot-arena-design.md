@@ -272,18 +272,25 @@ subscription tailing per the Phase 3b design in the live-ai-leaders spec.
   in-program. No arena code before all pass.
 - **Phase 1 — program + crank (devnet):** ArenaConfig/MarketState/Bot accounts, `tick`,
   SOL market only, 2 bots, parity suite green, crank lease-guarded on Railway.
+- **Phase 1.5 — mainnet promotion (rev 2026-06-11, pulled forward from Phase 4):** as soon
+  as the Phase-1 devnet soak passes, deploy the same program to mainnet ER (self-serve per
+  MagicNet Phase 2) — it holds paper only, so the original "week of real traffic" gate was
+  receipts-journal conservatism that doesn't apply here. **Hard dependency: mainnet Pyth
+  Lazer feed PDA addresses are unpublished — open the MagicBlock conversation
+  (Telegram/Discord/Incubator) during Phase 1, not after.** Devnet stays the iteration
+  environment; mainnet is config + rent (~2-3 SOL deploy + epoch rent + commit fees), never
+  a rewrite — all endpoints/feeds/ids are env-driven. The Solscan-verify claim and the
+  "How to verify" page go live here.
 - **Phase 2 — live arena UI:** ws subscriptions, bot cards + profile + tape, commits +
-  Solscan links, BTC/ETH markets, staleness UX.
+  Solscan links, BTC/ETH markets, staleness UX. Runs against whichever network is live
+  (env-driven); flips to mainnet when 1.5 lands.
 - **Phase 3 — copy-trading:** position-copy via existing rails, entry-gap display,
   portfolio attribution, $5 real-money verification.
-- **Phase 4 — mainnet ER + arena v2:** mainnet deploy (self-serve per MagicNet Phase 2),
-  "How to verify" page goes live with the Solscan claim, Grok oracle-bot persona, then
-  auto-close mirroring → subscription tailing (Phase 3b of the live-ai-leaders spec).
-  This is the **Magic Incubator / Blitz v6 artifact**.
-- **Blitz v5 (June 12–14) is optional and NOT the plan of record.** If Phase-0 spikes pass
-  by Saturday, a one-bot devnet demo is a legitimate entry ("on-chain paper trading bot in an
-  ER"); decide Friday under the existing abort discipline. Nothing in this design depends
-  on it.
+- **Phase 4 — arena v2:** Grok oracle-bot persona, then auto-close mirroring →
+  subscription tailing (Phase 3b of the live-ai-leaders spec). This is the
+  **Magic Incubator / Blitz v6 artifact**.
+- **Blitz v5 (June 12–14): SKIPPED** (user decision 2026-06-11, supersedes the earlier
+  optional Friday gate-call). Nothing in this design depends on it.
 
 **Prerequisites carried from the 2026-06-11 handoff (unchanged, do first):** live-verify
 flash-tail persistence + autopilot, merge `feat/flash-tail-persistence`, `railway up`, set
