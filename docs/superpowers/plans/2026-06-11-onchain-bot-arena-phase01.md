@@ -829,9 +829,11 @@ npx tsx --env-file=.env.local scripts/arena/tick-once.ts
 ### Task 14: Crank service
 
 **Files:**
-- Create: `lib/arena/lease.ts`, `lib/arena/crank.ts`
+- Create: `lib/arena/lease.ts`, `lib/arena/crank.ts`, `scripts/arena/crank-worker.ts`
 - Test: `lib/arena/crank.test.ts`
-- Modify: `instrumentation.ts` (start the crank where the other tickers start)
+- (Decision 2026-06-11, binding: the crank runs on a NEW dedicated Railway worker service —
+  do NOT touch `instrumentation.ts` or piggyback the prod web service. The lease guard stays
+  mandatory anyway: dev runs and the worker share one Neon DB.)
 
 - [ ] **Step 1: `lib/arena/lease.ts`** — copy `lib/autopilot/ticker-lease.ts` exactly, renaming table to `arena_crank_lease` and functions to `ensureArenaLeaseTable` / `acquireArenaCrankLease`. (Same TTL, same CAS upsert. Deliberate duplication: the two leases must be independently droppable.)
 
@@ -839,7 +841,7 @@ npx tsx --env-file=.env.local scripts/arena/tick-once.ts
 
 - [ ] **Step 3: Implement `lib/arena/crank.ts`** — mirror `lib/autopilot/ticker.ts` structure verbatim (HOLDER id, startup delay, lease loop, lazy dep loading, `globalThis` start-once guard, `DISABLE_ARENA_CRANK` kill switch), with the tick body: for each active market, send `tick(marketId)` to the ER connection (`skipPreflight: true`, ER blockhash, `ARENA_CRANK_KEYPAIR` signer); every `ARENA_COMMIT_INTERVAL_MS`, send `commit_state`. Log one line per N ticks, every error, and every commit signature. All chain deps injected via a `CrankDeps` type (same DI style as `EngineDeps`) so the vitest never touches a connection.
 
-- [ ] **Step 4: Wire into `instrumentation.ts`** next to the existing ticker starts. Run `npx vitest run lib/arena` + `npm run typecheck` → PASS.
+- [ ] **Step 4: Create the worker entry** — `scripts/arena/crank-worker.ts`: calls `startArenaCrank()` and keeps the process alive; honors `DISABLE_ARENA_CRANK`. Add npm script `"arena:crank": "tsx scripts/arena/crank-worker.ts"`. File header documents the Railway setup (new worker service in the existing project, start command `npm run arena:crank`, env: `ARENA_PROGRAM_ID`, `ARENA_ER_ENDPOINT`, `ARENA_CRANK_KEYPAIR`, `ARENA_CRANK_INTERVAL_MS`, `ARENA_COMMIT_INTERVAL_MS`, `DATABASE_URL`); deploying the worker is a Phase-2+ ops step, not this task. Run `npx vitest run lib/arena` + `npm run typecheck` → PASS.
 
 - [ ] **Step 5: Commit** (`feat(arena): lease-guarded crank ticking the ER`)
 
