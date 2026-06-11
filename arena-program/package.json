@@ -5,7 +5,8 @@
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
-    "test": "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+    "test": "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts",
+    "test:delegation": "./scripts/test-delegation.sh"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",

@@ -1,4 +1,7 @@
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
+use ephemeral_rollups_sdk::cpi::DelegateConfig;
+use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 
 pub mod candles;
 pub mod oracle;
@@ -14,6 +17,7 @@ pub const CONFIG_SEED: &[u8] = b"config";
 pub const MARKET_SEED: &[u8] = b"market";
 pub const BOT_SEED: &[u8] = b"bot";
 
+#[ephemeral]
 #[program]
 pub mod arena {
     use super::*;
@@ -134,6 +138,78 @@ pub mod arena {
         }
         Ok(())
     }
+
+    // ---- ER delegation lifecycle (er-sdk 0.14.3, anchor-counter patterns) --
+
+    /// Base-layer instruction: delegate the MarketState PDA to the ER.
+    /// Admin-gated. The ER validator identity is pinned via the first
+    /// remaining account (spec gotcha: never delegate without pinning).
+    pub fn delegate_market(ctx: Context<DelegateMarket>, market_id: u8) -> Result<()> {
+        ctx.accounts.delegate_market_state(
+            &ctx.accounts.admin,
+            &[MARKET_SEED, &[market_id]],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
+
+    /// Base-layer instruction: delegate one Bot PDA to the ER. Admin-gated.
+    pub fn delegate_bot(ctx: Context<DelegateBot>, persona_id: [u8; 16]) -> Result<()> {
+        ctx.accounts.delegate_bot_state(
+            &ctx.accounts.admin,
+            &[BOT_SEED, &persona_id],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
+
+    /// ER instruction: persist the current ER state of the market (+ any Bot
+    /// accounts passed as remaining_accounts) to the base layer WITHOUT
+    /// undelegating. Deliberately permissionless: the crank keypair is not
+    /// the admin (Task 14), and a commit can only persist state, never
+    /// mutate it — the magic program rejects non-delegated accounts anyway.
+    pub fn commit_state<'info>(
+        ctx: Context<'info, CommitState<'info>>,
+        _market_id: u8,
+    ) -> Result<()> {
+        let mut accounts = vec![ctx.accounts.market_state.to_account_info()];
+        accounts.extend(ctx.remaining_accounts.iter().cloned());
+        MagicIntentBundleBuilder::new(
+            ctx.accounts.payer.to_account_info(),
+            ctx.accounts.magic_context.to_account_info(),
+            ctx.accounts.magic_program.to_account_info(),
+        )
+        .commit(&accounts)
+        .build_and_invoke()?;
+        Ok(())
+    }
+
+    /// ER instruction: commit AND undelegate the market (+ remaining Bot
+    /// accounts) back to the base layer. Admin-gated — an unwanted
+    /// undelegation halts the arena until re-delegation. (The config PDA is
+    /// not delegated; the ER serves it as a read-only clone from the base
+    /// layer, which the local ephemeral harness exercises.)
+    pub fn undelegate_all<'info>(
+        ctx: Context<'info, UndelegateAll<'info>>,
+        _market_id: u8,
+    ) -> Result<()> {
+        let mut accounts = vec![ctx.accounts.market_state.to_account_info()];
+        accounts.extend(ctx.remaining_accounts.iter().cloned());
+        MagicIntentBundleBuilder::new(
+            ctx.accounts.admin.to_account_info(),
+            ctx.accounts.magic_context.to_account_info(),
+            ctx.accounts.magic_program.to_account_info(),
+        )
+        .commit_and_undelegate(&accounts)
+        .build_and_invoke()?;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -220,6 +296,81 @@ pub struct Tick<'info> {
     /// (require_keys_eq → WrongFeed); oracle::read_feed parses the data
     /// defensively and fails closed on anything malformed.
     pub feed: UncheckedAccount<'info>,
+}
+
+// Delegation contexts hold the PDAs as UncheckedAccount exactly like
+// anchor-counter's DelegateInput (its `pda` IS an UncheckedAccount):
+// delegation operates at the AccountInfo level, so the zero_copy
+// serialization format is irrelevant and AccountLoader types would only
+// fight the er-sdk `del` macro for no benefit. Seeds are still PDA-checked.
+#[delegate]
+#[derive(Accounts)]
+#[instruction(market_id: u8)]
+pub struct DelegateMarket<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: PDA address enforced by seeds; handed to the delegation
+    /// program via the er-sdk `del` constraint.
+    #[account(mut, del, seeds = [MARKET_SEED, &[market_id]], bump)]
+    pub market_state: UncheckedAccount<'info>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+#[instruction(persona_id: [u8; 16])]
+pub struct DelegateBot<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: PDA address enforced by seeds; handed to the delegation
+    /// program via the er-sdk `del` constraint.
+    #[account(mut, del, seeds = [BOT_SEED, &persona_id], bump)]
+    pub bot_state: UncheckedAccount<'info>,
+}
+
+#[commit]
+#[derive(Accounts)]
+#[instruction(market_id: u8)]
+pub struct CommitState<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [MARKET_SEED, &[market_id]],
+        bump = market_state.load()?.bump
+    )]
+    pub market_state: AccountLoader<'info, MarketState>,
+}
+
+#[commit]
+#[derive(Accounts)]
+#[instruction(market_id: u8)]
+pub struct UndelegateAll<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [MARKET_SEED, &[market_id]],
+        bump = market_state.load()?.bump
+    )]
+    pub market_state: AccountLoader<'info, MarketState>,
 }
 
 #[error_code]

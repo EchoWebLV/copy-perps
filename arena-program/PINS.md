@@ -309,3 +309,59 @@ Gotchas hit during the migration (recorded for Phase-2/UI work):
 4. **SBPF v2+ dynamic stack frames** (`cargo build-sbf --arch ...`) — removes
    the 4 KB fixed frame, but deviates from the anchor-counter template pins and
    needs feature-gate support on devnet AND the MagicBlock ER validator.
+
+## Tasks 11–12: tick + ER delegation lifecycle (2026-06-11)
+
+- **Task 11 `tick(market_id)`** (commit after the zero_copy migration):
+  permissionless; config seed-checked, MarketState `AccountLoader` (mut,
+  `bump = market_state.load()?.bump`), feed `UncheckedAccount` +
+  `require_keys_eq` vs `config.markets[market_id].feed` (WrongFeed). Bots via
+  remaining_accounts: `AccountLoader::<Bot>::try_from` (owner + discriminator
+  checked) + `load_mut()` (writable-checked) — zero_copy writes land directly
+  in account memory, **no `.exit()` re-serialize** (confirmed on anchor 1.0.2:
+  the plan's `bot.exit(&crate::ID)?` line is Borsh-era and unnecessary).
+  Conviction stays 0 in tape entries (not modeled in Phase 1).
+  `anchor-1.0.2 test --validator legacy`: 9/9.
+
+- **Task 12 delegation** copies anchor-counter's er-sdk 0.14.3 macro usage:
+  `#[ephemeral]` on the program mod, `#[delegate]` contexts with
+  `#[account(mut, del, seeds = ..., bump)]` on an **UncheckedAccount** (the
+  `del` macro is happiest there; delegation works at the AccountInfo level so
+  zero_copy is irrelevant to it), `#[commit]` + `MagicIntentBundleBuilder`
+  `.commit(...)` / `.commit_and_undelegate(...)` + `.build_and_invoke()`.
+  Instructions: `delegate_market(market_id)` / `delegate_bot(persona_id)`
+  (admin-gated, validator pinned via first remaining account),
+  `commit_state(market_id)` (deliberately permissionless — the Task-14 crank
+  keypair is not the admin and commits only persist state),
+  `undelegate_all(market_id)` (admin-gated; the non-delegated config PDA is
+  served to the ER as a read-only clone — verified working on the local
+  ephemeral validator, de-risking the same pattern for tick's config read).
+  Handler lifetime note: anchor 1.0.2's `Context` takes ONE lifetime
+  (`Context<'info, T<'info>>`), not the four-lifetime 0.3x form.
+
+### Local ER harness (scripts/test-delegation.sh → tests/delegation.ts)
+
+`npm run test:delegation`: mb-test-validator (base, :8899) + ephemeral-validator
+(:7799, pty-wrapped — the TUI exits silently without a TTY) + deploy + mocha.
+**5/5 passing**: init → delegate (market + 2 bots, owner flips to DELeG…) →
+tick via ER (lastPrice live, bucket folded) → commit_state
+(GetCommitmentSignature lands on base; base lastPrice == ER lastPrice; still
+delegated) → undelegate_all (owner back to the program on base ≤2 s; state
+matches ER). The suite self-skips (5 pending) under
+`anchor-1.0.2 test --validator legacy` via `ARENA_DELEGATION_TEST=1` gating.
+
+Gotchas:
+
+- `@magicblock-labs/ephemeral-validator` **0.12.0 global install is missing
+  two delegation-program account dumps** (`9yvg9551…` and `7L9eCRv5…`) from
+  `bin/local-dumps/` — mb-test-validator hard-fails on startup. They exist on
+  devnet; the harness script auto-dumps them on first run
+  (`ARENA_DEVNET_RPC` overrides the RPC; api.devnet.solana.com was degraded
+  again, Helius devnet worked).
+- The delegation program id at er-sdk 0.14.3 is
+  `DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh`
+  (magicblock-delegation-program-api 3.0.0) — NOT the older
+  `…teabpTabdBah` id that floats around older docs; ownership asserts against
+  the wrong id fail confusingly while everything else works.
+- Local ephemeral-validator identity is `mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev`
+  (pinned in tests/delegation.ts, same as anchor-counter's localnet test).
