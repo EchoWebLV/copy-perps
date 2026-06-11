@@ -91,6 +91,15 @@ export interface EngineDeps {
     walletAddress: string;
     transactionB64: string;
   }): Promise<{ signature: string }>;
+  /** CAS tick claim — false means another process ticked this session
+   * inside the claim window; skip it entirely (double-tick guard). */
+  claimTick(sessionId: string): Promise<boolean>;
+  /** ALL live Flash positions on the wallet (any source — manual Scalp,
+   * whale tails, autopilot). Cross-source stacking guard: Flash merges
+   * positions per (owner, market, side), which would corrupt accounting. */
+  getWalletPositions(
+    walletAddress: string,
+  ): Promise<Array<{ market: string; side: "long" | "short" }>>;
   listOpenBets(sessionId: string): Promise<OpenAutopilotBet[]>;
   recentCloses(
     sessionId: string,
@@ -151,6 +160,18 @@ export async function tickSession(
   const tier = getTier(session.tier);
   const now = deps.now();
 
+  // (0) Double-tick guard: claim the session or stand down.
+  try {
+    const claimed = await deps.claimTick(session.id);
+    if (!claimed) {
+      result.skipped.push("tick already claimed by another process");
+      return result;
+    }
+  } catch (err) {
+    console.error(`[autopilot] claimTick failed session=${session.id}:`, err);
+    return result;
+  }
+
   // (1) Open autopilot bets for this session.
   let openBets: OpenAutopilotBet[] = [];
   try {
@@ -185,12 +206,17 @@ export async function tickSession(
         walletAddress,
         transactionB64: built.transactionB64,
       });
-      await deps.confirmClose({
+      const closeOk = await deps.confirmClose({
         betId: bet.betId,
         userId: session.userId,
         signature: sent.signature,
         receiveUsdEstimate: built.receiveUsd,
       });
+      if (!closeOk) {
+        console.warn(
+          `[autopilot] confirmClose CAS miss bet=${bet.betId} (already closed/externalized)`,
+        );
+      }
       openBets = openBets.filter((b) => b.betId !== bet.betId);
       result.exited += 1;
     } catch (err) {
@@ -241,9 +267,30 @@ export async function tickSession(
       await safeTouch(deps, session.id);
       return result;
     }
+    // Cross-source guard: fail CLOSED — if we cannot see the wallet's
+    // live positions we must not open anything (Flash would silently
+    // merge a stacked position and corrupt both rows' accounting).
+    let walletHeldMarkets: Set<string>;
+    try {
+      const live = await deps.getWalletPositions(walletAddress);
+      walletHeldMarkets = new Set(live.map((pos) => pos.market));
+    } catch (err) {
+      console.error(
+        `[autopilot] getWalletPositions failed session=${session.id} — skipping entries this tick:`,
+        err,
+      );
+      await safeTouch(deps, session.id);
+      return result;
+    }
     const heldMarkets = new Set(openBets.map((b) => b.market));
     for (const market of AUTOPILOT_MARKETS) {
       if (heldMarkets.has(market)) continue; // never hedge/stack a market
+      if (walletHeldMarkets.has(market)) {
+        result.skipped.push(
+          `${market}: wallet already holds a position (manual/tail)`,
+        );
+        continue;
+      }
       try {
         const [candles, mark] = await Promise.all([
           deps.getCandles(market, AUTOPILOT_TIMEFRAME, AUTOPILOT_CANDLE_COUNT),
@@ -309,11 +356,16 @@ export async function tickSession(
           transactionB64: built.transactionB64,
         });
         try {
-          await deps.confirmOpen({
+          const openOk = await deps.confirmOpen({
             betId,
             userId: session.userId,
             signature: sent.signature,
           });
+          if (!openOk) {
+            console.warn(
+              `[autopilot] confirmOpen CAS miss bet=${betId} (already confirmed/reaped)`,
+            );
+          }
         } catch (err) {
           // Never let bookkeeping turn a landed trade into a tick failure;
           // the reconcile sweep picks the row up later.
@@ -487,6 +539,15 @@ export function buildEngineDeps(): EngineDeps {
         walletAddress,
         transactionB64,
       });
+    },
+    claimTick: async (sessionId) => {
+      const { claimSessionTick } = await import("./sessions");
+      return claimSessionTick(sessionId);
+    },
+    getWalletPositions: async (walletAddress) => {
+      const { getFlashPerpsService } = await import("@/lib/flash/perps");
+      const positions = await getFlashPerpsService().positionsOf(walletAddress);
+      return positions.map((p) => ({ market: p.symbol, side: p.side }));
     },
     listOpenBets: async (sessionId) => {
       const { listOpenAutopilotBets } = await import("./sessions");

@@ -58,6 +58,8 @@ function makeDeps(overrides: Partial<EngineDeps> = {}): EngineDeps {
     }),
     placeTrigger: vi.fn().mockResolvedValue({ transactionB64: "trigger-tx" }),
     sendTransaction: vi.fn().mockResolvedValue({ signature: "sig-1" }),
+    claimTick: vi.fn().mockResolvedValue(true),
+    getWalletPositions: vi.fn().mockResolvedValue([]),
     listOpenBets: vi.fn().mockResolvedValue([]),
     recentCloses: vi.fn().mockResolvedValue([]),
     recordOpen: vi.fn().mockResolvedValue("bet-1"),
@@ -72,6 +74,44 @@ function makeDeps(overrides: Partial<EngineDeps> = {}): EngineDeps {
 }
 
 describe("tickSession", () => {
+  it("stands down when the tick claim is lost (double-tick guard)", async () => {
+    const deps = makeDeps({ claimTick: vi.fn().mockResolvedValue(false) });
+    const result = await tickSession(makeSession(), deps);
+    expect(result.opened).toBe(0);
+    expect(result.skipped).toContain("tick already claimed by another process");
+    expect(deps.listOpenBets).not.toHaveBeenCalled();
+  });
+
+  it("skips a market the wallet already holds via another source", async () => {
+    const deps = makeDeps({
+      getCandles: vi.fn().mockResolvedValue(breakoutCandles()),
+      getMark: vi.fn().mockResolvedValue(101),
+      getWalletPositions: vi
+        .fn()
+        .mockResolvedValue([{ market: "BTC", side: "long" }]),
+    });
+    const result = await tickSession(makeSession(), deps);
+    expect(result.skipped).toContain(
+      "BTC: wallet already holds a position (manual/tail)",
+    );
+    // The guard skips BTC; the breakout fires on the next market instead.
+    expect(
+      (deps.openTrade as ReturnType<typeof vi.fn>).mock.calls[0][0].market,
+    ).toBe("ETH");
+  });
+
+  it("never sends the open tx when recording the pending row fails", async () => {
+    const deps = makeDeps({
+      getCandles: vi.fn().mockResolvedValue(breakoutCandles()),
+      getMark: vi.fn().mockResolvedValue(101),
+      recordOpen: vi.fn().mockRejectedValue(new Error("db down")),
+    });
+    const result = await tickSession(makeSession(), deps);
+    expect(result.opened).toBe(0);
+    expect(deps.sendTransaction).not.toHaveBeenCalled();
+  });
+
+
   it("opens one trade when the brain fires: record -> send -> confirm -> SL -> TP", async () => {
     const deps = makeDeps({
       getCandles: vi.fn().mockResolvedValue(breakoutCandles()),

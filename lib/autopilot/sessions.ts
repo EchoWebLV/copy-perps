@@ -10,7 +10,7 @@
 // e.g. an SL trigger fired) counts as a FULL loss of its stake, so the
 // loss budget can only be over-protected, never over-spent.
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { autopilotSessions, bets, users } from "@/lib/db/schema";
 import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
@@ -164,6 +164,32 @@ export async function endSession(args: {
         eq(autopilotSessions.status, "active"),
       ),
     );
+}
+
+// A holder whose lease expired mid-tick (180s TTL) can overlap the new
+// holder's tick; this CAS makes the overlap harmless — only one process
+// claims a session per window, so double-opens cannot happen.
+export const TICK_CLAIM_GAP_MS = 30_000;
+
+/** CAS tick claim: stamps lastTickAt now IFF no one ticked this active
+ * session within the claim window. False = skip the session this tick. */
+export async function claimSessionTick(sessionId: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - TICK_CLAIM_GAP_MS);
+  const rows = await db
+    .update(autopilotSessions)
+    .set({ lastTickAt: new Date() })
+    .where(
+      and(
+        eq(autopilotSessions.id, sessionId),
+        eq(autopilotSessions.status, "active"),
+        or(
+          isNull(autopilotSessions.lastTickAt),
+          lt(autopilotSessions.lastTickAt, cutoff),
+        ),
+      ),
+    )
+    .returning();
+  return rows.length > 0;
 }
 
 export async function touchSession(sessionId: string): Promise<void> {
