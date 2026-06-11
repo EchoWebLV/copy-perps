@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+pub mod candles;
 pub mod state;
 
 declare_id!("6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"); // replaced after first deploy
