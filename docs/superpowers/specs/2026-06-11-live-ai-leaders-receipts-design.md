@@ -179,6 +179,10 @@ integration; it cannot be *verified live* without it. That containment is delibe
 - First live bot: **Pulse** (BTC/ETH/SOL only — all on Flash Crypto.1, verified
   compatible). Small bankroll ($200–500); the accumulating verifiable track record is
   the launch asset.
+- Add a **long/short open-interest feed** (Hyperliquid per-market OI) to the resolver
+  signal snapshot alongside liquidations/funding/whale opens — crowded-side input for
+  strategies, and completes the literal "news, sentiment, OI, market indicators"
+  signal set from MagicBlock's trading-bot idea card.
 - Admin UI: re-add a minimal `/admin/bots` for live state (balance, positions,
   pause/close).
 
