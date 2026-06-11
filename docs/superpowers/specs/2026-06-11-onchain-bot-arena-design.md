@@ -62,11 +62,22 @@ already-reviewed Phase-1 tail machinery.
   `ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu`, BTCUSD
   `71wtTRDY8Gxgw56bXFt2oc6qeAbTxzStdNiC425Z51sr`, ETHUSD
   `5vaYr1hpv8yrSpu8w3K95x22byYxUJCCNCSYJtqVWPvG` (ER endpoint
-  `https://devnet.magicblock.app`). **Mainnet feed addresses are NOT published** — confirming
-  third-party mainnet access with MagicBlock is a Phase-4 dependency. Canonical repo:
-  `magicblock-labs/real-time-pricing-oracle`. Trust model is pusher-authority — there is no
-  on-chain Lazer signature verification (the Lazer verify CPI needs the non-delegated
-  treasury writable, likely ER-incompatible), and the trust copy in §1/§9 reflects that.
+  `https://devnet.magicblock.app`). Canonical repo: `magicblock-labs/real-time-pricing-oracle`.
+  Trust model is pusher-authority — there is no on-chain Lazer signature verification (the
+  Lazer verify CPI needs the non-delegated treasury writable, likely ER-incompatible), and
+  the trust copy in §1/§9 reflects that.
+- **MAINNET ORACLE CONFIRMED LIVE (empirical, 2026-06-11 + MagicBlock's direct answer):**
+  MagicBlock confirmed third-party PDA reads
+  (https://pyth-template.magicblock.app/, derivation:
+  docs.magicblock.gg/pages/tools/oracle/implementation#deriving-the-price-feed-account).
+  Derivation verified against all three published addresses: seeds
+  `["price_feed", "pyth-lazer", ascii(lazerFeedId)]` under the same oracle program —
+  feed ids BTC/USD=1, ETH/USD=2, SOL/USD=6 (PDAs are cluster-independent, so mainnet
+  uses the SAME addresses). Probed live: the mainnet base layer shows the SOL feed PDA
+  delegated to the delegation program, and the regional ER endpoints
+  `https://as.magicblock.app` / `eu` / `us` all serve it with **age 0s** at the live
+  price. Phase 1.5's only remaining mainnet work is deploy + rent + delegation
+  (pin the mainnet ER validator identity during deploy).
 
 ## 3. Architecture — what runs where
 
