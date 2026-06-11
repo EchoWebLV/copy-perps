@@ -20,6 +20,10 @@ Gwak gets two new primitives:
    on-chain in a MagicBlock Ephemeral Rollup (ER) within milliseconds, streamed live in
    the UI, and periodically committed to Solana base layer.
 
+Plus a third pillar built on the same rails: **Scalp Autopilot** (Phase 3c) — a
+budgeted AI that trades the user's *own* wallet in the Scalp game, tiered up to 500x
+via Flash Degen Mode, with the same glass-box receipts treatment.
+
 **The honest trust claim (verbatim for marketing/judges):** every Flash receipt links a
 fill to a real venue transaction — anyone can cross-check it on Solscan (program, market,
 side, size, signer) and audit completeness by replaying the leader wallet's public tx
@@ -107,6 +111,22 @@ must lead.
             │        │                                          ms-latency tape + Solscan links)    │
             └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## 3.1 Where MagicBlock comes in — exact boundaries
+
+The one-table answer to "are we using MagicBlock, and for what":
+
+| Layer | MagicBlock? | What it does for us | What it does NOT do |
+|---|---|---|---|
+| **Trading venue** (Flash, incl. 500x Degen Mode) | Indirect — Flash itself runs on MagicBlock ERs + Pyth Lazer feeds | Sub-50ms execution and real-time liquidations are why a 0.2%-wide liquidation band (500x) can exist on a Solana DEX at all. Every fill in our product executes on MagicBlock-powered infra | We do not integrate ER here ourselves; leverage caps are Flash's risk-engine parameter — ERs **enable** 500x, they never **raise** caps (framing rule for all comms) |
+| **Receipts journal** (Phase 4) | **Direct — our own ER integration** | Our Anchor program's epoch accounts delegate to an ER: free ms-latency appends, in-program mirror verification, live on-chain leader scoreboard; periodic commits anchor state to Solana mainnet | Not the source of truth for money (Postgres is); receipts are attestations anchored to venue txs, not trustless proofs |
+| **Copy engine, auto-close, autopilot execution** (build phases 3/3b/3c) | None | — | Deliberate: runs on Privy session signers + our server (rung-3 on-chain copy engine deferred; see Phase 4) |
+| **Bot brains / signals** (Phase 2) | None | — | Grok/X, Hyperliquid, CEX funding — off-chain by nature |
+
+Net: MagicBlock is the **verification layer we build on directly** and the
+**execution substrate we inherit from Flash**. The product trades without our ER
+integration; it cannot be *verified live* without it. That containment is deliberate
+— money never waits on MagicBlock.
 
 ## 4. Build phases (dependency order)
 
@@ -228,6 +248,67 @@ proceed in parallel with it.
 - **UX:** "Tail Pulse with $100" — one consent flow (session signer + policies), then
   a subscription card in the portfolio showing allocation, live aggregate PnL, recent
   auto-trades with receipts, and pause/stop controls.
+
+### Phase 3c — Scalp Autopilot (AI trades the user's own wallet)
+
+The Scalp game gains an **Autopilot** mode: the user allocates a session budget,
+picks a risk tier, and a server-side AI scalps their wallet for them — every
+decision narrated, every fill journaled. Sequenced after Phase 3b (shares the
+session-signer consent, policy, fee-payer solution, and budget bookkeeping); can be
+re-ordered ahead of 3b if product priority demands, since it does not need the
+proportional-allocation model.
+
+**Verified foundations (June 2026):** Flash Degen Mode is live at 125x–500x on
+SOL/BTC/ETH (market orders only) and already wired into the app —
+lib/flash/markets.ts carries `maxLeverage: 500`, FastPerpsGame's degen presets are
+[125, 250, 500], and instant mode already lets the server sign-and-send the user's
+trades after one session-signer approval. TP/SL trigger orders exist via
+`/api/flash/perp/trigger`. The autopilot is a brain + a budget ledger on top of
+shipped rails. Flash is the only Solana DEX at 500x; no competitor ships one-tap AI
+scalping of the user's own wallet on Solana perps (nearest: PerpsClaw agent arena on
+Drift, Hyperliquid delegated bots).
+
+**The 500x physics (drives every design choice below):** liquidation sits 1/L from
+entry — 0.2% at 500x — and Flash's ~4bps open + ~4bps close burns ~40% of that
+margin at entry; effective survivable adverse move ≈0.1%, one oracle tick, with
+market-order slippage both ways. No strategy "manages risk" inside that geometry.
+The honest product is **the disciplined degen**: an AI that never revenge-trades,
+always attaches the stop, sizes tiny, banks profits, and quits at the cap. The
+discipline is the value; 500x is the entertainment tier.
+
+- **Session model.** `autopilot_sessions` table: `(id, userId, budgetUsd, tier,
+  status 'active'|'stopped'|'exhausted'|'target', pnlUsd, config jsonb, startedAt,
+  endedAt)`. The budget is the **absolute loss bound** — the autopilot can never
+  deploy more than the remaining budget, ever. Stop button takes effect next tick;
+  open positions are closed on stop.
+- **Risk tiers** (server-enforced, clamped to lib/flash market bounds):
+  - *Cruise* — standard mode 20–100x, stake ≤10% of budget per trade, up to 2
+    concurrent
+  - *Sweat* — degen 125–250x, stake ≤5% of budget, 1 concurrent
+  - *Full Degen* — 500x, stake hard-capped $1–$10, 1 concurrent, mandatory TP+SL
+    triggers attached at open
+- **The deterministic shell rule:** the LLM (Grok catalyst layer, Pulse-style) may
+  pick direction and conviction; **code** decides size, leverage, stops, and whether
+  a trade is allowed at all. The brain's base is the restored Blitz 15m momentum
+  strategy from the Phase 2 kit; the shell reuses the bot kit's tilt guard (loss
+  streak → cooldown) and adds: always-attached SL trigger, per-tier caps, auto-stop
+  on liquidation or budget exhaustion.
+- **Execution.** One shared lease-guarded autopilot loop ticks all active sessions
+  (NOT a loop per user); entries/exits go through the existing
+  `/api/flash/perp{,/close,/trigger}` paths with `instant: true` via
+  `signAndSendPrivySolanaTransaction`. Same fee-payer solution as Phase 3 (opens,
+  closes, AND triggers). Same Neon-cost note as Phase 2 — one more always-on loop.
+- **Consent & safety.** A distinct consent screen ("this AI will trade this budget
+  from your wallet — it can lose all of it") separate from the copy auto-close
+  consent; per-session audit log of every decision (including skipped entries and
+  why); liquidation-distance and fee math shown in the UI at tier selection;
+  revocation honored with the all-or-nothing caveat.
+- **Receipts.** Every autopilot fill journals to the ER (receipt kind tagged
+  autopilot) — the "glass-box AI": its decisions appear on the public tape in
+  milliseconds. Narration in persona voice feeds the Scalp UI.
+- **MagicBlock role here:** indirect but load-bearing — 500x exists on a Solana DEX
+  only because Flash runs on the ER + Lazer speed stack (see §3b; "enables, never
+  raises"). Our direct ER use is the journaling of autopilot decisions/fills.
 
 ### Phase 4 — ER receipts layer (the MagicBlock integration)
 
@@ -370,6 +451,7 @@ who opt into privacy over verifiability. Only after the public journal is proven
 | Epoch rollover complexity (the real Phase 4 risk) | Pre-sized 100KB epochs (~3–5 days each), lease-guarded cranker, queue during rollover, index-account resubscription — all specified in §4 |
 | Privy policy scoping for server-initiated closes | The only unproven Privy piece (signing stack itself already ships in Scalp instant mode); spike the policy definition early; fallback notify + one-tap |
 | Server-initiated OPENS (Phase 3b) widen the blast radius | Separate, stricter policy bundle (program allowlist + per-tx cap); freshness gate prevents stale entries; per-subscription drawdown stop; subscribe-time prechecks |
+| Autopilot loses user money fast at 500x (Phase 3c) | Budget = absolute loss bound; deterministic shell (code sets size/leverage/stops, LLM only picks direction); mandatory SL triggers; tier caps; tilt-guard cooldowns; distinct "it can lose all of it" consent; liquidation math shown in UI |
 | 0-SOL followers stranded in positions | Fee-payer decision required in Phase 3 (sponsor flag / SOL precheck at tail / gas drip); tails refuse to open uncloseable copies |
 | Bot loses real money | Small bankroll, hard caps, kill switch, busted handling; losses are verifiable content too |
 | Neon compute cost of reviving the resolver loop | Acknowledged: slower live-only tick + budget; this was the original removal reason |
@@ -389,7 +471,9 @@ who opt into privacy over verifiability. Only after the public journal is proven
    Phase 3b (subscriptions) may run in parallel with this milestone.
 5. **M5 — Subscriptions**: Phase 3b shipped — allocate-once tailing with
    proportional sizing, follower risk controls, and subscription receipts.
-6. **M6 — Privacy stretch** (Phase 5), once the public journal is proven.
+6. **M6 — Autopilot**: Phase 3c shipped — budgeted AI scalping of the user's own
+   wallet in the Scalp game, tiered up to 500x, glass-box receipts.
+7. **M7 — Privacy stretch** (Phase 5), once the public journal is proven.
 
 ## 9. Decisions log
 
@@ -415,6 +499,10 @@ who opt into privacy over verifiability. Only after the public journal is proven
   deliberately deferred** (user decision 2026-06-11): mirror-matching + live
   aggregates run inside the ER program; moving the fan-out decision on-chain is
   recorded as a future option, revisited only post-M4 for a specific event.
+- **Scalp Autopilot is in scope as Phase 3c** (user decision 2026-06-11): budgeted
+  AI trading of the user's own wallet, tiered to 500x via Flash Degen Mode, built
+  on the shipped instant/session-signer stack. Framing rule everywhere: MagicBlock
+  speed *enables* 500x on-chain; it never *raises* leverage caps.
 - **No Telegram bot** (user decision 2026-06-11). Alerts/auto-close fallbacks are
   in-app only.
 - Blitz v5 (June 12–14) is NOT a deadline; target Blitz v6+/Magic Incubator with M4.
