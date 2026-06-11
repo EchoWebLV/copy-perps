@@ -36,6 +36,7 @@ import {
   type TriggerLevelInput,
 } from "@/lib/flash/graph-channel";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
+import { AutopilotPanel } from "@/components/trade/AutopilotPanel";
 import {
   formatTailSigningError,
   sendDepositWithSponsorFallback,
@@ -306,6 +307,7 @@ export function FastPerpsGame() {
   const [sessionSignerWalletAddress, setSessionSignerWalletAddress] = useState<
     string | null
   >(null);
+  const [autopilotMode, setAutopilotMode] = useState(false);
   const entryCostCacheRef = useRef<FlashEntryCostCache>(new Map());
 
   const effectiveStake = useMemo(() => {
@@ -404,6 +406,34 @@ export function FastPerpsGame() {
       setSessionSignerWalletAddress(null);
     }
   }, [sessionSignerWalletAddress, wallet?.address]);
+
+  // One-shot probe: if an autopilot session is already running, land the
+  // user on the Autopilot view instead of the manual ticket.
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
+        const resp = await fetch("/api/autopilot/session", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) return;
+        const body = (await resp.json()) as {
+          session?: { status?: string } | null;
+        };
+        if (!cancelled && body.session?.status === "active") {
+          setAutopilotMode(true);
+        }
+      } catch {
+        // non-fatal — the toggle still works manually
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, getAccessToken]);
 
   useEffect(() => {
     entryCostCacheRef.current = loadFlashEntryCostCache(wallet?.address);
@@ -1009,7 +1039,33 @@ export function FastPerpsGame() {
               />
             )}
           </div>
-          {!selectedPosition && (
+
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            {([false, true] as const).map((next) => {
+              const isActive = autopilotMode === next;
+              return (
+                <button
+                  key={String(next)}
+                  type="button"
+                  onClick={() => setAutopilotMode(next)}
+                  className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                  style={{
+                    background: isActive ? FG : PANEL_2,
+                    color: isActive ? BG : FG,
+                    border: `1px solid ${isActive ? FG : FAINT}`,
+                  }}
+                >
+                  {next ? "Autopilot" : "Manual"}
+                </button>
+              );
+            })}
+          </div>
+
+          {autopilotMode ? (
+            <AutopilotPanel />
+          ) : (
+            <>
+              {!selectedPosition && (
             <>
               <div className="rounded-xl p-2" style={{ background: PANEL, border: `1px solid ${FAINT}` }}>
                 <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: DIM }}>
@@ -1253,6 +1309,8 @@ export function FastPerpsGame() {
               </button>
             )}
           </div>
+            </>
+          )}
         </aside>
       </div>
     </div>
