@@ -12,6 +12,10 @@ Gwak gets two new primitives:
 
 1. **Live AI leaders** — house bots (starting with Pulse) promoted from paper trading to
    real-money execution on Flash Trade, surfaced as copyable leaders next to the whales.
+   Followers get two modes, shipped in sequence: **position-copy** (tap to mirror one
+   open bot position, auto-closed when the bot exits) and **subscription tailing**
+   (allocate once; the server auto-opens AND auto-closes every future bot trade for
+   you, sized proportionally).
 2. **Receipts** — every fill in a copy trade, leader-side and follower-side, journaled
    on-chain in a MagicBlock Ephemeral Rollup (ER) within milliseconds, streamed live in
    the UI, and periodically committed to Solana base layer.
@@ -190,6 +194,41 @@ must lead.
   ("leader exited at X, you exited at Y, Δ") — divergence transparency IS the product,
   and the Copy-PnL index quantifies it rather than papering over it.
 
+### Phase 3b — Subscription tailing (auto-copy every future trade)
+
+Runs after Phase 3 (position-copy proves the rails); independent of Phase 4 and may
+proceed in parallel with it.
+
+- **Allocation model.** New `bot_subscriptions` table: `(id, userId, botId,
+  allocationUsd, status 'active'|'paused'|'stopped', riskConfig jsonb, createdAt)`.
+  Follower stake per trade = bot's stake-as-%-of-bankroll × follower allocation
+  (mirrors the bot's conviction sizing). Skip-and-record when the follower balance
+  can't cover the minimum stake — a skipped trade emits a notification, never a retry
+  into a stale entry.
+- **Freshness gate on auto-opens:** only open the follower position while price is
+  within 0.5% of the bot's entry (same gate the whale-mirror bots use). If the window
+  is missed, skip and record — never chase.
+- **Execution.** In the resolver live branch, after the bot's own open confirms, fan
+  out follower opens via the same session-signer path
+  (`signAndSendPrivySolanaTransaction`), parallel batches,
+  oldest-subscription-first fairness. Closes ride the existing Phase 3 mirror-close
+  sweep. All subscription fills hit the fills table and journal as receipts (tagged
+  subscription vs position-copy).
+- **Policy scoping is stricter than close-only.** A server that can OPEN positions
+  needs a tighter Privy policy: Flash program only, per-transaction size cap, and
+  ideally market allowlist. Defined as a separate policy bundle from the close-only
+  one; subscribing grants both.
+- **Follower-side risk controls** (riskConfig): per-subscription stop
+  ("auto-unsubscribe if my allocation draws down X%"), max concurrent positions,
+  pause/resume, hard per-trade cap. Auto-pause every subscription when the bot goes
+  `'busted'`.
+- **Subscribe-time prechecks:** the fee-payer solution (Phase 3) must cover opens
+  too; refuse subscription if the wallet can't fund closes/opens (SOL or sponsor
+  path), and verify the session signer + both policy grants exist.
+- **UX:** "Tail Pulse with $100" — one consent flow (session signer + policies), then
+  a subscription card in the portfolio showing allocation, live aggregate PnL, recent
+  auto-trades with receipts, and pause/stop controls.
+
 ### Phase 4 — ER receipts layer (the MagicBlock integration)
 
 **Receipt struct (fixed-size, ~158 bytes):** `{ kind: u8, leaderId: [u8;16],
@@ -308,6 +347,7 @@ who opt into privacy over verifiability. Only after the public journal is proven
 | SDK version churn (0.13→0.15 in 6 weeks) | Pin to example versions; upgrade deliberately |
 | Epoch rollover complexity (the real Phase 4 risk) | Pre-sized 100KB epochs (~3–5 days each), lease-guarded cranker, queue during rollover, index-account resubscription — all specified in §4 |
 | Privy policy scoping for server-initiated closes | The only unproven Privy piece (signing stack itself already ships in Scalp instant mode); spike the policy definition early; fallback notify + one-tap |
+| Server-initiated OPENS (Phase 3b) widen the blast radius | Separate, stricter policy bundle (program allowlist + per-tx cap); freshness gate prevents stale entries; per-subscription drawdown stop; subscribe-time prechecks |
 | 0-SOL followers stranded in positions | Fee-payer decision required in Phase 3 (sponsor flag / SOL precheck at tail / gas drip); tails refuse to open uncloseable copies |
 | Bot loses real money | Small bankroll, hard caps, kill switch, busted handling; losses are verifiable content too |
 | Neon compute cost of reviving the resolver loop | Acknowledged: slower live-only tick + budget; this was the original removal reason |
@@ -324,7 +364,10 @@ who opt into privacy over verifiability. Only after the public journal is proven
    working incl. fee-payer solution.
 4. **M4 — Receipts**: Phase 4 on devnet ER → the Blitz v6 / Magic Incubator entry
    artifact; mainnet ER after a week of stability (Solscan-verify claim starts here).
-5. **M5 — Privacy stretch** (Phase 5), once the public journal is proven.
+   Phase 3b (subscriptions) may run in parallel with this milestone.
+5. **M5 — Subscriptions**: Phase 3b shipped — allocate-once tailing with
+   proportional sizing, follower risk controls, and subscription receipts.
+6. **M6 — Privacy stretch** (Phase 5), once the public journal is proven.
 
 ## 9. Decisions log
 
@@ -343,6 +386,9 @@ who opt into privacy over verifiability. Only after the public journal is proven
 - Trust language: attestations anchored to verifiable venue txs — never "trustless".
 - Devnet ER first (demo-only label), mainnet ER second. Bot trading is mainnet Flash
   from day one.
+- **Both follow modes, sequenced** (user decision 2026-06-11): position-copy ships
+  first (M3), subscription tailing is designed in as Phase 3b / M5 — not deferred to
+  a future spec.
 - **No Telegram bot** (user decision 2026-06-11). Alerts/auto-close fallbacks are
   in-app only.
 - Blitz v5 (June 12–14) is NOT a deadline; target Blitz v6+/Magic Incubator with M4.
