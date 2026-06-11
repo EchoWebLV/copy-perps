@@ -11,6 +11,7 @@ import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/per
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
+import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
 import {
   buildPortfolioSummary,
   type PortfolioSnapshotPayload,
@@ -95,6 +96,7 @@ function positionKey(market: string, side: "long" | "short"): string {
 function flashRowFromPosition(
   p: FlashPositionSummary,
   pricedAt: string,
+  tailBet?: { id: string; meta: ReturnType<typeof parseFlashTailMeta> } | null,
 ): PortfolioSnapshotPayload["copyRows"][number] {
   const stakeUsdc = flashStakeUsdFromPosition(p);
   const marginUsd =
@@ -109,9 +111,11 @@ function flashRowFromPosition(
     stakeUsdc != null && pnlUsd != null ? (pnlUsd / stakeUsdc) * 100 : null;
 
   return {
-    betId: null,
+    betId: tailBet?.id ?? null,
     venue: "flash" satisfies CopyVenue,
-    sourceKind: "wallet" satisfies CopySourceKind,
+    sourceKind: tailBet
+      ? ("tail" satisfies CopySourceKind)
+      : ("wallet" satisfies CopySourceKind),
     market: p.symbol,
     side: p.side,
     leverage:
@@ -120,12 +124,18 @@ function flashRowFromPosition(
     openFeeUsd,
     leaderAddress: null,
     leaderUsername: null,
-    whaleId: null,
-    whaleName: null,
+    whaleId: tailBet?.meta?.whaleId ?? null,
+    whaleName:
+      tailBet?.meta?.sourceKind === "whale"
+        ? (tailBet.meta.sourceName ?? null)
+        : null,
     autoCloseOnSourceClose: false,
     closeReason: null,
-    botId: null,
-    botName: null,
+    botId: tailBet?.meta?.botId ?? null,
+    botName:
+      tailBet?.meta?.sourceKind === "bot"
+        ? (tailBet.meta.sourceName ?? null)
+        : null,
     liveStatus: "open" satisfies CopyLiveStatus,
     entryPrice: p.entryPriceUsd,
     markPrice: p.markPriceUsd ?? null,
@@ -195,8 +205,9 @@ export async function GET(request: Request) {
     )
     .orderBy(desc(bets.createdAt));
 
+  const legacyBets = userBets.filter((b) => b.type !== "flash-tail");
   const positions = await Promise.all(
-    userBets.map((bet) => enrichBet(bet, user.solanaPubkey)),
+    legacyBets.map((bet) => enrichBet(bet, user.solanaPubkey)),
   );
 
   // --- Pacifica copy bets ---
@@ -416,7 +427,20 @@ export async function GET(request: Request) {
         };
       }),
   );
-  const flashRows = flashPositions.map((p) => flashRowFromPosition(p, pricedAt));
+  const flashTailByKey = new Map<
+    string,
+    { id: string; meta: ReturnType<typeof parseFlashTailMeta> }
+  >();
+  for (const b of userBets) {
+    if (b.type !== "flash-tail" || b.status !== "confirmed") continue;
+    const meta = parseFlashTailMeta(b.meta);
+    if (!meta) continue;
+    const key = positionKey(meta.market, meta.side);
+    if (!flashTailByKey.has(key)) flashTailByKey.set(key, { id: b.id, meta });
+  }
+  const flashRows = flashPositions.map((p) =>
+    flashRowFromPosition(p, pricedAt, flashTailByKey.get(positionKey(p.symbol, p.side)) ?? null),
+  );
   const liveCopyRows = [
     ...copyRows,
     ...walletRows,
