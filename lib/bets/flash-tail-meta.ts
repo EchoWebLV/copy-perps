@@ -115,7 +115,9 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
   if (!isStringOrNull(value.botId ?? null)) return null;
   if (!isString(value.market)) return null;
   if (!isSide(value.side)) return null;
-  if (typeof value.leverage !== "number") return null;
+  if (typeof value.leverage !== "number" || !Number.isFinite(value.leverage)) {
+    return null;
+  }
   if (value.mode !== "standard" && value.mode !== "degen") return null;
   if (!isString(value.walletAddress)) return null;
   if (!isNumberOrNull(value.entryPriceUsd ?? null)) return null;

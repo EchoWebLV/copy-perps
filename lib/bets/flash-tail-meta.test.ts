@@ -37,6 +37,28 @@ describe("flash-tail meta", () => {
     expect(parseFlashTailMeta({ sourceType: "flash-tail" })).toBeNull();
   });
 
+  it("rejects single-field corruption of otherwise valid meta", () => {
+    const valid = buildFlashTailMeta({
+      lineage,
+      market: "SOL",
+      side: "long",
+      leverage: 20,
+      mode: "standard",
+      walletAddress: "wallet-1",
+      entryPriceUsd: 160,
+      notionalUsd: 20,
+      openFeeUsd: 0.01,
+    });
+    expect(parseFlashTailMeta({ ...valid, side: "up" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, mode: "turbo" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, walletAddress: "" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, leverage: Number.NaN })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, closeReason: "auto" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, proceedsSource: "guess" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, openSignature: 5 })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, entryPriceUsd: "160" })).toBeNull();
+  });
+
   it("parses tail lineage from a request body", () => {
     expect(parseTailLineage(lineage)).toEqual(lineage);
     expect(
