@@ -1,4 +1,4 @@
-import { and, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { Connection } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, fills } from "@/lib/db/schema";
@@ -88,15 +88,21 @@ function defaultDeps(): ReconcileDeps {
               and(
                 eq(bets.status, "closed"),
                 sql`${bets.meta} ->> 'proceedsSource' = 'quote-estimate'`,
+                sql`${bets.meta} ->> 'closeSignature' IS NOT NULL`,
               ),
               // opens never chain-verified
               and(
                 eq(bets.status, "confirmed"),
                 sql`${bets.meta} ->> 'reconciledAt' IS NULL`,
+                sql`${bets.meta} ->> 'openSignature' IS NOT NULL`,
               ),
             ),
           ),
         )
+        // Newest first: fresh work always outranks rows whose tx never
+        // landed (dropped blockhash) and would otherwise camp in the
+        // BATCH window forever.
+        .orderBy(desc(bets.createdAt))
         .limit(BATCH);
       const out: ReconcileBet[] = [];
       for (const row of rows) {
@@ -136,6 +142,14 @@ function defaultDeps(): ReconcileDeps {
     },
     async applyChainTruth(truth: ChainTruth) {
       if (truth.txFailed) {
+        // The estimate fill written at confirm time references a tx that
+        // failed on-chain — delete it, or a later retry double-counts in
+        // any aggregation over fills.
+        await db
+          .delete(fills)
+          .where(
+            and(eq(fills.txSig, truth.txSig), eq(fills.action, truth.action)),
+          );
         if (truth.action === "open") {
           // open never landed → bet is dead
           await db
@@ -167,6 +181,27 @@ function defaultDeps(): ReconcileDeps {
       }
 
       if (truth.action === "close") {
+        if (truth.usdcDelta === null) {
+          // Tx landed but the owner's USDC account never appeared in it —
+          // we cannot derive proceeds. Keep the quote estimate rather than
+          // stamping an unknown as chain truth; mark reconciled so the row
+          // exits the queue.
+          console.warn(
+            "[flash-reconcile] landed close with no derivable USDC delta:",
+            truth.txSig,
+          );
+          await db
+            .update(bets)
+            .set({
+              meta: {
+                ...truth.meta,
+                proceedsSource: "chain",
+                reconciledAt: truth.nowIso,
+              },
+            })
+            .where(eq(bets.id, truth.betId));
+          return;
+        }
         await db
           .update(bets)
           .set({
@@ -185,15 +220,19 @@ function defaultDeps(): ReconcileDeps {
           .where(eq(bets.id, truth.betId));
       }
 
-      await db
-        .update(fills)
-        .set({
-          fillUsd: truth.usdcDelta === null ? null : Math.abs(truth.usdcDelta),
-          source: "chain",
-        })
-        .where(
-          and(eq(fills.txSig, truth.txSig), eq(fills.action, truth.action)),
-        );
+      if (truth.usdcDelta !== null) {
+        // Note: for opens the chain value is collateral spent (stake+fee),
+        // not notional — fills.source distinguishes the units.
+        await db
+          .update(fills)
+          .set({
+            fillUsd: Math.abs(truth.usdcDelta),
+            source: "chain",
+          })
+          .where(
+            and(eq(fills.txSig, truth.txSig), eq(fills.action, truth.action)),
+          );
+      }
     },
     now: () => new Date(),
   };

@@ -132,7 +132,12 @@ describe("runFlashReconcileSweep", () => {
     await runFlashReconcileSweep({ timeBoxMs: 10_000, deps });
 
     expect(deps.applyChainTruth).toHaveBeenCalledWith(
-      expect.objectContaining({ betId: "bet-2", action: "open", txFailed: true }),
+      expect.objectContaining({
+        betId: "bet-2",
+        action: "open",
+        txFailed: true,
+        usdcDelta: null,
+      }),
     );
   });
 });
