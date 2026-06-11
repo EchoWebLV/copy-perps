@@ -72,3 +72,73 @@ then only copy patterns from the oracle repo, never from the 0.14.x skill docs.
 Corollary for Task 2: building on the anchor-counter pins requires anchor-cli
 1.0.2 (`~/.avm/bin/anchor-1.0.2` — installed, but shadowed on PATH; see above).
 Do not build anchor-lang 1.0.2 code with the default 0.31.1 CLI.
+
+## Spike A
+
+**Outcome: PASS** (2026-06-11). The stock anchor-counter example ran the full
+delegate → ER write → commit → undelegate cycle end-to-end against the devnet
+Ephemeral Rollup. All 7 tests in `tests/public-counter.ts` passed in 18s.
+**Decision rule satisfied: the arena builds on the anchor-counter pins
+(anchor-lang 1.0.2 + ephemeral-rollups-sdk 0.14.3).**
+
+### Path taken
+
+**Stock program, no own deploy** (README's primary flow). The stock program id
+`79sGyNW41g8TrKyQwk7SZu432SH9ZfHmtRzEtR6CSt3n` was already deployed + executable
+on devnet (its upgrade keypair is tracked in the repo at
+`target/deploy/public_counter-keypair.json`, so `git checkout` restores it).
+Own-deploy path was skipped: wallet `HKVgAYCTKDdtLyN4hGmBC49Psfb9yxsFWQk3jnBEXnhL`
+had only 0.686 SOL (deploy needs ~2.3; faucet was dry).
+
+### Exact commands
+
+```bash
+cd ~/spikes/magicblock-engine-examples/anchor-counter
+git checkout -- .                      # restore stock declare_id + Anchor.toml + shipped keypair
+~/.avm/bin/anchor-1.0.2 build          # NEVER plain `anchor` (PATH has 0.31.1)
+PROVIDER_ENDPOINT="https://devnet.helius-rpc.com/?api-key=$HELIUS_API_KEY" \
+  ~/.avm/bin/anchor-1.0.2 test --skip-build --skip-deploy --provider.cluster devnet
+```
+
+`PROVIDER_ENDPOINT` override was required: `api.devnet.solana.com` was degraded
+(getHealth ok, but getAccountInfo/getMultipleAccounts timed out >25s). The test
+file honors `PROVIDER_ENDPOINT` over `ANCHOR_PROVIDER_URL`, so Helius devnet
+served as the base layer with zero source changes. ER endpoint was the test's
+default `https://devnet-as.magicblock.app/` (identity
+`MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57`, matches the validator pubkey
+hardcoded in the delegate test).
+
+### Key tx signatures (devnet + devnet ER)
+
+| Step | Layer | Signature |
+| --- | --- | --- |
+| Initialize | Base | `3PPkPpTzfNrg8byseqffjqXhrnUM5NAEA93YevCHPsHihD3EimMMzXzZyWLyGkHowH4LxViytnB4R9bb5jf1dTVo` |
+| Increment | Base | `2aizcn34khbM1z42iAwKzGBBeePoGzNox4mLo3S1GZPnJDUpEJGaNCps58XimCpwD59qcVjiMfWYAX3umTSL3FG9` |
+| **Delegate** | Base | `3ZkkqRz6JUdSXQyY8aaSxKAe7Ky2ZfUgLFWhmxtsximZoB2Z19q2gSMy129L5xRphSjX2f6Hkbd8acpJiwmYZNMP` |
+| **ER increment** | ER | `4mdygqfnYPLYMHUcKzdnFBtLcq8pwA5RPPzDkXbfMNQuRg4XExPPZBCZspLBQLDn5dTa4PtALenot3hRDBPuDuL6` |
+| **Commit (ER side)** | ER | `kTBsTst8bwhRyFBKiVbJoNCXQFYatfDg8js9uqM4NScvHtM5zZExoAHdxgtPFKgRZiRSCYaJKtUJQBsDEPqx5Hy` |
+| **Commit (base-layer confirmation)** | Base | `4NufAWazGrWvzMFLBhzt69mp9VQsp6hQk4NyW8bHsv6YFbCWmqn3dmPKaw1P1af6dSWMheoQiowH1yA5uWFKW2vt` |
+| Increment+commit CPI | ER | `4T7AXVBirAR1cKQZ9zzcQDVEqrGUpCZVR5SGETse4ymSfamru7VhTw3PmgeFcyuwwmoWPVK6KMidmF5YD5vuQpsc` |
+| **Increment+undelegate** | ER | `2tGCEztZC2yNNYN3tp1tJL77FoAKzRs2d3nmx2mJ6eQbcqRMXmLJbPVsLFFAwDf4JP6R6KtTGdHrWYSiBFyLYSuq` |
+
+### State verification (post-run, base layer via Helius devnet)
+
+Counter PDA `7Qgut4mSFC6aK23ocQ6vMTFB3HjHuVQVpK1iipkZZPDV` (seeds `["counter"]`,
+globally seeded — shared state, but it was undelegated pre-run so no collision):
+owner back to `79sG…` (undelegated, not the delegation program) and `count = 4` —
+exactly initialize(0) + 1 base + 3 ER increments, proving ER state committed back
+to the base layer.
+
+### Deviations / notes
+
+- A previous session had deleted the shipped keypair, regenerated it, run
+  `anchor keys sync` (rewriting `declare_id!` + Anchor.toml) and rebuilt,
+  preparing a fresh deploy that never happened (faucet dry). Recovery was
+  `git checkout -- .` (the keypair is git-tracked, so it restored too) + a
+  rebuild with `anchor-1.0.2`; artifacts (IDL address, keypair, declare_id) all
+  verified back at the stock `79sG…` id before the run.
+- Wall clock: 7 tests in 18s total. Base-layer txs ~0.7–1.6s; ER increment
+  3.2s first-touch then 1.5–2.8s; commit ER-side 1.8s + base confirmation 1.5s
+  (via `GetCommitmentSignature`).
+- ER fee payer worked with the base-layer wallet (0.686 SOL) — no separate ER
+  funding step was needed on devnet.
