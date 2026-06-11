@@ -14,7 +14,8 @@
     "db:apply:portfolio-snapshots": "tsx scripts/apply-portfolio-snapshots.ts",
     "db:studio": "drizzle-kit studio",
     "seed:bots": "tsx --env-file=.env.local scripts/seed-bots.ts",
-    "refresh:ostium": "tsx --env-file=.env.local scripts/refresh-ostium.ts"
+    "refresh:ostium": "tsx --env-file=.env.local scripts/refresh-ostium.ts",
+    "arena:crank": "tsx scripts/arena/crank-worker.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
