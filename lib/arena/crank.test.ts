@@ -54,6 +54,15 @@ describe("shouldCommit", () => {
   });
 });
 
+describe("shouldRecheckLease", () => {
+  it("always checks when not holding, heartbeats on the interval while holding", async () => {
+    const { shouldRecheckLease } = await import("@/lib/arena/crank");
+    expect(shouldRecheckLease(false, 0, 1)).toBe(true);
+    expect(shouldRecheckLease(true, 0, 29_999, 30_000)).toBe(false);
+    expect(shouldRecheckLease(true, 0, 30_000, 30_000)).toBe(true);
+  });
+});
+
 describe("buildTickPlan", () => {
   it("caps remaining accounts per market at 10 and reports drops", async () => {
     const { buildTickPlan, MAX_TICK_BOTS } = await import("@/lib/arena/crank");
