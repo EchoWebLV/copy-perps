@@ -151,6 +151,7 @@ export function CopyRow({ row, onClosed }: Props) {
       setStatus("Confirming close...");
       const conn = new Connection(RPC, "confirmed");
       await conn.confirmTransaction(signatureText, "confirmed");
+      return signatureText;
     },
     [signAndSendTransaction, wallet],
   );
@@ -178,7 +179,7 @@ export function CopyRow({ row, onClosed }: Props) {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(
-            isWalletPosition
+            isFlashPosition || isWalletPosition
               ? {
                   market: row.market,
                   side: row.side,
@@ -196,7 +197,34 @@ export function CopyRow({ row, onClosed }: Props) {
         if (typeof body.transactionB64 !== "string") {
           throw new Error("Flash close transaction missing");
         }
-        await signAndSendFlashClose(body.transactionB64);
+        const signature = await signAndSendFlashClose(body.transactionB64);
+        const closeBetId =
+          typeof body.betId === "string" ? body.betId : row.betId;
+        if (closeBetId && !closeBetId.startsWith("flash:")) {
+          await fetch("/api/flash/perp/close/confirm", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              betId: closeBetId,
+              signature,
+              receiveUsd:
+                typeof body.quote?.receiveUsd === "number"
+                  ? body.quote.receiveUsd
+                  : null,
+            }),
+          })
+            .then((resp) => {
+              if (!resp.ok) {
+                console.warn("[copy] flash close confirm HTTP", resp.status);
+              }
+            })
+            .catch((err) =>
+              console.warn("[copy] flash close confirm failed:", err),
+            );
+        }
       }
       setStatus("Closed");
       onClosed(row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`);
