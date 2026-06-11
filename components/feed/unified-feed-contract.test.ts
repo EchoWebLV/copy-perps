@@ -79,6 +79,37 @@ describe("UnifiedFeed contract", () => {
   });
 });
 
+describe("desktop card grid (founder feedback: classic cards return at lg+)", () => {
+  it("renders the same ranked entries twice: stacked below lg, grid at lg+", () => {
+    const source = read(FEED);
+
+    // The stacked Invo list hides at lg; the classic grid sibling takes over.
+    expect(source).toContain("flex w-full max-w-xl flex-col gap-3 lg:hidden");
+    expect(source).toContain("lg:grid");
+    expect(source).toContain("grid-cols-2");
+    expect(source).toContain("xl:grid-cols-3");
+    expect(source).toContain("max-w-6xl");
+  });
+
+  it("reuses the arena BotCard and the resurrected DesktopWhaleCard", () => {
+    const source = read(FEED);
+
+    expect(source).toContain('from "@/components/arena/BotCard"');
+    expect(source).toContain('from "./DesktopWhaleCard"');
+  });
+
+  it("keeps the resurrected desktop card free of heat and tape surfaces", () => {
+    const card = read("components/feed/DesktopWhaleCard.tsx");
+
+    expect(card).not.toContain("heatScore");
+    expect(card).not.toContain("/live");
+    expect(card).not.toContain("WhaleViewSwitch");
+    // Tail keeps working from the grid: the same source builder the stacked
+    // cards hand to TailModal.
+    expect(card).toContain("buildWhaleTailSource");
+  });
+});
+
 describe("dead surfaces stay dead", () => {
   it("removed the /live route, the tape, the heatmap and the old roster", () => {
     for (const gone of [

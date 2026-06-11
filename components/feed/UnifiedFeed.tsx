@@ -1,14 +1,18 @@
 "use client";
 
-// The unified /feed: whales AND on-chain arena bots in one Invo-style
-// stacked-card list. Replaces the old TikTok-style snap WhaleRoster.
+// The unified /feed: whales AND on-chain arena bots, one ranked list with
+// two renderings. Below lg it's the Invo-style stacked-card list; at lg+
+// the classic WhaleRoster card grid returns (founder feedback) — rich
+// equity/exposure whale cards (DesktopWhaleCard) and the arena BotCard in
+// the same 2/3-col grid. The entity pills + compact sort drive BOTH views
+// off the same filtered+ranked entries.
 //
 // Data plumbing is salvaged straight from WhaleRoster (SSR initialWhales →
 // /api/whales/roster visible-poll with the stale-refresh guard, TailModal
 // wiring via buildWhaleTailSource) plus the arena live hook (REST seed →
-// ER ws → poll fallback) for the bots. Presentation is new: entity pills
-// (All · Whales · Bots) with a compact 1D · 7D · 30D · Equity segmented
-// sort in the same row — no heat sort, no snap scroll, no tape.
+// ER ws → poll fallback) for the bots. Entity pills (All · Whales · Bots)
+// with a compact 1D · 7D · 30D · Equity segmented sort in the same row —
+// no heat sort, no snap scroll, no tape.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -16,12 +20,14 @@ import type { WhaleTraderSignal } from "@/lib/types";
 import { useArenaLive } from "@/lib/arena/use-arena-live";
 import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
+import { BotCard } from "@/components/arena/BotCard";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
 import { formatPriceUsd } from "@/components/whales/whale-money";
+import { DesktopWhaleCard, SkeletonDesktopWhaleCard } from "./DesktopWhaleCard";
 import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
 import {
@@ -129,7 +135,8 @@ export function UnifiedFeed({ initialWhales }: Props) {
       </div>
 
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-24 pt-3 lg:px-6 lg:pb-8">
-        <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+        {/* Below lg: the Invo-style stacked feed, untouched. */}
+        <div className="mx-auto flex w-full max-w-xl flex-col gap-3 lg:hidden">
           {showSkeletons ? (
             Array.from({ length: 4 }).map((_, i) => (
               <SkeletonFeedCard key={i} />
@@ -157,6 +164,44 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   bot={entry.bot}
                   market={market}
                   lastUpdateMs={lastUpdateMs}
+                  now={now}
+                />
+              ),
+            )
+          )}
+        </div>
+
+        {/* lg and up: the classic card grid (founder feedback) over the SAME
+            ranked entries — resurrected DesktopWhaleCard for whales, the
+            arena BotCard for bots. Rank chips follow the active sort. */}
+        <div className="mx-auto hidden w-full max-w-6xl auto-rows-max grid-cols-2 gap-3 lg:grid xl:grid-cols-3">
+          {showSkeletons ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonDesktopWhaleCard key={i} />
+            ))
+          ) : ranked.length === 0 ? (
+            <div className="col-span-full">
+              <EmptyFeed
+                filter={filter}
+                arenaConfigured={botNames.length > 0}
+                onReset={() => setFilter("all")}
+              />
+            </div>
+          ) : (
+            ranked.map((entry, idx) =>
+              entry.kind === "whale" ? (
+                <DesktopWhaleCard
+                  key={entry.whale.payload.whaleId}
+                  whale={entry.whale}
+                  rank={idx + 1}
+                  now={now}
+                  onTail={(source) => setTailSource(source)}
+                />
+              ) : (
+                <BotCard
+                  key={entry.name}
+                  name={entry.name}
+                  bot={entry.bot}
                   now={now}
                 />
               ),
