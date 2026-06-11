@@ -6,6 +6,7 @@
 // (ShareCard/WhaleCard: rounded-3xl, white/10 hairline, soft white gradient)
 // on the v2 tokens.
 
+import type { ReactNode } from "react";
 import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { DIM, FAINT, GREEN, RED } from "@/components/v2/ui";
@@ -46,11 +47,15 @@ export function BotCard({
   bot,
   now,
   onOpen,
+  tailCta,
 }: {
   name: string;
   bot: ArenaBot | null;
   now: number;
   onOpen?: () => void;
+  /** Optional copy CTA rendered under the positions block — the /feed grid
+   *  passes the Tail button; /arena keeps rendering without it. */
+  tailCta?: ReactNode;
 }) {
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
@@ -183,6 +188,17 @@ export function BotCard({
           ))
         )}
       </div>
+
+      {/* Stop propagation so a CTA tap never doubles as the card's onOpen. */}
+      {tailCta ? (
+        <div
+          className="mt-3"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {tailCta}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
 import { formatPriceUsd } from "@/components/whales/whale-money";
+import { botCopyCta, type BotCopyCta } from "./bot-tail-source";
 import { DesktopWhaleCard, SkeletonDesktopWhaleCard } from "./DesktopWhaleCard";
 import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
@@ -165,6 +166,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   market={market}
                   lastUpdateMs={lastUpdateMs}
                   now={now}
+                  onTail={(source) => setTailSource(source)}
                 />
               ),
             )
@@ -198,11 +200,14 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   onTail={(source) => setTailSource(source)}
                 />
               ) : (
-                <BotCard
+                <GridBotCard
                   key={entry.name}
                   name={entry.name}
                   bot={entry.bot}
+                  market={market}
+                  lastUpdateMs={lastUpdateMs}
                   now={now}
+                  onTail={(source) => setTailSource(source)}
                 />
               ),
             )
@@ -380,17 +385,21 @@ function BotFeedCard({
   market,
   lastUpdateMs,
   now,
+  onTail,
 }: {
   name: string;
   bot: ArenaBot | null;
   market: ArenaMarketState | null;
   lastUpdateMs: number;
   now: number;
+  onTail: (source: TailSource) => void;
 }) {
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
 
   if (bot === null) return <SkeletonFeedCard />;
+
+  const copyCta = botCopyCta({ name, bot, market, lastUpdateMs, nowMs: now });
 
   const wins = bot.wins;
   const losses = Math.max(0, bot.trades - bot.wins);
@@ -500,12 +509,78 @@ function BotFeedCard({
               ? `New position · opened ${formatWhalePositionAge(position.openedTsMs, now)} ago`
               : `Position · opened ${formatWhalePositionAge(position.openedTsMs, now)} ago`
           }
-          cta={<DisabledCta label="Copy — soon" />}
+          cta={<BotTailCta cta={copyCta} onTail={onTail} />}
         />
       ) : (
         <FlatLine />
       )}
     </article>
+  );
+}
+
+/** CTA slot for a bot position, shared by the stacked card and the desktop
+ *  grid. "tail" gets the same accent button the whale card uses; frozen data
+ *  degrades to an honest disabled label instead of a live-looking copy. */
+function BotTailCta({
+  cta,
+  onTail,
+}: {
+  cta: BotCopyCta;
+  onTail: (source: TailSource) => void;
+}) {
+  if (cta.state === "none") return null;
+  if (cta.state === "tail") {
+    return (
+      <button
+        type="button"
+        onClick={() => onTail(cta.source)}
+        className="w-full rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+        style={{
+          background: ACCENT,
+          color: BG,
+          boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+        }}
+      >
+        Tail
+      </button>
+    );
+  }
+  return (
+    <DisabledCta
+      label={cta.state === "stale" ? "Copy — stale" : "Copy — unavailable"}
+    />
+  );
+}
+
+/** Desktop-grid wrapper: computes the copy CTA and hands it to the arena
+ *  BotCard via its optional tailCta slot (/arena keeps rendering without). */
+function GridBotCard({
+  name,
+  bot,
+  market,
+  lastUpdateMs,
+  now,
+  onTail,
+}: {
+  name: string;
+  bot: ArenaBot | null;
+  market: ArenaMarketState | null;
+  lastUpdateMs: number;
+  now: number;
+  onTail: (source: TailSource) => void;
+}) {
+  const cta = botCopyCta({ name, bot, market, lastUpdateMs, nowMs: now });
+  return (
+    <BotCard
+      name={name}
+      bot={bot}
+      now={now}
+      tailCta={
+        cta.state === "none" ? undefined : (
+          <BotTailCta cta={cta} onTail={onTail} />
+        )
+      }
+    />
   );
 }
 

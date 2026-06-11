@@ -860,6 +860,22 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
               <div className="text-sm font-semibold text-white">{markText}</div>
             </div>
+            {/* Bot sources: surface the source entry (and approx liq) the
+                whale position rows already show — the Mark cell alone would
+                hide the entry→mark gap once a live mark arrives. */}
+            {source.kind === "bot" ? (
+              <div className="col-span-3 border-t border-white/5 pt-2 text-[10px] uppercase tracking-widest text-white/35">
+                Entry {fmtPrice(source.entryMark)}
+                {(() => {
+                  const liq = approxLiqPrice(
+                    source.entryMark,
+                    source.side,
+                    source.leverage,
+                  );
+                  return liq === null ? null : ` · Liq ≈ ${fmtPrice(liq)}`;
+                })()}
+              </div>
+            ) : null}
           </div>
         )}
 

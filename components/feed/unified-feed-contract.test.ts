@@ -50,14 +50,29 @@ describe("UnifiedFeed contract", () => {
     expect(source).toContain("setLoaded(true)");
   });
 
-  it("feeds bot cards from the arena live hook with a disabled copy CTA", () => {
+  it("feeds bot cards from the arena live hook with a staleness-gated copy CTA", () => {
     const source = read(FEED);
 
     expect(source).toContain("useArenaLive");
     expect(source).toContain("ARENA_PERSONAS");
-    expect(source).toContain('label="Copy — soon"');
+    // "Copy — soon" is gone: fresh bots get the real Tail button into the
+    // shared TailModal; frozen data degrades to an honest disabled label.
+    expect(source).not.toContain("Copy — soon");
+    expect(source).toContain("botCopyCta");
+    expect(source).toContain('"Copy — stale"');
     expect(source).toContain("botPositionPnlPct");
     expect(source).toContain("market.lastPrice");
+  });
+
+  it("wires bot tails through the same shared TailModal as whales (both renderings)", () => {
+    const source = read(FEED);
+
+    // Stacked card and desktop grid both hand a built bot TailSource to the
+    // single setTailSource → TailModal instance.
+    expect(source).toContain('from "./bot-tail-source"');
+    expect(source).toContain("BotTailCta");
+    expect(source).toContain("GridBotCard");
+    expect(source).toContain("tailCta=");
   });
 
   it("renders W/L counts only for bots — whale payloads carry no win rate", () => {
