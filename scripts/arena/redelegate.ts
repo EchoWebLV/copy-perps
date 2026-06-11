@@ -9,7 +9,10 @@
 //
 // The arena pauses (bots frozen) for the few seconds between undelegation
 // finalizing and re-delegation landing. Paper-only state: no money risk.
-// Proper fix queued: magic_fee_vault + delegated fee payer in commit_state.
+// Permanent fix SHIPPED (PINS.md "magic_fee_vault commits"): commit_state
+// pays its own bundles via the delegated crank payer, so the quota no
+// longer applies once the new program is deployed + the payer is funded —
+// keep this script only as an emergency delegation-reset tool.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
