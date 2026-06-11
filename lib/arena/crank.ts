@@ -12,8 +12,18 @@
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 
-const TICK_GAP_MS = Number(process.env.ARENA_CRANK_INTERVAL_MS ?? 2_000);
-const COMMIT_GAP_MS = Number(process.env.ARENA_COMMIT_INTERVAL_MS ?? 300_000);
+// Env values are untrusted: NaN or <=0 would coerce setTimeout to a ~1ms hot
+// loop hammering the ER and the lease table, so fall back to the default.
+function safeMs(raw: string | number, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const TICK_GAP_MS = safeMs(process.env.ARENA_CRANK_INTERVAL_MS ?? 2_000, 2_000);
+const COMMIT_GAP_MS = safeMs(
+  process.env.ARENA_COMMIT_INTERVAL_MS ?? 300_000,
+  300_000,
+);
 const LEASE_RECHECK_MS = 30_000;
 const STARTUP_DELAY_MS = 5_000;
 const HOLDER = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
@@ -43,6 +53,20 @@ export function shouldCommit(
   return nowMs - lastCommitMs >= intervalMs;
 }
 
+/**
+ * The tick gap is ~2s but the lease only needs a heartbeat every 30s while
+ * held (TTL 180s) — re-upserting Neon every tick would be ~43k writes/day
+ * for nothing ("idle loops must be near-free", lib/autopilot/ticker.ts).
+ */
+export function shouldRecheckLease(
+  wasHolder: boolean,
+  lastCheckMs: number,
+  nowMs: number,
+  intervalMs: number = LEASE_RECHECK_MS,
+): boolean {
+  return !wasHolder || nowMs - lastCheckMs >= intervalMs;
+}
+
 export function buildTickPlan(markets: CrankMarket[]): TickPlanEntry[] {
   return markets.map((m) => ({
     marketId: m.marketId,
@@ -68,12 +92,23 @@ export function startArenaCrank(deps?: CrankDeps): void {
 
 async function loop(injected?: CrankDeps): Promise<void> {
   await sleep(STARTUP_DELAY_MS);
-  const deps = injected ?? (await buildCrankDeps());
+  let deps: CrankDeps;
+  try {
+    deps = injected ?? (await buildCrankDeps());
+  } catch (err) {
+    // Designed fail-fast: without deps the worker is useless — exit cleanly
+    // instead of dying via unhandled rejection on Railway.
+    console.error("[arena] crank cannot start:", err);
+    process.exitCode = 1;
+    return;
+  }
 
   let tableReady = false;
   let wasHolder = false;
+  let lastLeaseCheckMs = 0;
   let lastCommitMs = 0;
   let tickCount = 0;
+  const warnedDropMarkets = new Set<number>();
 
   for (;;) {
     if (!tableReady) {
@@ -87,11 +122,15 @@ async function loop(injected?: CrankDeps): Promise<void> {
       }
     }
 
-    let holder = false;
-    try {
-      holder = await deps.acquireArenaCrankLease(HOLDER);
-    } catch (err) {
-      console.error("[arena] lease check failed:", err);
+    let holder = wasHolder;
+    if (shouldRecheckLease(wasHolder, lastLeaseCheckMs, Date.now())) {
+      try {
+        holder = await deps.acquireArenaCrankLease(HOLDER);
+      } catch (err) {
+        console.error("[arena] lease check failed:", err);
+        holder = false;
+      }
+      lastLeaseCheckMs = Date.now();
     }
 
     if (!holder) {
@@ -111,9 +150,10 @@ async function loop(injected?: CrankDeps): Promise<void> {
     try {
       const plan = buildTickPlan(await deps.listMarkets());
       for (const entry of plan) {
-        if (entry.dropped > 0) {
+        if (entry.dropped > 0 && !warnedDropMarkets.has(entry.marketId)) {
+          warnedDropMarkets.add(entry.marketId);
           console.warn(
-            `[arena] market=${entry.marketId} dropping ${entry.dropped} bots over the ${MAX_TICK_BOTS}-account tick cap`,
+            `[arena] market=${entry.marketId} dropping ${entry.dropped} bots over the ${MAX_TICK_BOTS}-account tick cap (warned once)`,
           );
         }
         try {

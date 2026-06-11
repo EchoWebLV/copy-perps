@@ -30,6 +30,10 @@ export function decideRingMomentum(
   candles: StrategyCandle[],
   params: StrategyParams,
 ): "long" | "short" | null {
+  // Domain: 0 <= breakoutBps < 10_000. At >= 10_000 the short comparison
+  // (priorLow * (BPS - bo)) goes negative — fine for BigInt, an underflow
+  // panic for Rust u64 — so both implementations fail closed here instead.
+  if (params.breakoutBps < 0 || params.breakoutBps >= 10_000) return null;
   if (candles.length < MIN_CANDLES) return null;
   const last = candles[candles.length - 1];
   if (last.c <= 0n) return null;
