@@ -217,3 +217,53 @@ to the base layer.
   (`AccountLoader`) if the boxed form still trips the limit at runtime.
   Do NOT restructure the state structs preemptively — measure on the local
   validator first.
+
+## Task 10 BLOCKED: Borsh deserialize blows the SBF stack at RUNTIME (2026-06-11)
+
+**Box<Account<...>> is NOT sufficient.** With every account Boxed in every
+`#[derive(Accounts)]` context (`Box<Account<ArenaConfig>>`,
+`Box<Account<MarketState>>`, `Box<Account<Bot>>`), `init_market` and
+`init_bot` fail on the local validator with stack AccessViolations. Tasks
+10–12 cannot proceed until the structural decision below is made.
+
+### Build diagnostics (anchor-1.0.2 build, all accounts Boxed; exit 0)
+
+| Function | Frame | Over the 4096 offset by |
+| --- | --- | --- |
+| `MarketState::try_deserialize_unchecked` | 7232 B (offset 7208) | 3112 B |
+| `Bot::try_deserialize_unchecked` | 4608 B (offset 4168) | 72 B |
+| `InitMarket::try_accounts` closure | 4288 B (offset 4160) | 64 B |
+
+### Runtime (solana-test-validator via `anchor-1.0.2 test --validator legacy`)
+
+- `ping`, feed-fixture load, `init_config` → **pass** (ArenaConfig is 8+327 B;
+  its deserialize frame is small).
+- `init_market` → `Access violation in stack frame 7 at 0x200007fc0 of size 8`
+  (8,635 CU consumed, fails inside the program before completing).
+- `init_bot` → `Access violation in stack frame 11 at 0x20000bfb8 of size 8`
+  (after the System CPI creates the account, i.e. in the deserialize of the
+  fresh zeroed buffer into `Account<Bot>`).
+- Boxing does not help because the overflow is in the *callee*
+  `try_deserialize_unchecked` frame (Borsh constructs the `[Bucket; 64]` /
+  `[TapeEntry; 64]` arrays on that function's own stack before the value ever
+  reaches the heap Box). The diagnostics are identical with and without Box.
+
+### Options for the controller (measured, not yet chosen)
+
+1. **zero_copy (`AccountLoader`)** — the standard fix for accounts this size.
+   Structural: `bool` fields (`MarketCfg.active`, `Position.active`,
+   `StrategyParams.trend_filter`) are not Pod and must become `u8`; `#[repr(C)]`
+   layout review; `candles.rs`/`paper.rs` signatures move to `Ref/RefMut`; the
+   TS client decodes change. Touches the Tasks 6–9 modules + their 25 tests.
+2. **Shrink the structs until the frames fit** — does NOT work for
+   `MarketState`: rider (span 4 × MIN_STRAT_CANDLES 12 = 48 buckets) needs
+   RING_LEN ≥ ~50, and frame ≈ 2× ring bytes ⇒ ~5.2 KB, still over. `Bot` is
+   only 72 B over (TAPE_LEN 64→60 would fit), but that alone doesn't unblock
+   `MarketState`.
+3. **`LazyAccount<'info, T>`** (anchor-lang 1.0.2, `lazy-account` feature,
+   experimental) — heap-based lazy per-field deserialize; avoids the frame
+   entirely for reads, but tick mutates nearly every Bot field and init must
+   write whole accounts, so the write path needs hand-rolled serialization.
+4. **SBPF v2+ dynamic stack frames** (`cargo build-sbf --arch ...`) — removes
+   the 4 KB fixed frame, but deviates from the anchor-counter template pins and
+   needs feature-gate support on devnet AND the MagicBlock ER validator.

@@ -25,3 +25,10 @@ wallet = "~/.config/solana/id.json"
 # legacy` uses solana-test-validator. Plain `anchor` on PATH is 0.31.1 —
 # never use it here.)
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+# Devnet SOLUSD feed snapshot (Spike B dump) loaded at its real address so
+# local tests exercise the same account the program reads on devnet/mainnet.
+# Static data — tests must init the config with a huge max_age_secs.
+[[test.validator.account]]
+address = "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu"
+filename = "tests/fixtures/solusd-feed.json"
