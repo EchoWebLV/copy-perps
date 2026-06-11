@@ -38,6 +38,10 @@ export function decide(input: {
   if (candles.length < MIN_CANDLES) return null;
 
   const last = candles[candles.length - 1];
+  // Fail CLOSED on garbage in the breakout candle — this gate fires 500x
+  // trades; NaN/zero must veto, never pass.
+  if (!Number.isFinite(last.close) || last.close <= 0) return null;
+  if (!Number.isFinite(last.volume) || last.volume <= 0) return null;
   const prior = candles.slice(0, -1);
   const priorHigh = Math.max(...prior.map((c) => c.high));
   const priorLow = Math.min(...prior.map((c) => c.low));
@@ -67,7 +71,8 @@ export function decide(input: {
   if (!side) return null;
 
   // Volume confirm: breakout candle runs >= 1.4x the prior average.
-  if (!(avgVolume > 0) || last.volume < VOLUME_MULTIPLIER * avgVolume) {
+  // Inverted comparison so NaN anywhere fails closed.
+  if (!(avgVolume > 0) || !(last.volume >= VOLUME_MULTIPLIER * avgVolume)) {
     return null;
   }
 

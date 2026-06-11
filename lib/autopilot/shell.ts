@@ -46,13 +46,15 @@ export function sessionPhase(session: ShellSessionState): SessionPhase {
   return "active";
 }
 
-/** recentCloses must be newest-first. */
+/** Order-independent: sorts a copy newest-first internally. */
 export function isTiltCooldown(
   recentCloses: RecentClose[],
   now: Date,
 ): boolean {
   if (recentCloses.length < TILT_LOSS_STREAK) return false;
-  const newest = recentCloses.slice(0, TILT_LOSS_STREAK);
+  const newest = [...recentCloses]
+    .sort((a, b) => b.closedAt.getTime() - a.closedAt.getTime())
+    .slice(0, TILT_LOSS_STREAK);
   if (!newest.every((c) => c.pnlUsd < 0)) return false;
   const ageMs = now.getTime() - newest[0].closedAt.getTime();
   return ageMs <= TILT_WINDOW_MS;
@@ -73,7 +75,10 @@ export type ShellVerdict =
 export function evaluateShell(input: {
   session: ShellSessionState;
   openCount: number;
-  /** Newest-first realized results, for the tilt guard. */
+  /** Sum of amountUsdc across the session's OPEN bets — reserved against
+   * the budget so concurrent opens can never overshoot the loss bound. */
+  openStakesUsd: number;
+  /** Realized results for the tilt guard (any order). */
   recentCloses: RecentClose[];
   decision: BrainDecision;
   now: Date;
@@ -91,9 +96,11 @@ export function evaluateShell(input: {
     return { allow: false, reason: "tilt cooldown (2 fast losses)" };
   }
 
-  const remaining = lossBudgetRemaining(input.session);
-  if (remaining < 1) {
-    return { allow: false, reason: "remaining budget below $1" };
+  // Open stakes are worst-case losses too — reserve them.
+  const remaining =
+    lossBudgetRemaining(input.session) - Math.max(0, input.openStakesUsd);
+  if (remaining < tier.stakeUsdMin) {
+    return { allow: false, reason: "remaining budget below minimum stake" };
   }
   const stakeUsdc = computeStake(tier.name, remaining);
   if (stakeUsdc == null) {

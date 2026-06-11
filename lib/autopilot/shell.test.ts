@@ -36,6 +36,15 @@ describe("lossBudgetRemaining / sessionPhase", () => {
 });
 
 describe("isTiltCooldown", () => {
+  it("is order-independent (oldest-first input still trips the guard)", () => {
+    const closes = [
+      { pnlUsd: -1, closedAt: new Date(NOW.getTime() - 4 * 60 * 1000) },
+      { pnlUsd: -1, closedAt: new Date(NOW.getTime() - 60 * 1000) },
+    ];
+    expect(isTiltCooldown(closes, NOW)).toBe(true);
+  });
+
+
   it("two fresh consecutive losses trip the cooldown", () => {
     const closes: RecentClose[] = [
       { pnlUsd: -2, closedAt: minsAgo(1) },
@@ -67,7 +76,23 @@ describe("isTiltCooldown", () => {
 });
 
 describe("evaluateShell", () => {
+  it("reserves open stakes against the budget (no concurrent overshoot)", () => {
+    // Budget $100, realized -$98.50 -> remaining $1.50. One open $1 stake
+    // reserved -> only $0.50 deployable -> second open must be denied.
+    const verdict = evaluateShell({
+      session: { budgetUsd: 100, realizedPnlUsd: -98.5, tier: "cruise" },
+      openCount: 1,
+      openStakesUsd: 1,
+      recentCloses: [],
+      decision,
+      now: NOW,
+    });
+    expect(verdict.allow).toBe(false);
+  });
+
+
   const base = {
+    openStakesUsd: 0,
     session: { budgetUsd: 100, realizedPnlUsd: 0, tier: "cruise" as const },
     openCount: 0,
     recentCloses: [] as RecentClose[],

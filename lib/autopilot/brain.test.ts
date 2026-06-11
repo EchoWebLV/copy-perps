@@ -38,6 +38,22 @@ describe("autopilot brain — decide", () => {
     expect(decide({ candles: flat(20), markPrice: 100 })).toBeNull();
   });
 
+  it("vetoes a breakout candle with NaN volume (fail closed)", () => {
+    const candles = [
+      ...flat(19),
+      { ts: 19 * 900_000, open: 100, high: 101.2, low: 100, close: 101, volume: Number.NaN },
+    ];
+    expect(decide({ candles, markPrice: 101 })).toBeNull();
+  });
+
+  it("vetoes a breakout candle with zero close (fail closed)", () => {
+    const candles = [
+      ...flat(19),
+      { ts: 19 * 900_000, open: 100, high: 101.2, low: 100, close: 0, volume: 30 },
+    ];
+    expect(decide({ candles, markPrice: 101 })).toBeNull();
+  });
+
   it("stays flat when volume does not confirm", () => {
     const candles = [
       ...flat(19),

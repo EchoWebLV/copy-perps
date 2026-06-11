@@ -2259,6 +2259,9 @@ export async function tickSession(
         const verdict = evaluateShell({
           session: shellSession,
           openCount: openBets.length,
+          // Reserve open stakes against the budget (review fix: concurrent
+          // opens must never overshoot the loss bound).
+          openStakesUsd: openBets.reduce((sum, b) => sum + b.amountUsdc, 0),
           recentCloses,
           decision,
           now,
