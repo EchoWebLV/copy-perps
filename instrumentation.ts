@@ -27,4 +27,10 @@ export async function register(): Promise<void> {
   // To re-enable, restore the startBotTicker() import + call here.
   const { startWhaleTicker } = await import("@/lib/whales/ticker");
   startWhaleTicker();
+
+  // Scalp Autopilot loop (Phase 3c). Lease-guarded like the whale ticker;
+  // near-free when idle (one indexed query per tick, no market data).
+  // Kill switch: DISABLE_AUTOPILOT_TICKER=true.
+  const { startAutopilotTicker } = await import("@/lib/autopilot/ticker");
+  startAutopilotTicker();
 }
