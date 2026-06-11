@@ -95,6 +95,7 @@ interface OpenResponse {
 interface FlashSignResponse {
   phase: "sign";
   venue: "flash";
+  betId?: string;
   transactionB64: string;
   quote: {
     amountUsd?: number;
@@ -187,7 +188,7 @@ function flashSignResponseToOpen(
   const sizeUsd = response.position.sizeUsd ?? response.quote.notionalUsd ?? 0;
   return {
     phase: "open",
-    betId: `flash:${signature}`,
+    betId: response.betId ?? `flash:${signature}`,
     fill: {
       orderId: signature,
       avgFillPrice: String(entryPrice),
@@ -460,6 +461,21 @@ export function TailModal({ open, onClose, source }: Props) {
           leverage: flashLeverage,
           mode: flashTradeModeForLeverage(flashMarket, flashLeverage) ?? "standard",
           walletAddress: wallet.address,
+          tail:
+            source.kind === "whale"
+              ? {
+                  sourceKind: "whale",
+                  whaleId: source.whaleId,
+                  sourceName: source.displayName,
+                  sourcePositionId:
+                    copyPosition?.sourcePositionId ?? source.sourcePositionId,
+                }
+              : {
+                  sourceKind: "bot",
+                  botId: source.botId,
+                  sourceName: source.botName,
+                  sourcePositionId: source.positionId ?? null,
+                },
         };
         const resp = await fetch("/api/flash/perp", {
           method: "POST",
@@ -552,6 +568,21 @@ export function TailModal({ open, onClose, source }: Props) {
             first.transactionB64,
             "Signing Flash trade…",
           );
+          if (first.betId) {
+            await fetch("/api/flash/perp/confirm", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                betId: first.betId,
+                signature,
+              }),
+            }).catch((err) =>
+              console.warn("[tail] flash confirm postback failed:", err),
+            );
+          }
           setStatus("Opened on Flash");
           return flashSignResponseToOpen(first, signature, source);
         }
