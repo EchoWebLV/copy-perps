@@ -8,18 +8,18 @@ describe("desktop shell nav contract", () => {
   it("exposes the main app destinations in display order", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/feed",
-      "/live",
       "/trade",
       "/chatter",
       "/portfolio",
       "/deposit",
     ]);
+    // The /live heat + tape surfaces are gone — nothing should link there.
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).not.toContain("/live");
   });
 
-  it("labels the main whale trading surfaces without legacy bot roster copy", () => {
+  it("labels the main trading surfaces without legacy heat or bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Whales",
-      "Heat",
+      "Feed",
       "Scalp",
       "Pulse",
       "Folio",
@@ -29,6 +29,7 @@ describe("desktop shell nav contract", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).not.toContain(
       "Chatter",
     );
+    expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).not.toContain("Heat");
   });
 
   it("uses the same primary trade icons on desktop and mobile", () => {

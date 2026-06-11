@@ -1,5 +1,4 @@
 import {
-  Activity,
   ChartCandlestick,
   Flame,
   PieChart,
@@ -8,8 +7,7 @@ import {
 } from "lucide-react";
 
 export const DESKTOP_NAV_ITEMS = [
-  { href: "/feed", label: "Whales", icon: Flame },
-  { href: "/live", label: "Heat", icon: Activity },
+  { href: "/feed", label: "Feed", icon: Flame },
   { href: "/trade", label: "Scalp", icon: ChartCandlestick },
   { href: "/chatter", label: "Pulse", icon: Zap },
   { href: "/portfolio", label: "Folio", icon: PieChart },
