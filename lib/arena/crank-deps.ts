@@ -17,6 +17,10 @@
 //                              ARENA_ADMIN_KEYPAIR_PATH)
 //   ARENA_BOTS               — comma-separated persona names, default
 //                              "scalper-v1,rider-v1"
+//   ARENA_ER_VALIDATOR       — ER validator identity for the magic-fee-vault
+//                              derivation in commit_state, default
+//                              MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57
+//                              (devnet.magicblock.app — PINS.md Task 13)
 //
 // Send pattern proven by scripts/arena/tick-once.ts + tests/delegation.ts:
 // ER blockhash, skipPreflight true, poll getSignatureStatus (no websockets —
@@ -39,6 +43,19 @@ import type { CrankDeps, CrankMarket, TickPlanEntry } from "./crank";
 const FEEDS: Record<number, web3.PublicKey> = {
   0: new web3.PublicKey("ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu"),
 };
+
+// magicblock-delegation-program-api 3.0.0 id (PINS.md Task 12 gotchas — NOT
+// the older …teabpTabdBah). Derivations below mirror the SDK's
+// delegationRecordPdaFromDelegatedAccount / magicFeeVaultPdaFromValidator
+// (the SDK package only lives in arena-program/node_modules, so the two
+// PDAs are derived by hand here; seeds verified against the SDK source).
+const DELEGATION_PROGRAM_ID = new web3.PublicKey(
+  "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
+);
+// Devnet ER validator identity (PINS.md Task 13: devnet.magicblock.app ==
+// devnet-as.magicblock.app == MAS1…zk57). The magic fee vault is scoped to
+// this validator, so a different ER deployment needs ARENA_ER_VALIDATOR set.
+const DEFAULT_ER_VALIDATOR = "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57";
 
 const MARKET_ID = 0;
 const DEFAULT_BOTS = "scalper-v1,rider-v1";
@@ -205,14 +222,37 @@ export async function buildRealCrankDeps(): Promise<CrankDeps> {
   // commit_state is permissionless by design (it can only persist delegated
   // state, never mutate it), so the crank keypair works as payer even though
   // it is not the admin. magic_program/magic_context resolve from the IDL's
-  // baked addresses — only payer + market_state need passing, exactly like
-  // tests/delegation.ts.
+  // baked addresses. Since the magic_fee_vault migration (PINS.md
+  // "magic_fee_vault commits") the intent bundle is paid by the delegated
+  // crank-payer PDA — the crank keypair only pays the ER tx fee — so commits
+  // are no longer capped at 10 per delegated account. Three extra accounts
+  // ride along: the market's delegation record (validator source of truth),
+  // the validator's fee vault, and the crank-payer PDA.
+  const erValidator = new web3.PublicKey(
+    process.env.ARENA_ER_VALIDATOR || DEFAULT_ER_VALIDATOR,
+  );
+  const [crankPayerPda] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("crank-payer")],
+    program.programId,
+  );
+  const [marketDelegationRecord] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("delegation"), marketPda(MARKET_ID).toBuffer()],
+    DELEGATION_PROGRAM_ID,
+  );
+  const [magicFeeVault] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("magic-fee-vault"), erValidator.toBuffer()],
+    DELEGATION_PROGRAM_ID,
+  );
+
   const sendCommit = async (): Promise<string> => {
     const tx = await program.methods
       .commitState(MARKET_ID)
       .accountsPartial({
         payer: payer.publicKey,
         marketState: marketPda(MARKET_ID),
+        delegationRecord: marketDelegationRecord,
+        magicFeeVault,
+        crankPayer: crankPayerPda,
       })
       .remainingAccounts(botMetas(botPubkeys))
       .transaction();

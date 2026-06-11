@@ -201,7 +201,30 @@ async function main() {
     console.log(`init_bot ${bot.name} ${pda.toBase58()}: ${sig}`);
   }
 
-  // --- delegate market + bots to the devnet ER ------------------------------
+  // --- init crank payer ------------------------------------------------------
+  // Lamport reservoir that pays commit_state's Magic intent bundle once
+  // delegated (magic_fee_vault pattern, PINS.md "magic_fee_vault commits").
+  // Top up AFTER delegation with scripts/arena/fund-crank-payer.ts.
+  const [crankPayerPda] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("crank-payer")],
+    program.programId,
+  );
+  if (await connection.getAccountInfo(crankPayerPda)) {
+    console.log(`crank payer ${crankPayerPda.toBase58()} exists — skip`);
+  } else {
+    const sig = await program.methods
+      .initCrankPayer()
+      .accountsPartial({
+        config: configPda,
+        crankPayer: crankPayerPda,
+        admin: admin.publicKey,
+        systemProgram: web3.SystemProgram.programId,
+      })
+      .rpc();
+    console.log(`init_crank_payer ${crankPayerPda.toBase58()}: ${sig}`);
+  }
+
+  // --- delegate market + bots + crank payer to the devnet ER ----------------
   // Validator pinned via the first remaining account (spec gotcha: never
   // delegate without pinning). skipPreflight like tests/delegation.ts — the
   // delegate CPI reassigns ownership mid-tx, which trips simulation.
@@ -245,7 +268,22 @@ async function main() {
     console.log(`delegate_bot ${name}: ${sig}`);
   }
 
-  for (const pda of [marketPda, ...botPdas.map((b) => b.pda)]) {
+  if (await delegated(crankPayerPda)) {
+    console.log(`crank payer already delegated — skip`);
+  } else {
+    const sig = await program.methods
+      .delegateCrankPayer()
+      .accountsPartial({
+        config: configPda,
+        admin: admin.publicKey,
+        crankPayer: crankPayerPda,
+      })
+      .remainingAccounts(validatorMeta)
+      .rpc({ skipPreflight: true });
+    console.log(`delegate_crank_payer: ${sig}`);
+  }
+
+  for (const pda of [marketPda, ...botPdas.map((b) => b.pda), crankPayerPda]) {
     const owner = (await connection.getAccountInfo(pda))?.owner.toBase58();
     console.log(
       `${pda.toBase58()} owner ${owner} ${owner === DELEGATION_PROGRAM_ID.toBase58() ? "(delegated)" : "(NOT DELEGATED)"}`,
