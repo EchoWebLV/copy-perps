@@ -14,6 +14,14 @@ import {
 import { signAndSendPrivySolanaTransaction } from "@/lib/privy/instant-solana";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
+import {
+  buildFlashTailMeta,
+  parseTailLineage,
+} from "@/lib/bets/flash-tail-meta";
+import {
+  confirmFlashTailOpen,
+  recordFlashTailOpen,
+} from "@/lib/bets/flash-tail";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -31,6 +39,7 @@ interface Body {
   walletAddress?: string;
   instant?: boolean;
   mode?: FlashTradeMode;
+  tail?: unknown;
 }
 
 const FLASH_ERROR_STATUS: Record<FlashPerpsError["code"], number> = {
@@ -147,6 +156,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
+  const tailLineage = parseTailLineage(body.tail);
+
   try {
     const result = await getFlashPerpsService().open({
       trader: user.solanaPubkey,
@@ -156,15 +167,44 @@ export async function POST(request: Request) {
       leverage: body.leverage,
       mode,
     });
+
+    let betId: string | undefined;
+    if (tailLineage) {
+      betId = await recordFlashTailOpen({
+        userId: user.id,
+        stakeUsdc: body.stakeUsdc,
+        meta: buildFlashTailMeta({
+          lineage: tailLineage,
+          market,
+          side: body.side,
+          leverage: body.leverage,
+          mode,
+          walletAddress: user.solanaPubkey,
+          entryPriceUsd:
+            result.quote.entryPriceUsd ?? result.position.entryPriceUsd ?? null,
+          notionalUsd: result.quote.notionalUsd ?? result.position.sizeUsd ?? null,
+          openFeeUsd: result.quote.feesUsd ?? null,
+        }),
+      });
+    }
+
     if (body.instant) {
       const sent = await signAndSendPrivySolanaTransaction({
         privyUserId: claims.userId,
         walletAddress: user.solanaPubkey,
         transactionB64: result.transaction,
       });
+      if (betId) {
+        await confirmFlashTailOpen({
+          betId,
+          userId: user.id,
+          signature: sent.signature,
+        });
+      }
       return NextResponse.json({
         phase: "sent",
         venue: "flash",
+        betId,
         signature: sent.signature,
         caip2: sent.caip2,
         quote: result.quote,
@@ -181,6 +221,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       phase: "sign",
       venue: "flash",
+      betId,
       transactionB64: result.transaction,
       quote: result.quote,
       position: result.position,

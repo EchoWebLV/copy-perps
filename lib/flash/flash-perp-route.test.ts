@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   close: vi.fn(),
   positionsOf: vi.fn(),
   activeTriggersOf: vi.fn(),
+  recordFlashTailOpen: vi.fn(),
+  confirmFlashTailOpen: vi.fn(),
 }));
 
 vi.mock("@/lib/privy/server", () => ({
@@ -20,6 +22,11 @@ vi.mock("@/lib/privy/instant-solana", () => ({
 vi.mock("@/lib/users/ensure", () => ({
   ensureUser: mocks.ensureUser,
 }));
+vi.mock("@/lib/bets/flash-tail", () => ({
+  recordFlashTailOpen: mocks.recordFlashTailOpen,
+  confirmFlashTailOpen: mocks.confirmFlashTailOpen,
+}));
+
 vi.mock("@/lib/flash/perps", () => ({
   FLASH_MIN_NOTIONAL_USD: 10,
   FlashPerpsError: class FlashPerpsError extends Error {
@@ -104,6 +111,8 @@ describe("Flash perp routes", () => {
       signature: "instant-sig",
       caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
     });
+    mocks.recordFlashTailOpen.mockResolvedValue("bet-1");
+    mocks.confirmFlashTailOpen.mockResolvedValue(true);
   });
 
   it("builds a user-signed Flash open transaction for $1 20x USDC perps", async () => {
@@ -391,6 +400,80 @@ describe("Flash perp routes", () => {
         market: "SOL",
         side: "short",
       },
+    });
+  });
+
+  it("records a pending flash-tail bet when tail lineage is present", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+        tail: { sourceKind: "whale", whaleId: "whale-1", sourceName: "Big Whale" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.recordFlashTailOpen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        stakeUsdc: 1,
+        meta: expect.objectContaining({
+          sourceType: "flash-tail",
+          whaleId: "whale-1",
+          market: "SOL",
+          side: "long",
+        }),
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sign",
+      betId: "bet-1",
+    });
+  });
+
+  it("does not touch the db when tail lineage is absent (Scalp path)", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.recordFlashTailOpen).not.toHaveBeenCalled();
+    const body = await response.json();
+    expect(body.betId).toBeUndefined();
+  });
+
+  it("records and immediately confirms a flash-tail bet on the instant path", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+        instant: true,
+        tail: { sourceKind: "bot", botId: "pulse", sourceName: "Pulse" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.recordFlashTailOpen).toHaveBeenCalled();
+    expect(mocks.confirmFlashTailOpen).toHaveBeenCalledWith({
+      betId: "bet-1",
+      userId: "user-1",
+      signature: "instant-sig",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sent",
+      betId: "bet-1",
     });
   });
 
