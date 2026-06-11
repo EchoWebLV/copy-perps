@@ -1,7 +1,7 @@
 import type { FlashTradeMode } from "@/lib/flash/markets";
 
 export type TailLineage = {
-  sourceKind: "whale" | "bot";
+  sourceKind: "whale" | "bot" | "autopilot";
   whaleId: string | null;
   botId: string | null;
   sourceName: string | null;
@@ -11,11 +11,15 @@ export type TailLineage = {
 export type FlashTailMeta = {
   sourceType: "flash-tail";
   venue: "flash";
-  sourceKind: "whale" | "bot";
+  sourceKind: "whale" | "bot" | "autopilot";
   whaleId: string | null;
   botId: string | null;
   sourceName: string | null;
   sourcePositionId: string | null;
+  // Set when sourceKind === 'autopilot': the autopilot_sessions row that
+  // opened this trade. Optional so pre-Phase-3c meta literals/rows still
+  // typecheck; build/parse always normalize it to string | null.
+  autopilotSessionId?: string | null;
   market: string;
   side: "long" | "short";
   leverage: number;
@@ -44,6 +48,7 @@ type BuildArgs = {
   entryPriceUsd: number | null;
   notionalUsd: number | null;
   openFeeUsd: number | null;
+  autopilotSessionId?: string | null;
 };
 
 export function buildFlashTailMeta(args: BuildArgs): FlashTailMeta {
@@ -55,6 +60,7 @@ export function buildFlashTailMeta(args: BuildArgs): FlashTailMeta {
     botId: args.lineage.botId,
     sourceName: args.lineage.sourceName,
     sourcePositionId: args.lineage.sourcePositionId,
+    autopilotSessionId: args.autopilotSessionId ?? null,
     market: args.market,
     side: args.side,
     leverage: args.leverage,
@@ -94,7 +100,13 @@ function isSide(value: unknown): value is "long" | "short" {
 /** Parse the optional `tail` object from the /api/flash/perp request body. */
 export function parseTailLineage(value: unknown): TailLineage | null {
   if (!isRecord(value)) return null;
-  if (value.sourceKind !== "whale" && value.sourceKind !== "bot") return null;
+  if (
+    value.sourceKind !== "whale" &&
+    value.sourceKind !== "bot" &&
+    value.sourceKind !== "autopilot"
+  ) {
+    return null;
+  }
   const whaleId = isString(value.whaleId) ? value.whaleId : null;
   const botId = isString(value.botId) ? value.botId : null;
   if (value.sourceKind === "whale" && !whaleId) return null;
@@ -113,7 +125,14 @@ export function parseTailLineage(value: unknown): TailLineage | null {
 export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
   if (!isRecord(value)) return null;
   if (value.sourceType !== "flash-tail" || value.venue !== "flash") return null;
-  if (value.sourceKind !== "whale" && value.sourceKind !== "bot") return null;
+  if (
+    value.sourceKind !== "whale" &&
+    value.sourceKind !== "bot" &&
+    value.sourceKind !== "autopilot"
+  ) {
+    return null;
+  }
+  if (!isStringOrNull(value.autopilotSessionId ?? null)) return null;
   if (!isStringOrNull(value.whaleId ?? null)) return null;
   if (!isStringOrNull(value.botId ?? null)) return null;
   if (!isString(value.market)) return null;
@@ -154,6 +173,7 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
     sourcePositionId: isString(value.sourcePositionId)
       ? value.sourcePositionId
       : null,
+    autopilotSessionId: (value.autopilotSessionId as string | null) ?? null,
     market: value.market,
     side: value.side,
     leverage: value.leverage,
