@@ -94,7 +94,9 @@ export async function POST(request: Request) {
       });
       if (tailBet) {
         // Never let bookkeeping turn a landed close into a client error;
-        // the reconcile sweep verifies from chain later.
+        // the reconcile sweep verifies from chain later. A later client
+        // postback via /close/confirm is a safe no-op: confirmFlashTailClose
+        // is CAS on status='confirmed'.
         try {
           await confirmFlashTailClose({
             betId: tailBet.id,

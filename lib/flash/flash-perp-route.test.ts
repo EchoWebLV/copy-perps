@@ -370,11 +370,13 @@ describe("Flash perp routes", () => {
       market: "SOL",
       side: "short",
     });
-    await expect(response.json()).resolves.toMatchObject({
+    const body = await response.json();
+    expect(body).toMatchObject({
       phase: "sign-close",
       venue: "flash",
       transactionB64: "close-tx-b64",
     });
+    expect(body.betId).toBeUndefined();
   });
 
   it("sends a session-signed Flash close transaction when instant execution is requested", async () => {
