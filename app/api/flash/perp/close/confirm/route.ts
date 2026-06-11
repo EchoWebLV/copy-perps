@@ -10,7 +10,6 @@ interface Body {
   betId?: string;
   signature?: string;
   receiveUsd?: number;
-  walletAddress?: string;
 }
 
 export async function POST(request: Request) {
@@ -25,7 +24,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await ensureUser(claims.userId, body.walletAddress ?? null);
+  // Confirms only need the user row id; never sync solanaPubkey from
+  // this body — the open/close routes already did that when it mattered.
+  const user = await ensureUser(claims.userId, null);
   const ok = await confirmFlashTailClose({
     betId: body.betId,
     userId: user.id,

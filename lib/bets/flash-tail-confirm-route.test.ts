@@ -104,5 +104,23 @@ describe("flash-tail confirm routes", () => {
       }),
     );
     expect(response.status).toBe(401);
+    const closeResponse = await CONFIRM_CLOSE(
+      postRequest("/api/flash/perp/close/confirm", {
+        betId: "bet-1",
+        signature: "sig",
+      }),
+    );
+    expect(closeResponse.status).toBe(401);
+  });
+
+  it("never syncs solanaPubkey from the confirm body", async () => {
+    await CONFIRM_OPEN(
+      postRequest("/api/flash/perp/confirm", {
+        betId: "bet-1",
+        signature: "sig-open",
+        walletAddress: "attacker-controlled",
+      }),
+    );
+    expect(mocks.ensureUser).toHaveBeenCalledWith("privy-user", null);
   });
 });
