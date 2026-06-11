@@ -365,3 +365,83 @@ Gotchas:
   the wrong id fail confusingly while everything else works.
 - Local ephemeral-validator identity is `mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev`
   (pinned in tests/delegation.ts, same as anchor-counter's localnet test).
+
+## Task 13: devnet deploy + first live tick (2026-06-11)
+
+### Deploy
+
+- Program id `6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC` (declared id ==
+  deployed id; keypair tracked at `target/deploy/arena-keypair.json`).
+- Deployed with `solana program deploy target/deploy/arena.so --program-id
+  target/deploy/arena-keypair.json --use-rpc` against Helius devnet
+  (`https://devnet.helius-rpc.com/?api-key=…` — api.devnet.solana.com still
+  degraded, same Spike A workaround). First attempt landed; no buffer cleanup
+  needed.
+- Deploy signature:
+  `4SQYjVBmkHZk3BmeDfsU9fiATEL6akpDtd7rDkqMEHQMhTdqFAP2T4oPgavzftRS4AwYJzk8Z5mNJvxLV8YxqxFG`
+- Cost: wallet `HKVgAYCTKDdtLyN4hGmBC49Psfb9yxsFWQk3jnBEXnhL` 10.686 → 7.919
+  devnet SOL = **2.767 SOL** (2.76404568 SOL rent on the 396,960-byte
+  programdata `BWwYevg6yd1RSmooRgE6uhks1RsNmV2m7bkCbSDUJwYn` + fees).
+  Upgrade authority = the wallet.
+
+### Devnet ER endpoint + validator (measured, not assumed)
+
+`https://devnet.magicblock.app` and `https://devnet-as.magicblock.app` are the
+SAME validator: both `getIdentity` →
+**`MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57`** (the pubkey anchor-counter
+pins for devnet), and both serve the SOLUSD feed
+`ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu` fresh. So:
+delegation validator = `MAS1…zk57`, `ARENA_ER_ENDPOINT=
+https://devnet.magicblock.app` (matches the .env.example default; no regional
+fallback was needed — the feed was visible and ticks landed first try).
+
+### Init + delegation (scripts/arena/init-devnet.ts, idempotent)
+
+Config `{fee_bps 6, spread_bps 5, maint_buffer_bps 500, max_age_secs 10,
+bucket_secs 15}` — note max_age_secs is the REAL 10s freshness guard here,
+unlike the huge window the static-fixture local tests need. Bots seeded with
+$1,000 (1_000_000_000 micro-USD).
+
+**Persona-id encoding: utf8 bytes zero-padded to 16** (`Buffer.alloc(16)` +
+`buf.write(name)`); the bytes are the PDA seed, so the string IS the on-chain
+identity. Devnet personas are **`scalper-v1` / `rider-v1`** (dashes, per the
+Task-13 spec) — the local test suites use `scalper.v1` / `rider.v1` (dots),
+which derive DIFFERENT PDAs; deliberate, the suites self-contain.
+
+| Step | Account | Signature |
+| --- | --- | --- |
+| init_config | `34CNfvrbVQUUMhX1PWNK7EjP8rmFB6DkBvbxT2Lia9hA` | `5r99K2WGWgHPhFS4LS4vFwGv3AzBHiiZHB4nLAtEDkZ7Y11ntjEfMvhEKQiTddaiB62zrYHn5MFX1pwKydmDa6Do` |
+| init_market 0 | `BTk9M99Eh5xjccYpZui4K8CvMesCLkHAWjF9gXSjhhzj` | `2KZ3EMoEeSRM9NH2zUxR1FiHY8diiY9D21bcv61f9KroxYzZH3daH3cKgupoK3Xaavkyza6cpxwJ58uZmhkcPHZ4` |
+| init_bot scalper-v1 | `Fgbev9Y218a3V74baTRuwpecc4Ae6dddqbTFzkmJ8JkZ` | `66zyT5mp6pj47LQA2SLrvcvWq89jFifamzMskSKPCWy9aWHD542oCyrF3LgeALax5M9x6jvcqQcFjMg7ue4qPScA` |
+| init_bot rider-v1 | `Az5PA1SVzC7z6p5ckjXwikoaGgG6oi65iuAhyriNRRHC` | `57uDGbe6ydpKAbk3h4H7iHMyiTC93pJsTyDbt346AzGwDX4EoP3Q2ttgGPFdB39BHPYvo1ADKLuj6jMVekDpUhBx` |
+| delegate_market | (owner → `DELeG…aeSh`) | `55yE5qc7BVGSLkLBFWMNBq8cCz6dyKY8woxeTtTZqg53Cp55ufkheCT951m2nik8qXsdMZphwsVHo3oMJWGyBLAd` |
+| delegate_bot scalper-v1 | (owner → `DELeG…aeSh`) | `rUkCtyLzSrEMJauFkQyMdiH8nN9omWZGrtGBKjLXFTZLDemFoe1ZJak2FnLnaEQ37ZBArfW5wz5LDJgJDJxP66k` |
+| delegate_bot rider-v1 | (owner → `DELeG…aeSh`) | `4bWUyKYKQqq8kALjowrN1k682Hzc73FdynjZsNZEbfuZpGbFkoYTFH3N5jwcyqKrQ8SEAMvhvd3XFnbDDPeyrvkD` |
+
+Delegation worked first try WITH the validator pinned via the first remaining
+account (`MAS1…zk57`); the "try without validator" fallback from the task notes
+was never needed.
+
+### First live ticks (scripts/arena/tick-once.ts, via the ER)
+
+Sent with the tests/delegation.ts pattern: ER blockhash, skipPreflight true,
+base-layer wallet as ER fee payer (no ER funding step, same as Spike A).
+MarketState decoded from raw bytes at the documented state.rs offsets.
+
+| Tick | ER signature | Decoded after |
+| --- | --- | --- |
+| 1 | `3x4HpAL2VZUzTXKrDainthR9VNxBfXUBDd4uEkTXPU65Q57K8XiUVgJ7uj7uk8esmeQ8aftAdkgrqG6ykXyPtDEJ` | lastPrice **$66.68689696**, publishTs 1781200142, head 0, bucket o/h/l/c all 66.68689696, startTs 1781200140, pathLen 0, updates 1 |
+| 2 | `Vh7Rho6H73KXwLYAXVaoQdrKYEapdG3S7VMfAFCJ1rexfk6ci3sBJNW2JxcuwfySPMLM4XPZ8ZnJPceFM33BuN6` | lastPrice 66.68703616, head **1** (15s bucket rolled: startTs 1781200155), open carried from prior close, pathLen 0.0001392, updates 1 |
+| 3 | `A8F6Y3vQumGnKzDr1E7pawq6hW5usc6NMKapxTZ1BsTDGUx3TrvSMgwctJGXjabrumbf8HnieNGaEKpkKJu21gp` | lastPrice 66.99854111, head 2, o 66.68703616 / h 66.99854111 / l 66.68703616 / c 66.99854111, pathLen 0.31150495, updates 1 |
+
+A live SOL price in the expected $60–70 band, the ring folding real movement
+(tick 3 caught a 31¢ move), buckets rolling on the 15s boundary, head
+advancing, pathLen accumulating — the on-chain pipeline is live against the
+real MagicBlock oracle. No compute/stack errors on the devnet ER (the local
+harness's 5/5 carried over). Each script invocation takes ~15s wall clock, so
+consecutive runs landed in different buckets; in-bucket `updates` increments
+were already proven by the local suites.
+
+Tick CU note: tick 1 had 2 incomplete buckets; strategy evaluation
+(MIN_STRAT_CANDLES=12) stays a no-op until the crank (Task 14) keeps the ring
+warm for ≥3 min (scalper) / ≥12 min (rider).

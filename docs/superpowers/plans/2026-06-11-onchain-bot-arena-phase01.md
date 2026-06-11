@@ -809,20 +809,20 @@ pub fn tick<'info>(ctx: Context<'_, '_, '_, 'info, Tick<'info>>, market_id: u8) 
 - Create: `scripts/arena/init-devnet.ts`, `scripts/arena/tick-once.ts`
 - Modify: `arena-program/PINS.md` (record program id), `.env.example` (arena vars)
 
-- [ ] **Step 1: Deploy to devnet** (`anchor deploy --provider.cluster devnet`; update `declare_id!` + `Anchor.toml`, rebuild, redeploy). Record the program id in PINS.md.
+- [x] **Step 1: Deploy to devnet** (`anchor deploy --provider.cluster devnet`; update `declare_id!` + `Anchor.toml`, rebuild, redeploy). Record the program id in PINS.md. *(Done 2026-06-11: no `declare_id!` rewrite needed — the Task-4 keypair id `6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC` deployed as-is via `solana program deploy --use-rpc` on Helius devnet; 2.767 SOL. Details in PINS.md "Task 13".)*
 
-- [ ] **Step 2: `scripts/arena/init-devnet.ts`** — using the workspace IDL + an admin keypair from `ARENA_ADMIN_KEYPAIR` (JSON array env): init config (fee 6 / spread 5 / maint 500 / max_age 10 / bucket 15), init SOL market with the real SOLUSD feed address, init the two bots from Task 10's params, then delegate market + bots to the devnet ER (validator pubkey pinned). Idempotent: skip every account that already exists.
+- [x] **Step 2: `scripts/arena/init-devnet.ts`** — using the workspace IDL + an admin keypair from `ARENA_ADMIN_KEYPAIR` (JSON array env): init config (fee 6 / spread 5 / maint 500 / max_age 10 / bucket 15), init SOL market with the real SOLUSD feed address, init the two bots from Task 10's params, then delegate market + bots to the devnet ER (validator pubkey pinned). Idempotent: skip every account that already exists. *(Shipped with `ARENA_ADMIN_KEYPAIR_PATH` — a keypair FILE path defaulting to `~/.config/solana/id.json` — instead of a JSON-array env; simpler for the local admin wallet. Devnet personas: `scalper-v1` / `rider-v1`, utf8 zero-padded to 16 bytes.)*
 
-- [ ] **Step 3: `scripts/arena/tick-once.ts`** — build one `tick(0)` tx with `[marketState, feed]` + bots as remaining accounts, send via `new Connection(process.env.ARENA_ER_ENDPOINT)` with `skipPreflight: true` and the ER blockhash; print the resulting MarketState (decode `last_price`, head bucket) read back from the ER endpoint.
+- [x] **Step 3: `scripts/arena/tick-once.ts`** — build one `tick(0)` tx with `[marketState, feed]` + bots as remaining accounts, send via `new Connection(process.env.ARENA_ER_ENDPOINT)` with `skipPreflight: true` and the ER blockhash; print the resulting MarketState (decode `last_price`, head bucket) read back from the ER endpoint.
 
-- [ ] **Step 4: Run both; expected: tick lands, `last_price` is a live SOL price.**
+- [x] **Step 4: Run both; expected: tick lands, `last_price` is a live SOL price.** *(lastPrice $66.69, live; three ticks recorded in PINS.md.)*
 
 ```bash
 npx tsx --env-file=.env.local scripts/arena/init-devnet.ts
 npx tsx --env-file=.env.local scripts/arena/tick-once.ts
 ```
 
-- [ ] **Step 5: Add to `.env.example`**: `ARENA_PROGRAM_ID=`, `ARENA_ER_ENDPOINT=https://devnet.magicblock.app`, `ARENA_ADMIN_KEYPAIR=`, `ARENA_CRANK_KEYPAIR=`, `ARENA_CRANK_INTERVAL_MS=2000`, `ARENA_COMMIT_INTERVAL_MS=300000`, `DISABLE_ARENA_CRANK=`. Commit (`feat(arena): devnet deploy + init/smoke scripts`).
+- [x] **Step 5: Add to `.env.example`**: `ARENA_PROGRAM_ID=`, `ARENA_ER_ENDPOINT=https://devnet.magicblock.app`, `ARENA_ADMIN_KEYPAIR=`, `ARENA_CRANK_KEYPAIR=`, `ARENA_CRANK_INTERVAL_MS=2000`, `ARENA_COMMIT_INTERVAL_MS=300000`, `DISABLE_ARENA_CRANK=`. Commit (`feat(arena): devnet deploy + init/smoke scripts`).
 
 ---
 
