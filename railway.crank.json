@@ -1,0 +1,5 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": { "buildCommand": "echo 'arena-crank worker: no build phase (tsx runtime)'" },
+  "deploy": { "startCommand": "npm run arena:crank", "restartPolicyType": "ALWAYS" }
+}

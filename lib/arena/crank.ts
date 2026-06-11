@@ -26,6 +26,8 @@ const COMMIT_GAP_MS = safeMs(
 );
 const LEASE_RECHECK_MS = 30_000;
 const STARTUP_DELAY_MS = 5_000;
+/** Min gap between commit ATTEMPTS after a failure (success uses COMMIT_GAP). */
+const COMMIT_RETRY_MS = 60_000;
 const HOLDER = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
 
 /** ER compute headroom cap on remaining accounts per tick (spec §13 item 4). */
@@ -107,6 +109,7 @@ async function loop(injected?: CrankDeps): Promise<void> {
   let wasHolder = false;
   let lastLeaseCheckMs = 0;
   let lastCommitMs = 0;
+  let lastCommitAttemptMs = 0;
   let tickCount = 0;
   const warnedDropMarkets = new Set<number>();
 
@@ -167,13 +170,20 @@ async function loop(injected?: CrankDeps): Promise<void> {
         }
       }
 
-      if (shouldCommit(lastCommitMs, Date.now(), COMMIT_GAP_MS)) {
+      // Backoff on commit FAILURE too — without it a persistent failure
+      // (e.g. the sponsored-commit quota, PINS "commit quota" entry) retries
+      // every sweep and floods the log at ~25 errors/min.
+      if (
+        shouldCommit(lastCommitMs, Date.now(), COMMIT_GAP_MS) &&
+        shouldCommit(lastCommitAttemptMs, Date.now(), COMMIT_RETRY_MS)
+      ) {
+        lastCommitAttemptMs = Date.now();
         try {
           const sig = await deps.sendCommit();
           lastCommitMs = Date.now();
           console.log(`[arena] committed state to base layer: ${sig}`);
         } catch (err) {
-          console.error("[arena] commit failed:", err);
+          console.error("[arena] commit failed (next retry in 60s):", err);
         }
       }
     } catch (err) {
