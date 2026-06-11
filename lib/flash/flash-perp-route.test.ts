@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   activeTriggersOf: vi.fn(),
   recordFlashTailOpen: vi.fn(),
   confirmFlashTailOpen: vi.fn(),
+  findOpenFlashTailBet: vi.fn(),
+  confirmFlashTailClose: vi.fn(),
 }));
 
 vi.mock("@/lib/privy/server", () => ({
@@ -25,6 +27,8 @@ vi.mock("@/lib/users/ensure", () => ({
 vi.mock("@/lib/bets/flash-tail", () => ({
   recordFlashTailOpen: mocks.recordFlashTailOpen,
   confirmFlashTailOpen: mocks.confirmFlashTailOpen,
+  findOpenFlashTailBet: mocks.findOpenFlashTailBet,
+  confirmFlashTailClose: mocks.confirmFlashTailClose,
 }));
 
 vi.mock("@/lib/flash/perps", () => ({
@@ -113,6 +117,8 @@ describe("Flash perp routes", () => {
     });
     mocks.recordFlashTailOpen.mockResolvedValue("bet-1");
     mocks.confirmFlashTailOpen.mockResolvedValue(true);
+    mocks.findOpenFlashTailBet.mockResolvedValue(null);
+    mocks.confirmFlashTailClose.mockResolvedValue(true);
   });
 
   it("builds a user-signed Flash open transaction for $1 20x USDC perps", async () => {
@@ -495,6 +501,52 @@ describe("Flash perp routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       phase: "sent",
+      signature: "instant-sig",
+      betId: "bet-1",
+    });
+  });
+
+  it("returns the betId on close when an open flash-tail bet matches", async () => {
+    mocks.findOpenFlashTailBet.mockResolvedValue({ id: "bet-1" });
+    const response = await CLOSE(
+      postRequest("/api/flash/perp/close", {
+        market: "SOL",
+        side: "short",
+        walletAddress: "wallet-1",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.findOpenFlashTailBet).toHaveBeenCalledWith({
+      userId: "user-1",
+      market: "SOL",
+      side: "short",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sign-close",
+      betId: "bet-1",
+    });
+  });
+
+  it("confirms the close inline on the instant path and survives confirm failure", async () => {
+    mocks.findOpenFlashTailBet.mockResolvedValue({ id: "bet-1" });
+    mocks.confirmFlashTailClose.mockRejectedValueOnce(new Error("db down"));
+    const response = await CLOSE(
+      postRequest("/api/flash/perp/close", {
+        market: "SOL",
+        side: "short",
+        walletAddress: "wallet-1",
+        instant: true,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.confirmFlashTailClose).toHaveBeenCalledWith({
+      betId: "bet-1",
+      userId: "user-1",
+      signature: "instant-sig",
+      receiveUsdEstimate: 1.24,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sent-close",
       signature: "instant-sig",
       betId: "bet-1",
     });

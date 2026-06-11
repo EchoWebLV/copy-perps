@@ -9,6 +9,10 @@ import { normalizeFlashMarket } from "@/lib/flash/markets";
 import { signAndSendPrivySolanaTransaction } from "@/lib/privy/instant-solana";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
+import {
+  confirmFlashTailClose,
+  findOpenFlashTailBet,
+} from "@/lib/bets/flash-tail";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -70,6 +74,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
+  const tailBet = await findOpenFlashTailBet({
+    userId: user.id,
+    market,
+    side: body.side,
+  }).catch(() => null);
+
   try {
     const result = await getFlashPerpsService().close({
       trader: user.solanaPubkey,
@@ -82,9 +92,27 @@ export async function POST(request: Request) {
         walletAddress: user.solanaPubkey,
         transactionB64: result.transaction,
       });
+      if (tailBet) {
+        // Never let bookkeeping turn a landed close into a client error;
+        // the reconcile sweep verifies from chain later.
+        try {
+          await confirmFlashTailClose({
+            betId: tailBet.id,
+            userId: user.id,
+            signature: sent.signature,
+            receiveUsdEstimate: result.quote.receiveUsd ?? null,
+          });
+        } catch (err) {
+          console.error(
+            "[flash/perp/close] flash-tail confirm failed post-send:",
+            err,
+          );
+        }
+      }
       return NextResponse.json({
         phase: "sent-close",
         venue: "flash",
+        betId: tailBet?.id,
         signature: sent.signature,
         caip2: sent.caip2,
         quote: result.quote,
@@ -98,6 +126,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       phase: "sign-close",
       venue: "flash",
+      betId: tailBet?.id,
       transactionB64: result.transaction,
       quote: result.quote,
       position: result.position,
