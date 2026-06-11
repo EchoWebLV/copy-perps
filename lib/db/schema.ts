@@ -386,3 +386,36 @@ export const pulseComments = pgTable(
     ),
   }),
 );
+
+// One row per Autopilot run. The budget is the ABSOLUTE loss bound for the
+// session: the engine can never deploy more than what losses have left of
+// it. realizedPnlUsd is an opportunistic cache — the source of truth is the
+// session's bets rows (type 'flash-tail', meta.autopilotSessionId = id),
+// recomputed by lib/autopilot/sessions.ts#sessionStats each tick.
+export const autopilotSessions = pgTable(
+  "autopilot_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    budgetUsd: doublePrecision("budget_usd").notNull(),
+    tier: text("tier").notNull(), // 'cruise' | 'sweat' | 'degen'
+    status: text("status").notNull().default("active"), // 'active' | 'stopped' | 'exhausted' | 'target'
+    realizedPnlUsd: doublePrecision("realized_pnl_usd").notNull().default(0),
+    // Reserved for per-session tier overrides; v1 always writes null.
+    config: jsonb("config"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    lastTickAt: timestamp("last_tick_at", { withTimezone: true }),
+  },
+  (t) => ({
+    statusIdx: index("autopilot_sessions_status_idx").on(t.status),
+    userStartedIdx: index("autopilot_sessions_user_started_idx").on(
+      t.userId,
+      t.startedAt,
+    ),
+  }),
+);
