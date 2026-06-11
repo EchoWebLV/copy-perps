@@ -432,6 +432,7 @@ describe("Flash perp routes", () => {
       phase: "sign",
       betId: "bet-1",
     });
+    expect(mocks.confirmFlashTailOpen).not.toHaveBeenCalled();
   });
 
   it("does not touch the db when tail lineage is absent (Scalp path)", async () => {
@@ -473,6 +474,28 @@ describe("Flash perp routes", () => {
     });
     await expect(response.json()).resolves.toMatchObject({
       phase: "sent",
+      betId: "bet-1",
+    });
+  });
+
+  it("still returns sent when the inline confirm fails after the instant send", async () => {
+    mocks.confirmFlashTailOpen.mockRejectedValueOnce(new Error("db down"));
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+        instant: true,
+        tail: { sourceKind: "bot", botId: "pulse" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      phase: "sent",
+      signature: "instant-sig",
       betId: "bet-1",
     });
   });

@@ -195,11 +195,18 @@ export async function POST(request: Request) {
         transactionB64: result.transaction,
       });
       if (betId) {
-        await confirmFlashTailOpen({
-          betId,
-          userId: user.id,
-          signature: sent.signature,
-        });
+        // Never let bookkeeping turn a landed trade into a client error.
+        // On failure the row stays pending (reaped later) — losing the
+        // receipt beats telling the user a filled trade failed.
+        try {
+          await confirmFlashTailOpen({
+            betId,
+            userId: user.id,
+            signature: sent.signature,
+          });
+        } catch (err) {
+          console.error("[flash/perp] flash-tail confirm failed post-send:", err);
+        }
       }
       return NextResponse.json({
         phase: "sent",
