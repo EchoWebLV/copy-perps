@@ -512,6 +512,96 @@ before any public/mainnet exposure:
 - **Phase 1 EXIT: all checklist items green** (tests, live trade lifecycle, commit
   mirroring, no compute errors). Phase 1.5 (mainnet) unblocked pending real SOL.
 
+## magic_fee_vault commits (2026-06-12)
+
+### Incident that forced this
+
+**2026-06-11 ~21:45 sponsored-commit quota exhausted (nonce 10/10); commits
+failed ~1h; undelegate-redelegate cycle stalled on validator-side base-layer
+finalize (30+ min), arena paused; interim: hourly commits + redelegate.ts;
+permanent: this section.** Root cause: MagicBlock sponsors only 10 commits
+per delegated account (magic program error 0xa0000000 "current commit nonce
+10 reached the limit of 10"); 5-min commit cadence burned the quota in
+~50 min.
+
+### Design (shipped, local-ER verified; devnet deploy pending post-incident)
+
+`commit_state` now pays its own Magic intent bundles — no per-account quota
+(delegation.md "Option 2", mirrored from
+`magicblock-engine-examples/rewards-delegated-vrf`, the only in-repo user of
+the pattern):
+
+- **CrankPayer PDA** `["crank-payer"]` — a program-owned Borsh data account
+  (8 + 1 bytes, just the bump). The documented "delegated fee payer" is NOT
+  a system account: it must be program-owned so the `del` constraint can
+  delegate it (rewards-delegated-vrf's payer is its `reward_list` data PDA).
+  Lamports it holds at delegation time become its spendable ER balance.
+  Devnet PDA: `6TpDj4Z5h1v9MqFNpvSy4nYZFQB2Yrhgov6MKUpmveWS`.
+- **`init_crank_payer` / `delegate_crank_payer`** — admin-gated; delegation
+  requires the validator pinned via the first remaining account
+  (MissingValidator otherwise, same rule as market/bots). Pinning to the
+  SAME validator as the market matters: the fee vault commit_state derives
+  is the market-validator's vault, and the payer's ER balance only exists on
+  the validator it was delegated to.
+- **`commit_state` v2 accounts** (+3): `delegation_record` (market_state's,
+  `address =`-pinned via `ephemeral_rollups_sdk::pda::
+  delegation_record_pda_from_delegated_account`), `magic_fee_vault`
+  (writable; handler re-derives `["magic-fee-vault", validator]` under
+  `ephemeral_rollups_sdk::id()` from the record's bytes 8..40 —
+  DelegationRecord = [8-byte AccountDiscriminator=100][32 authority =
+  validator][...], verified in dlp-api 3.0.0 source — and requires equality,
+  InvalidFeeVault), `crank_payer` (writable UncheckedAccount, seeds-checked).
+  Builder: `.magic_fee_vault(...)` then `.commit(...)` then
+  `.build_and_invoke_signed(&[crank_payer_seeds])` — the payer signs via
+  seeds; er-sdk 0.14.3's `build()` forces the payer meta signer+writable, so
+  no `is_signer` patching needed (rewards-delegated-vrf's `as_signer`
+  workaround targets its CallHandler escrow_authority path, which we don't
+  use). Still permissionless: a spammer can drain the crank payer at the
+  per-commit fee rate (reviewed + accepted — persistence pauses, ER state
+  unharmed).
+- **Funding** — `scripts/arena/fund-crank-payer.ts` shuttles lamports to the
+  delegated payer via the Ephemeral SPL Token program's sponsored-lamports
+  flow (`lamportsDelegatedTransferIx`, ix discriminator 20, program
+  `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`): base-layer tx, fresh
+  32-byte salt per run (PDA `["lamports", payer, dest, salt]` — reuse
+  collides), destination must already be delegated. Pre-delegation a plain
+  SystemProgram.transfer works instead (what the local test does).
+  init-devnet.ts gained idempotent init+delegate steps for the payer.
+- **Crank** — lib/arena/crank-deps.ts derives the three PDAs client-side
+  (validator from `ARENA_ER_VALIDATOR`, default MAS1…zk57); the TS SDK's
+  `delegationRecordPdaFromDelegatedAccount` / `magicFeeVaultPdaFromValidator`
+  exist but the package only lives in arena-program/node_modules, so the
+  root derives by hand (seeds verified against SDK source — both PDAs live
+  under the DELEGATION program, `DELeG…aeSh`, which is also what
+  `ephemeral_rollups_sdk::id()` returns; the skill doc's "under the
+  ephemeral rollups SDK program ID" means exactly that id).
+- **undelegate_all** unchanged (admin-gated sponsored path is fine for the
+  rare undelegation).
+
+### Verification (2026-06-12)
+
+- `cargo test -p arena` 30 green; legacy suite **12 passing** (+ crank-payer
+  init + MissingValidator rejection); `anchor-1.0.2 build` clean — zero
+  stack-offset diagnostics (CrankPayer is 9 bytes).
+- Local ER harness (`scripts/test-delegation.sh`) **7/7**: init→fund (plain
+  base transfer pre-delegation)→delegate crank payer (owner → DELeG…),
+  bogus-vault commit REJECTED with InvalidFeeVault (raw-send + log assert —
+  anchor's sendAndConfirm mangles ER failures into "Unknown action
+  'undefined'", hence the raw pattern), fee-vault commit lands on base via
+  GetCommitmentSignature with base lastPrice == ER lastPrice, still
+  delegated.
+- NOT verified locally: actual lamport billing. The local ephemeral
+  validator accepted the fee-vault bundle but debited 0 lamports from the
+  crank payer (no fee schedule locally; the `["magic-fee-vault",
+  mAGicPQY…1mev]` vault account doesn't exist on the local base layer and
+  that was fine). Real per-commit cost + the >10-commit soak must be
+  measured on devnet post-incident, then size fund-crank-payer.ts top-ups
+  accordingly. Quota-lift behavior (the whole point) is likewise
+  devnet-only to prove.
+- IDL is a COMMITTED file now — `anchor build` regenerates
+  target/idl/arena.json; commit it together with any instruction change
+  (the crank loads it at runtime).
+
 ## Phase 2: live arena UI (2026-06-11 night)
 
 - Shipped: /arena page (roster + bot profile + decision tape + Arena nav tab),
