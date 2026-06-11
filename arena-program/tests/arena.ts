@@ -162,6 +162,85 @@ describe("arena", () => {
     assert.equal(rider.balanceMicro.toString(), START_BALANCE.toString());
   });
 
+  const botMetas = [scalperPda, riderPda].map((pubkey) => ({
+    pubkey,
+    isSigner: false,
+    isWritable: true,
+  }));
+
+  it("rejects a tick whose feed does not match the market config", async () => {
+    try {
+      await program.methods
+        .tick(0)
+        .accountsPartial({
+          config: configPda,
+          marketState: marketPda,
+          feed: configPda, // any existing account that is not the configured feed
+        })
+        .remainingAccounts(botMetas)
+        .rpc();
+      assert.fail("expected WrongFeed");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "WrongFeed");
+    }
+  });
+
+  it("ticks: folds the oracle price into the ring", async () => {
+    await program.methods
+      .tick(0)
+      .accountsPartial({
+        config: configPda,
+        marketState: marketPda,
+        feed: SOL_FEED,
+      })
+      .remainingAccounts(botMetas)
+      .rpc();
+
+    const ms = await program.account.marketState.fetch(marketPda);
+    assert.isTrue(ms.lastPrice.gt(new BN(0)), "lastPrice should be live");
+    assert.isTrue(ms.lastPublishTs.gt(new BN(0)));
+    assert.equal(ms.head, 0); // first bucket is the in-progress head
+    const bucket = ms.ring[0];
+    assert.equal(bucket.updates, 1);
+    assert.isTrue(bucket.open.eq(ms.lastPrice));
+    assert.isTrue(bucket.close.eq(ms.lastPrice));
+    assert.isTrue(bucket.startTs.gt(new BN(0)));
+  });
+
+  it("double tick: bucket updates advance, tape and seq stay untouched", async () => {
+    const msBefore = await program.account.marketState.fetch(marketPda);
+    await program.methods
+      .tick(0)
+      .accountsPartial({
+        config: configPda,
+        marketState: marketPda,
+        feed: SOL_FEED,
+      })
+      .remainingAccounts(botMetas)
+      .rpc();
+
+    const ms = await program.account.marketState.fetch(marketPda);
+    // The fixture price/publish_ts are static, so the fold lands in the same
+    // bucket: updates grows, head does not roll, price unchanged.
+    assert.equal(ms.head, msBefore.head);
+    assert.equal(
+      ms.ring[ms.head].updates,
+      msBefore.ring[msBefore.head].updates + 1,
+    );
+    assert.isTrue(ms.lastPrice.eq(msBefore.lastPrice));
+
+    // No complete candles yet (need MIN_STRAT_CANDLES) and no open positions,
+    // so neither bot may have taped anything. Conviction stays 0 in the tape
+    // by design (not modeled in Phase 1).
+    for (const pda of [scalperPda, riderPda]) {
+      const bot = await program.account.bot.fetch(pda);
+      assert.equal(bot.seq.toString(), "0");
+      assert.equal(bot.tapeHead, 0);
+      assert.equal(bot.trades, 0);
+      assert.isTrue(bot.positions.every((p: { active: number }) => p.active === 0));
+    }
+  });
+
   it("rejects bot params outside the domain", async () => {
     try {
       await program.methods

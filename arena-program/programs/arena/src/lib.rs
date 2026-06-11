@@ -88,6 +88,52 @@ pub mod arena {
         bot.bump = ctx.bumps.bot;
         Ok(())
     }
+
+    /// Permissionless crank tick for one market: read the oracle feed, fold
+    /// the price into the candle ring, then for each Bot in
+    /// remaining_accounts run maintenance (liq / favorable / max-hold exits)
+    /// and the open decision. Fail-closed: a stale or malformed feed is a
+    /// successful no-op — the arena pauses honestly instead of trading on
+    /// bad data. Tape entries record conviction 0 (conviction is not modeled
+    /// in Phase 1).
+    pub fn tick(ctx: Context<Tick>, market_id: u8) -> Result<()> {
+        let cfg = &ctx.accounts.config;
+        let mcfg = cfg
+            .markets
+            .iter()
+            .find(|m| m.active && m.market_id == market_id)
+            .ok_or(ArenaError::UnknownMarket)?;
+        require_keys_eq!(ctx.accounts.feed.key(), mcfg.feed, ArenaError::WrongFeed);
+
+        let now = Clock::get()?.unix_timestamp;
+        let read = {
+            let data = ctx.accounts.feed.try_borrow_data()?;
+            oracle::read_feed(&data, now, cfg.max_age_secs)
+        };
+        let Some(read) = read else {
+            return Ok(()); // stale/malformed feed → no-op success
+        };
+
+        let ms = &mut *ctx.accounts.market_state.load_mut()?;
+        candles::fold_price(ms, read.price, read.publish_ts, cfg.bucket_secs);
+
+        // Bots ride in remaining_accounts. AccountLoader::try_from checks
+        // owner + discriminator; load_mut additionally requires the account
+        // writable and maps the bytes in place — zero_copy means there is no
+        // stack deserialize frame and no `.exit()` re-serialize: writes land
+        // directly in account memory when the RefMut drops.
+        for acc in ctx.remaining_accounts {
+            let loader = AccountLoader::<Bot>::try_from(acc)?;
+            let bot = &mut *loader.load_mut()?;
+            paper::maintain(bot, cfg, market_id, read.price, now);
+            let span = bot.params.read_span as usize;
+            let candles = candles::complete_candles(ms, span, MIN_STRAT_CANDLES);
+            if let Some(side) = strategy::decide_ring_momentum(&candles, &bot.params) {
+                paper::try_open(bot, cfg, market_id, side, read.price, now);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -157,6 +203,23 @@ pub struct InitBot<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(market_id: u8)]
+pub struct Tick<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(
+        mut,
+        seeds = [MARKET_SEED, &[market_id]],
+        bump = market_state.load()?.bump
+    )]
+    pub market_state: AccountLoader<'info, MarketState>,
+    /// CHECK: handler enforces address == config.markets[market_id].feed
+    /// (require_keys_eq → WrongFeed); oracle::read_feed parses the data
+    /// defensively and fails closed on anything malformed.
+    pub feed: UncheckedAccount<'info>,
 }
 
 #[error_code]
