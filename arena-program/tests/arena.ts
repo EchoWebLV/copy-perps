@@ -241,6 +241,26 @@ describe("arena", () => {
     }
   });
 
+  it("rejects delegation without a pinned ER validator", async () => {
+    // The validator pin rides as the first remaining account; forgetting it
+    // must fail loudly (MissingValidator) instead of delegating unpinned.
+    // The require! fires before the delegation CPI, so this asserts on the
+    // legacy validator even though no delegation program is deployed here.
+    try {
+      await program.methods
+        .delegateMarket(0)
+        .accountsPartial({
+          config: configPda,
+          admin: provider.wallet.publicKey,
+          marketState: marketPda,
+        })
+        .rpc();
+      assert.fail("expected MissingValidator");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "MissingValidator");
+    }
+  });
+
   it("rejects bot params outside the domain", async () => {
     try {
       await program.methods

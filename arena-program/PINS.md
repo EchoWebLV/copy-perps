@@ -445,3 +445,47 @@ were already proven by the local suites.
 Tick CU note: tick 1 had 2 incomplete buckets; strategy evaluation
 (MIN_STRAT_CANDLES=12) stays a no-op until the crank (Task 14) keeps the ring
 warm for ≥3 min (scalper) / ≥12 min (rider).
+
+## Known pre-mainnet gates (review follow-ups, recorded 2026-06-11)
+
+Deliberately NOT fixed in the Task-13.5 review patch; both must be resolved
+before any public/mainnet exposure:
+
+- **Permissionless tick spam-aging / fee-bleed griefing (review Issue 2).**
+  Anyone can call `tick` in a tight loop: each call is a successful no-op (or
+  same-bucket fold) that still ages positions via `ticks_held` and bleeds the
+  crank's expected cadence assumptions (max_hold_ticks personas decay on
+  attacker-paid ticks). The cheap floor is a no-op guard
+  `if read.publish_ts <= ms.last_publish_ts { return Ok(()); }` — deliberately
+  NOT applied now because the static-fixture double-tick test (and the local
+  suites' static publish_ts) depend on same-ts re-folds; apply together with
+  test updates before public/mainnet.
+- **`commit_state` trust dependency (review Issue 3 sibling, per review).**
+  `commit_state` is permissionless and relies on MagicBlock's delegation
+  records binding commits to the owning program — i.e. the magic program
+  rejecting commits of accounts not delegated from this program. That is a
+  trust dependency on MagicBlock's delegation-program enforcement, not
+  something the arena verifies itself.
+
+## Task 13.5: review patch — devnet upgraded in place (2026-06-11)
+
+- Patches: candles.rs `fold_price` gap-loop clamp (`start = start.max(target -
+  RING_LEN as i64 * bucket_secs)` — a multi-day publish_ts gap now reseeds the
+  full ring in ≤ RING_LEN iterations instead of one iteration per skipped
+  bucket, which blew the ER compute cap stickily) + lib.rs mandatory validator
+  pin in `delegate_market`/`delegate_bot` (`MissingValidator` error when the
+  first remaining account is absent; silent unpinned delegation no longer
+  possible).
+- Tests: `cargo test -p arena` 30 green (29 + `multi_day_gap_clamps_to_
+  ring_len_and_recovers`); legacy suite 10 green (9 + "rejects delegation
+  without a pinned ER validator" — the require! fires before the delegation
+  CPI, so it asserts on solana-test-validator with no delegation program).
+  `anchor-1.0.2 build`: still zero stack-offset diagnostics.
+- New binary 398,712 B > the 396,960 B programdata max len, so the upgrade
+  needed `solana program extend 6YSS… 2048` first (programdata now 399,008 B).
+- Upgrade sig (same wallet/Helius-devnet/--use-rpc pattern as Task 13):
+  `2wdV4kB6sYz6pSnRsvBaqhAw6MzJiLwa5UXQ9gYUXZtz7aoa1ySqwjJ9CStnkKET82wMREbrszHQvmH4mVxhbgUy`
+  (slot 468744327). Net cost 0.01624 SOL (extend rent + fees; the deploy
+  buffer rent was refunded on close), wallet 7.846 → 7.830 SOL.
+- Post-upgrade smoke (tick-once.ts ×2 via the devnet ER): live prices
+  $67.063 → $67.030, head 56 → 57 (15s bucket rolled), updates/pathLen sane.

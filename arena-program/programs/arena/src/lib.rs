@@ -143,8 +143,13 @@ pub mod arena {
 
     /// Base-layer instruction: delegate the MarketState PDA to the ER.
     /// Admin-gated. The ER validator identity is pinned via the first
-    /// remaining account (spec gotcha: never delegate without pinning).
+    /// remaining account (spec gotcha: never delegate without pinning) —
+    /// MANDATORY: forgetting it must fail loudly, not delegate unpinned.
     pub fn delegate_market(ctx: Context<DelegateMarket>, market_id: u8) -> Result<()> {
+        require!(
+            !ctx.remaining_accounts.is_empty(),
+            ArenaError::MissingValidator
+        );
         ctx.accounts.delegate_market_state(
             &ctx.accounts.admin,
             &[MARKET_SEED, &[market_id]],
@@ -157,7 +162,12 @@ pub mod arena {
     }
 
     /// Base-layer instruction: delegate one Bot PDA to the ER. Admin-gated.
+    /// Validator pin via the first remaining account is mandatory, as above.
     pub fn delegate_bot(ctx: Context<DelegateBot>, persona_id: [u8; 16]) -> Result<()> {
+        require!(
+            !ctx.remaining_accounts.is_empty(),
+            ArenaError::MissingValidator
+        );
         ctx.accounts.delegate_bot_state(
             &ctx.accounts.admin,
             &[BOT_SEED, &persona_id],
@@ -383,4 +393,6 @@ pub enum ArenaError {
     UnknownMarket,
     #[msg("feed account does not match the market config")]
     WrongFeed,
+    #[msg("delegation requires the ER validator pinned as the first remaining account")]
+    MissingValidator,
 }

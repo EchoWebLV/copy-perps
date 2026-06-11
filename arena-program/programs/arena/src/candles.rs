@@ -31,6 +31,15 @@ pub fn fold_price(ms: &mut MarketState, price: u64, publish_ts: i64, bucket_secs
         let mut start = cur.start_ts;
         let prev_close = cur.close;
         let target = bucket_start(publish_ts, bucket_secs);
+        // Gap clamp (review Issue 1): without it, a multi-day publish_ts gap
+        // runs the loop once per skipped bucket, blows the ER compute cap and
+        // bricks tick stickily (every retry faces a bigger gap). Writes more
+        // than RING_LEN buckets back would be overwritten before they could
+        // ever be read, so fast-forwarding the cursor is semantics-free: the
+        // loop runs at most RING_LEN times, fully reseeding the ring flat at
+        // prev_close. Both operands are bucket-aligned, so the clamped start
+        // stays on the bucket grid.
+        start = start.max(target - RING_LEN as i64 * bucket_secs);
         let mut head_now = ms.head as usize;
         while start < target {
             start += bucket_secs;
@@ -209,6 +218,65 @@ mod tests {
         assert_eq!(b.start_ts, 1035);
         assert_eq!(b.updates, 1);
         assert_eq!(b.path_len, 10);
+    }
+
+    #[test]
+    fn multi_day_gap_clamps_to_ring_len_and_recovers() {
+        let mut ms = fresh_ms();
+        fold_price(&mut ms, 100, 1000, BUCKET_SECS); // bucket [990, 1005), head 0
+
+        // 10-day gap: 57_600 skipped buckets. Unclamped this loops 57k times
+        // (ER compute death); clamped it must run exactly RING_LEN times.
+        let ts2 = 1000 + 10 * 24 * 3600; // 865_000
+        fold_price(&mut ms, 90, ts2, BUCKET_SECS);
+        let target = ts2 - ts2.rem_euclid(BUCKET_SECS); // 864_990
+
+        // RING_LEN iterations wrap the head all the way around: head is back
+        // at 0 and points at the bucket holding the new price.
+        assert_eq!(ms.head, 0);
+        let b = &ms.ring[ms.head as usize];
+        assert_eq!(b.start_ts, target);
+        assert_eq!(b.open, 100); // seeded from prev close
+        assert_eq!(b.high, 100);
+        assert_eq!(b.low, 90);
+        assert_eq!(b.close, 90);
+        assert_eq!(b.updates, 1);
+        assert_eq!(b.path_len, 10);
+        assert_eq!(ms.last_price, 90);
+        assert_eq!(ms.last_publish_ts, ts2);
+
+        // Every other slot was reseeded flat at the prev close with
+        // contiguous, bucket-aligned start_ts walking back from target —
+        // the pre-gap [990, 1005) bucket is gone.
+        for i in 1..RING_LEN {
+            let idx = (ms.head as usize + RING_LEN - i) % RING_LEN;
+            let g = &ms.ring[idx];
+            assert_eq!(g.start_ts, target - i as i64 * BUCKET_SECS);
+            assert_eq!(g.open, 100);
+            assert_eq!(g.high, 100);
+            assert_eq!(g.low, 100);
+            assert_eq!(g.close, 100);
+            assert_eq!(g.updates, 0);
+            assert_eq!(g.path_len, 0);
+        }
+
+        // A subsequent normal fold lands in the same bucket...
+        fold_price(&mut ms, 95, ts2 + 2, BUCKET_SECS); // 865_002 < 865_005
+        assert_eq!(ms.head, 0);
+        let b = &ms.ring[0];
+        assert_eq!(b.close, 95);
+        assert_eq!(b.updates, 2);
+        assert_eq!(b.path_len, 15); // 10 + |95 - 90|
+
+        // ...and the next bucket boundary rolls the head by exactly one.
+        fold_price(&mut ms, 96, ts2 + 5, BUCKET_SECS); // 865_005 ⇒ next bucket
+        assert_eq!(ms.head, 1);
+        let nb = &ms.ring[1];
+        assert_eq!(nb.start_ts, target + BUCKET_SECS);
+        assert_eq!(nb.open, 95);
+        assert_eq!(nb.close, 96);
+        assert_eq!(nb.updates, 1);
+        assert_eq!(nb.path_len, 1);
     }
 
     #[test]
