@@ -427,6 +427,20 @@ places**: the bot resolver tick ([lib/bots/resolver.ts:301](../lib/bots/resolver
 and the event-driven whale source monitor
 ([lib/whales/source-monitor.ts:300](../lib/whales/source-monitor.ts)).
 
+**Flash tail persistence (June 2026):** Flash tails are no longer write-less.
+`TailModal` sends whale/bot lineage in the `/api/flash/perp` body; the route
+records a `flash-tail` bets row (meta in
+[lib/bets/flash-tail-meta.ts](../lib/bets/flash-tail-meta.ts), lifecycle in
+[lib/bets/flash-tail.ts](../lib/bets/flash-tail.ts)); the client confirms via
+`/api/flash/perp/confirm` and `/api/flash/perp/close/confirm`. Every open/close
+also writes a `fills` row (`quote-estimate` at confirm time). The portfolio
+attributes live Flash positions back to their bet by (market, side), so tail
+rows survive reload with whale/bot names + betId. A reconcile sweep
+([lib/bets/flash-reconcile.ts](../lib/bets/flash-reconcile.ts)) rides the whale
+ticker tick: reaps stale pendings, verifies signatures on-chain, upgrades
+estimate fills/proceeds to chain truth via USDC balance deltas, reverts failed
+closes, and kills failed opens. Scalp-game trades (no lineage) are untouched.
+
 ---
 
 ## 8. Database (Drizzle / Neon)
