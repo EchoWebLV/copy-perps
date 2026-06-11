@@ -511,3 +511,18 @@ before any public/mainnet exposure:
   0.6%@1.4x-activity breakout occurred; they are deliberately picky.
 - **Phase 1 EXIT: all checklist items green** (tests, live trade lifecycle, commit
   mirroring, no compute errors). Phase 1.5 (mainnet) unblocked pending real SOL.
+
+## Phase 2: live arena UI (2026-06-11 night)
+
+- Shipped: /arena page (roster + bot profile + decision tape + Arena nav tab),
+  client byte-decoders for the zero-copy layouts (53 vitest green incl. PDA
+  derivations asserted against this file's Task 13 records), live data hook
+  (REST seed → ER ws → 4s visible-poll fallback).
+- **Spec §13 item 3 RESOLVED empirically: `onAccountChange` ws subscriptions
+  WORK against https://devnet.magicblock.app directly** — the arena page runs
+  in "LIVE" (ws) mode in the browser; the poll fallback exists but did not
+  trigger. Verified in-browser 2026-06-11 ~22:35 EEST (SOL mark ticking live).
+- Browser-verified end-to-end: invite gate → /arena → live cards ($1,000
+  equity, flat state) → profile modal (stats grid, empty-tape copy, Solscan
+  devnet links to the real bot PDA + program). Production build green with
+  /arena in the route table.
