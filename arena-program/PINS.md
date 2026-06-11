@@ -489,3 +489,25 @@ before any public/mainnet exposure:
   buffer rent was refunded on close), wallet 7.846 → 7.830 SOL.
 - Post-upgrade smoke (tick-once.ts ×2 via the devnet ER): live prices
   $67.063 → $67.030, head 56 → 57 (15s bucket rolled), updates/pathLen sane.
+
+## Task 15: devnet soak + Phase 1 exit (2026-06-11 evening)
+
+- **Soak**: crank (lib/arena/crank-deps.ts wiring) ran 700+ ticks with ZERO failures
+  across ~1h+, commits landing every 5 min (sample sigs in /tmp/arena-crank-soak.log
+  history: JjD4QaWm…G6Y, 2XY5V9KG…ot6y, …). Base-layer commit mirroring verified twice
+  (head 40 → 60 across consecutive commits). Rode through a live program upgrade
+  (55895a5) with no failed ticks. ~5-7 oracle prints folded per 15s bucket.
+- **First autonomous on-chain trade (exit-checklist evidence)**: test-aggro-v1
+  (PDA 9rzUs2NA2kdzNU8eqikhApMo49CqQBB65cYZabi5PKZ4, breakout 5bps / activity 1.0x /
+  no trend filter / 5x / maxHold 20 ticks):
+  OPEN_SHORT $100 stake @ $66.81305105 (2026-06-11T18:49:33Z) →
+  EXIT_MAX_HOLD @ $66.85149969 (18:50:41Z, 68s hold).
+  Books: grossPnl -$0.587733, fees $0.600000 (= 2 × 6bps × $500 notional exactly),
+  balance $999.112267, trades 1, wins 0, seq 2, both tape entries decoded from the
+  ER. Full open→close lifecycle with real price action, spread, fees, honest loss.
+- **Roster reverted** to scalper-v1,rider-v1 post-evidence (test bot stays on-chain,
+  undelegation optional later); crank restarted.
+- **Launch personas** (scalper-v1/rider-v1): zero trades after 1h+ — correct, no
+  0.6%@1.4x-activity breakout occurred; they are deliberately picky.
+- **Phase 1 EXIT: all checklist items green** (tests, live trade lifecycle, commit
+  mirroring, no compute errors). Phase 1.5 (mainnet) unblocked pending real SOL.
