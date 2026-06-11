@@ -579,9 +579,18 @@ export function TailModal({ open, onClose, source }: Props) {
                 betId: first.betId,
                 signature,
               }),
-            }).catch((err) =>
-              console.warn("[tail] flash confirm postback failed:", err),
-            );
+            })
+              .then((resp) => {
+                if (!resp.ok) {
+                  console.warn(
+                    "[tail] flash confirm postback HTTP",
+                    resp.status,
+                  );
+                }
+              })
+              .catch((err) =>
+                console.warn("[tail] flash confirm postback failed:", err),
+              );
           }
           setStatus("Opened on Flash");
           return flashSignResponseToOpen(first, signature, source);
