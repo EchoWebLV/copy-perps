@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { bets, users } from "@/lib/db/schema";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { enrichBet } from "@/lib/positions/enrich";
+import { closedFlashTailCopyRows } from "@/lib/positions/flash-tail-closed";
 import {
   buildPortfolioSummary,
   emptyPortfolioPayload,
@@ -38,17 +39,22 @@ async function fallbackPayloadForUser(
     .where(
       and(
         eq(bets.userId, userId),
-        inArray(bets.status, ["pending", "confirmed", "closed"]),
+        // closed-external: flash-tail whose position died on-chain without a
+        // close postback (reconcile sweep) — renders as closed history.
+        inArray(bets.status, ["pending", "confirmed", "closed", "closed-external"]),
       ),
     )
     .orderBy(desc(bets.createdAt));
+  // flash-tail bets never go through legacy enrichment (mirrors the live
+  // portfolio route); their closed history renders as copy rows instead.
+  const legacyBets = userBets.filter((b) => b.type !== "flash-tail");
   const positions = await Promise.all(
-    userBets.map((bet) => enrichBet(bet, userPubkey)),
+    legacyBets.map((bet) => enrichBet(bet, userPubkey)),
   );
 
   return {
     positions,
-    copyRows: [],
+    copyRows: closedFlashTailCopyRows(userBets),
     pacificaAccount: null,
     walletBalance: null,
   };

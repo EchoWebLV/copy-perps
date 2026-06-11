@@ -2,6 +2,7 @@ import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { Connection } from "@solana/web3.js";
 import { db } from "@/lib/db";
 import { bets, fills } from "@/lib/db/schema";
+import { getFlashPerpsService } from "@/lib/flash/perps";
 import {
   parseFlashTailMeta,
   type FlashTailMeta,
@@ -10,6 +11,14 @@ import {
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const STALE_PENDING_MS = 5 * 60_000;
 const BATCH = 10;
+// A landed tx is visible to getTransaction within seconds and a dropped
+// blockhash expires in ~2 minutes — an open sig still unfindable this long
+// after the bet was created never executed.
+const OPEN_SIG_MAX_AGE_MS = 30 * 60_000;
+// Don't liveness-check a tail until the open has had ample time to settle
+// and show up in positionsOf.
+const EXTERNAL_CLOSE_MIN_AGE_MS = 15 * 60_000;
+const LIVENESS_BATCH = 10;
 
 const RPC =
   process.env.HELIUS_RPC_URL ??
@@ -52,8 +61,11 @@ type ReconcileBet = {
   userId: string;
   status: string;
   amountUsdc: number;
+  createdAt: Date;
   meta: FlashTailMeta;
 };
+
+type LivePositionKey = { market: string; side: "long" | "short" };
 
 type ChainTruth = {
   betId: string;
@@ -67,11 +79,35 @@ type ChainTruth = {
 
 export type ReconcileDeps = {
   listBetsToReconcile: () => Promise<ReconcileBet[]>;
+  listLivenessCandidates: (olderThan: Date) => Promise<ReconcileBet[]>;
   reapStalePending: () => Promise<number>;
   getTx: (sig: string) => Promise<{ meta: TxMetaLike | null } | null>;
+  getLivePositions: (walletAddress: string) => Promise<LivePositionKey[]>;
   applyChainTruth: (truth: ChainTruth) => Promise<void>;
+  markClosedExternal: (args: {
+    betId: string;
+    meta: FlashTailMeta;
+    nowIso: string;
+  }) => Promise<void>;
   now: () => Date;
 };
+
+function toReconcileBets(rows: (typeof bets.$inferSelect)[]): ReconcileBet[] {
+  const out: ReconcileBet[] = [];
+  for (const row of rows) {
+    const meta = parseFlashTailMeta(row.meta);
+    if (!meta) continue;
+    out.push({
+      id: row.id,
+      userId: row.userId,
+      status: row.status,
+      amountUsdc: row.amountUsdc,
+      createdAt: row.createdAt,
+      meta,
+    });
+  }
+  return out;
+}
 
 function defaultDeps(): ReconcileDeps {
   const conn = new Connection(RPC, "confirmed");
@@ -104,19 +140,29 @@ function defaultDeps(): ReconcileDeps {
         // BATCH window forever.
         .orderBy(desc(bets.createdAt))
         .limit(BATCH);
-      const out: ReconcileBet[] = [];
-      for (const row of rows) {
-        const meta = parseFlashTailMeta(row.meta);
-        if (!meta) continue;
-        out.push({
-          id: row.id,
-          userId: row.userId,
-          status: row.status,
-          amountUsdc: row.amountUsdc,
-          meta,
-        });
-      }
-      return out;
+      return toReconcileBets(rows);
+    },
+    async listLivenessCandidates(olderThan: Date) {
+      const rows = await db
+        .select()
+        .from(bets)
+        .where(
+          and(
+            eq(bets.type, "flash-tail"),
+            eq(bets.status, "confirmed"),
+            // Only chain-verified opens: the position provably existed, so
+            // its absence now means it died externally. Unverified opens are
+            // the signature-verify queue's job (failed if the tx never lands).
+            sql`${bets.meta} ->> 'reconciledAt' IS NOT NULL`,
+            lt(bets.createdAt, olderThan),
+          ),
+        )
+        // Random sample per sweep: live positions never leave this set, so
+        // any deterministic order would let the same rows camp in the
+        // LIVENESS_BATCH window and starve the rest.
+        .orderBy(sql`random()`)
+        .limit(LIVENESS_BATCH);
+      return toReconcileBets(rows);
     },
     async reapStalePending() {
       const cutoff = new Date(Date.now() - STALE_PENDING_MS);
@@ -139,6 +185,25 @@ function defaultDeps(): ReconcileDeps {
         commitment: "confirmed",
       });
       return tx ? { meta: tx.meta } : null;
+    },
+    async getLivePositions(walletAddress: string) {
+      const positions = await getFlashPerpsService().positionsOf(walletAddress);
+      return positions.map((p) => ({ market: p.symbol, side: p.side }));
+    },
+    async markClosedExternal({ betId, meta, nowIso }) {
+      // No proceeds, no fill: we know the position is gone but not what it
+      // paid out — stamping a guess here is exactly the corruption this
+      // status exists to prevent.
+      await db
+        .update(bets)
+        .set({
+          status: "closed-external",
+          closedAt: new Date(nowIso),
+          meta: { ...meta, closeReason: "external" },
+        })
+        // CAS: a manual close postback landing between the liveness read and
+        // this write wins — it carries the real signature and proceeds.
+        .where(and(eq(bets.id, betId), eq(bets.status, "confirmed")));
     },
     async applyChainTruth(truth: ChainTruth) {
       if (truth.txFailed) {
@@ -245,11 +310,12 @@ function defaultDeps(): ReconcileDeps {
 export async function runFlashReconcileSweep(args?: {
   timeBoxMs?: number;
   deps?: ReconcileDeps;
-}): Promise<{ checked: number; reaped: number }> {
+}): Promise<{ checked: number; reaped: number; externalized: number }> {
   const timeBoxMs = args?.timeBoxMs ?? 10_000;
   const deps = args?.deps ?? defaultDeps();
   const deadline = Date.now() + timeBoxMs;
-  const nowIso = deps.now().toISOString();
+  const now = deps.now();
+  const nowIso = now.toISOString();
 
   const reaped = await deps.reapStalePending();
 
@@ -271,7 +337,28 @@ export async function runFlashReconcileSweep(args?: {
       console.warn("[flash-reconcile] getTransaction failed:", err);
       continue;
     }
-    if (!tx?.meta) continue; // not yet visible; retry next sweep
+    if (!tx?.meta) {
+      // Not yet visible; retry next sweep — except an open past the age
+      // cutoff, where absence IS the chain truth: the tx never landed, and
+      // without a cutoff the row retries every sweep forever and camps in
+      // the BATCH window.
+      if (
+        action === "open" &&
+        now.getTime() - bet.createdAt.getTime() > OPEN_SIG_MAX_AGE_MS
+      ) {
+        checked += 1;
+        await deps.applyChainTruth({
+          betId: bet.id,
+          action,
+          txSig: sig,
+          usdcDelta: null,
+          txFailed: true,
+          meta: bet.meta,
+          nowIso,
+        });
+      }
+      continue;
+    }
 
     checked += 1;
     const txFailed = tx.meta.err != null;
@@ -288,5 +375,39 @@ export async function runFlashReconcileSweep(args?: {
     });
   }
 
-  return { checked, reaped };
+  // Liveness pass: a confirmed tail whose verified position no longer shows
+  // up in positionsOf died externally (liquidation, TP/SL trigger, lost close
+  // postback). Left 'confirmed', it mis-attributes the next Scalp open on the
+  // same (market, side) and that position's close stamps it with wrong
+  // proceeds — expire it instead.
+  let externalized = 0;
+  const livenessCutoff = new Date(now.getTime() - EXTERNAL_CLOSE_MIN_AGE_MS);
+  const livenessCandidates = await deps.listLivenessCandidates(livenessCutoff);
+  const positionsByWallet = new Map<string, LivePositionKey[] | null>();
+  for (const bet of livenessCandidates) {
+    if (Date.now() > deadline) break;
+
+    let positions = positionsByWallet.get(bet.meta.walletAddress);
+    if (positions === undefined) {
+      try {
+        positions = await deps.getLivePositions(bet.meta.walletAddress);
+      } catch (err) {
+        console.warn("[flash-reconcile] live position fetch failed:", err);
+        positions = null;
+      }
+      positionsByWallet.set(bet.meta.walletAddress, positions);
+    }
+    // Unreadable ≠ dead: only a successful read may expire a bet.
+    if (positions === null) continue;
+
+    const alive = positions.some(
+      (p) => p.market === bet.meta.market && p.side === bet.meta.side,
+    );
+    if (alive) continue;
+
+    await deps.markClosedExternal({ betId: bet.id, meta: bet.meta, nowIso });
+    externalized += 1;
+  }
+
+  return { checked, reaped, externalized };
 }

@@ -265,12 +265,22 @@ export default function PortfolioPage() {
       }),
     [copyRows, liveMarks],
   );
+  // Closed copy rows (settled flash-tail bets) belong in the closed ledger,
+  // not in open holdings or open value.
+  const openCopyRows = useMemo(
+    () => liveCopyRows.filter((row) => row.liveStatus !== "closed"),
+    [liveCopyRows],
+  );
+  const closedCopyRows = useMemo(
+    () => liveCopyRows.filter((row) => row.liveStatus === "closed"),
+    [liveCopyRows],
+  );
 
   const legacyPositionsValue = openPositions.reduce(
     (sum, p) => sum + (p.currentValueUsdc ?? p.amountUsdc),
     0,
   );
-  const copyRowsValue = liveCopyRows.reduce((sum, row) => {
+  const copyRowsValue = openCopyRows.reduce((sum, row) => {
     if (row.stakeUsdc === null) {
       const marginValue =
         row.marginUsd === null ? 0 : row.marginUsd + (row.pnlUsd ?? 0);
@@ -280,11 +290,12 @@ export default function PortfolioPage() {
       row.unrealizedPnlPct === null ? 1 : 1 + row.unrealizedPnlPct / 100;
     return sum + Math.max(0, row.stakeUsdc * liveMultiplier);
   }, 0);
-  const openHoldingCount = openPositions.length + liveCopyRows.length;
+  const openHoldingCount = openPositions.length + openCopyRows.length;
+  const closedHoldingCount = closedPositions.length + closedCopyRows.length;
 
   const totalCost =
     openPositions.reduce((sum, p) => sum + p.amountUsdc, 0) +
-    liveCopyRows.reduce(
+    openCopyRows.reduce(
       (sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0),
       0,
     );
@@ -339,11 +350,18 @@ export default function PortfolioPage() {
   // proceeds count — a closed position whose proceeds haven't been
   // recorded yet would otherwise read as a fabricated 100% loss.
   const settledClosed = closedPositions.filter((p) => p.proceedsUsdc != null);
-  const closedCost = settledClosed.reduce((sum, p) => sum + p.amountUsdc, 0);
-  const closedProceeds = settledClosed.reduce(
-    (sum, p) => sum + (p.proceedsUsdc ?? 0),
-    0,
+  const settledClosedCopyRows = closedCopyRows.filter(
+    (row) => row.stakeUsdc !== null && row.pnlUsd !== null,
   );
+  const closedCost =
+    settledClosed.reduce((sum, p) => sum + p.amountUsdc, 0) +
+    settledClosedCopyRows.reduce((sum, row) => sum + (row.stakeUsdc ?? 0), 0);
+  const closedProceeds =
+    settledClosed.reduce((sum, p) => sum + (p.proceedsUsdc ?? 0), 0) +
+    settledClosedCopyRows.reduce(
+      (sum, row) => sum + (row.stakeUsdc ?? 0) + (row.pnlUsd ?? 0),
+      0,
+    );
   const realizedPnl = closedProceeds - closedCost;
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
@@ -538,14 +556,14 @@ export default function PortfolioPage() {
                 />
                 <PortfolioSummaryCard
                   label="Closed"
-                  value={String(closedPositions.length)}
+                  value={String(closedHoldingCount)}
                   detail={
-                    closedPositions.length > 0
+                    closedHoldingCount > 0
                       ? formatSignedUsd(realizedPnl)
                       : "No exits"
                   }
                   tone={
-                    closedPositions.length === 0
+                    closedHoldingCount === 0
                       ? undefined
                       : realizedPnl >= 0
                         ? "up"
@@ -562,7 +580,7 @@ export default function PortfolioPage() {
                   [
                     ["wallet", "Wallet", 1, WalletCards],
                     ["open", "Open", openHoldingCount, Activity],
-                    ["closed", "Closed", closedPositions.length, History],
+                    ["closed", "Closed", closedHoldingCount, History],
                   ] as const
                 ).map(([key, label, count, Icon]) => {
                   const active = activeTab === key;
@@ -621,7 +639,7 @@ export default function PortfolioPage() {
                   <OpenPositionsPanel
                     positions={positions}
                     openPositions={openPositions}
-                    copyRows={liveCopyRows}
+                    copyRows={openCopyRows}
                     openHoldingCount={openHoldingCount}
                     positionsValue={positionsValue}
                     positionsPnl={positionsPnl}
@@ -634,6 +652,7 @@ export default function PortfolioPage() {
                   <ClosedPositionsPanel
                     positions={positions}
                     closedPositions={closedPositions}
+                    closedCopyRows={closedCopyRows}
                     closedCost={closedCost}
                     realizedPnl={realizedPnl}
                     realizedPnlPct={realizedPnlPct}
@@ -918,6 +937,7 @@ function OpenPositionsPanel({
 function ClosedPositionsPanel({
   positions,
   closedPositions,
+  closedCopyRows,
   closedCost,
   realizedPnl,
   realizedPnlPct,
@@ -925,27 +945,41 @@ function ClosedPositionsPanel({
 }: {
   positions: PortfolioPosition[] | null;
   closedPositions: PortfolioPosition[];
+  closedCopyRows: CopyRowData[];
   closedCost: number;
   realizedPnl: number;
   realizedPnlPct: number;
   refreshPortfolio: () => void | Promise<void>;
 }) {
+  const closedCount = closedPositions.length + closedCopyRows.length;
+
   return (
     <section className="space-y-3">
       <CompactPositionSummary
         label="Closed positions"
-        count={closedPositions.length}
+        count={closedCount}
         value={formatSignedUsd(realizedPnl)}
         pnl={realizedPnl}
         pnlPct={realizedPnlPct}
         cost={closedCost}
       />
       {positions === null && <PortfolioEmptyState text="LOADING POSITIONS..." />}
-      {positions !== null && closedPositions.length === 0 && (
+      {positions !== null && closedCount === 0 && (
         <PortfolioEmptyState
           headline={`"NO CLOSED YET"`}
           text="CLOSED BETS SHOW UP HERE."
         />
+      )}
+      {closedCopyRows.length > 0 && (
+        <section className="space-y-2.5">
+          {closedCopyRows.map((row) => (
+            <CopyRow
+              key={row.betId ?? `${row.venue ?? "pacifica"}:${row.market}:${row.side}`}
+              row={row}
+              onClosed={() => void refreshPortfolio()}
+            />
+          ))}
+        </section>
       )}
       {closedPositions.length > 0 && (
         <section className="grid gap-2.5 lg:grid-cols-2">

@@ -59,6 +59,22 @@ describe("flash-tail meta", () => {
     expect(parseFlashTailMeta({ ...valid, entryPriceUsd: "160" })).toBeNull();
   });
 
+  it("accepts the external closeReason stamped by the reconcile sweep", () => {
+    const valid = buildFlashTailMeta({
+      lineage,
+      market: "SOL",
+      side: "long",
+      leverage: 20,
+      mode: "standard",
+      walletAddress: "wallet-1",
+      entryPriceUsd: 160,
+      notionalUsd: 20,
+      openFeeUsd: 0.01,
+    });
+    const parsed = parseFlashTailMeta({ ...valid, closeReason: "external" });
+    expect(parsed?.closeReason).toBe("external");
+  });
+
   it("parses tail lineage from a request body", () => {
     expect(parseTailLineage(lineage)).toEqual(lineage);
     expect(

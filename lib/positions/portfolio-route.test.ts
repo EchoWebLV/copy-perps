@@ -384,6 +384,80 @@ describe("GET /api/portfolio", () => {
     });
   });
 
+  it("emits closed flash-tail bets as closed copy rows instead of dropping them", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      {
+        id: "user-1",
+        privyId: "privy-user",
+        solanaPubkey: "wallet-1",
+      },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([
+      {
+        id: "tail-closed",
+        userId: "user-1",
+        type: "flash-tail",
+        amountUsdc: 1,
+        proceedsUsdc: 1.24,
+        status: "closed",
+        meta: {
+          sourceType: "flash-tail",
+          venue: "flash",
+          sourceKind: "whale",
+          whaleId: "whale-1",
+          botId: null,
+          sourceName: "Big Whale",
+          sourcePositionId: "pos-1",
+          market: "SOL",
+          side: "long",
+          leverage: 20,
+          mode: "standard",
+          walletAddress: "wallet-1",
+          entryPriceUsd: 160,
+          notionalUsd: 20,
+          openFeeUsd: 0.01,
+          openSignature: "sig-open",
+          closeSignature: "sig-close",
+          closeReason: "manual",
+          proceedsSource: "quote-estimate",
+          reconciledAt: null,
+        },
+        createdAt: new Date("2026-06-11T10:00:00.000Z"),
+        closedAt: new Date("2026-06-11T11:00:00.000Z"),
+      },
+    ]);
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: "tail-closed",
+      venue: "flash",
+      sourceKind: "tail",
+      market: "SOL",
+      side: "long",
+      leverage: 20,
+      stakeUsdc: 1,
+      whaleId: "whale-1",
+      whaleName: "Big Whale",
+      botId: null,
+      botName: null,
+      closeReason: "manual",
+      liveStatus: "closed",
+      entryPrice: 160,
+      markPrice: null,
+      openedAt: "2026-06-11T10:00:00.000Z",
+      closedAt: "2026-06-11T11:00:00.000Z",
+    });
+    expect(body.copyRows[0].pnlUsd).toBeCloseTo(0.24);
+    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(24);
+    // flash-tail rows never go through legacy enrichment
+    expect(mocks.enrichBet).not.toHaveBeenCalled();
+    expect(body.positions).toEqual([]);
+  });
+
   it("returns flat Pacifica account cash after positions are closed", async () => {
     mocks.selectUserLimit.mockResolvedValueOnce([
       {

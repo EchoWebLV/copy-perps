@@ -439,7 +439,13 @@ rows survive reload with whale/bot names + betId. A reconcile sweep
 ([lib/bets/flash-reconcile.ts](../lib/bets/flash-reconcile.ts)) rides the whale
 ticker tick: reaps stale pendings, verifies signatures on-chain, upgrades
 estimate fills/proceeds to chain truth via USDC balance deltas, reverts failed
-closes, and kills failed opens. Scalp-game trades (no lineage) are untouched.
+closes, and kills failed opens — including opens whose signature never becomes
+findable within 30 min (dropped tx; they'd otherwise retry forever). A liveness
+pass then expires confirmed tails whose chain-verified position no longer shows
+in `positionsOf` (liquidation, TP/SL trigger, lost close postback) to status
+`closed-external` with `closeReason: 'external'` — no proceeds or fill is
+fabricated; the portfolio renders them as closed history with unknown PnL.
+Scalp-game trades (no lineage) are untouched.
 
 ---
 

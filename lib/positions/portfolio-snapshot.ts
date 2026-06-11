@@ -138,15 +138,23 @@ export function buildPortfolioSummary(
 ): PortfolioSummary {
   const openLegacyPositions = openPositions(payload);
   const closedLegacyPositions = closedPositions(payload);
+  // Closed copy rows are settled history — their proceeds already sit in a
+  // wallet balance, so they carry no open value, cost, or count.
+  const openCopyRows = payload.copyRows.filter(
+    (row) => row.liveStatus !== "closed",
+  );
+  const closedCopyRows = payload.copyRows.filter(
+    (row) => row.liveStatus === "closed",
+  );
   const legacyPositionsValueUsd = openLegacyPositions.reduce(
     (sum, position) => sum + (position.currentValueUsdc ?? position.amountUsdc),
     0,
   );
-  const copyRowsValueUsd = payload.copyRows.reduce(
+  const copyRowsValueUsd = openCopyRows.reduce(
     (sum, row) => sum + copyRowValueUsd(row),
     0,
   );
-  const nonPacificaCopyRowsValueUsd = payload.copyRows.reduce(
+  const nonPacificaCopyRowsValueUsd = openCopyRows.reduce(
     (sum, row) =>
       (row.venue ?? "pacifica") === "pacifica"
         ? sum
@@ -155,7 +163,7 @@ export function buildPortfolioSummary(
   );
   const positionsCostUsd =
     openLegacyPositions.reduce((sum, position) => sum + position.amountUsdc, 0) +
-    payload.copyRows.reduce(
+    openCopyRows.reduce(
       (sum, row) => sum + (row.stakeUsdc ?? row.marginUsd ?? 0),
       0,
     );
@@ -201,8 +209,8 @@ export function buildPortfolioSummary(
     positionsCostUsd,
     positionsPnlUsd,
     positionsPnlPct,
-    openCount: openLegacyPositions.length + payload.copyRows.length,
-    closedCount: closedLegacyPositions.length,
+    openCount: openLegacyPositions.length + openCopyRows.length,
+    closedCount: closedLegacyPositions.length + closedCopyRows.length,
     netWorthUsd,
   };
 }

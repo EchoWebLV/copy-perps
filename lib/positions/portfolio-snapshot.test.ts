@@ -88,6 +88,55 @@ describe("portfolio snapshot payload", () => {
     expect(summary.positionsPnlPct).toBeCloseTo(17.5);
   });
 
+  it("counts closed copy rows as closed history, not open value", () => {
+    const summary = buildPortfolioSummary({
+      positions: [],
+      copyRows: [
+        {
+          betId: "tail-closed",
+          venue: "flash",
+          sourceKind: "tail",
+          market: "SOL",
+          side: "long",
+          leverage: 20,
+          stakeUsdc: 1,
+          leaderAddress: null,
+          leaderUsername: null,
+          whaleId: "whale-1",
+          whaleName: "Big Whale",
+          botId: null,
+          botName: null,
+          liveStatus: "closed",
+          entryPrice: 160,
+          markPrice: null,
+          pricedAt: null,
+          liquidationPrice: null,
+          amountBase: null,
+          marginUsd: null,
+          marginMode: null,
+          notionalUsd: 20,
+          pnlUsd: 0.24,
+          unrealizedPnlPct: 24,
+          openedAt: "2026-06-11T10:00:00.000Z",
+          positionUpdatedAt: "2026-06-11T11:00:00.000Z",
+          closedAt: "2026-06-11T11:00:00.000Z",
+          leaderClosedAt: null,
+        },
+      ],
+      pacificaAccount: null,
+      walletBalance: null,
+    });
+
+    expect(summary).toMatchObject({
+      openCount: 0,
+      closedCount: 1,
+      copyRowsValueUsd: 0,
+      positionsValueUsd: 0,
+      positionsCostUsd: 0,
+      positionsPnlUsd: 0,
+    });
+  });
+
   it("keeps last live rows when a delayed refresh returns blank syncing rows", () => {
     const previous: PortfolioSnapshotPayload = {
       positions: [],

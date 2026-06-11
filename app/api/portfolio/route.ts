@@ -12,6 +12,7 @@ import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
+import { closedFlashTailCopyRows } from "@/lib/positions/flash-tail-closed";
 import {
   buildPortfolioSummary,
   type PortfolioSnapshotPayload,
@@ -200,7 +201,9 @@ export async function GET(request: Request) {
     .where(
       and(
         eq(bets.userId, user.id),
-        inArray(bets.status, ["pending", "confirmed", "closed"]),
+        // closed-external: flash-tail whose position died on-chain without a
+        // close postback (reconcile sweep) — renders as closed history.
+        inArray(bets.status, ["pending", "confirmed", "closed", "closed-external"]),
       ),
     )
     .orderBy(desc(bets.createdAt));
@@ -429,11 +432,11 @@ export async function GET(request: Request) {
   );
   // Newest confirmed flash-tail bet per market:side (userBets is newest-
   // first; first-wins keeps the live one — Flash holds one position per
-  // owner+market+side). Known limitation: a confirmed bet whose position
-  // died externally (liquidation, trigger close, lost close postback)
-  // mis-attributes a later Scalp open on the same key. No expiry exists
-  // yet — sweep-side expiry of externally-closed positions is a planned
-  // follow-up.
+  // owner+market+side). A confirmed bet whose position died externally
+  // (liquidation, trigger close, lost close postback) is expired to
+  // 'closed-external' by the reconcile sweep (lib/bets/flash-reconcile.ts)
+  // and drops out of this map; until the sweep catches it (~15 min) it can
+  // briefly mis-attribute a fresh Scalp open on the same key.
   const flashTailByKey = new Map<
     string,
     { id: string; meta: ReturnType<typeof parseFlashTailMeta> }
@@ -448,10 +451,15 @@ export async function GET(request: Request) {
   const flashRows = flashPositions.map((p) =>
     flashRowFromPosition(p, pricedAt, flashTailByKey.get(positionKey(p.symbol, p.side)) ?? null),
   );
+  // Closed flash-tail bets render as closed history rows; without this they
+  // appear nowhere (excluded from legacy enrichment, copyBets, and the
+  // confirmed-only flashTailByKey attribution above).
+  const closedFlashTailRows = closedFlashTailCopyRows(userBets);
   const liveCopyRows = [
     ...copyRows,
     ...walletRows,
     ...flashRows,
+    ...closedFlashTailRows,
   ] as PortfolioSnapshotPayload["copyRows"];
   const payload: PortfolioSnapshotPayload = {
     positions,

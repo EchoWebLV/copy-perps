@@ -98,9 +98,9 @@ async function loop(): Promise<void> {
 
     try {
       const sweep = await runFlashReconcileSweep({ timeBoxMs: 10_000 });
-      if (sweep.checked > 0 || sweep.reaped > 0) {
+      if (sweep.checked > 0 || sweep.reaped > 0 || sweep.externalized > 0) {
         console.log(
-          `[whales] flash reconcile: ${sweep.checked} checked, ${sweep.reaped} reaped`,
+          `[whales] flash reconcile: ${sweep.checked} checked, ${sweep.reaped} reaped, ${sweep.externalized} closed-external`,
         );
       }
     } catch (err) {

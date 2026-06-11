@@ -1,4 +1,4 @@
-export type PortfolioCopyRowStatus = "open" | "not_found" | "unknown";
+export type PortfolioCopyRowStatus = "open" | "not_found" | "unknown" | "closed";
 
 export interface PortfolioCopyRowRefreshShape {
   betId: string | null;

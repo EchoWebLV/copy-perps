@@ -26,7 +26,10 @@ export type FlashTailMeta = {
   openFeeUsd: number | null;
   openSignature: string | null;
   closeSignature: string | null;
-  closeReason: "manual" | null;
+  // 'external' = position vanished on-chain without a close postback
+  // (liquidation, TP/SL trigger, lost confirm) — stamped by the reconcile
+  // sweep alongside status 'closed-external'; proceeds stay unknown.
+  closeReason: "manual" | "external" | null;
   proceedsSource: "quote-estimate" | "chain" | null;
   reconciledAt: string | null; // ISO; set once the open fill is chain-verified
 };
@@ -125,7 +128,13 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
   if (!isNumberOrNull(value.openFeeUsd ?? null)) return null;
   if (!isStringOrNull(value.openSignature ?? null)) return null;
   if (!isStringOrNull(value.closeSignature ?? null)) return null;
-  if (value.closeReason !== null && value.closeReason !== "manual") return null;
+  if (
+    value.closeReason !== null &&
+    value.closeReason !== "manual" &&
+    value.closeReason !== "external"
+  ) {
+    return null;
+  }
   if (
     value.proceedsSource !== null &&
     value.proceedsSource !== "quote-estimate" &&
@@ -155,7 +164,7 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
     openFeeUsd: (value.openFeeUsd as number | null) ?? null,
     openSignature: (value.openSignature as string | null) ?? null,
     closeSignature: (value.closeSignature as string | null) ?? null,
-    closeReason: (value.closeReason as "manual" | null) ?? null,
+    closeReason: (value.closeReason as FlashTailMeta["closeReason"]) ?? null,
     proceedsSource:
       (value.proceedsSource as "quote-estimate" | "chain" | null) ?? null,
     reconciledAt: (value.reconciledAt as string | null) ?? null,

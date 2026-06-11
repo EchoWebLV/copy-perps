@@ -25,10 +25,10 @@ export interface CopyRowData {
   whaleId?: string | null;
   whaleName?: string | null;
   autoCloseOnSourceClose?: boolean;
-  closeReason?: "manual" | "source_closed" | "already_flat" | null;
+  closeReason?: "manual" | "source_closed" | "already_flat" | "external" | null;
   botId: string | null;
   botName: string | null;
-  liveStatus: "open" | "not_found" | "unknown";
+  liveStatus: "open" | "not_found" | "unknown" | "closed";
   entryPrice: number | null;
   markPrice: number | null;
   pricedAt: string | null;
@@ -41,6 +41,7 @@ export interface CopyRowData {
   unrealizedPnlPct: number | null;
   openedAt: string | null;
   positionUpdatedAt: string | null;
+  closedAt?: string | null;
   leaderClosedAt: string | null;
 }
 
@@ -253,28 +254,41 @@ export function CopyRow({ row, onClosed }: Props) {
     row.unrealizedPnlPct === null
       ? null
       : `${row.unrealizedPnlPct >= 0 ? "+" : ""}${row.unrealizedPnlPct.toFixed(1)}%`;
+  const isClosed = row.liveStatus === "closed";
   const statusMeta =
     row.liveStatus === "open"
       ? {
           label: "LIVE",
           className: "border-green-400/30 bg-green-400/10 text-green-300",
         }
-      : row.liveStatus === "unknown"
+      : row.liveStatus === "closed"
         ? {
-            label: row.markPrice == null ? "CHECKING" : "DATA DELAYED",
-            className: "border-amber-300/30 bg-amber-300/10 text-amber-200",
+            label: "CLOSED",
+            className: "border-white/20 bg-white/5 text-white/60",
           }
-        : {
-            label: "NOT OPEN",
-            className: "border-rose-300/30 bg-rose-300/10 text-rose-200",
-          };
+        : row.liveStatus === "unknown"
+          ? {
+              label: row.markPrice == null ? "CHECKING" : "DATA DELAYED",
+              className: "border-amber-300/30 bg-amber-300/10 text-amber-200",
+            }
+          : {
+              label: "NOT OPEN",
+              className: "border-rose-300/30 bg-rose-300/10 text-rose-200",
+            };
   const hasStake = row.stakeUsdc !== null;
   const sourceText =
     row.venue === "flash"
-      ? "Flash"
+      ? row.whaleName || row.botName
+        ? formatCopySourceLabel(row)
+        : "Flash"
       : row.sourceKind === "wallet"
       ? "Wallet"
       : formatCopySourceLabel(row);
+  // Realized exit value for settled rows: stake plus realized PnL.
+  const exitValueUsd =
+    isClosed && row.stakeUsdc !== null && row.pnlUsd !== null
+      ? row.stakeUsdc + row.pnlUsd
+      : null;
   const subtitleParts = [
     hasStake ? `Stake ${formatUsd(row.stakeUsdc)}` : null,
     sourceText,
@@ -300,7 +314,7 @@ export function CopyRow({ row, onClosed }: Props) {
             {subtitleParts.join(" · ")}
           </div>
         </div>
-        {(row.betId || row.sourceKind === "wallet") && (
+        {!isClosed && (row.betId || row.sourceKind === "wallet") && (
           <button
             type="button"
             disabled={busy}
@@ -319,12 +333,17 @@ export function CopyRow({ row, onClosed }: Props) {
           detail={pnlPct ?? undefined}
           tone={pnlTone}
         />
-        <CompactPositionMetric label="Now" value={formatPrice(row.markPrice)} />
+        {isClosed ? (
+          <CompactPositionMetric label="Exit" value={formatUsd(exitValueUsd)} />
+        ) : (
+          <CompactPositionMetric label="Now" value={formatPrice(row.markPrice)} />
+        )}
         <CompactPositionMetric label="Notional" value={formatUsd(row.notionalUsd)} />
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/38">
         {row.openedAt && <span>OPENED {formatAge(row.openedAt)} AGO</span>}
+        {row.closedAt && <span>CLOSED {formatAge(row.closedAt)} AGO</span>}
         {row.pricedAt && (
           <span>PRICED {formatAge(row.pricedAt)} AGO</span>
         )}
@@ -339,6 +358,11 @@ export function CopyRow({ row, onClosed }: Props) {
         {row.closeReason === "already_flat" && (
           <div className="mt-1 text-xs text-amber-300">
             Already flat when whale exited
+          </div>
+        )}
+        {row.closeReason === "external" && (
+          <div className="mt-1 text-xs text-amber-300">
+            Closed on-chain (liquidation or trigger) — final P/L unknown
           </div>
         )}
         {row.leaderClosedAt && !row.closeReason && (
