@@ -188,3 +188,9 @@ to the base layer.
   mainnet ER endpoints `https://as.magicblock.app` / `eu.` / `us.` serve it with
   age 0s. `https://router.magicblock.app` errored on plain getAccountInfo — use
   the regional endpoints (pin validator identity at Phase-1.5 delegation).
+
+### Task 4 deviations addendum (review follow-up)
+- `init-if-needed` anchor-lang feature dropped (template has it; ping program does not
+  use it — re-add only when an instruction needs `init_if_needed`).
+- Template's `packageManager: yarn@1.22.19` field dropped from package.json (npm used,
+  matching the parent repo).
