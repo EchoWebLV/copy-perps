@@ -186,11 +186,12 @@ async function loop(injected?: CrankDeps): Promise<void> {
 
 /**
  * Real chain wiring (ER connection, tick/commit tx builders against the
- * deployed arena program). Implemented once the program is deployed
- * (plan Task 13/14); the loop and worker entry are testable without it.
+ * deployed arena program) lives in lib/arena/crank-deps.ts, loaded lazily so
+ * this module stays importable without anchor/web3/DATABASE_URL — tests and
+ * any accidental client bundle never touch a connection (same pattern as
+ * lib/autopilot's dynamic imports).
  */
 async function buildCrankDeps(): Promise<CrankDeps> {
-  throw new Error(
-    "[arena] buildCrankDeps not wired yet — deploy the arena program (plan Task 13) and wire ARENA_PROGRAM_ID/ARENA_ER_ENDPOINT first",
-  );
+  const { buildRealCrankDeps } = await import("./crank-deps");
+  return buildRealCrankDeps();
 }
