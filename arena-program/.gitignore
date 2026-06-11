@@ -11,3 +11,8 @@ target/*
 !target/deploy/
 target/deploy/*
 !target/deploy/arena-keypair.json
+# The IDL is committed: the crank worker + scripts read it at runtime and
+# Railway deploys must not depend on tarball gitignore semantics.
+!target/idl/
+target/idl/*
+!target/idl/arena.json

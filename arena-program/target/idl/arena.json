@@ -1,0 +1,1453 @@
+{
+  "address": "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC",
+  "metadata": {
+    "name": "arena",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain bot arena program (MagicBlock ER)"
+  },
+  "instructions": [
+    {
+      "name": "commit_state",
+      "docs": [
+        "ER instruction: persist the current ER state of the market (+ any Bot",
+        "accounts passed as remaining_accounts) to the base layer WITHOUT",
+        "undelegating. Deliberately permissionless: the crank keypair is not",
+        "the admin (Task 14), and a commit can only persist state, never",
+        "mutate it — the magic program rejects non-delegated accounts anyway."
+      ],
+      "discriminator": [
+        201,
+        80,
+        148,
+        145,
+        9,
+        196,
+        225,
+        56
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market_state",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "_market_id",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "delegate_bot",
+      "docs": [
+        "Base-layer instruction: delegate one Bot PDA to the ER. Admin-gated.",
+        "Validator pin via the first remaining account is mandatory, as above."
+      ],
+      "discriminator": [
+        83,
+        79,
+        93,
+        144,
+        191,
+        115,
+        2,
+        149
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "buffer_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bot_state"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                82,
+                88,
+                52,
+                99,
+                40,
+                236,
+                89,
+                24,
+                89,
+                167,
+                12,
+                24,
+                207,
+                100,
+                194,
+                22,
+                101,
+                177,
+                160,
+                240,
+                129,
+                248,
+                170,
+                198,
+                67,
+                58,
+                242,
+                100,
+                209,
+                18,
+                84,
+                223
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bot_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bot_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "bot_state",
+          "docs": [
+            "program via the er-sdk `del` constraint."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "persona_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "persona_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "delegate_market",
+      "docs": [
+        "Base-layer instruction: delegate the MarketState PDA to the ER.",
+        "Admin-gated. The ER validator identity is pinned via the first",
+        "remaining account (spec gotcha: never delegate without pinning) —",
+        "MANDATORY: forgetting it must fail loudly, not delegate unpinned."
+      ],
+      "discriminator": [
+        223,
+        125,
+        110,
+        148,
+        99,
+        176,
+        143,
+        72
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "buffer_market_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market_state"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                82,
+                88,
+                52,
+                99,
+                40,
+                236,
+                89,
+                24,
+                89,
+                167,
+                12,
+                24,
+                207,
+                100,
+                194,
+                22,
+                101,
+                177,
+                160,
+                240,
+                129,
+                248,
+                170,
+                198,
+                67,
+                58,
+                242,
+                100,
+                209,
+                18,
+                84,
+                223
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_market_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_market_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "market_state",
+          "docs": [
+            "program via the er-sdk `del` constraint."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_program",
+          "address": "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "market_id",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "init_bot",
+      "discriminator": [
+        115,
+        30,
+        236,
+        249,
+        142,
+        225,
+        167,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "bot",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "persona_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "persona_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "StrategyParams"
+            }
+          }
+        },
+        {
+          "name": "starting_balance_micro",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "init_config",
+      "discriminator": [
+        23,
+        235,
+        115,
+        232,
+        168,
+        96,
+        1,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "spread_bps",
+          "type": "u16"
+        },
+        {
+          "name": "maint_buffer_bps",
+          "type": "u16"
+        },
+        {
+          "name": "max_age_secs",
+          "type": "i64"
+        },
+        {
+          "name": "bucket_secs",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "init_market",
+      "discriminator": [
+        33,
+        253,
+        15,
+        116,
+        89,
+        25,
+        127,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market_state",
+          "writable": true
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "market_id",
+          "type": "u8"
+        },
+        {
+          "name": "feed",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "ping",
+      "discriminator": [
+        173,
+        0,
+        94,
+        236,
+        73,
+        133,
+        225,
+        153
+      ],
+      "accounts": [],
+      "args": []
+    },
+    {
+      "name": "process_undelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "base_account",
+          "writable": true
+        },
+        {
+          "name": "buffer"
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_seeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tick",
+      "docs": [
+        "Permissionless crank tick for one market: read the oracle feed, fold",
+        "the price into the candle ring, then for each Bot in",
+        "remaining_accounts run maintenance (liq / favorable / max-hold exits)",
+        "and the open decision. Fail-closed: a stale or malformed feed is a",
+        "successful no-op — the arena pauses honestly instead of trading on",
+        "bad data. Tape entries record conviction 0 (conviction is not modeled",
+        "in Phase 1)."
+      ],
+      "discriminator": [
+        92,
+        79,
+        44,
+        8,
+        101,
+        80,
+        63,
+        15
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market_state",
+          "writable": true
+        },
+        {
+          "name": "feed",
+          "docs": [
+            "(require_keys_eq → WrongFeed); oracle::read_feed parses the data",
+            "defensively and fails closed on anything malformed."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "market_id",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "undelegate_all",
+      "docs": [
+        "ER instruction: commit AND undelegate the market (+ remaining Bot",
+        "accounts) back to the base layer. Admin-gated — an unwanted",
+        "undelegation halts the arena until re-delegation. (The config PDA is",
+        "not delegated; the ER serves it as a read-only clone from the base",
+        "layer, which the local ephemeral harness exercises.)"
+      ],
+      "discriminator": [
+        85,
+        123,
+        97,
+        145,
+        66,
+        22,
+        252,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "market_state",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "_market_id",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ArenaConfig",
+      "discriminator": [
+        9,
+        186,
+        181,
+        145,
+        197,
+        50,
+        33,
+        38
+      ]
+    },
+    {
+      "name": "Bot",
+      "discriminator": [
+        122,
+        136,
+        3,
+        241,
+        243,
+        138,
+        195,
+        52
+      ]
+    },
+    {
+      "name": "MarketState",
+      "discriminator": [
+        0,
+        125,
+        123,
+        215,
+        95,
+        96,
+        164,
+        194
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "signer does not match the config admin"
+    },
+    {
+      "code": 6001,
+      "name": "BadParams",
+      "msg": "parameter outside the accepted domain"
+    },
+    {
+      "code": 6002,
+      "name": "UnknownMarket",
+      "msg": "unknown or inactive market id"
+    },
+    {
+      "code": 6003,
+      "name": "WrongFeed",
+      "msg": "feed account does not match the market config"
+    },
+    {
+      "code": 6004,
+      "name": "MissingValidator",
+      "msg": "delegation requires the ER validator pinned as the first remaining account"
+    }
+  ],
+  "types": [
+    {
+      "name": "ArenaConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "spread_bps",
+            "type": "u16"
+          },
+          {
+            "name": "maint_buffer_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_age_secs",
+            "type": "i64"
+          },
+          {
+            "name": "bucket_secs",
+            "type": "i64"
+          },
+          {
+            "name": "markets",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "MarketCfg"
+                  }
+                },
+                8
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bot",
+      "docs": [
+        "2328 bytes, align 8. Account data = 8-byte discriminator + this.",
+        "",
+        "| offset | size | field                       |",
+        "|--------|------|-----------------------------|",
+        "| 0x00   | 8    | balance_micro: u64          |",
+        "| 0x08   | 8    | gross_pnl_micro: i64        |",
+        "| 0x10   | 8    | fees_micro: u64             |",
+        "| 0x18   | 8    | equity_high_micro: u64      |",
+        "| 0x20   | 8    | seq: u64                    |",
+        "| 0x28   | 192  | positions: [Position; 4]    |",
+        "| 0xE8   | 2048 | tape: [TapeEntry; 64]       |",
+        "| 0x8E8  | 16   | params: StrategyParams      |",
+        "| 0x8F8  | 16   | persona_id: [u8; 16]        |",
+        "| 0x908  | 4    | trades: u32                 |",
+        "| 0x90C  | 4    | wins: u32                   |",
+        "| 0x910  | 2    | tape_head: u16              |",
+        "| 0x912  | 1    | bump: u8                    |",
+        "| 0x913  | 5    | _pad                        |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "balance_micro",
+            "type": "u64"
+          },
+          {
+            "name": "gross_pnl_micro",
+            "type": "i64"
+          },
+          {
+            "name": "fees_micro",
+            "type": "u64"
+          },
+          {
+            "name": "equity_high_micro",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "positions",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Position"
+                  }
+                },
+                4
+              ]
+            }
+          },
+          {
+            "name": "tape",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "TapeEntry"
+                  }
+                },
+                64
+              ]
+            }
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "StrategyParams"
+              }
+            }
+          },
+          {
+            "name": "persona_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "trades",
+            "type": "u32"
+          },
+          {
+            "name": "wins",
+            "type": "u32"
+          },
+          {
+            "name": "tape_head",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                5
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bucket",
+      "docs": [
+        "One 15s OHLC bucket. 56 bytes, align 8.",
+        "",
+        "| offset | size | field        |",
+        "|--------|------|--------------|",
+        "| 0x00   | 8    | open: u64    |",
+        "| 0x08   | 8    | high: u64    |",
+        "| 0x10   | 8    | low: u64     |",
+        "| 0x18   | 8    | close: u64   |",
+        "| 0x20   | 8    | start_ts: i64|",
+        "| 0x28   | 8    | path_len: u64|",
+        "| 0x30   | 4    | updates: u32 |",
+        "| 0x34   | 4    | _pad         |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "open",
+            "type": "u64"
+          },
+          {
+            "name": "high",
+            "type": "u64"
+          },
+          {
+            "name": "low",
+            "type": "u64"
+          },
+          {
+            "name": "close",
+            "type": "u64"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "path_len",
+            "type": "u64"
+          },
+          {
+            "name": "updates",
+            "type": "u32"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketCfg",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_id",
+            "type": "u8"
+          },
+          {
+            "name": "feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketState",
+      "docs": [
+        "3608 bytes, align 8. Account data = 8-byte discriminator + this.",
+        "",
+        "| offset | size | field                  |",
+        "|--------|------|------------------------|",
+        "| 0x00   | 8    | last_price: u64        |",
+        "| 0x08   | 8    | last_publish_ts: i64   |",
+        "| 0x10   | 3584 | ring: [Bucket; 64]     |",
+        "| 0xE10  | 2    | head: u16              |",
+        "| 0xE12  | 1    | market_id: u8          |",
+        "| 0xE13  | 1    | bump: u8               |",
+        "| 0xE14  | 4    | _pad                   |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "last_price",
+            "type": "u64"
+          },
+          {
+            "name": "last_publish_ts",
+            "type": "i64"
+          },
+          {
+            "name": "ring",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Bucket"
+                  }
+                },
+                64
+              ]
+            }
+          },
+          {
+            "name": "head",
+            "type": "u16"
+          },
+          {
+            "name": "market_id",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Position",
+      "docs": [
+        "One paper position. 48 bytes, align 8.",
+        "",
+        "| offset | size | field            |",
+        "|--------|------|------------------|",
+        "| 0x00   | 8    | entry_price: u64 |",
+        "| 0x08   | 8    | stake_micro: u64 |",
+        "| 0x10   | 8    | opened_ts: i64   |",
+        "| 0x18   | 8    | liq_price: u64   |",
+        "| 0x20   | 4    | ticks_held: u32  |",
+        "| 0x24   | 2    | leverage: u16    |",
+        "| 0x26   | 1    | active: u8 (0/1) |",
+        "| 0x27   | 1    | market_id: u8    |",
+        "| 0x28   | 1    | side: u8         |",
+        "| 0x29   | 7    | _pad             |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "stake_micro",
+            "type": "u64"
+          },
+          {
+            "name": "opened_ts",
+            "type": "i64"
+          },
+          {
+            "name": "liq_price",
+            "type": "u64"
+          },
+          {
+            "name": "ticks_held",
+            "type": "u32"
+          },
+          {
+            "name": "leverage",
+            "type": "u16"
+          },
+          {
+            "name": "active",
+            "type": "u8"
+          },
+          {
+            "name": "market_id",
+            "type": "u8"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "StrategyParams",
+      "docs": [
+        "Strategy knobs. 16 bytes, align 4 — deliberately ZERO padding so the Borsh",
+        "encoding of this struct (it doubles as the `init_bot` instruction arg) is",
+        "byte-identical to its repr(C) layout.",
+        "",
+        "| offset | size | field                   |",
+        "|--------|------|-------------------------|",
+        "| 0x00   | 4    | max_hold_ticks: u32     |",
+        "| 0x04   | 2    | breakout_bps: u16       |",
+        "| 0x06   | 2    | activity_mult_bps: u16  |",
+        "| 0x08   | 2    | stake_frac_bps: u16     |",
+        "| 0x0A   | 2    | leverage: u16           |",
+        "| 0x0C   | 2    | exit_favorable_bps: u16 |",
+        "| 0x0E   | 1    | read_span: u8           |",
+        "| 0x0F   | 1    | trend_filter: u8 (0/1)  |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "max_hold_ticks",
+            "type": "u32"
+          },
+          {
+            "name": "breakout_bps",
+            "type": "u16"
+          },
+          {
+            "name": "activity_mult_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stake_frac_bps",
+            "type": "u16"
+          },
+          {
+            "name": "leverage",
+            "type": "u16"
+          },
+          {
+            "name": "exit_favorable_bps",
+            "type": "u16"
+          },
+          {
+            "name": "read_span",
+            "type": "u8"
+          },
+          {
+            "name": "trend_filter",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TapeEntry",
+      "docs": [
+        "One tape event. 32 bytes, align 8.",
+        "",
+        "| offset | size | field            |",
+        "|--------|------|------------------|",
+        "| 0x00   | 8    | ts: i64          |",
+        "| 0x08   | 8    | price: u64       |",
+        "| 0x10   | 8    | stake_micro: u64 |",
+        "| 0x18   | 1    | market_id: u8    |",
+        "| 0x19   | 1    | action: u8       |",
+        "| 0x1A   | 1    | conviction: u8   |",
+        "| 0x1B   | 5    | _pad             |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ts",
+            "type": "i64"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "stake_micro",
+            "type": "u64"
+          },
+          {
+            "name": "market_id",
+            "type": "u8"
+          },
+          {
+            "name": "action",
+            "type": "u8"
+          },
+          {
+            "name": "conviction",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                5
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

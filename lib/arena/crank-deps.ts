@@ -60,6 +60,12 @@ function personaId(name: string): Buffer {
 }
 
 function loadCrankKeypair(): web3.Keypair {
+  // Railway worker: the secret key rides in an env var (JSON byte array) —
+  // there is no keypair file to mount. Local dev: file path, solana-CLI style.
+  const inline = process.env.ARENA_CRANK_KEYPAIR?.trim();
+  if (inline) {
+    return web3.Keypair.fromSecretKey(Uint8Array.from(JSON.parse(inline)));
+  }
   const p =
     process.env.ARENA_CRANK_KEYPAIR_PATH ||
     path.join(homedir(), ".config/solana/id.json");
