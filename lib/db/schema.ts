@@ -64,6 +64,33 @@ export const bets = pgTable(
   }),
 );
 
+// One row per executed fill (open or close), both venues. betId is nullable
+// because Phase-2 leader (bot) fills have no bets row; botId is a soft text
+// column (no FK) for the same reason. source tracks data quality:
+// 'quote-estimate' rows are written at confirm time from the build-time
+// quote; the reconcile sweep upgrades them to 'chain' with real numbers.
+export const fills = pgTable(
+  "fills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    betId: uuid("bet_id").references(() => bets.id),
+    botId: text("bot_id"),
+    action: text("action").notNull(), // 'open' | 'close'
+    market: text("market").notNull(),
+    side: text("side").notNull(), // 'long' | 'short'
+    fillUsd: doublePrecision("fill_usd"),
+    priceUsd: doublePrecision("price_usd"),
+    feeUsd: doublePrecision("fee_usd"),
+    txSig: text("tx_sig").notNull(),
+    source: text("source").notNull().default("quote-estimate"), // 'quote-estimate' | 'chain'
+    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    sigActionIdx: uniqueIndex("fills_sig_action_idx").on(t.txSig, t.action),
+    betIdx: index("fills_bet_idx").on(t.betId),
+  }),
+);
+
 export const waitlist = pgTable("waitlist", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
