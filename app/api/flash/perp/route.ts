@@ -157,6 +157,14 @@ export async function POST(request: Request) {
   }
 
   const tailLineage = parseTailLineage(body.tail);
+  // Autopilot rows are only ever created in-process by the engine — an HTTP
+  // caller claiming the lineage would forge "Autopilot" attribution.
+  if (tailLineage?.sourceKind === "autopilot") {
+    return NextResponse.json(
+      { error: "autopilot lineage cannot be set via HTTP" },
+      { status: 400 },
+    );
+  }
 
   try {
     const result = await getFlashPerpsService().open({

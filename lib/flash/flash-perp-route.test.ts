@@ -443,6 +443,25 @@ describe("Flash perp routes", () => {
     expect(mocks.confirmFlashTailOpen).not.toHaveBeenCalled();
   });
 
+  it("rejects autopilot lineage from HTTP callers", async () => {
+    const response = await OPEN(
+      postRequest("/api/flash/perp", {
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 1,
+        leverage: 20,
+        walletAddress: "wallet-1",
+        tail: { sourceKind: "autopilot", sourceName: "Autopilot" },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.recordFlashTailOpen).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: "autopilot lineage cannot be set via HTTP",
+    });
+  });
+
   it("does not touch the db when tail lineage is absent (Scalp path)", async () => {
     const response = await OPEN(
       postRequest("/api/flash/perp", {
