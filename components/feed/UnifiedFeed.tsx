@@ -22,6 +22,8 @@ import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
 import { formatPriceUsd } from "@/components/whales/whale-money";
+import { Sparkline } from "./Sparkline";
+import { useMiniCandles } from "./use-mini-candles";
 import {
   ACCENT,
   BG,
@@ -50,6 +52,7 @@ import {
   formatSignedPct,
   primaryBotPosition,
   rankFeedEntries,
+  ringClosesChronological,
   shouldUseRosterRefresh,
   sourceChipLabel,
   whaleHeaderPnl,
@@ -212,6 +215,7 @@ function WhaleFeedCard({
     position.openedAtKnown !== false &&
     now - position.openedAtMs < FRESH_POSITION_MS;
   const moreCount = Math.max(0, p.openPositionsCount - 1);
+  const closes = useMiniCandles(position?.market ?? null);
 
   return (
     <article
@@ -239,6 +243,13 @@ function WhaleFeedCard({
                   · {formatFeedAge(ageMs)}
                 </span>
               )}
+            </div>
+            <div
+              className="mt-1 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              style={{ color: DIM }}
+            >
+              <span>Equity ${Math.round(p.stats.equityUsdc).toLocaleString("en-US")}</span>
+              <span>{p.openPositionsCount} open</span>
             </div>
           </div>
         </div>
@@ -271,6 +282,9 @@ function WhaleFeedCard({
           pnlPct={positionPnl}
           moreCount={moreCount}
           fresh={positionFresh}
+          closes={closes}
+          notionalUsd={position.notionalUsd ?? null}
+          chartLabel={`${position.market} · 1m`}
           footer={whalePositionFooter(position, now)}
           cta={
             tail ? (
@@ -349,6 +363,14 @@ function BotFeedCard({
   const moreCount = position
     ? Math.max(0, bot.positions.filter((p) => p.active).length - 1)
     : 0;
+  // Real on-chain sparkline: the ER market candle ring (15s buckets).
+  const ringCloses =
+    position !== null && market !== null && market.marketId === position.marketId
+      ? ringClosesChronological(market)
+      : null;
+  const openStakeUsd = bot.positions
+    .filter((p) => p.active)
+    .reduce((s, p) => s + p.stakeUsd, 0);
 
   return (
     <article
@@ -371,6 +393,16 @@ function BotFeedCard({
               </span>
               <SourceChip label="BOT" />
               <BotFreshness lastUpdateMs={lastUpdateMs} now={now} />
+            </div>
+            <div
+              className="mt-1 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              style={{ color: DIM }}
+            >
+              <span>
+                Equity ${Math.round(bot.balanceUsd + openStakeUsd).toLocaleString("en-US")}
+              </span>
+              <span>{bot.trades} trades</span>
+              <span>Fees ${bot.feesUsd.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -415,6 +447,9 @@ function BotFeedCard({
           pnlPct={positionPnl}
           moreCount={moreCount}
           fresh={positionFresh}
+          closes={ringCloses}
+          liqPrice={position.liqPrice}
+          chartLabel={`${arenaMarketTicker(position.marketId)} · 15s on-chain`}
           footer={
             positionFresh
               ? `New position · opened ${formatWhalePositionAge(position.openedTsMs, now)} ago`
@@ -508,6 +543,10 @@ function PositionPanel({
   fresh,
   footer,
   cta,
+  closes,
+  liqPrice,
+  notionalUsd,
+  chartLabel,
 }: {
   asset: string;
   side: "long" | "short";
@@ -519,16 +558,20 @@ function PositionPanel({
   fresh: boolean;
   footer: string;
   cta: ReactNode;
+  /** Close series for the mini chart; omit/empty = no chart row. */
+  closes?: number[] | null;
+  liqPrice?: number | null;
+  notionalUsd?: number | null;
+  chartLabel?: string;
 }) {
   const long = side === "long";
   const sideColor = long ? GREEN : RED;
   const pnlColor = pnlPct === null ? DIM : pnlPct >= 0 ? GREEN : RED;
 
+  // Flat by design (founder feedback): hairline-separated section, no
+  // nested panel-in-panel.
   return (
-    <div
-      className="mt-3 rounded-2xl border px-3 pb-2.5 pt-3"
-      style={{ background: BG, borderColor: FAINT }}
-    >
+    <div className="mt-3 border-t pt-3" style={{ borderColor: FAINT }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -555,6 +598,7 @@ function PositionPanel({
             style={{ color: DIM }}
           >
             Entry {formatPriceUsd(entryPrice)}
+            {markPrice !== null && <> → Mark {formatPriceUsd(markPrice)}</>}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -568,10 +612,33 @@ function PositionPanel({
             className="mt-1.5 text-[11px] font-bold tabular-nums"
             style={{ color: DIM }}
           >
-            Mark {markPrice === null ? "—" : formatPriceUsd(markPrice)}
+            {liqPrice != null && Number.isFinite(liqPrice) && liqPrice > 0 ? (
+              <>Liq {formatPriceUsd(liqPrice)}</>
+            ) : notionalUsd != null && Number.isFinite(notionalUsd) ? (
+              <>Size ${Math.round(notionalUsd).toLocaleString("en-US")}</>
+            ) : null}
           </div>
         </div>
       </div>
+
+      {closes && closes.length >= 2 && (
+        <div className="relative mt-2.5">
+          <Sparkline
+            closes={closes}
+            entryPrice={entryPrice}
+            color={pnlColor === DIM ? "rgba(250,250,242,0.45)" : pnlColor}
+            height={40}
+          />
+          {chartLabel && (
+            <span
+              className="absolute right-0 top-0 text-[8px] font-black uppercase tracking-widest"
+              style={{ color: DIM }}
+            >
+              {chartLabel}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="mt-3">{cta}</div>
 

@@ -245,3 +245,22 @@ export function shouldUseRosterRefresh(
 
   return true;
 }
+
+/** Chronological close series from the on-chain market candle ring (oldest →
+ *  newest, in-progress head bucket excluded, never-written slots skipped).
+ *  Feeds the bot-card sparkline with real ER data. */
+export function ringClosesChronological(market: {
+  ring: Array<{ close: number; startTs?: number; startTsMs?: number; updates: number }>;
+  head: number;
+}): number[] {
+  const n = market.ring.length;
+  if (n === 0) return [];
+  const closes: number[] = [];
+  // Walk forward from the oldest slot (head+1) up to but excluding head.
+  for (let i = 1; i < n; i++) {
+    const b = market.ring[(market.head + i) % n];
+    const written = (b.startTsMs ?? b.startTs ?? 0) !== 0;
+    if (written && Number.isFinite(b.close) && b.close > 0) closes.push(b.close);
+  }
+  return closes.length >= 2 ? closes : [];
+}

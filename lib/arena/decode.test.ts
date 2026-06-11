@@ -12,6 +12,7 @@ import {
   arenaAction,
   decodeBot,
   decodeMarketState,
+  ringClosesChronological,
   tapeNewestFirst,
 } from "./decode";
 import { ARENA_PERSONAS, botPda, personaIdBytes } from "./personas";
@@ -541,6 +542,57 @@ describe("decodeMarketState", () => {
     // A Bot-sized buffer is far too small for MarketState.
     expect(decodeMarketState(mkBot())).toBeNull();
     expect(decodeMarketState(new Uint8Array(0))).toBeNull();
+  });
+});
+
+// ──────────────────────── ringClosesChronological ──────────────────────────
+
+describe("ringClosesChronological", () => {
+  const bucket = (slot: number, startTs: bigint, close: bigint): BucketSpec => ({
+    slot,
+    open: close,
+    high: close,
+    low: close,
+    close,
+    startTs,
+    pathLen: 0n,
+    updates: 1,
+  });
+
+  it("walks oldest→newest across the wrap, ending at the head bucket", () => {
+    // Write order was 63, 0, 1 — head points at the IN-PROGRESS bucket
+    // (newest), so head = 1 and the oldest written slot is 63.
+    const market = decodeMarketState(
+      mkMarket({
+        head: 1,
+        buckets: [
+          bucket(63, 10n, 6_700_000_000n), // $67 — oldest
+          bucket(0, 20n, 6_710_000_000n), // $67.1
+          bucket(1, 30n, 6_720_000_000n), // $67.2 — in-progress head
+        ],
+      }),
+    );
+    expect(market).not.toBeNull();
+    expect(ringClosesChronological(market!)).toEqual([67, 67.1, 67.2]);
+  });
+
+  it("skips never-written slots and zeroed closes (fail-closed)", () => {
+    const market = decodeMarketState(
+      mkMarket({
+        head: 2,
+        buckets: [
+          bucket(0, 10n, 6_700_000_000n),
+          bucket(1, 20n, 0n), // written but garbage close — dropped
+          bucket(2, 30n, 6_730_000_000n),
+        ],
+      }),
+    );
+    expect(ringClosesChronological(market!)).toEqual([67, 67.3]);
+  });
+
+  it("returns [] for a fresh market (no buckets written)", () => {
+    const market = decodeMarketState(mkMarket());
+    expect(ringClosesChronological(market!)).toEqual([]);
   });
 });
 

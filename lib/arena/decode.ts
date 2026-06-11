@@ -337,6 +337,30 @@ export function decodeMarketState(data: Uint8Array): ArenaMarketState | null {
   };
 }
 
+/** Ring closes in chronological order (oldest → newest), ending at the
+ *  in-progress head bucket — `head` is the NEWEST bucket (the crank writes
+ *  into ring[head] and only advances on rollover), so chronological order
+ *  walks head+1 … wrap … head. Never-written slots (startTs == 0) and
+ *  zeroed closes are skipped — fail-closed, the sparkline gets data or
+ *  nothing. */
+export function ringClosesChronological(
+  market: Pick<ArenaMarketState, "ring" | "head">,
+): number[] {
+  const n = market.ring.length;
+  const out: number[] = [];
+  for (let i = 1; i <= n; i++) {
+    const bucket = market.ring[(market.head + i) % n];
+    if (
+      bucket.startTsMs !== 0 &&
+      Number.isFinite(bucket.close) &&
+      bucket.close > 0
+    ) {
+      out.push(bucket.close);
+    }
+  }
+  return out;
+}
+
 /** Bot decision tape in newest-first order. tape_head points at the NEXT
  *  write slot (paper.rs: write at head, then advance), so the newest entry
  *  sits at (head - 1) mod 64; never-written slots (ts == 0) are skipped. */
