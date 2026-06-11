@@ -284,6 +284,12 @@ subscription tailing per the Phase 3b design in the live-ai-leaders spec.
 - **Phase 2 — live arena UI:** ws subscriptions, bot cards + profile + tape, commits +
   Solscan links, BTC/ETH markets, staleness UX. Runs against whichever network is live
   (env-driven); flips to mainnet when 1.5 lands.
+  - **Follow-on (user idea 2026-06-12, after Phase 2 ships): Scalp mark upgrade** — reuse
+    the Phase-2 ER feed subscription + decode utilities to drive the Scalp game's live
+    mark from the MagicBlock Lazer feed (~50ms, same oracle family Flash fills/liquidates
+    against) instead of HL/Pacifica REST polling. Candles stay REST — Lazer has no
+    history. Mainnet feeds only (same Phase-1.5 MagicBlock dependency). Reference UI:
+    https://pyth-template.magicblock.app/ (magicblock-labs/oracle-template).
 - **Phase 3 — copy-trading:** position-copy via existing rails, entry-gap display,
   portfolio attribution, $5 real-money verification.
 - **Phase 4 — arena v2:** Grok oracle-bot persona, then auto-close mirroring →
