@@ -447,6 +447,25 @@ in `positionsOf` (liquidation, TP/SL trigger, lost close postback) to status
 fabricated; the portfolio renders them as closed history with unknown PnL.
 Scalp-game trades (no lineage) are untouched.
 
+**Scalp Autopilot (June 2026):** the Scalp game has an Autopilot mode — the
+user allocates a $5–$200 session budget + risk tier (cruise 50x / sweat 150x /
+degen 500x) and a third lease-guarded ticker
+([lib/autopilot/ticker.ts](../lib/autopilot/ticker.ts), kill switch
+`DISABLE_AUTOPILOT_TICKER`) trades BTC/ETH/SOL from the user's own wallet via
+the Privy instant stack. Pipeline per tick: CAS tick claim → exits (1%
+favorable / max hold; on-chain SL+TP own the hard stops) → deterministic risk
+shell (budget is the absolute loss bound, open stakes reserved, tilt guard) →
+Blitz momentum brain → record-before-send open + mandatory SL (attach failure
+= emergency close). Trades are `flash-tail` bets with
+`meta.sourceKind: 'autopilot'` (HTTP callers cannot forge that lineage), so
+the reconcile/liveness machinery above covers them for free. Sessions live in
+`autopilot_sessions` (one active per user via partial unique index). Known
+limitations: SL-trigger exits book as worst-case full-stake loss until
+chain-priced (UI says so); engine dep calls carry no abort timeouts, so the
+30s tick-claim window assumes a single Railway replica; the reconcile sweep
+lives on the WHALE ticker — running autopilot with `DISABLE_WHALE_TICKER=true`
+removes its external-close/chain-verify safety net.
+
 ---
 
 ## 8. Database (Drizzle / Neon)
