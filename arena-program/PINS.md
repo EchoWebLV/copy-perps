@@ -194,3 +194,26 @@ to the base layer.
   use it — re-add only when an instruction needs `init_if_needed`).
 - Template's `packageManager: yarn@1.22.19` field dropped from package.json (npm used,
   matching the parent repo).
+
+## Tasks 6–9: pure Rust modules (2026-06-11)
+
+- `state.rs` / `candles.rs` / `strategy.rs` / `paper.rs` landed per the plan;
+  `cargo test -p arena` = 25 tests green (1 state size, 8 candles, 2 strategy,
+  13 paper, 1 scaffold). Strategy mirrors the CURRENT
+  `lib/arena/strategy-reference.ts` (including the `breakout_bps >= 10_000`
+  domain guard added in review) and passes all nine fixture cases in
+  `fixtures/arena/strategy-cases.json`.
+- dev-deps `serde`/`serde_json` added for the fixture parity test (test-only;
+  Cargo.lock delta is exactly those crates — er-sdk stays at 0.14.3 exact).
+- **`anchor-1.0.2 build` caveat for Tasks 10–11:** the SBF compile emits
+  stack-offset diagnostics (build still exits 0, `arena.so` + IDL produced):
+  `MarketState::try_deserialize_unchecked` frame ≈7232 bytes (limit 4096) and
+  `Bot::try_deserialize_unchecked` ≈4672 bytes. The Borsh deserialize path
+  builds the full ~3.3KB ring / ~2KB tape structs on the stack. This bites the
+  moment an instruction takes `Account<MarketState>` / `Account<Bot>`
+  (Task 10's init contexts construct fresh accounts — likely fine — but
+  Task 11's `tick` deserializes both). Mitigations to evaluate at Task 10/11,
+  in order: `Box<Account<...>>` in the Accounts structs, then zero_copy
+  (`AccountLoader`) if the boxed form still trips the limit at runtime.
+  Do NOT restructure the state structs preemptively — measure on the local
+  validator first.
