@@ -20,6 +20,7 @@ import {
   STREAK,
 } from "@/components/v2/ui";
 import { BotCard, fmtArenaPrice } from "./BotCard";
+import { BotProfile } from "./BotProfile";
 
 // Literal process.env access so Next.js inlines it at build time.
 const CLUSTER_LABEL =
@@ -29,6 +30,7 @@ export function ArenaRoster() {
   const { bots, market, mode } = useArenaLive();
   const now = useNowTick();
   const botNames = Object.keys(bots);
+  const [selected, setSelected] = useState<string | null>(null);
 
   const oracleTsMs = market?.lastPublishTsMs ?? 0;
   const oracleStale = now > 0 && market !== null && isStale(oracleTsMs, now);
@@ -102,7 +104,13 @@ export function ArenaRoster() {
                 stories — no 100vh snap). Desktop: WhaleRoster's grid. */}
             <div className="flex flex-col gap-3 lg:grid lg:auto-rows-max lg:grid-cols-2 lg:gap-3 xl:grid-cols-3">
               {botNames.map((name) => (
-                <BotCard key={name} name={name} bot={bots[name]} now={now} />
+                <BotCard
+                  key={name}
+                  name={name}
+                  bot={bots[name]}
+                  now={now}
+                  onOpen={() => setSelected(name)}
+                />
               ))}
             </div>
             <p
@@ -116,6 +124,15 @@ export function ArenaRoster() {
           </>
         )}
       </div>
+
+      {selected && (
+        <BotProfile
+          name={selected}
+          bot={bots[selected] ?? null}
+          now={now}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

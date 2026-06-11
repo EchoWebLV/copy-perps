@@ -45,10 +45,12 @@ export function BotCard({
   name,
   bot,
   now,
+  onOpen,
 }: {
   name: string;
   bot: ArenaBot | null;
   now: number;
+  onOpen?: () => void;
 }) {
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
@@ -59,7 +61,18 @@ export function BotCard({
     bot && bot.grossPnlUsd !== 0 ? (bot.grossPnlUsd > 0 ? GREEN : RED) : DIM;
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-4">
+    <div
+      className={`rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-4 text-left ${onOpen ? "cursor-pointer transition-colors hover:border-white/25" : ""}`}
+      onClick={onOpen}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onOpen();
+            }
+          : undefined
+      }>
       {/* header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
