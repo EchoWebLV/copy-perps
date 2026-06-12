@@ -505,7 +505,12 @@ export function buildCopyEngineDeps(): CopyEngineDeps {
     },
     getMark: async (symbol) => {
       const { getMark } = await import("@/lib/data/marks");
-      return getMark(symbol);
+      const ours = await getMark(symbol);
+      if (ours !== null) return ours;
+      // Exotic markets (XAU/FX/equities whales): the hosted V2 API prices
+      // every Flash symbol. Engine still falls to sourceMarkUsd after this.
+      const { fetchFlashV2PriceUsd } = await import("@/lib/flash/v2-prices");
+      return fetchFlashV2PriceUsd(symbol);
     },
     openTrade: async ({ walletAddress, market, side, stakeUsdc, leverage, mode }) => {
       const { getFlashPerpsService } = await import("@/lib/flash/perps");
