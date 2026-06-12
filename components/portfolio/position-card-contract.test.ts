@@ -47,6 +47,6 @@ describe("Portfolio position cards", () => {
     expect(source).not.toContain("text-[20px]");
     expect(source).not.toContain("shadow-[");
     expect(source).toContain("Current");
-    expect(source).toContain("Cost");
+    expect(source).toContain("Stake");
   });
 });

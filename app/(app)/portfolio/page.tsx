@@ -9,6 +9,8 @@ import {
   History,
   LogOut,
   RefreshCw,
+  Trophy,
+  Users,
   WalletCards,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -41,6 +43,7 @@ import {
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 import { CopyTradingPanel } from "@/components/copy/CopyTradingPanel";
+import { LeaderboardFeed } from "@/components/leaderboard/LeaderboardFeed";
 import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
 import { mergeCopyRowsForPortfolioRefresh } from "@/lib/positions/portfolio-refresh";
 import { applyLiveMarksToCopyRows } from "@/lib/positions/live-copy-row";
@@ -122,7 +125,7 @@ interface PortfolioResponseData {
   snapshot?: PortfolioSnapshotMetaData;
 }
 
-type PortfolioTab = "wallet" | "open" | "closed";
+type PortfolioTab = "subscriptions" | "open" | "history" | "wins" | "wallet";
 
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
@@ -142,7 +145,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<PortfolioTab>("wallet");
+  const [activeTab, setActiveTab] = useState<PortfolioTab>("subscriptions");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const liveMarks = useLiveMarks();
 
@@ -347,7 +350,7 @@ export default function PortfolioPage() {
         ? "NET WORTH · LAST GOOD"
         : "NET WORTH · LIVE";
 
-  // Realized PnL summary for the Closed tab. Only positions with known
+  // Realized PnL summary for the History tab. Only positions with known
   // proceeds count — a closed position whose proceeds haven't been
   // recorded yet would otherwise read as a fabricated 100% loss.
   const settledClosed = closedPositions.filter((p) => p.proceedsUsdc != null);
@@ -431,7 +434,7 @@ export default function PortfolioPage() {
   ) : null;
 
   return (
-    <AppShell rail={portfolioRail} railTitle="Portfolio" hideEmptyRail>
+    <AppShell rail={portfolioRail} railTitle="My copies" hideEmptyRail>
       <div
         className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-none lg:px-6 lg:pt-5"
         style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
@@ -556,7 +559,7 @@ export default function PortfolioPage() {
                   detail={formatMaybeUsd(positionsValue, portfolioDataReady)}
                 />
                 <PortfolioSummaryCard
-                  label="Closed"
+                  label="History"
                   value={String(closedHoldingCount)}
                   detail={
                     closedHoldingCount > 0
@@ -573,15 +576,18 @@ export default function PortfolioPage() {
                 />
               </div>
 
+              {/* Tab bar: Subscriptions (standing commitments first), Open, History, Wins, Wallet */}
               <div
-                className="mt-3 grid grid-cols-3 gap-1 rounded-2xl p-1"
+                className="mt-3 grid grid-cols-5 gap-1 rounded-2xl p-1"
                 style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
               >
                 {(
                   [
-                    ["wallet", "Wallet", 1, WalletCards],
+                    ["subscriptions", "Subs", null, Users],
                     ["open", "Open", openHoldingCount, Activity],
-                    ["closed", "Closed", closedHoldingCount, History],
+                    ["history", "History", closedHoldingCount, History],
+                    ["wins", "Wins", null, Trophy],
+                    ["wallet", "Wallet", null, WalletCards],
                   ] as const
                 ).map(([key, label, count, Icon]) => {
                   const active = activeTab === key;
@@ -589,16 +595,16 @@ export default function PortfolioPage() {
                     <button
                       key={key}
                       onClick={() => setActiveTab(key)}
-                      className="flex min-w-0 items-center justify-center gap-1 rounded-xl px-2 py-2 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.97] sm:text-[11px]"
+                      className="flex min-w-0 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[9px] font-black uppercase tracking-widest transition active:scale-[0.97] sm:text-[10px]"
                       style={{
                         background: active ? ACCENT : "transparent",
                         color: active ? BG : FG,
                         opacity: active ? 1 : 0.58,
                       }}
                     >
-                      <Icon size={14} strokeWidth={2.8} />
+                      <Icon size={13} strokeWidth={2.8} />
                       <span className="truncate">
-                        {label} {key === "wallet" ? "" : `· ${count}`}
+                        {label}{count !== null ? ` · ${count}` : ""}
                       </span>
                     </button>
                   );
@@ -620,21 +626,8 @@ export default function PortfolioPage() {
                     {error}
                   </div>
                 )}
-                {activeTab === "wallet" && (
-                  <WalletTabPanel
-                    walletAddress={wallet?.address ?? null}
-                    walletStableUsd={effectiveWalletStableUsd}
-                    walletSol={effectiveWalletSol}
-                    pacificaAvailableUsd={pacificaAvailableUsd}
-                    availableCashUsd={availableCashUsd}
-                    totalNetWorth={totalNetWorth}
-                    portfolioBalancesReady={portfolioBalancesReady}
-                    portfolioDataReady={portfolioDataReady}
-                    processingFundsUsd={processingFundsUsd}
-                    copied={copied}
-                    copyWalletAddress={copyWalletAddress}
-                    refreshPortfolio={refreshPortfolio}
-                  />
+                {activeTab === "subscriptions" && (
+                  <SubscriptionsPanel />
                 )}
                 {activeTab === "open" && (
                   <OpenPositionsPanel
@@ -649,7 +642,7 @@ export default function PortfolioPage() {
                     refreshPortfolio={refreshPortfolio}
                   />
                 )}
-                {activeTab === "closed" && (
+                {activeTab === "history" && (
                   <ClosedPositionsPanel
                     positions={positions}
                     closedPositions={closedPositions}
@@ -657,6 +650,25 @@ export default function PortfolioPage() {
                     closedCost={closedCost}
                     realizedPnl={realizedPnl}
                     realizedPnlPct={realizedPnlPct}
+                    refreshPortfolio={refreshPortfolio}
+                  />
+                )}
+                {activeTab === "wins" && (
+                  <WinsPanel />
+                )}
+                {activeTab === "wallet" && (
+                  <WalletTabPanel
+                    walletAddress={wallet?.address ?? null}
+                    walletStableUsd={effectiveWalletStableUsd}
+                    walletSol={effectiveWalletSol}
+                    pacificaAvailableUsd={pacificaAvailableUsd}
+                    availableCashUsd={availableCashUsd}
+                    totalNetWorth={totalNetWorth}
+                    portfolioBalancesReady={portfolioBalancesReady}
+                    portfolioDataReady={portfolioDataReady}
+                    processingFundsUsd={processingFundsUsd}
+                    copied={copied}
+                    copyWalletAddress={copyWalletAddress}
                     refreshPortfolio={refreshPortfolio}
                   />
                 )}
@@ -734,6 +746,22 @@ function PortfolioSummaryCard({
         </div>
       )}
     </div>
+  );
+}
+
+function SubscriptionsPanel() {
+  return (
+    <section className="space-y-3">
+      <CopyTradingPanel />
+    </section>
+  );
+}
+
+function WinsPanel() {
+  return (
+    <section className="space-y-3">
+      <LeaderboardFeed />
+    </section>
   );
 }
 
@@ -900,7 +928,6 @@ function OpenPositionsPanel({
         pnlPct={positionsPnlPct}
         cost={totalCost}
       />
-      <CopyTradingPanel />
       {positions === null && <PortfolioEmptyState text="LOADING POSITIONS..." />}
       {positions !== null && !hasPositions && (
         <PortfolioEmptyState
@@ -958,7 +985,7 @@ function ClosedPositionsPanel({
   return (
     <section className="space-y-3">
       <CompactPositionSummary
-        label="Closed positions"
+        label="History"
         count={closedCount}
         value={formatSignedUsd(realizedPnl)}
         pnl={realizedPnl}
@@ -968,7 +995,7 @@ function ClosedPositionsPanel({
       {positions === null && <PortfolioEmptyState text="LOADING POSITIONS..." />}
       {positions !== null && closedCount === 0 && (
         <PortfolioEmptyState
-          headline={`"NO CLOSED YET"`}
+          headline={`"NO HISTORY YET"`}
           text="CLOSED BETS SHOW UP HERE."
         />
       )}

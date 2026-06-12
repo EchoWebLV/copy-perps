@@ -197,7 +197,7 @@ export function PositionRow({
             )}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-neutral-500">
-            <span>Cost {fmtUsd(position.amountUsdc)}</span>
+            <span>Stake {fmtUsd(position.amountUsdc)}</span>
             <span>·</span>
             <span>Current {fmtUsd(value)}</span>
             {position.openTxHash && (
@@ -252,7 +252,7 @@ export function PositionRow({
 
       <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/10 pt-2">
         <CompactLegacyMetric label="Current" value={fmtUsd(value)} />
-        <CompactLegacyMetric label="Cost" value={fmtUsd(position.amountUsdc)} />
+        <CompactLegacyMetric label="Stake" value={fmtUsd(position.amountUsdc)} />
         <CompactLegacyMetric
           label="P/L"
           value={dim ? "-" : fmtUsd(position.pnlUsdc)}

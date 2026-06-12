@@ -23,23 +23,47 @@ describe("Portfolio layout contract", () => {
     expect(page).toContain("WithdrawButton");
   });
 
-  it("uses wallet, open, and closed as the primary portfolio tabs", () => {
+  it("uses subscriptions, open, history, wins, and wallet as the portfolio tabs", () => {
     const page = source();
 
-    expect(page).toContain('type PortfolioTab = "wallet" | "open" | "closed"');
-    expect(page).toContain('useState<PortfolioTab>("wallet")');
-    expect(page).toContain('["wallet", "Wallet"');
+    expect(page).toContain(
+      'type PortfolioTab = "subscriptions" | "open" | "history" | "wins" | "wallet"',
+    );
+    expect(page).toContain('useState<PortfolioTab>("subscriptions")');
+    expect(page).toContain('["subscriptions", "Subs"');
     expect(page).toContain('["open", "Open"');
-    expect(page).toContain('["closed", "Closed"');
+    expect(page).toContain('["history", "History"');
+    expect(page).toContain('["wins", "Wins"');
+    expect(page).toContain('["wallet", "Wallet"');
   });
 
-  it("keeps wallet actions inside the wallet tab instead of above every position list", () => {
+  it("puts subscriptions first and moves wallet to last position in the tab bar", () => {
+    const page = source();
+
+    const subsIdx = page.indexOf('["subscriptions"');
+    const openIdx = page.indexOf('["open"');
+    const historyIdx = page.indexOf('["history"');
+    const winsIdx = page.indexOf('["wins"');
+    const walletIdx = page.indexOf('["wallet"');
+
+    expect(subsIdx).toBeGreaterThan(-1);
+    expect(subsIdx).toBeLessThan(openIdx);
+    expect(openIdx).toBeLessThan(historyIdx);
+    expect(historyIdx).toBeLessThan(winsIdx);
+    expect(winsIdx).toBeLessThan(walletIdx);
+  });
+
+  it("keeps wallet actions inside the wallet tab and renders all tab panels", () => {
     const page = source();
 
     expect(page).toContain('activeTab === "wallet"');
+    expect(page).toContain('activeTab === "subscriptions"');
+    expect(page).toContain('activeTab === "wins"');
+    expect(page).toContain("SubscriptionsPanel");
     expect(page).toContain("WalletTabPanel");
     expect(page).toContain("OpenPositionsPanel");
     expect(page).toContain("ClosedPositionsPanel");
+    expect(page).toContain("WinsPanel");
   });
 
   it("does not render wallet-only balances as total net worth while portfolio data is loading", () => {
@@ -84,8 +108,33 @@ describe("Portfolio layout contract", () => {
     const page = source();
 
     expect(page).toContain(
-      '<AppShell rail={portfolioRail} railTitle="Portfolio" hideEmptyRail>',
+      '<AppShell rail={portfolioRail} railTitle="My copies" hideEmptyRail>',
     );
     expect(page).not.toContain("Select a bot or position");
+  });
+
+  it("renders the Wins tab from the shared LeaderboardFeed component", () => {
+    const page = source();
+
+    expect(page).toContain("LeaderboardFeed");
+    expect(page).toContain("WinsPanel");
+  });
+
+  it("renders the Subscriptions tab from CopyTradingPanel without embedding it in Open", () => {
+    const page = source();
+
+    // CopyTradingPanel lives exclusively in SubscriptionsPanel now
+    expect(page).toContain("SubscriptionsPanel");
+    // CopyTradingPanel must appear in SubscriptionsPanel body, not directly in OpenPositionsPanel
+    const subscriptionsBody = page.slice(
+      page.indexOf("function SubscriptionsPanel"),
+      page.indexOf("function WinsPanel"),
+    );
+    expect(subscriptionsBody).toContain("CopyTradingPanel");
+    const openPanelBody = page.slice(
+      page.indexOf("function OpenPositionsPanel"),
+      page.indexOf("function ClosedPositionsPanel"),
+    );
+    expect(openPanelBody).not.toContain("CopyTradingPanel");
   });
 });
