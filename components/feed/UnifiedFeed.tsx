@@ -112,8 +112,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
 
   // Sentiment: reaction counts aggregated per whale across their open positions.
   // Fetched lazily from /api/pulse/social (unauthenticated — public read).
-  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>({});
-  useWhaleSentiment(whales, setSentiment);
+  const sentiment = useWhaleSentiment(whales);
 
   const botNames = useMemo(() => Object.keys(bots), [bots]);
 
@@ -1338,12 +1337,20 @@ type PulseApiSocial = Record<
   { reactionCounts: { Bullish?: number; Bearish?: number; Tailing?: number } }
 >;
 
+const SENTIMENT_CHUNK_SIZE = 100;
+
 /** Fetches reaction counts for all whale open positions and aggregates them
- *  per whale. Refreshes once when the whale roster changes. */
+ *  per whale. Refreshes once when the whale roster changes.
+ *
+ *  Fix 1: sentiment is bullish-vs-bearish only (Tailing excluded from
+ *  percentage and total). Row hides when subtotal === 0.
+ *  Fix 2: latch fetchedKeyRef only on success; stale-response guard drops
+ *  results that arrived after the roster changed.
+ *  Fix 3: position IDs are chunked into ≤100-id batches so the server-side
+ *  100-id cap never silently truncates a large roster. */
 function useWhaleSentiment(
   whales: WhaleTraderSignal[],
-  setSentiment: (value: Record<string, TraderSentiment>) => void,
-) {
+): Record<string, TraderSentiment> {
   // Build a stable "all position IDs" key to detect roster changes.
   const positionIdsKey = useMemo(() => {
     return whales
@@ -1364,43 +1371,74 @@ function useWhaleSentiment(
   }, [whales]);
 
   const fetchedKeyRef = useRef<string>("");
+  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>({});
 
   useEffect(() => {
     if (!positionIdsKey || fetchedKeyRef.current === positionIdsKey) return;
-    fetchedKeyRef.current = positionIdsKey;
 
-    const positionIds = positionIdsKey.split(",").filter(Boolean);
+    const capturedKey = positionIdsKey;
+    const positionIds = capturedKey.split(",").filter(Boolean);
     if (positionIds.length === 0) return;
 
-    const encoded = positionIds.map(encodeURIComponent).join(",");
-    void fetch(`/api/pulse/social?positionIds=${encoded}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { social?: PulseApiSocial } | null) => {
-        if (!data?.social) return;
-        // Aggregate bullish + total per whale across all their positions.
+    // Chunk into ≤100-id batches to stay within the server-side cap.
+    const chunks: string[][] = [];
+    for (let i = 0; i < positionIds.length; i += SENTIMENT_CHUNK_SIZE) {
+      chunks.push(positionIds.slice(i, i + SENTIMENT_CHUNK_SIZE));
+    }
+
+    void Promise.all(
+      chunks.map((chunk) => {
+        const encoded = chunk.map(encodeURIComponent).join(",");
+        return fetch(`/api/pulse/social?positionIds=${encoded}`, {
+          cache: "no-store",
+        })
+          .then((r) => (r.ok ? (r.json() as Promise<{ social?: PulseApiSocial } | null>) : null))
+          .catch(() => null);
+      }),
+    )
+      .then((responses) => {
+        // Stale-guard: drop if the roster changed while fetches were in flight.
+        if (capturedKey !== positionIdsKey) return;
+
+        // Merge all chunk payloads into one social map.
+        const merged: PulseApiSocial = {};
+        for (const data of responses) {
+          if (!data?.social) continue;
+          Object.assign(merged, data.social);
+        }
+
+        // Aggregate bullish-vs-bearish per whale (Tailing excluded from math).
         const agg = new Map<string, { bullish: number; total: number }>();
-        for (const [positionId, record] of Object.entries(data.social)) {
+        for (const [positionId, record] of Object.entries(merged)) {
           const whaleId = positionToWhale.get(positionId);
           if (!whaleId) continue;
           const counts = record.reactionCounts;
           const bullish = counts.Bullish ?? 0;
           const bearish = counts.Bearish ?? 0;
-          const tailing = counts.Tailing ?? 0;
-          const subtotal = bullish + bearish + tailing;
+          // Fix 1: subtotal excludes Tailing — percentage and vote count are
+          // bullish-vs-bearish only.
+          const subtotal = bullish + bearish;
+          if (subtotal === 0) continue;
           const existing = agg.get(whaleId) ?? { bullish: 0, total: 0 };
           agg.set(whaleId, {
             bullish: existing.bullish + bullish,
             total: existing.total + subtotal,
           });
         }
+
         const result: Record<string, TraderSentiment> = {};
         for (const [whaleId, counts] of agg) {
           result[whaleId] = counts;
         }
+
+        // Fix 2: latch the key only after a successful resolve.
+        fetchedKeyRef.current = capturedKey;
         setSentiment(result);
       })
       .catch(() => {
-        // Sentiment is non-critical — silently ignore fetch failures.
+        // Sentiment is non-critical — silently ignore unexpected failures.
       });
-  }, [positionIdsKey, positionToWhale, setSentiment]);
+  }, [positionIdsKey, positionToWhale]);
+
+  return sentiment;
 }
