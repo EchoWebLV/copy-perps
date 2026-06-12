@@ -31,11 +31,14 @@ import { BN, Program, web3 } from "@coral-xyz/anchor";
 const SOL_FEED = new web3.PublicKey(
   "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu",
 );
-// Devnet ER validator identity. Both https://devnet.magicblock.app and
-// https://devnet-as.magicblock.app report this same getIdentity (verified
-// 2026-06-11); it is also the pubkey anchor-counter pins for devnet runs.
-const DEVNET_ER_VALIDATOR = new web3.PublicKey(
-  "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57",
+// ER validator identity used as the delegation pin (spec gotcha: never
+// delegate without pinning). Default = devnet.magicblock.app == devnet-as
+// (verified 2026-06-11). For mainnet pass ARENA_ER_VALIDATOR explicitly —
+// regional identities are pinned in PINS.md "Phase 1.5 mainnet runbook"
+// (Asia happens to share the devnet key; pin deliberately anyway).
+const ER_VALIDATOR = new web3.PublicKey(
+  process.env.ARENA_ER_VALIDATOR?.trim() ||
+    "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57",
 );
 // magicblock-delegation-program-api 3.0.0 (the er-sdk 0.14.3 dependency) —
 // NOT the older ...teabpTabdBah id from stale docs (PINS.md Task 12 gotcha).
@@ -258,7 +261,7 @@ async function main() {
   // delegate without pinning). skipPreflight like tests/delegation.ts — the
   // delegate CPI reassigns ownership mid-tx, which trips simulation.
   const validatorMeta = [
-    { pubkey: DEVNET_ER_VALIDATOR, isSigner: false, isWritable: false },
+    { pubkey: ER_VALIDATOR, isSigner: false, isWritable: false },
   ];
   const delegated = async (pda: web3.PublicKey) =>
     (await connection.getAccountInfo(pda))?.owner.equals(

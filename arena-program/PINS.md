@@ -688,3 +688,60 @@ flip purely as a courtesy signal.
   Billing appears inactive/deferred; the quota-lift proof is therefore
   "commit #11 lands" during the soak (sponsored path died at exactly 10).
   Re-measure fund-crank-payer.ts sizing once billing activates.
+
+## Phase 1.5 mainnet runbook (prepped 2026-06-12, awaiting funding)
+
+Verified live 2026-06-12: all three mainnet ER regions serve the SOL/USD feed
+(`ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu`, same cluster-independent PDA)
+at age 0–1s. Validator identities (the delegation pin + fee-vault scope):
+
+| region | endpoint | identity |
+|---|---|---|
+| Asia | as.magicblock.app | `MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57` (same key as devnet!) |
+| EU | eu.magicblock.app | `MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e` |
+| US | us.magicblock.app | `MUS3hc9TCw4cGC12vHNoYcCGzJG1txjgQLZWVoeNHNd` |
+
+Recommended pin: **EU** (founder + demo audience are EEST; crank latency is
+irrelevant at the 2s cadence). The same program keypair deploys to the same
+id — `6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC` is unoccupied on mainnet
+(checked 2026-06-12).
+
+Cost (computed against mainnet rent, 437,416-byte .so):
+program 3.046 + market 0.026 + bots×3 0.051 + config 0.009 + crank-payer
+account 0.001 + crank-payer funding 0.1 + fee headroom ≈ **3.28 SOL total**.
+
+Sequence (each step = the devnet command with mainnet env):
+```bash
+# admin wallet needs ~3.4 SOL on MAINNET first
+solana program deploy arena-program/target/deploy/arena.so \
+  --program-id arena-program/target/deploy/arena-keypair.json \
+  --use-rpc --url "$NEXT_PUBLIC_HELIUS_RPC_URL"          # mainnet Helius
+
+ARENA_DEVNET_RPC="$NEXT_PUBLIC_HELIUS_RPC_URL" \
+ARENA_ER_ENDPOINT=https://eu.magicblock.app \
+ARENA_MARKET_ID=0 ARENA_BOTS=scalper-v2,rider-v2 \
+  npx tsx --env-file=.env.local scripts/arena/init-devnet.ts
+# NOTE: init-devnet.ts pins DEVNET_ER_VALIDATOR (MAS1…) as the delegation
+# validator — MUST be switched to the chosen mainnet identity (env-drive it
+# before running; same for _test-aggro-bot.ts). Asia would work unchanged
+# (same key) but pin deliberately, not by coincidence.
+
+ARENA_DEVNET_RPC="$NEXT_PUBLIC_HELIUS_RPC_URL" ARENA_ER_ENDPOINT=https://eu.magicblock.app \
+  npx tsx --env-file=.env.local scripts/arena/fund-crank-payer.ts   # ARENA_FUND_LAMPORTS=100000000
+
+ARENA_MARKET_ID=0 ARENA_BOTS=scalper-v2,rider-v2 ARENA_ER_ENDPOINT=https://eu.magicblock.app \
+ARENA_ER_VALIDATOR=MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e \
+ARENA_DEVNET_RPC="$NEXT_PUBLIC_HELIUS_RPC_URL" \
+  npx tsx --env-file=.env.local scripts/arena/commit-once.ts        # smoke before the crank
+
+# Railway arena-crank env flips: ARENA_ER_ENDPOINT, ARENA_ER_VALIDATOR,
+# ARENA_MARKET_ID=0, ARENA_BOTS, ARENA_DEVNET_RPC (mainnet Helius)
+# Web env flips: NEXT_PUBLIC_ARENA_ER_ENDPOINT, NEXT_PUBLIC_ARENA_MARKET_ID=0,
+# NEXT_PUBLIC_ARENA_BOTS, NEXT_PUBLIC_ARENA_CLUSTER_LABEL=mainnet
+```
+
+Open items before running: (1) ~~validator pin env-drive~~ DONE same day —
+`ARENA_ER_VALIDATOR` drives init-devnet.ts + _test-aggro-bot.ts; (2) mainnet commit BILLING
+is unmeasured — fund 0.1 SOL, watch the crank-payer balance for the first
+hours, resize; (3) PINS pre-mainnet gates: tick spam-aging guard + the
+commit_state delegation-record trust note.

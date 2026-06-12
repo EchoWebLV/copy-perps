@@ -6,24 +6,30 @@
 // with real price action while SOL is too quiet for the launch personas.
 //
 // Ad-hoc by design (underscore prefix, repo convention): run once, add
-// "test-aggro-v1" to ARENA_BOTS, restart the crank worker; REMOVE the bot
+// the bot name to ARENA_BOTS, restart the crank worker; REMOVE the bot
 // from ARENA_BOTS after the trade evidence is recorded in PINS.md.
 //
 //   npx tsx --env-file=.env.local scripts/arena/_test-aggro-bot.ts
+//
+// ARENA_TEST_BOT_NAME overrides the persona (default test-aggro-v2 —
+// test-aggro-v1 belongs to the wedged market-0 generation).
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { BN, Program, web3 } from "@coral-xyz/anchor";
 
-const DEVNET_ER_VALIDATOR = new web3.PublicKey(
-  "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57",
+// Delegation validator pin — env-overridable for mainnet (PINS.md
+// "Phase 1.5 mainnet runbook"); default is the devnet identity.
+const ER_VALIDATOR = new web3.PublicKey(
+  process.env.ARENA_ER_VALIDATOR?.trim() ||
+    "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57",
 );
 const DELEGATION_PROGRAM_ID = new web3.PublicKey(
   "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
 );
 
-const NAME = "test-aggro-v1";
+const NAME = process.env.ARENA_TEST_BOT_NAME?.trim() || "test-aggro-v2";
 const PARAMS = {
   readSpan: 1,
   breakoutBps: 5, // 0.05% past the prior range — fires on routine noise
@@ -115,7 +121,7 @@ async function main() {
         botState: pda,
       })
       .remainingAccounts([
-        { pubkey: DEVNET_ER_VALIDATOR, isSigner: false, isWritable: false },
+        { pubkey: ER_VALIDATOR, isSigner: false, isWritable: false },
       ])
       .rpc({ skipPreflight: true });
     console.log(`delegate_bot ${NAME}: ${sig}`);
