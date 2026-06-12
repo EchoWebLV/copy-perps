@@ -849,3 +849,34 @@ Founder funded the admin wallet to 4.896 SOL; full runbook executed in ~6 min:
   rehearsal record (test-aggro-v2 retired with it).
 - Local UI env → mainnet (cluster label "mainnet"); browser-verified live.
   Prod web still ships the arena UI with the pending merge.
+
+## 2026-06-12 — Flash copy-trading shipped (commit 842156c)
+
+Copy people (any Flash wallet) or arena bots; auto-open mirrors + auto-close
+on source exit. Spec: docs/superpowers/specs/2026-06-12-flash-copy-trading.md.
+
+- **Copy ticker** runs in-process (instrumentation.ts), lease table
+  `copy_ticker_lease` (raw SQL, 180s TTL like autopilot). Cadence 3s while
+  watching targets, 30s idle. Env: `DISABLE_COPY_TICKER=true` kill switch,
+  `COPY_DRY_RUN=true` log-only mode, `COPY_TICK_GAP_MS` override.
+- **Bot source** = bot PDA read on the ER (`ARENA_ER_ENDPOINT` +
+  `ARENA_PROGRAM_ID`, NEXT_PUBLIC_ fallbacks), position key
+  `arena:<persona>:<openedTsMs>` (same as Tail). **Wallet source** =
+  flash-sdk positionsOf, key `flash:<wallet>:<market>:<side>` (openTime
+  deliberately NOT in the key — Flash merges adds per owner+market+side).
+- **Copied positions are bets rows** (type flash-tail) with
+  meta.copySubscriptionId + meta.autoCloseOnSourceClose; close pass stamps
+  closeReason 'source-closed'. Failed source fetch = unknown ≠ flat (never
+  close on RPC blips).
+- **Money rails reused verbatim**: FlashPerpsService open/close +
+  signAndSendPrivySolanaTransaction (autopilot path). Flash floor:
+  $1 stakes need ≥10× leverage ($10 min notional); TP/SL triggers
+  impossible under ~$10 collateral — exits ARE the close pass.
+- **MERGE CHECKLIST**: (1) after prod deploy, add DISABLE_COPY_TICKER=true
+  to .claude/launch.json dev configs (autopilot-lease lesson — local dev
+  must not crank prod copies); (2) flip COPY_DRY_RUN off in prod env only
+  after the $1 live copy verifies; (3) Privy authorization key rotation
+  still gates any public push.
+- Dry-run E2E: test subscription 6f28f669 (user 6691e1c7 → degen-v1, $1,
+  mirror, auto-close) verified against live mainnet Degen cycles, then
+  stopped before handover.
