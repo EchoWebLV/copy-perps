@@ -23,6 +23,7 @@ import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { BotCard } from "@/components/arena/BotCard";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
+import { CopyModal, type CopyModalTarget } from "@/components/copy/CopyModal";
 import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
@@ -75,6 +76,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
   const [whales, setWhales] = useState<WhaleTraderSignal[]>(initialWhales);
   const [loaded, setLoaded] = useState(initialWhales.length > 0);
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
+  const [copyTarget, setCopyTarget] = useState<CopyModalTarget | null>(null);
   const { bots, market, mode, lastUpdateMs } = useArenaLive();
   const now = useNowTick();
 
@@ -167,6 +169,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   lastUpdateMs={lastUpdateMs}
                   now={now}
                   onTail={(source) => setTailSource(source)}
+                  onCopy={(target) => setCopyTarget(target)}
                 />
               ),
             )
@@ -208,6 +211,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   lastUpdateMs={lastUpdateMs}
                   now={now}
                   onTail={(source) => setTailSource(source)}
+                  onCopy={(target) => setCopyTarget(target)}
                 />
               ),
             )
@@ -219,6 +223,11 @@ export function UnifiedFeed({ initialWhales }: Props) {
         open={!!tailSource}
         source={tailSource}
         onClose={() => setTailSource(null)}
+      />
+      <CopyModal
+        open={copyTarget !== null}
+        target={copyTarget}
+        onClose={() => setCopyTarget(null)}
       />
     </div>
   );
@@ -386,6 +395,7 @@ function BotFeedCard({
   lastUpdateMs,
   now,
   onTail,
+  onCopy,
 }: {
   name: string;
   bot: ArenaBot | null;
@@ -393,6 +403,7 @@ function BotFeedCard({
   lastUpdateMs: number;
   now: number;
   onTail: (source: TailSource) => void;
+  onCopy: (target: CopyModalTarget) => void;
 }) {
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
@@ -488,6 +499,16 @@ function BotFeedCard({
               {formatSignedPct(pnlPct)}
             </div>
           </div>
+          <BotCopyButton
+            onClick={() =>
+              onCopy({
+                kind: "arena-bot",
+                key: name,
+                label: display,
+                emoji: persona?.emoji,
+              })
+            }
+          />
         </div>
       </div>
 
@@ -515,6 +536,22 @@ function BotFeedCard({
         <FlatLine />
       )}
     </article>
+  );
+}
+
+/** Standing-copy entry point — present whether or not the bot currently
+ *  holds a position (arming BEFORE the next entry is the whole point). */
+function BotCopyButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border px-2.5 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+      style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
+      aria-label="Copy this bot"
+    >
+      Copy
+    </button>
   );
 }
 
@@ -561,6 +598,7 @@ function GridBotCard({
   lastUpdateMs,
   now,
   onTail,
+  onCopy,
 }: {
   name: string;
   bot: ArenaBot | null;
@@ -568,16 +606,40 @@ function GridBotCard({
   lastUpdateMs: number;
   now: number;
   onTail: (source: TailSource) => void;
+  onCopy: (target: CopyModalTarget) => void;
 }) {
   const cta = botCopyCta({ name, bot, market, lastUpdateMs, nowMs: now });
+  const persona = ARENA_PERSONAS[name];
+  const copyButton = (
+    <button
+      type="button"
+      onClick={() =>
+        onCopy({
+          kind: "arena-bot",
+          key: name,
+          label: persona?.display ?? name,
+          emoji: persona?.emoji,
+        })
+      }
+      className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+      style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
+    >
+      Copy trader
+    </button>
+  );
   return (
     <BotCard
       name={name}
       bot={bot}
       now={now}
       tailCta={
-        cta.state === "none" ? undefined : (
-          <BotTailCta cta={cta} onTail={onTail} />
+        cta.state === "none" ? (
+          copyButton
+        ) : (
+          <div className="flex flex-col gap-2">
+            <BotTailCta cta={cta} onTail={onTail} />
+            {copyButton}
+          </div>
         )
       }
     />

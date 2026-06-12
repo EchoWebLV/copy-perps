@@ -165,6 +165,14 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  // TailModal's "auto-close when the source closes" checkbox. Only honored
+  // with a lineage that names a source position the copy engine can watch.
+  const autoCloseOnSourceClose =
+    tailLineage !== null &&
+    tailLineage.sourcePositionId !== null &&
+    typeof body.tail === "object" &&
+    body.tail !== null &&
+    (body.tail as { autoClose?: unknown }).autoClose === true;
 
   try {
     const result = await getFlashPerpsService().open({
@@ -192,6 +200,7 @@ export async function POST(request: Request) {
             result.quote.entryPriceUsd ?? result.position.entryPriceUsd ?? null,
           notionalUsd: result.quote.notionalUsd ?? result.position.sizeUsd ?? null,
           openFeeUsd: result.quote.feesUsd ?? null,
+          autoCloseOnSourceClose,
         }),
       });
     }

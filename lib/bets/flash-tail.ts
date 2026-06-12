@@ -104,6 +104,10 @@ export async function confirmFlashTailClose(args: {
   userId: string;
   signature: string;
   receiveUsdEstimate: number | null;
+  /** Who initiated the close. Defaults to 'manual' (user-clicked). The copy
+   *  engine stamps 'source-closed'; 'external' marks bookkeeping-only closes
+   *  where the position was already gone on-chain. */
+  closeReason?: "manual" | "source-closed" | "external";
 }): Promise<boolean> {
   const bet = await loadOwnedFlashTailBet(args.betId, args.userId);
   if (!bet || bet.status !== "confirmed") return false;
@@ -111,7 +115,7 @@ export async function confirmFlashTailClose(args: {
   const nextMeta: FlashTailMeta = {
     ...bet.meta,
     closeSignature: args.signature,
-    closeReason: "manual",
+    closeReason: args.closeReason ?? "manual",
     proceedsSource: "quote-estimate",
   };
   const updated = await db

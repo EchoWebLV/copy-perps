@@ -51,6 +51,10 @@ describe("flash-tail meta", () => {
     });
     expect(parseFlashTailMeta({ ...valid, side: "up" })).toBeNull();
     expect(parseFlashTailMeta({ ...valid, mode: "turbo" })).toBeNull();
+    expect(parseFlashTailMeta({ ...valid, copySubscriptionId: 7 })).toBeNull();
+    expect(
+      parseFlashTailMeta({ ...valid, autoCloseOnSourceClose: "yes" }),
+    ).toBeNull();
     expect(parseFlashTailMeta({ ...valid, walletAddress: "" })).toBeNull();
     expect(parseFlashTailMeta({ ...valid, leverage: Number.NaN })).toBeNull();
     expect(parseFlashTailMeta({ ...valid, closeReason: "auto" })).toBeNull();
@@ -73,6 +77,49 @@ describe("flash-tail meta", () => {
     });
     const parsed = parseFlashTailMeta({ ...valid, closeReason: "external" });
     expect(parsed?.closeReason).toBe("external");
+  });
+
+  it("round-trips copy-engine fields and accepts source-closed", () => {
+    const meta = buildFlashTailMeta({
+      lineage,
+      market: "SOL",
+      side: "long",
+      leverage: 50,
+      mode: "standard",
+      walletAddress: "wallet-1",
+      entryPriceUsd: 66.8,
+      notionalUsd: 50,
+      openFeeUsd: 0.03,
+      copySubscriptionId: "sub-1",
+      autoCloseOnSourceClose: true,
+    });
+    expect(meta.copySubscriptionId).toBe("sub-1");
+    expect(meta.autoCloseOnSourceClose).toBe(true);
+    expect(parseFlashTailMeta(meta)).toEqual(meta);
+    const parsed = parseFlashTailMeta({ ...meta, closeReason: "source-closed" });
+    expect(parsed?.closeReason).toBe("source-closed");
+  });
+
+  it("defaults copy fields when absent (legacy rows)", () => {
+    const meta = buildFlashTailMeta({
+      lineage,
+      market: "SOL",
+      side: "long",
+      leverage: 20,
+      mode: "standard",
+      walletAddress: "wallet-1",
+      entryPriceUsd: 160,
+      notionalUsd: 20,
+      openFeeUsd: 0.01,
+    });
+    expect(meta.copySubscriptionId).toBeNull();
+    expect(meta.autoCloseOnSourceClose).toBe(false);
+    const legacy = { ...meta } as Record<string, unknown>;
+    delete legacy.copySubscriptionId;
+    delete legacy.autoCloseOnSourceClose;
+    const parsed = parseFlashTailMeta(legacy);
+    expect(parsed?.copySubscriptionId).toBeNull();
+    expect(parsed?.autoCloseOnSourceClose).toBe(false);
   });
 
   it("parses tail lineage from a request body", () => {

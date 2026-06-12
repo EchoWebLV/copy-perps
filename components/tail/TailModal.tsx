@@ -240,6 +240,9 @@ export function TailModal({ open, onClose, source }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<null | TailSuccess>(null);
   const [whaleLeverage, setWhaleLeverage] = useState(1);
+  // Bot tails only: the copy ticker closes the position when the bot's
+  // source position (meta.sourcePositionId) leaves its ER account.
+  const [autoCloseOnSource, setAutoCloseOnSource] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [preflight, setPreflight] = useState<TailPreflightState>({
     checking: false,
@@ -308,6 +311,7 @@ export function TailModal({ open, onClose, source }: Props) {
     setStatus(null);
     setError(null);
     setSuccess(null);
+    setAutoCloseOnSource(true);
     setPreflight({
       checking: false,
       error: null,
@@ -475,6 +479,8 @@ export function TailModal({ open, onClose, source }: Props) {
                   botId: source.botId,
                   sourceName: source.botName,
                   sourcePositionId: source.positionId ?? null,
+                  // Honored server-side only when sourcePositionId is set.
+                  autoClose: autoCloseOnSource,
                 },
         };
         const resp = await fetch("/api/flash/perp", {
@@ -687,6 +693,7 @@ export function TailModal({ open, onClose, source }: Props) {
     preflightBlocked,
     signMessage,
     signAndSendTransaction,
+    autoCloseOnSource,
   ]);
 
   if (!open || !source) return null;
@@ -948,6 +955,36 @@ export function TailModal({ open, onClose, source }: Props) {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl pl-8 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
                 />
               </div>
+              {/* Auto-close on source exit — bot tails only: the copy
+                  ticker can watch the bot's ER account; needs a concrete
+                  position id to match against. */}
+              {source.kind === "bot" && source.positionId ? (
+                <button
+                  type="button"
+                  onClick={() => setAutoCloseOnSource((v) => !v)}
+                  disabled={submitting}
+                  className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                >
+                  <span
+                    aria-hidden
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[11px] font-black transition ${
+                      autoCloseOnSource
+                        ? "border-emerald-400 bg-emerald-400 text-black"
+                        : "border-white/25 bg-transparent text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-white">
+                      Auto-close when {source.botName} closes
+                    </span>
+                    <span className="block text-[10px] text-white/40">
+                      Your position exits within seconds of the bot&apos;s exit
+                    </span>
+                  </span>
+                </button>
+              ) : null}
             </div>
 
             {showWhaleLeverageControl ? (

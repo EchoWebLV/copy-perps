@@ -53,8 +53,10 @@ export function closedFlashTailCopyRows(
       leaderUsername: null,
       whaleId: meta.whaleId,
       whaleName: meta.sourceKind === "whale" ? meta.sourceName : null,
-      autoCloseOnSourceClose: false,
-      closeReason: meta.closeReason,
+      autoCloseOnSourceClose: meta.autoCloseOnSourceClose === true,
+      // CopyRowData uses the Pacifica copy stack's underscore variant.
+      closeReason:
+        meta.closeReason === "source-closed" ? "source_closed" : meta.closeReason,
       botId: meta.botId,
       botName:
         meta.sourceKind === "bot" || meta.sourceKind === "autopilot"

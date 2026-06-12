@@ -20,6 +20,14 @@ export type FlashTailMeta = {
   // opened this trade. Optional so pre-Phase-3c meta literals/rows still
   // typecheck; build/parse always normalize it to string | null.
   autopilotSessionId?: string | null;
+  // Set when the copy engine opened this trade: the copy_subscriptions row.
+  // Same optionality contract as autopilotSessionId.
+  copySubscriptionId?: string | null;
+  // Opt-in for the copy engine's close pass: close this position when the
+  // source position (matched by sourcePositionId) disappears. Set by the
+  // copy engine on subscription opens and by TailModal's checkbox on
+  // manual tails. Absent on pre-copy rows = false.
+  autoCloseOnSourceClose?: boolean;
   market: string;
   side: "long" | "short";
   leverage: number;
@@ -33,7 +41,9 @@ export type FlashTailMeta = {
   // 'external' = position vanished on-chain without a close postback
   // (liquidation, TP/SL trigger, lost confirm) — stamped by the reconcile
   // sweep alongside status 'closed-external'; proceeds stay unknown.
-  closeReason: "manual" | "external" | null;
+  // 'source-closed' = the copy engine closed it because the copied source
+  // position exited.
+  closeReason: "manual" | "external" | "source-closed" | null;
   proceedsSource: "quote-estimate" | "chain" | null;
   reconciledAt: string | null; // ISO; set once the open fill is chain-verified
 };
@@ -49,6 +59,8 @@ type BuildArgs = {
   notionalUsd: number | null;
   openFeeUsd: number | null;
   autopilotSessionId?: string | null;
+  copySubscriptionId?: string | null;
+  autoCloseOnSourceClose?: boolean;
 };
 
 export function buildFlashTailMeta(args: BuildArgs): FlashTailMeta {
@@ -61,6 +73,8 @@ export function buildFlashTailMeta(args: BuildArgs): FlashTailMeta {
     sourceName: args.lineage.sourceName,
     sourcePositionId: args.lineage.sourcePositionId,
     autopilotSessionId: args.autopilotSessionId ?? null,
+    copySubscriptionId: args.copySubscriptionId ?? null,
+    autoCloseOnSourceClose: args.autoCloseOnSourceClose === true,
     market: args.market,
     side: args.side,
     leverage: args.leverage,
@@ -133,6 +147,13 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
     return null;
   }
   if (!isStringOrNull(value.autopilotSessionId ?? null)) return null;
+  if (!isStringOrNull(value.copySubscriptionId ?? null)) return null;
+  if (
+    value.autoCloseOnSourceClose !== undefined &&
+    typeof value.autoCloseOnSourceClose !== "boolean"
+  ) {
+    return null;
+  }
   if (!isStringOrNull(value.whaleId ?? null)) return null;
   if (!isStringOrNull(value.botId ?? null)) return null;
   if (!isString(value.market)) return null;
@@ -150,7 +171,8 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
   if (
     value.closeReason !== null &&
     value.closeReason !== "manual" &&
-    value.closeReason !== "external"
+    value.closeReason !== "external" &&
+    value.closeReason !== "source-closed"
   ) {
     return null;
   }
@@ -174,6 +196,8 @@ export function parseFlashTailMeta(value: unknown): FlashTailMeta | null {
       ? value.sourcePositionId
       : null,
     autopilotSessionId: (value.autopilotSessionId as string | null) ?? null,
+    copySubscriptionId: (value.copySubscriptionId as string | null) ?? null,
+    autoCloseOnSourceClose: value.autoCloseOnSourceClose === true,
     market: value.market,
     side: value.side,
     leverage: value.leverage,

@@ -40,6 +40,7 @@ import {
 } from "@/lib/privy/use-solana-wallet";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
+import { CopyTradingPanel } from "@/components/copy/CopyTradingPanel";
 import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
 import { mergeCopyRowsForPortfolioRefresh } from "@/lib/positions/portfolio-refresh";
 import { applyLiveMarksToCopyRows } from "@/lib/positions/live-copy-row";
@@ -899,6 +900,7 @@ function OpenPositionsPanel({
         pnlPct={positionsPnlPct}
         cost={totalCost}
       />
+      <CopyTradingPanel />
       {positions === null && <PortfolioEmptyState text="LOADING POSITIONS..." />}
       {positions !== null && !hasPositions && (
         <PortfolioEmptyState

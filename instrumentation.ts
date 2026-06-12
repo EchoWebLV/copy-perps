@@ -33,4 +33,12 @@ export async function register(): Promise<void> {
   // Kill switch: DISABLE_AUTOPILOT_TICKER=true.
   const { startAutopilotTicker } = await import("@/lib/autopilot/ticker");
   startAutopilotTicker();
+
+  // Flash copy-trading loop: mirrors targets' opens into followers'
+  // wallets and closes copies when the source exits. Idle ticks are two
+  // indexed queries per 30s; fast (3s) ticks only run while a target is
+  // actually being watched and are RPC-bound, not DB-bound.
+  // Kill switches: DISABLE_COPY_TICKER=true, COPY_DRY_RUN=true.
+  const { startCopyTicker } = await import("@/lib/copy/ticker");
+  startCopyTicker();
 }

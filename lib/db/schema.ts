@@ -425,3 +425,42 @@ export const autopilotSessions = pgTable(
       .where(sql`status = 'active'`),
   }),
 );
+
+// Standing copy-trade of one target per row: when the target opens a Flash
+// position the copy engine mirrors it with stakeUsdc, and (if autoClose)
+// closes the mirror when the target exits. Copied positions themselves are
+// bets rows (type 'flash-tail', meta.copySubscriptionId = id) — this table
+// only holds the user's standing instructions, never money state.
+export const copySubscriptions = pgTable(
+  "copy_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    targetKind: text("target_kind").notNull(), // 'arena-bot' | 'flash-wallet'
+    targetKey: text("target_key").notNull(), // persona name | wallet pubkey
+    targetLabel: text("target_label"),
+    stakeUsdc: doublePrecision("stake_usdc").notNull(),
+    leverageMode: text("leverage_mode").notNull().default("mirror"), // 'mirror' | 'fixed'
+    fixedLeverage: doublePrecision("fixed_leverage"),
+    autoClose: boolean("auto_close").notNull().default(true),
+    maxConcurrent: integer("max_concurrent").notNull().default(1),
+    dailyCapUsd: doublePrecision("daily_cap_usd").notNull(),
+    maxEntryGapBps: integer("max_entry_gap_bps").notNull().default(100),
+    status: text("status").notNull().default("active"), // 'active' | 'paused' | 'stopped'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastCopyAt: timestamp("last_copy_at", { withTimezone: true }),
+  },
+  (t) => ({
+    statusIdx: index("copy_subscriptions_status_idx").on(t.status),
+    userIdx: index("copy_subscriptions_user_idx").on(t.userId, t.createdAt),
+    // One live (non-stopped) subscription per user+target; stopped rows
+    // stay as history and don't block re-subscribing.
+    liveTargetIdx: uniqueIndex("copy_subscriptions_live_target_idx")
+      .on(t.userId, t.targetKind, t.targetKey)
+      .where(sql`status <> 'stopped'`),
+  }),
+);
