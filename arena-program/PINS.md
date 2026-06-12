@@ -756,3 +756,29 @@ hours, resize; (3) PINS pre-mainnet gates: ~~tick spam-aging guard~~ DONE
 2026-06-12 (guard in the .so this runbook deploys; see the gates section) +
 the commit_state delegation-record trust note (still open — d300d12's
 delegation_record is read only for fee-vault scoping, not commit-binding).
+
+### 2026-06-12 follow-on finding: validator co-packs intents and underestimates CU
+
+Per-account intents work when flushed as separate base txs (the smoke run) —
+but the validator's intent executor BATCHES co-pending intents into one base
+tx with a CU estimate that ignores account size. Evidence: base tx
+`5pBemJVKz618E8HMy3eqMz3M3SyEvW3VYRq7DPsidwS1ggvHCKxLPB1mqtaXitqsZBJsLZX6EWshjkVnHa3PHzu`
+(slot 468872281) sets ~140k CU for two finalize instructions; the market's
+finalize alone consumes 124,244 CU (3.6KB account), ix[3] gets 15,456 and
+dies ComputationalBudgetExceeded; atomicity voids the whole tx. No on-chain
+retry observed in 10+ min.
+
+Steady state since: **bot finalizes land on every flush (2.3KB ≈ small
+enough), the market account alone lags on base** (ER fully live throughout —
+ticks, trades, UI unaffected). Soft degradation, accepted for the devnet
+soak: bot PnL records (the product-critical tape) persist; the market ring is
+derived oracle data. Escalated to MagicBlock as more evidence on the same
+ticket (their estimator/packer, nothing actionable in our intent shape —
+each intent is already single-account). If their queue ever starts choking
+BOT finalizes too, the contingency is bumping ARENA_COMMIT_INTERVAL_MS on
+the Railway worker (persistence pauses, ER unharmed — the already-accepted
+failure mode).
+
+Mainnet gate addendum: do NOT undelegate the market on a validator without
+this fix (the undelegation finalize for a 3.6KB account may co-pack and
+fail the same way — that is exactly the market-0 wedge).
