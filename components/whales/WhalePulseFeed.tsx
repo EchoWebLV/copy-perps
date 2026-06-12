@@ -568,7 +568,7 @@ function PulsePositionCard({
               ) : (
                 <Eye size={13} strokeWidth={3} />
               )}
-              {item.canTail ? "Tail" : "Watch only"}
+              {item.canTail ? "Copy now" : "Watch only"}
             </button>
           </div>
       </div>
@@ -740,7 +740,7 @@ function DesktopPulseCard({
           ) : (
             <Eye size={13} strokeWidth={3} />
           )}
-          {item.canTail ? "Tail" : "Watch"}
+          {item.canTail ? "Copy now" : "Watch"}
         </button>
       </div>
     </article>

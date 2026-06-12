@@ -254,9 +254,9 @@ export function DesktopWhaleCard({
         >
           <Zap size={12} strokeWidth={3} fill={canTail ? BG : "none"} />
           {canTail
-            ? `Tail ${exposureSummary.copyableCount} position${
+            ? `Copy now (${exposureSummary.copyableCount} position${
                 exposureSummary.copyableCount === 1 ? "" : "s"
-              }`
+              })`
             : "Unavailable"}
         </button>
         {onCopy ? (
@@ -277,7 +277,7 @@ export function DesktopWhaleCard({
               color: FG,
             }}
           >
-            Copy
+            Auto-copy
           </button>
         ) : null}
       </div>

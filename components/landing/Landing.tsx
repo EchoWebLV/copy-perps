@@ -416,7 +416,7 @@ function PhoneShowcase() {
                     }}
                   >
                     <Zap size={11} strokeWidth={3} fill={BG} />
-                    Tail whale (2)
+                    COPY NOW (2)
                   </div>
                 </div>
               </article>
@@ -699,7 +699,7 @@ const SURFACES = [
     icon: PieChart,
     tab: "Portfolio",
     title: "Your receipts",
-    body: "Every copy you're riding and everything you've banked, marked to market live. Green or red, the folio doesn't lie.",
+    body: "Every copy you're riding and everything you've banked, marked to market live. Green or red, the portfolio doesn't lie.",
   },
 ] as const;
 

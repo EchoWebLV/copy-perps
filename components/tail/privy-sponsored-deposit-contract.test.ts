@@ -9,7 +9,7 @@ describe("TailModal deposit send", () => {
       "utf8",
     );
 
-    expect(source).toContain("const STAKE_CHIPS = [1, 5, 10, 50] as const");
+    expect(source).toContain("const STAKE_CHIPS = [1, 5, 10, 20] as const");
     expect(source).toContain("const MIN_USDC = 1");
     expect(source).toContain("const [stake, setStake] = useState<number>(1)");
     expect(source).toContain("setStake(1)");

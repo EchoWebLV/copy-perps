@@ -32,7 +32,7 @@ describe("tail copy labels", () => {
     expect(whaleTailPrimaryCta({
       positions: [solLong],
       effectiveStake: 10,
-    })).toBe("Copy this position with $10");
+    })).toBe("Copy with $10");
   });
 
   it("keeps whale-bundle wording when copying multiple open positions", () => {
@@ -53,6 +53,6 @@ describe("tail copy labels", () => {
     expect(whaleTailPrimaryCta({
       positions,
       effectiveStake: 10,
-    })).toBe("Tail whale with $10 each");
+    })).toBe("Copy 2 positions · $10 each");
   });
 });

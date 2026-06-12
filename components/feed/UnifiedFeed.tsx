@@ -392,7 +392,7 @@ function WhaleFeedCard({
                   className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
                   style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
                 >
-                  Tail
+                  Copy now
                 </button>
               ) : (
                 <button
@@ -405,11 +405,11 @@ function WhaleFeedCard({
                     boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
                   }}
                 >
-                  Tail
+                  Copy now
                 </button>
               )
             ) : (
-              <DisabledCta label="Tail — unavailable" />
+              <DisabledCta label="Copy now — unavailable" />
             )
           }
         />
@@ -589,7 +589,7 @@ function BotCopyButton({ onClick }: { onClick: () => void }) {
       style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
       aria-label="Copy this trader"
     >
-      Copy
+      Auto-copy
     </button>
   );
 }
@@ -617,7 +617,7 @@ function BotTailCta({
           boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
         }}
       >
-        Tail
+        Copy now
       </button>
     );
   }
@@ -663,7 +663,7 @@ function GridBotCard({
       className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
       style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
     >
-      Copy trader
+      Auto-copy
     </button>
   );
   return (

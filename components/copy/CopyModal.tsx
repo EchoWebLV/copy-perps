@@ -129,7 +129,7 @@ export function CopyModal({
             </div>
             <div>
               <div className="text-xs uppercase tracking-widest text-white/40">
-                Copy trader
+                Auto-copy
               </div>
               <div className="text-base font-semibold text-white">
                 {target.label}
@@ -151,13 +151,11 @@ export function CopyModal({
             <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
               <div className="text-3xl mb-2">🎯</div>
               <div className="text-emerald-300 font-semibold mb-1">
-                Copy armed
+                Auto-copy active
               </div>
               <div className="text-xs text-emerald-200/80">
-                {target.label}&apos;s next position gets mirrored with $
-                {effectiveStake}
-                {autoClose ? " and closed when they close" : ""}. Manage it
-                from Portfolio.
+                {target.label}&apos;s every new trade is mirrored with $
+                {effectiveStake} until you stop.
               </div>
             </div>
             <button
@@ -234,7 +232,7 @@ export function CopyModal({
                     Close when {target.label} closes
                   </span>
                   <span className="block text-[10px] text-white/40">
-                    Off = you exit manually from Portfolio
+                    We watch the source and exit when they do.
                   </span>
                 </span>
               </button>
@@ -271,7 +269,7 @@ export function CopyModal({
               >
                 {submitting
                   ? "Arming…"
-                  : `Copy with $${stakeValid ? effectiveStake : "—"}`}
+                  : `Start auto-copy · $${stakeValid ? effectiveStake : "—"}/trade`}
               </button>
             </div>
           </>

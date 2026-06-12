@@ -905,7 +905,7 @@ function OpenPositionsPanel({
       {positions !== null && !hasPositions && (
         <PortfolioEmptyState
           headline={`"NO OPEN POSITIONS"`}
-          text="TAP A BOT IN THE FEED TO TAIL ONE."
+          text="TAP A BOT IN THE FEED TO COPY ONE."
         />
       )}
       {copyRows.length > 0 && (

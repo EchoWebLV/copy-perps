@@ -47,6 +47,6 @@ export function whaleTailPrimaryCta({
 }): string {
   const stakeText = effectiveStake.toFixed(0);
   return isSinglePosition(positions)
-    ? `Copy this position with $${stakeText}`
-    : `Tail whale with $${stakeText} each`;
+    ? `Copy with $${stakeText}`
+    : `Copy ${positions.length} positions · $${stakeText} each`;
 }

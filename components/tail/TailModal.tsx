@@ -43,7 +43,7 @@ export type { TailSource, WhaleTailPosition } from "./tail-types";
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
-const STAKE_CHIPS = [1, 5, 10, 50] as const;
+const STAKE_CHIPS = [1, 5, 10, 20] as const;
 const MIN_USDC = 1;
 const MAX_USDC = 1000;
 const TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000;
@@ -795,7 +795,7 @@ export function TailModal({ open, onClose, source }: Props) {
             )}
             <div>
               <div className="text-xs uppercase tracking-widest text-white/40">
-                {isSingleWhalePosition ? "Tail position" : "Tail"}
+                Copy now
               </div>
               <div className="text-base font-semibold text-white">
                 {sourceName}
@@ -894,7 +894,7 @@ export function TailModal({ open, onClose, source }: Props) {
             <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
               <div className="text-3xl mb-2">✓</div>
               <div className="text-emerald-300 font-semibold mb-1">
-                {isSingleWhalePosition ? "Position copied" : "Tail opened"}
+                {isSingleWhalePosition ? "Position copied" : "Positions copied"}
               </div>
               <div className="text-xs text-emerald-200/80">
                 {success.opens.length === 1
@@ -957,6 +957,43 @@ export function TailModal({ open, onClose, source }: Props) {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl pl-8 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
                 />
               </div>
+              {/* Entry-gap disclosure: honest about the price difference
+                  between the source's entry and the user's estimated fill. */}
+              {(() => {
+                const sourceEntry =
+                  source.kind === "whale"
+                    ? isWhaleBundle
+                      ? (() => {
+                          const byLev = [...executableWhalePositions].sort(
+                            (a, b) => b.leverage - a.leverage,
+                          );
+                          return byLev[0]?.entryMark ?? null;
+                        })()
+                      : activeWhalePosition?.entryMark ?? null
+                    : source.entryMark;
+                const fillEst = markValue;
+                if (
+                  sourceEntry == null ||
+                  !Number.isFinite(sourceEntry) ||
+                  sourceEntry <= 0 ||
+                  fillEst == null ||
+                  !Number.isFinite(fillEst) ||
+                  fillEst <= 0
+                )
+                  return null;
+                const gapPct = ((fillEst - sourceEntry) / sourceEntry) * 100;
+                const sign = gapPct >= 0 ? "+" : "";
+                return (
+                  <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-[11px] leading-snug text-amber-200/80">
+                    <span className="font-semibold text-amber-200">Entry gap:</span>{" "}
+                    their entry {fmtPrice(sourceEntry)} → your est. fill{" "}
+                    {fmtPrice(fillEst)} ({sign}
+                    {gapPct.toFixed(1)}%). You enter at today&apos;s price, not
+                    theirs.
+                  </div>
+                );
+              })()}
+
               {/* Auto-close on source exit — needs a concrete source
                   position id for the copy ticker to match against (bot ER
                   accounts / whale live-cache both qualify). */}
@@ -980,10 +1017,10 @@ export function TailModal({ open, onClose, source }: Props) {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-xs font-semibold text-white">
-                      Auto-close when {sourceName} closes
+                      Close when {sourceName} closes
                     </span>
                     <span className="block text-[10px] text-white/40">
-                      Your position exits within seconds of theirs
+                      We watch the source and exit when they do.
                     </span>
                   </span>
                 </button>
@@ -1217,7 +1254,7 @@ export function TailModal({ open, onClose, source }: Props) {
                   : preflight.checking
                     ? "Checking..."
                     : preflightBlocked
-                      ? "Close existing tail first"
+                      ? "Close existing copy first"
                       : source.kind === "whale"
                         ? hasCopyableSource
                           ? whaleTailPrimaryCta({
@@ -1225,11 +1262,11 @@ export function TailModal({ open, onClose, source }: Props) {
                               effectiveStake,
                             })
                           : "No copyable positions"
-                        : `Tail ${sourceName} with $${effectiveStake.toFixed(0)}`}
+                        : `Copy with $${effectiveStake.toFixed(0)}`}
               </button>
               {!wallet ? (
                 <div className="mt-2 text-center text-xs text-white/40">
-                  Connect your wallet to tail.
+                  Connect your wallet to copy.
                 </div>
               ) : null}
             </div>
