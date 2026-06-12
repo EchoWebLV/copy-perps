@@ -1119,8 +1119,11 @@
         "remaining_accounts run maintenance (liq / favorable / max-hold exits)",
         "and the open decision. Fail-closed: a stale or malformed feed is a",
         "successful no-op — the arena pauses honestly instead of trading on",
-        "bad data. Tape entries record conviction 0 (conviction is not modeled",
-        "in Phase 1)."
+        "bad data. A feed print no newer than the last folded one is likewise",
+        "a successful no-op (spam-aging guard): candle and bot state only",
+        "advance when the oracle has actually published a NEWER price, so",
+        "spam ticks between oracle pushes cannot age positions. Tape entries",
+        "record conviction 0 (conviction is not modeled in Phase 1)."
       ],
       "discriminator": [
         92,

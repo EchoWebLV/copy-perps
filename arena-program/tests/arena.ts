@@ -207,8 +207,17 @@ describe("arena", () => {
     assert.isTrue(bucket.startTs.gt(new BN(0)));
   });
 
-  it("double tick: bucket updates advance, tape and seq stay untouched", async () => {
+  it("double tick on the same publish_ts is a pure no-op (spam-aging guard)", async () => {
+    // The fixture price/publish_ts are static, so the second tick sees a
+    // print no newer than the one already folded. The spam-aging guard
+    // (pre-mainnet gate, PINS.md review Issue 2) must turn it into a pure
+    // no-op success: no candle fold (updates/pathLen frozen), no head roll
+    // — and because the guard returns before paper maintenance, no
+    // ticks_held aging. Spam ticks between oracle pushes change nothing.
     const msBefore = await program.account.marketState.fetch(marketPda);
+    const botsBefore = await Promise.all(
+      [scalperPda, riderPda].map((pda) => program.account.bot.fetch(pda)),
+    );
     await program.methods
       .tick(0)
       .accountsPartial({
@@ -220,24 +229,36 @@ describe("arena", () => {
       .rpc();
 
     const ms = await program.account.marketState.fetch(marketPda);
-    // The fixture price/publish_ts are static, so the fold lands in the same
-    // bucket: updates grows, head does not roll, price unchanged.
     assert.equal(ms.head, msBefore.head);
     assert.equal(
       ms.ring[ms.head].updates,
-      msBefore.ring[msBefore.head].updates + 1,
+      msBefore.ring[msBefore.head].updates, // NOT +1: the fold never ran
+    );
+    assert.isTrue(
+      ms.ring[ms.head].pathLen.eq(msBefore.ring[msBefore.head].pathLen),
     );
     assert.isTrue(ms.lastPrice.eq(msBefore.lastPrice));
+    assert.isTrue(ms.lastPublishTs.eq(msBefore.lastPublishTs));
 
-    // No complete candles yet (need MIN_STRAT_CANDLES) and no open positions,
-    // so neither bot may have taped anything. Conviction stays 0 in the tape
-    // by design (not modeled in Phase 1).
-    for (const pda of [scalperPda, riderPda]) {
+    // Bots byte-identical: no tape, no trades, no balance moves — and every
+    // position slot's ticksHeld untouched (the griefing vector the guard
+    // closes: max_hold_ticks personas decaying on attacker-paid ticks).
+    for (const [i, pda] of [scalperPda, riderPda].entries()) {
       const bot = await program.account.bot.fetch(pda);
-      assert.equal(bot.seq.toString(), "0");
-      assert.equal(bot.tapeHead, 0);
-      assert.equal(bot.trades, 0);
-      assert.isTrue(bot.positions.every((p: { active: number }) => p.active === 0));
+      const before = botsBefore[i];
+      assert.equal(bot.seq.toString(), before.seq.toString());
+      assert.equal(bot.tapeHead, before.tapeHead);
+      assert.equal(bot.trades, before.trades);
+      assert.equal(bot.balanceMicro.toString(), before.balanceMicro.toString());
+      bot.positions.forEach(
+        (p: { active: number; ticksHeld: number }, slot: number) => {
+          assert.equal(p.active, before.positions[slot].active);
+          assert.equal(p.ticksHeld, before.positions[slot].ticksHeld);
+        },
+      );
+      assert.isTrue(
+        bot.positions.every((p: { active: number }) => p.active === 0),
+      );
     }
   });
 

@@ -448,18 +448,27 @@ warm for ≥3 min (scalper) / ≥12 min (rider).
 
 ## Known pre-mainnet gates (review follow-ups, recorded 2026-06-11)
 
-Deliberately NOT fixed in the Task-13.5 review patch; both must be resolved
-before any public/mainnet exposure:
+Deliberately NOT fixed in the Task-13.5 review patch; to be resolved before
+any public/mainnet exposure (per-item status below):
 
-- **Permissionless tick spam-aging / fee-bleed griefing (review Issue 2).**
-  Anyone can call `tick` in a tight loop: each call is a successful no-op (or
-  same-bucket fold) that still ages positions via `ticks_held` and bleeds the
-  crank's expected cadence assumptions (max_hold_ticks personas decay on
-  attacker-paid ticks). The cheap floor is a no-op guard
-  `if read.publish_ts <= ms.last_publish_ts { return Ok(()); }` — deliberately
-  NOT applied now because the static-fixture double-tick test (and the local
-  suites' static publish_ts) depend on same-ts re-folds; apply together with
-  test updates before public/mainnet.
+- **Permissionless tick spam-aging / fee-bleed griefing (review Issue 2) —
+  IMPLEMENTED 2026-06-12.**
+  Original issue: anyone can call `tick` in a tight loop — each call is a
+  successful no-op (or same-bucket fold) that still ages positions via
+  `ticks_held` and bleeds the crank's expected cadence assumptions
+  (max_hold_ticks personas decay on attacker-paid ticks). The fix is the
+  planned no-op guard, now in the `tick` handler right after the oracle
+  read: `if read.publish_ts <= ms.last_publish_ts { return Ok(()); }` —
+  a print no newer than the last folded one returns success WITHOUT
+  folding the candle, running paper maintenance, or aging `ticks_held`;
+  state only advances on a strictly newer oracle print. The static-fixture
+  double-tick test was rewritten to assert exactly that no-op (updates,
+  pathLen, ticks_held, tape/seq/balances all unchanged); folding stays
+  exercised by each suite's first tick and the ascending-ts candles.rs
+  unit tests (which call `fold_price` directly and are unaffected).
+  Evidence: cargo 30 green / legacy suite 12 passing / local ER harness
+  7/7 / anchor-1.0.2 build with zero stack-offset diagnostics. NOT yet
+  deployed — the guarded .so ships with the next planned deploy.
 - **`commit_state` trust dependency (review Issue 3 sibling, per review).**
   `commit_state` is permissionless and relies on MagicBlock's delegation
   records binding commits to the owning program — i.e. the magic program
@@ -743,5 +752,7 @@ ARENA_DEVNET_RPC="$NEXT_PUBLIC_HELIUS_RPC_URL" \
 Open items before running: (1) ~~validator pin env-drive~~ DONE same day —
 `ARENA_ER_VALIDATOR` drives init-devnet.ts + _test-aggro-bot.ts; (2) mainnet commit BILLING
 is unmeasured — fund 0.1 SOL, watch the crank-payer balance for the first
-hours, resize; (3) PINS pre-mainnet gates: tick spam-aging guard + the
-commit_state delegation-record trust note.
+hours, resize; (3) PINS pre-mainnet gates: ~~tick spam-aging guard~~ DONE
+2026-06-12 (guard in the .so this runbook deploys; see the gates section) +
+the commit_state delegation-record trust note (still open — d300d12's
+delegation_record is read only for fee-vault scoping, not commit-binding).

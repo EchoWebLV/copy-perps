@@ -99,8 +99,11 @@ pub mod arena {
     /// remaining_accounts run maintenance (liq / favorable / max-hold exits)
     /// and the open decision. Fail-closed: a stale or malformed feed is a
     /// successful no-op — the arena pauses honestly instead of trading on
-    /// bad data. Tape entries record conviction 0 (conviction is not modeled
-    /// in Phase 1).
+    /// bad data. A feed print no newer than the last folded one is likewise
+    /// a successful no-op (spam-aging guard): candle and bot state only
+    /// advance when the oracle has actually published a NEWER price, so
+    /// spam ticks between oracle pushes cannot age positions. Tape entries
+    /// record conviction 0 (conviction is not modeled in Phase 1).
     pub fn tick(ctx: Context<Tick>, market_id: u8) -> Result<()> {
         let cfg = &ctx.accounts.config;
         let mcfg = cfg
@@ -120,6 +123,16 @@ pub mod arena {
         };
 
         let ms = &mut *ctx.accounts.market_state.load_mut()?;
+        // Spam-aging guard (pre-mainnet gate, review Issue 2): a print at or
+        // before the last folded publish_ts advances NOTHING — same no-op
+        // success style as the stale-feed guard above. Without it, anyone
+        // could call tick in a tight loop: each call would re-fold the same
+        // print (updates/path_len churn) and, worse, run paper maintenance,
+        // aging every open position via ticks_held so max_hold_ticks
+        // personas decay on attacker-paid ticks.
+        if read.publish_ts <= ms.last_publish_ts {
+            return Ok(()); // no new oracle print → no-op success
+        }
         candles::fold_price(ms, read.price, read.publish_ts, cfg.bucket_secs);
 
         // Bots ride in remaining_accounts. AccountLoader::try_from checks
