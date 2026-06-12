@@ -6,6 +6,7 @@ import { usePrivy, useSessionSigners, type User } from "@privy-io/react-auth";
 import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
+import { OracleLiveBadge } from "@/components/trade/OracleLiveBadge";
 import {
   flashLeverageOptionsForMarket,
   flashMarketConfigForSymbol,
@@ -1661,7 +1662,8 @@ function LivePerpGraph({
       ];
 
   return (
-    <div ref={containerRef} className="h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full">
+      <OracleLiveBadge />
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
