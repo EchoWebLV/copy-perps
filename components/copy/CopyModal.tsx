@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
 export type CopyModalTarget = {
-  kind: "arena-bot" | "flash-wallet";
+  kind: "arena-bot" | "flash-wallet" | "whale";
   key: string;
   label: string;
   emoji?: string;
@@ -243,6 +243,12 @@ export function CopyModal({
                 Mirrors their direction and leverage at your stake. Skips
                 entries that already ran &gt;1% past their price. Daily cap $
                 {dailyCapUsd.toFixed(0)} · one position at a time.
+                {target.kind === "whale" ? (
+                  <span className="block mt-1">
+                    Executes on Flash — crypto, gold, FX and equity positions
+                    mirror; markets Flash doesn&apos;t list are skipped.
+                  </span>
+                ) : null}
                 {effectiveStake * 10 < 10 ? (
                   <span className="block mt-1 text-amber-300/80">
                     Note: Flash needs $10 notional — low-leverage trades under

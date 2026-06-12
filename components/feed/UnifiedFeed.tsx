@@ -159,6 +159,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   sortKey={sortKey}
                   now={now}
                   onTail={(source) => setTailSource(source)}
+                  onCopy={(target) => setCopyTarget(target)}
                 />
               ) : (
                 <BotFeedCard
@@ -201,6 +202,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                   rank={idx + 1}
                   now={now}
                   onTail={(source) => setTailSource(source)}
+                  onCopy={(target) => setCopyTarget(target)}
                 />
               ) : (
                 <GridBotCard
@@ -240,11 +242,13 @@ function WhaleFeedCard({
   sortKey,
   now,
   onTail,
+  onCopy,
 }: {
   whale: WhaleTraderSignal;
   sortKey: FeedSortKey;
   now: number;
   onTail: (source: TailSource) => void;
+  onCopy: (target: CopyModalTarget) => void;
 }) {
   const p = whale.payload;
   // now starts at 0 (hydration-safe); isSourceFresh treats a future lastSeen
@@ -315,19 +319,31 @@ function WhaleFeedCard({
 
         {/* Whale payloads carry no wins/losses counts (winRatePct1d is null
             from every stats path) — so no W/L block here, P&L only. */}
-        <div className="shrink-0 text-right">
-          <div
-            className="text-[9px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            {header.label}
+        <div className="flex shrink-0 items-start gap-3.5 text-right">
+          <div>
+            <div
+              className="text-[9px] font-black uppercase tracking-widest"
+              style={{ color: DIM }}
+            >
+              {header.label}
+            </div>
+            <div
+              className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
+              style={{ color: headerColor }}
+            >
+              {formatCompactSignedUsd(header.usd)}
+            </div>
           </div>
-          <div
-            className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
-            style={{ color: headerColor }}
-          >
-            {formatCompactSignedUsd(header.usd)}
-          </div>
+          <BotCopyButton
+            onClick={() =>
+              onCopy({
+                kind: "whale",
+                key: `${p.source}:${p.sourceAccount}`,
+                label: p.displayName,
+                emoji: "🐋",
+              })
+            }
+          />
         </div>
       </div>
 

@@ -30,6 +30,7 @@ import {
 } from "@/lib/bets/flash-tail-meta";
 import type { BuiltClose, BuiltOpen } from "@/lib/autopilot/engine";
 import type { AutoCloseBetRow, CopySubscriptionRow } from "./store";
+import { parseWhaleTargetKey } from "./sources";
 import {
   copyTargetId,
   type CopyTargetRef,
@@ -126,8 +127,15 @@ function deriveTargetFromMeta(meta: FlashTailMeta): CopyTargetRef | null {
   if (meta.sourceKind === "bot" && meta.botId?.startsWith("arena:")) {
     return { kind: "arena-bot", key: meta.botId.slice("arena:".length) };
   }
-  if (meta.sourceKind === "whale" && meta.whaleId?.startsWith("flash:")) {
-    return { kind: "flash-wallet", key: meta.whaleId.slice("flash:".length) };
+  if (meta.sourceKind === "whale" && meta.whaleId) {
+    if (meta.whaleId.startsWith("flash:")) {
+      return { kind: "flash-wallet", key: meta.whaleId.slice("flash:".length) };
+    }
+    // Roster whales: whaleId IS makeWhaleId(`${source}:${sourceAccount}`),
+    // which is exactly the whale targetKey format.
+    if (parseWhaleTargetKey(meta.whaleId)) {
+      return { kind: "whale", key: meta.whaleId };
+    }
   }
   return null;
 }
@@ -145,6 +153,16 @@ function subscriptionLineage(
       sourceKind: "bot",
       botId: `arena:${sub.targetKey}`,
       whaleId: null,
+      sourceName: sub.targetLabel ?? sub.targetKey,
+      sourcePositionId: position.key,
+    };
+  }
+  if (sub.targetKind === "whale") {
+    // targetKey is already the canonical whaleId (`source:account`).
+    return {
+      sourceKind: "whale",
+      whaleId: sub.targetKey,
+      botId: null,
       sourceName: sub.targetLabel ?? sub.targetKey,
       sourcePositionId: position.key,
     };
@@ -368,7 +386,11 @@ export async function tickCopyEngine(
             continue;
           }
 
-          const mark = await deps.getMark(position.market);
+          // Entry-gap guard: prefer our oracle mark; fall back to the
+          // source venue's own mark for markets our marks don't price
+          // (XAU/FX/equities whales). No price at all = skip, fail-safe.
+          const mark =
+            (await deps.getMark(position.market)) ?? position.sourceMarkUsd;
           if (mark === null) {
             result.skipped.push(`${position.key}: no mark price`);
             continue;

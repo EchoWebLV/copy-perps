@@ -473,6 +473,8 @@ export function TailModal({ open, onClose, source }: Props) {
                   sourceName: source.displayName,
                   sourcePositionId:
                     copyPosition?.sourcePositionId ?? source.sourcePositionId,
+                  // Honored server-side only when sourcePositionId is set.
+                  autoClose: autoCloseOnSource,
                 }
               : {
                   sourceKind: "bot",
@@ -955,10 +957,11 @@ export function TailModal({ open, onClose, source }: Props) {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl pl-8 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
                 />
               </div>
-              {/* Auto-close on source exit — bot tails only: the copy
-                  ticker can watch the bot's ER account; needs a concrete
-                  position id to match against. */}
-              {source.kind === "bot" && source.positionId ? (
+              {/* Auto-close on source exit — needs a concrete source
+                  position id for the copy ticker to match against (bot ER
+                  accounts / whale live-cache both qualify). */}
+              {(source.kind === "bot" && source.positionId) ||
+              source.kind === "whale" ? (
                 <button
                   type="button"
                   onClick={() => setAutoCloseOnSource((v) => !v)}
@@ -977,10 +980,10 @@ export function TailModal({ open, onClose, source }: Props) {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-xs font-semibold text-white">
-                      Auto-close when {source.botName} closes
+                      Auto-close when {sourceName} closes
                     </span>
                     <span className="block text-[10px] text-white/40">
-                      Your position exits within seconds of the bot&apos;s exit
+                      Your position exits within seconds of theirs
                     </span>
                   </span>
                 </button>

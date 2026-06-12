@@ -36,7 +36,11 @@ function toSubscriptionRow(row: {
   solanaPubkey: string | null;
 }): CopySubscriptionRow | null {
   if (!row.solanaPubkey) return null; // no wallet → cannot execute
-  if (row.sub.targetKind !== "arena-bot" && row.sub.targetKind !== "flash-wallet") {
+  if (
+    row.sub.targetKind !== "arena-bot" &&
+    row.sub.targetKind !== "flash-wallet" &&
+    row.sub.targetKind !== "whale"
+  ) {
     return null;
   }
   return {

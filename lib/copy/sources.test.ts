@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
-import { arenaBotSourcePositions, flashWalletSourcePositions } from "./sources";
+import type { WhalePositionRecord } from "@/lib/whales/types";
+import {
+  arenaBotSourcePositions,
+  flashWalletSourcePositions,
+  parseWhaleTargetKey,
+  whaleSourcePositions,
+} from "./sources";
 
 function position(overrides: Partial<ArenaPosition> = {}): ArenaPosition {
   return {
@@ -55,6 +61,7 @@ describe("arenaBotSourcePositions", () => {
         entryPriceUsd: 66.796,
         leverage: 50,
         openedTsMs: 1_765_540_000_000,
+        sourceMarkUsd: null,
       },
     ]);
   });
@@ -68,6 +75,73 @@ describe("arenaBotSourcePositions", () => {
       ]),
     );
     expect(out).toEqual([]);
+  });
+});
+
+function whaleRecord(
+  overrides: Partial<WhalePositionRecord> = {},
+): WhalePositionRecord {
+  return {
+    id: "pacifica:AcctA:SOL:long:1765540000000",
+    whaleId: "pacifica:AcctA",
+    source: "pacifica",
+    sourceAccount: "AcctA",
+    market: "SOL",
+    side: "long",
+    leverage: 20,
+    amountBase: 10,
+    notionalUsd: 1336,
+    entryPrice: 66.8,
+    currentMark: 66.9,
+    unrealizedPnlPct: 1.2,
+    openedAt: new Date(1_765_540_000_000),
+    closedAt: null,
+    status: "open",
+    raw: {},
+    lastSeenAt: new Date(1_765_540_050_000),
+    ...overrides,
+  };
+}
+
+describe("whaleSourcePositions", () => {
+  it("maps open positions with the record id as the key", () => {
+    expect(whaleSourcePositions([whaleRecord()])).toEqual([
+      {
+        key: "pacifica:AcctA:SOL:long:1765540000000",
+        market: "SOL",
+        side: "long",
+        entryPriceUsd: 66.8,
+        leverage: 20,
+        openedTsMs: 1_765_540_000_000,
+        sourceMarkUsd: 66.9,
+      },
+    ]);
+  });
+
+  it("drops closed positions and unlisted markets, keeps XAU/FX (Flash lists them)", () => {
+    const out = whaleSourcePositions([
+      whaleRecord({ status: "closed" }),
+      whaleRecord({ id: "x:XAU", market: "XAU" }),
+      whaleRecord({ id: "x:NOPE", market: "NOTAMARKET" }),
+    ]);
+    expect(out.map((p) => p.key)).toEqual(["x:XAU"]);
+    expect(out[0]!.market).toBe("XAU");
+  });
+});
+
+describe("parseWhaleTargetKey", () => {
+  it("parses source:account and rejects junk", () => {
+    expect(parseWhaleTargetKey("hyperliquid:0xabc")).toEqual({
+      source: "hyperliquid",
+      sourceAccount: "0xabc",
+    });
+    expect(parseWhaleTargetKey("pacifica:AcctA")).toEqual({
+      source: "pacifica",
+      sourceAccount: "AcctA",
+    });
+    expect(parseWhaleTargetKey("flash:Wallet")).toBeNull(); // not a whale source
+    expect(parseWhaleTargetKey("degen-v1")).toBeNull();
+    expect(parseWhaleTargetKey("pacifica:")).toBeNull();
   });
 });
 
@@ -94,6 +168,7 @@ describe("flashWalletSourcePositions", () => {
         entryPriceUsd: 66.8,
         leverage: 20,
         openedTsMs: 1_765_540_000_000,
+        sourceMarkUsd: null,
       },
     ]);
   });

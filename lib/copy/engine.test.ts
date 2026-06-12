@@ -43,6 +43,7 @@ function botPosition(overrides: Partial<SourcePosition> = {}): SourcePosition {
     entryPriceUsd: 66.8,
     leverage: 50,
     openedTsMs: NOW.getTime() - 5_000,
+    sourceMarkUsd: null,
     ...overrides,
   };
 }
@@ -204,6 +205,7 @@ describe("tickCopyEngine open pass", () => {
       entryPriceUsd: 100_000,
       leverage: 10,
       openedTsMs: null,
+      sourceMarkUsd: null,
     };
     const fetches = [
       [existing],
@@ -216,6 +218,7 @@ describe("tickCopyEngine open pass", () => {
           entryPriceUsd: 66.8,
           leverage: 20,
           openedTsMs: null,
+          sourceMarkUsd: null,
         } satisfies SourcePosition,
       ],
     ];
@@ -331,6 +334,76 @@ describe("tickCopyEngine open pass", () => {
     expect(deps.openTrade).not.toHaveBeenCalled();
     expect(deps.recordOpen).not.toHaveBeenCalled();
     expect(deps.sendTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("tickCopyEngine whale targets", () => {
+  const whalePos: SourcePosition = {
+    key: "pacifica:AcctA:SOL:long:1765540000000",
+    market: "SOL",
+    side: "long",
+    entryPriceUsd: 66.8,
+    leverage: 20,
+    openedTsMs: NOW.getTime() - 5_000,
+    sourceMarkUsd: 66.82,
+  };
+
+  it("copies a fresh whale position from a whale subscription", async () => {
+    const deps = makeDeps({
+      listActiveSubscriptions: vi.fn(async () => [
+        sub({
+          targetKind: "whale",
+          targetKey: "pacifica:AcctA",
+          targetLabel: "JohnLocke",
+        }),
+      ]),
+      fetchSourcePositions: vi.fn(async () => [whalePos]),
+    });
+    const result = await tickCopyEngine(createCopyEngineState(), deps);
+    expect(result.opened).toBe(1);
+    const meta = vi.mocked(deps.recordOpen).mock.calls[0]![0].meta;
+    expect(meta.sourceKind).toBe("whale");
+    expect(meta.whaleId).toBe("pacifica:AcctA");
+    expect(meta.sourcePositionId).toBe(whalePos.key);
+  });
+
+  it("auto-closes a manual whale tail when the whale exits", async () => {
+    const bet: AutoCloseBetRow = {
+      betId: "bet-w1",
+      userId: "user-1",
+      privyUserId: "privy-1",
+      meta: buildFlashTailMeta({
+        lineage: {
+          sourceKind: "whale",
+          whaleId: "pacifica:AcctA",
+          botId: null,
+          sourceName: "JohnLocke",
+          sourcePositionId: whalePos.key,
+        },
+        market: "SOL",
+        side: "long",
+        leverage: 20,
+        mode: "standard",
+        walletAddress: "FollowerWallet111",
+        entryPriceUsd: 66.8,
+        notionalUsd: 100,
+        openFeeUsd: 0.06,
+        autoCloseOnSourceClose: true,
+      }),
+    };
+    const deps = makeDeps({
+      listOpenAutoCloseBets: vi.fn(async () => [bet]),
+      fetchSourcePositions: vi.fn(async () => []), // whale went flat
+    });
+    const result = await tickCopyEngine(createCopyEngineState(), deps);
+    expect(result.closed).toBe(1);
+    expect(deps.fetchSourcePositions).toHaveBeenCalledWith({
+      kind: "whale",
+      key: "pacifica:AcctA",
+    });
+    expect(deps.confirmClose).toHaveBeenCalledWith(
+      expect.objectContaining({ betId: "bet-w1", closeReason: "source-closed" }),
+    );
   });
 });
 

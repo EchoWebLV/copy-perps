@@ -3,6 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
+import { parseWhaleTargetKey } from "@/lib/copy/sources";
 import {
   countOpenCopies,
   createCopySubscription,
@@ -68,14 +69,19 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as CreateBody | null;
   if (
     !body ||
-    (body.targetKind !== "arena-bot" && body.targetKind !== "flash-wallet") ||
+    (body.targetKind !== "arena-bot" &&
+      body.targetKind !== "flash-wallet" &&
+      body.targetKind !== "whale") ||
     typeof body.targetKey !== "string" ||
     body.targetKey.length === 0 ||
     typeof body.stakeUsdc !== "number" ||
     !Number.isFinite(body.stakeUsdc)
   ) {
     return NextResponse.json(
-      { error: "targetKind (arena-bot|flash-wallet), targetKey, stakeUsdc required" },
+      {
+        error:
+          "targetKind (arena-bot|flash-wallet|whale), targetKey, stakeUsdc required",
+      },
       { status: 400 },
     );
   }
@@ -130,6 +136,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "unknown arena bot" }, { status: 400 });
     }
     targetLabel ??= persona.display;
+  } else if (body.targetKind === "whale") {
+    if (!parseWhaleTargetKey(body.targetKey)) {
+      return NextResponse.json(
+        { error: "whale targetKey must be source:account" },
+        { status: 400 },
+      );
+    }
   } else {
     try {
       // Throws on anything that isn't a valid base58 pubkey.

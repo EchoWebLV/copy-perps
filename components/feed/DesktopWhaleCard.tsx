@@ -43,11 +43,19 @@ export function DesktopWhaleCard({
   rank,
   now,
   onTail,
+  onCopy,
 }: {
   whale: WhaleTraderSignal;
   rank: number;
   now: number;
   onTail: (source: TailSource) => void;
+  /** Standing auto-copy (Copy modal) — armed flat or live. */
+  onCopy?: (target: {
+    kind: "whale";
+    key: string;
+    label: string;
+    emoji?: string;
+  }) => void;
 }) {
   const p = whale.payload;
   const exposureSummary = buildWhaleExposureSummary(p.openPositions, now);
@@ -221,9 +229,10 @@ export function DesktopWhaleCard({
         )}
       </div>
 
-      {/* Single CTA: the old card paired this with a "Positions" link into
-          the tape — that surface is dead, so Tail takes the full row. */}
-      <div className="mt-3">
+      {/* CTA row: Tail (live positions) + Copy (standing auto-copy; works
+          even while the whale is flat — arming for the NEXT open is the
+          point). */}
+      <div className="mt-3 flex gap-2">
         <button
           type="button"
           disabled={!canTail}
@@ -232,7 +241,7 @@ export function DesktopWhaleCard({
             if (!source) return;
             onTail(source);
           }}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
           style={{
             background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
             color: canTail ? BG : DIM,
@@ -248,6 +257,27 @@ export function DesktopWhaleCard({
               }`
             : "Unavailable"}
         </button>
+        {onCopy ? (
+          <button
+            type="button"
+            onClick={() =>
+              onCopy({
+                kind: "whale",
+                key: `${p.source}:${p.sourceAccount}`,
+                label: p.displayName,
+                emoji: "🐋",
+              })
+            }
+            className="shrink-0 rounded-xl border px-3 py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+            style={{
+              background: "rgba(250,250,242,0.04)",
+              borderColor: FAINT,
+              color: FG,
+            }}
+          >
+            Copy
+          </button>
+        ) : null}
       </div>
     </article>
   );
