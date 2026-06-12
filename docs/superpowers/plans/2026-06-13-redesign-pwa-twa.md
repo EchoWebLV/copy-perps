@@ -189,7 +189,8 @@ export function filterTraders<T extends SearchableTrader>(list: T[], q: string):
 
 - [ ] **Step 4:** Run the test — expect PASS.
 - [ ] **Step 5:** Wire into `UnifiedFeed.tsx`: a search input above the All/Whales/Bots chips, placeholder `Search traders, assets, or paste a wallet`. Text queries call `filterTraders` over the already-fetched roster + bot list (client-side, no new endpoint). Wallet queries render a wallet result card that links into the **existing** manual-wallet copy flow (`CopyTradingPanel`'s wallet-source path — `lib/copy/sources.ts` already supports arbitrary Flash wallets); reuse its subscription POST rather than building a new endpoint.
-- [ ] **Step 6:** Gate + commit: `git commit -m "feat(traders): search by name/asset + paste-a-wallet via existing copy wallet source"`
+- [ ] **Step 6:** Sentiment aggregate on trader cards (whales AND bots): a row between the badges and the P&L chart — `{pct}% bullish · {N} votes` (green if ≥50%, red below) plus a thin green-on-red ratio bar. Source: the existing pulse reactions aggregates (grep `components/whales/WhalePulseFeed.tsx` for its reactions fetch/aggregation and reuse that endpoint, aggregated per whale/bot rather than per position). See the mock's `tcsent` row for exact anatomy.
+- [ ] **Step 7:** Gate + commit: `git commit -m "feat(traders): search + paste-a-wallet + sentiment aggregates on cards"`
 
 ### Task 7: LIVE event tape (the centerpiece)
 
@@ -205,7 +206,8 @@ The pulse feed already classifies signals (`Fresh open`, `Pain trade`, `Holding`
 - [ ] **Step 3:** Demote stale: cards whose mark is delayed render dimmed with the copy CTA disabled and the existing `watch only` affordance, labeled plainly: `Stale data — copying disabled until fresh.` Drop `Holding` cards older than 6h from the tape entirely (they're roster material, not live).
 - [ ] **Step 4:** Close events: when the feed includes a position-closed signal, the card headline becomes `{MKT} {LEV}x {SIDE} closed {±X}%` and the CTA becomes `Auto-copy {name}` (opens CopyModal) with subtext `Missed it? Auto-copy mirrors their next trade automatically.`
 - [ ] **Step 5:** Arrival mechanics: the feed already polls; on a poll that yields new items while the user is scrolled below the first card, do **not** re-anchor — show a floating `↑ N new signals` pill (fixed below the header) that, on tap, prepends and scrolls to top. If the user is at the top, prepend directly.
-- [ ] **Step 6:** Gate + commit: `git commit -m "feat(live): event tape — full-screen snap cards, one verb, close→Auto-copy, new-signal pill, stale demotion"`
+- [ ] **Step 6:** Reactions carry into the tape — the social layer is a locked product requirement, do NOT drop it: each card renders a sentiment row between the stats and the CTA — `▲ Bullish {n}` / `▼ Bearish {n}` toggle chips + thin ratio bar (mock's `sentRow`). Tap = optimistic toggle (vote / switch / unvote, counts reconcile) POSTing to the **existing** pulse reactions endpoint with its one-reaction-per-user semantics; update the row's DOM in place so the snap scroll position never resets.
+- [ ] **Step 7:** Gate + commit: `git commit -m "feat(live): event tape — snap cards, one verb, close→Auto-copy, new-signal pill, bullish/bearish reactions"`
 
 ### Task 8: Orphan cleanup
 

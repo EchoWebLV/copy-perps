@@ -153,6 +153,14 @@
   .newpill{position:absolute; top:78px; left:50%; transform:translateX(-50%); z-index:35; background:var(--acc);
            color:var(--acc-ink); font-size:10.5px; font-weight:900; letter-spacing:.08em; padding:8px 14px;
            border-radius:999px; cursor:pointer; display:none; text-transform:uppercase; box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  .sentrow{display:flex; align-items:center; gap:8px; margin-top:12px}
+  .schip{border:1px solid var(--line); background:var(--panel2); color:var(--dim); font:inherit; font-size:10px;
+         font-weight:900; letter-spacing:.08em; padding:7px 11px; border-radius:999px; cursor:pointer; text-transform:uppercase}
+  .schip.bull.on{background:var(--green-dim); color:var(--green); border-color:var(--green)}
+  .schip.bear.on{background:var(--red-dim); color:var(--red); border-color:var(--red)}
+  .sbar{flex:1; height:4px; border-radius:99px; background:var(--red-dim); overflow:hidden; min-width:40px}
+  .sbar div{height:100%; background:var(--green); border-radius:99px}
+  .tcsent{display:flex; align-items:center; gap:6px; font-size:10px; margin-top:9px; letter-spacing:.04em; font-weight:700}
   .g{color:var(--green)} .r{color:var(--red)} .d{color:var(--dim)}
   .tabh{font-size:21px; font-weight:900; text-transform:uppercase; letter-spacing:.01em; margin:6px 2px 2px}
   .tabsub{font-size:11px; color:var(--dim); margin:0 2px 14px}
@@ -256,17 +264,17 @@ const S = {
 };
 
 const TRADERS = [
-  { id:'iron-wolf', kind:'whale', name:'Iron Wolf', src:'Hyperliquid', col:'#9be15d', equity:13.6e6, pnl1d:573000, pnl30d:3.4e6,
+  { id:'iron-wolf', kind:'whale', name:'Iron Wolf', src:'Hyperliquid', col:'#9be15d', equity:13.6e6, pnl1d:573000, pnl30d:3.4e6, sent:{bull:43,bear:13},
     open:2, live:true, trade:{ mkt:'ETH', side:'long', lev:20, entry:1615, mark:1666, size:'$22.2M' } },
-  { id:'ghost-seal', kind:'whale', name:'Ghost Seal', src:'Hyperliquid', col:'#6db5f2', equity:14.0e6, pnl1d:344000, pnl30d:1.8e6,
+  { id:'ghost-seal', kind:'whale', name:'Ghost Seal', src:'Hyperliquid', col:'#6db5f2', equity:14.0e6, pnl1d:344000, pnl30d:1.8e6, sent:{bull:28,bear:16},
     open:3, live:true, trade:{ mkt:'ZEC', side:'short', lev:10, entry:462.9, mark:413.7, size:'$3.2M' } },
-  { id:'scalper', kind:'bot', name:'Scalper', src:'AI strategy', col:'#f5e04b', equity:1000, pnl1d:0, pnl30d:0,
+  { id:'scalper', kind:'bot', name:'Scalper', src:'AI strategy', col:'#f5e04b', equity:1000, pnl1d:0, pnl30d:0, sent:{bull:2,bear:1},
     open:0, live:true, desc:'15s momentum · 100x', flat:true },
-  { id:'berserker', kind:'bot', name:'Berserker', src:'AI strategy', col:'#f08a5d', equity:855.66, pnl1d:-105.04, pnl30d:-105.04,
+  { id:'berserker', kind:'bot', name:'Berserker', src:'AI strategy', col:'#f08a5d', equity:855.66, pnl1d:-105.04, pnl30d:-105.04, sent:{bull:8,bear:13},
     open:1, live:true, desc:'Hair-trigger scalps · 25x', trade:{ mkt:'SOL', side:'long', lev:25, entry:66.6, mark:66.5, size:'$66' } },
-  { id:'greedy-mantis', kind:'whale', name:'Greedy Mantis', src:'Pacifica', col:'#b39df0', equity:18.6e6, pnl1d:220000, pnl30d:880000,
+  { id:'greedy-mantis', kind:'whale', name:'Greedy Mantis', src:'Pacifica', col:'#b39df0', equity:18.6e6, pnl1d:220000, pnl30d:880000, sent:{bull:11,bear:3},
     open:3, live:false, staleFor:'3d', trade:{ mkt:'BTC', side:'long', lev:40, entry:67200, mark:68400, size:'$8.1M' } },
-  { id:'neon-octopus', kind:'whale', name:'Neon Octopus', src:'Pacifica', col:'#d4537e', equity:2.1e6, pnl1d:-89000, pnl30d:-310000,
+  { id:'neon-octopus', kind:'whale', name:'Neon Octopus', src:'Pacifica', col:'#d4537e', equity:2.1e6, pnl1d:-89000, pnl30d:-310000, sent:{bull:4,bear:14},
     open:1, live:true, trade:{ mkt:'HYPE', side:'long', lev:40, entry:27.40, mark:27.29, size:'$1.4M' } },
 ];
 
@@ -275,7 +283,8 @@ function ago(ts){ const sec=Math.max(0,(Date.now()-ts)/1000);
 function snapTrade(t){ return t.trade? {...t.trade} : null; }
 function tapeEvent(id, kind, eyebrow, ebg, ecol, ageMs, note, extra){
   const t=TRADERS.find(x=>x.id===id);
-  return Object.assign({traderId:id, kind, eyebrow, ebg, ecol, ts:Date.now()-ageMs, note, trade:snapTrade(t)}, extra||{});
+  return Object.assign({traderId:id, kind, eyebrow, ebg, ecol, ts:Date.now()-ageMs, note, trade:snapTrade(t),
+    sent:{bull:3+Math.floor(Math.random()*30), bear:1+Math.floor(Math.random()*12), mine:null}}, extra||{});
 }
 function initTape(){
   S.tape=[
@@ -335,6 +344,9 @@ function traderCard(t){
       </div>
     </div>
     <div style="display:flex; gap:6px; margin-top:9px">${badge}${liveB}</div>
+    ${(()=>{ const b=t.sent?.bull??0, r=t.sent?.bear??0, tot=b+r; if(!tot) return '';
+      const pb=Math.round(b/tot*100);
+      return `<div class="tcsent"><span class="${pb>=50?'g':'r'}">${pb}% bullish</span><span class="d">· ${tot} votes</span><div class="sbar"><div style="width:${pb}%"></div></div></div>`; })()}
     ${pnlSpark(t)}
     ${tradeRow}
     ${verify}
@@ -433,9 +445,28 @@ function liveCard(ev, idx){
       <div class="lnote">${ev.note}</div>
       ${spark(isClose?ev.realizedPct:p)}
       ${stats}
+      ${sentRow(ev, idx)}
       ${cta}
       ${idx===0?'<div class="swipe">Swipe or scroll for next ↑</div>':''}
     </div>`;
+}
+function sentRow(ev, i){
+  const b=ev.sent?.bull??0, r=ev.sent?.bear??0, tot=b+r;
+  const pctB = tot? Math.round(b/tot*100) : 50;
+  return `<div class="sentrow" data-sent="${i}">
+    <button class="schip bull ${ev.sent?.mine==='bull'?'on':''}" onclick="reactTape(${i},'bull')">▲ Bullish ${b}</button>
+    <button class="schip bear ${ev.sent?.mine==='bear'?'on':''}" onclick="reactTape(${i},'bear')">▼ Bearish ${r}</button>
+    <div class="sbar"><div style="width:${pctB}%"></div></div>
+  </div>`;
+}
+function reactTape(i, side){
+  const ev=S.tape[i]; if(!ev) return;
+  if(!ev.sent) ev.sent={bull:0,bear:0,mine:null};
+  const sn=ev.sent;
+  if(sn.mine===side){ sn[side]--; sn.mine=null; }
+  else { if(sn.mine) sn[sn.mine]--; sn[side]++; sn.mine=side; }
+  const el=document.querySelector(`[data-sent="${i}"]`);
+  if(el) el.outerHTML = sentRow(ev, i);
 }
 function rLive(){ return S.tape.map((ev,i)=>liveCard(ev,i)).join(''); }
 function pushTapeEvent(ev){
@@ -478,7 +509,7 @@ function rTraders(){
   if (isSolAddr(S.q)) {
     const short = S.q.slice(0,4)+'…'+S.q.slice(-4);
     walletCard = traderCard({ id:'pasted-wallet', kind:'wallet', name:short, src:'Flash wallet · found 2 open positions', col:'#41d6c3',
-      equity:152000, pnl1d:8400, pnl30d:31000, open:2, live:true, trade:{mkt:'SOL', side:'long', lev:12, entry:64.1, mark:66.5, size:'$31K'} });
+      equity:152000, pnl1d:8400, pnl30d:31000, sent:{bull:5,bear:2}, open:2, live:true, trade:{mkt:'SOL', side:'long', lev:12, entry:64.1, mark:66.5, size:'$31K'} });
     list = [];
   } else if (q) {
     list = list.filter(t => t.name.toLowerCase().includes(q) || (t.trade && t.trade.mkt.toLowerCase().includes(q)) || (t.desc||'').toLowerCase().includes(q));
