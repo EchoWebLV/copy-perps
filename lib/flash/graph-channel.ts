@@ -97,3 +97,30 @@ export function buildChannel(input: ChannelInput): Channel {
 
   return { minValue, maxValue, lines, valueToY };
 }
+
+/** Template-style y-axis: 2–5 round price levels inside [min, max].
+ *  Step is the nearest 1/2/5×10^k giving ~3 lines; decimals follow the step
+ *  so labels read "66.75", "63,600", never "66.7500000001". */
+export function priceGridLevels(
+  min: number,
+  max: number,
+): { levels: number[]; decimals: number } {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max - min <= 0) {
+    return { levels: [], decimals: 0 };
+  }
+  const span = max - min;
+  const rawStep = span / 3;
+  const mag = 10 ** Math.floor(Math.log10(rawStep));
+  const norm = rawStep / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+  const levels: number[] = [];
+  for (
+    let v = Math.ceil(min / step) * step;
+    v <= max + step * 1e-9 && levels.length < 6;
+    v += step
+  ) {
+    levels.push(Number(v.toFixed(decimals + 2)));
+  }
+  return { levels, decimals };
+}

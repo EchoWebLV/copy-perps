@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildChannel, valueAtRoi, LIQ_ROI_PCT } from "./graph-channel";
+import { buildChannel, priceGridLevels, valueAtRoi, LIQ_ROI_PCT } from "./graph-channel";
 
 describe("valueAtRoi", () => {
   it("maps ROI to position value in money-space", () => {
@@ -74,5 +74,27 @@ describe("buildChannel", () => {
     expect(ch.minValue).toBeCloseTo(0);
     expect(ch.maxValue).toBeGreaterThan(0);
     expect(Number.isFinite(ch.valueToY(0, 170, 18))).toBe(true);
+  });
+});
+
+describe("priceGridLevels", () => {
+  it("picks round levels inside the window (template-style axis)", () => {
+    // The 66.70–66.85 window from the reference screenshot → 0.05 steps.
+    const grid = priceGridLevels(66.68, 66.84);
+    expect(grid.levels).toEqual([66.7, 66.75, 66.8]);
+    expect(grid.decimals).toBe(2);
+  });
+
+  it("scales the step to the window magnitude", () => {
+    const btc = priceGridLevels(63400, 63900);
+    expect(btc.levels.every((l) => l % 100 === 0)).toBe(true);
+    expect(btc.levels.length).toBeGreaterThanOrEqual(2);
+    expect(btc.levels.length).toBeLessThanOrEqual(6);
+  });
+
+  it("handles degenerate windows without exploding", () => {
+    expect(priceGridLevels(0, 0).levels).toEqual([]);
+    expect(priceGridLevels(50, 50).levels).toEqual([]);
+    expect(priceGridLevels(Number.NaN, 10).levels).toEqual([]);
   });
 });

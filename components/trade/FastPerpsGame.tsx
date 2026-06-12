@@ -31,6 +31,7 @@ import {
 } from "@/lib/flash/position-value";
 import {
   buildChannel,
+  priceGridLevels,
   type ChannelLine,
   type TriggerKind,
   type TriggerLevelInput,
@@ -1535,6 +1536,17 @@ function LivePerpGraph({
   // Responsive sampling: snap the tip toward each incoming mark (no jitter).
   useEffect(() => {
     const id = setInterval(() => {
+      // No data yet (mark not delivered): don't plot, and never "climb" from
+      // a zero seed — that 0 would pollute the auto-ranged window (and the
+      // price grid) for minutes until it scrolls out.
+      if (!Number.isFinite(targetRef.current) || targetRef.current <= 0) {
+        return;
+      }
+      if (!Number.isFinite(displayRef.current) || displayRef.current <= 0) {
+        displayRef.current = targetRef.current;
+        setPoints([targetRef.current]);
+        return;
+      }
       displayRef.current +=
         (targetRef.current - displayRef.current) * GRAPH_SMOOTHING;
       setPoints((prev) =>
@@ -1581,14 +1593,29 @@ function LivePerpGraph({
   const lo = Math.min(...series);
   const hi = Math.max(...series);
   const mid = (lo + hi) / 2;
-  const minSpan = Math.max(Math.abs(value) * 0.05, 0.02);
+  // Idle price chart hugs the tape (template look: 66.70/66.75/66.80 grid,
+  // visible wiggle); the position money graph keeps the wider 5% floor.
+  const minSpan = Math.max(Math.abs(value) * (idle ? 0.002 : 0.05), 0.02);
   const span = Math.max(hi - lo, minSpan);
   const winMin = mid - span * WINDOW_K;
   const winMax = mid + span * WINDOW_K;
   const winRange = winMax - winMin || 1;
 
+  // Template-style y-axis: round price levels with faint gridlines and a
+  // small label on the left (66.70 / 66.75 / 66.80 in the reference).
+  const grid = priceGridLevels(winMin, winMax);
+  const gridLabel = (v: number) =>
+    v.toLocaleString("en-US", {
+      minimumFractionDigits: grid.decimals,
+      maximumFractionDigits: grid.decimals,
+    });
+
+  // The live tip keeps a right gutter (template look): the line ends with
+  // breathing room instead of the dot kissing the card edge.
+  const TIP_GUTTER = 36;
   const toX = (i: number) =>
-    pad + (i / Math.max(1, series.length - 1)) * (width - 2 * pad);
+    pad +
+    (i / Math.max(1, series.length - 1)) * (width - 2 * pad - TIP_GUTTER);
   const toY = (v: number) => {
     const t = Math.min(1, Math.max(0, (v - winMin) / winRange));
     return floorY - t * plotH;
@@ -1682,6 +1709,36 @@ function LivePerpGraph({
             </feMerge>
           </filter>
         </defs>
+
+        {/* Price grid: faint horizontal rules + left labels, under everything. */}
+        {grid.levels.map((level) => {
+          const y = toY(level);
+          return (
+            <g key={`grid-${level}`} data-grid-level={level}>
+              <line
+                x1={pad}
+                y1={y}
+                x2={width - pad}
+                y2={y}
+                stroke={FAINT}
+                strokeWidth="1"
+              />
+              <text
+                x={pad + 2}
+                y={y - 4}
+                fill={DIM}
+                fontSize="9"
+                fontWeight="600"
+                stroke={BG}
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke" }}
+              >
+                {gridLabel(level)}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Area fill under the live curve. */}
         {areaPath && <path d={areaPath} fill="url(#vfill)" />}
