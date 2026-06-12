@@ -25,6 +25,7 @@ describe("WhalePulseFeed route contract", () => {
       "utf8",
     );
 
+    // PULSE label is retained inside the desktop theater header ("PULSE TAPE")
     expect(componentSource).toContain("PULSE");
     expect(socialSource).toContain("Tailing");
     expect(socialSource).toContain("Bullish");
@@ -54,20 +55,24 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain("RISK");
   });
 
-  it("keeps the mobile snap feed and adds a desktop pulse grid", () => {
+  it("keeps the mobile snap feed and adds a desktop theater column", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
+    // Mobile snap-scroll tape
     expect(componentSource).toContain("snap-y snap-mandatory overflow-y-scroll");
     expect(componentSource).toContain('scrollSnapStop: "always"');
     expect(componentSource).toContain("h-full w-full snap-start");
     expect(componentSource).toContain("lg:hidden");
+    // Desktop theater column (hidden on mobile, shown on desktop)
     expect(componentSource).toContain("hidden h-full min-h-0 flex-col lg:flex");
     expect(componentSource).toContain("PulsePositionCard");
     expect(componentSource).toContain("DesktopPulseCard");
-    expect(componentSource).toContain("xl:grid-cols-3");
+    // Desktop theater: centered, side-bordered column
+    expect(componentSource).toContain("max-w-xl");
+    // PULSE TAPE label retained in desktop header
     expect(componentSource).toContain("PULSE TAPE");
     expect(componentSource).toContain("DesktopPulseReactionButton");
     expect(componentSource).toContain("inline-flex w-auto");
@@ -109,7 +114,7 @@ describe("WhalePulseFeed route contract", () => {
     );
 
     expect(componentSource).toContain(
-      "mt-auto flex flex-col gap-4 pt-4 sm:flex-row",
+      "mt-auto flex flex-col gap-4 sm:flex-row",
     );
   });
 
@@ -159,5 +164,56 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain(
       "mergePulsePositionSignals(current, data.positions, Date.now())",
     );
+  });
+
+  it("renders only bullish and bearish reaction chips on tape cards (Tailing hidden from display)", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    // Tape renders a ratio bar for bullish-vs-bearish sentiment
+    expect(componentSource).toContain("bullishPct");
+    expect(componentSource).toContain("bullishCount");
+    expect(componentSource).toContain("bearishCount");
+    // Tailing is filtered out before rendering chips
+    expect(componentSource).toContain('r !== "Tailing"');
+    // Tailing is preserved in the data model (social counts, reactions POST)
+    expect(componentSource).toContain("Tailing: 0");
+  });
+
+  it("shows a floating new-signal pill when items arrive while user is scrolled down", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("pendingItems");
+    expect(componentSource).toContain("newCount");
+    expect(componentSource).toContain("drainPendingItems");
+    expect(componentSource).toContain("new signal");
+  });
+
+  it("drops holding cards older than 6 hours from the tape", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("HOLDING_MAX_AGE_MS");
+    expect(componentSource).toContain("filterTapeItems");
+    expect(componentSource).toContain('item.kind !== "holding"');
+  });
+
+  it("renders a Copy now primary CTA and a quiet auto-copy link (no auto-copy button)", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("Copy now");
+    expect(componentSource).toContain("View trader → Auto-copy");
+    // NO standalone Auto-copy button on tape cards
+    expect(componentSource).not.toContain('"Auto-copy"');
   });
 });

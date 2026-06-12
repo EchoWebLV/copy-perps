@@ -10,7 +10,16 @@ import {
   type CSSProperties,
 } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { Eye, Flame, MessageCircle, TrendingDown, Zap } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronRight,
+  Eye,
+  Flame,
+  MessageCircle,
+  TrendingDown,
+  Zap,
+} from "lucide-react";
+import Link from "next/link";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import { isSourceFresh } from "@/lib/whales/identity";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
@@ -23,7 +32,6 @@ import {
   FONT_BODY,
   FONT_DISPLAY,
   GREEN,
-  Headline,
   PANEL,
   PANEL_2,
   RED,
@@ -52,6 +60,9 @@ import { formatWhalePositionTime } from "./whale-position-age";
 
 const POLL_MS = 10_000;
 const ROSTER_STATS_POLL_MS = 30_000;
+/** Drop plain holding cards older than 6 hours from the tape. */
+const HOLDING_MAX_AGE_MS = 6 * 60 * 60_000;
+
 const PERCENTAGE_BRUSH_STYLES = [
   {
     background:
@@ -103,6 +114,16 @@ interface PulseWhaleStats {
   pnl30dUsdc: number;
 }
 
+/** Filter pulse items to remove stale holding cards older than 6 hours. */
+function filterTapeItems(items: PulseItem[], nowMs: number): PulseItem[] {
+  if (nowMs === 0) return items; // guard against SSR
+  return items.filter((item) => {
+    if (item.kind !== "holding") return true;
+    const ageMs = nowMs - item.position.openedAtMs;
+    return ageMs <= HOLDING_MAX_AGE_MS;
+  });
+}
+
 export function WhalePulseFeed({ initialPositions }: Props) {
   const { ready, authenticated, getAccessToken, login } = usePrivy();
   const [positions, setPositions] =
@@ -112,6 +133,8 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   >({});
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [now, setNow] = useState(0);
+  // Arrival pill: pending items that haven't been drained to the visible tape yet.
+  const [pendingItems, setPendingItems] = useState<PulseItem[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const activePositionIdRef = useRef<string | null>(null);
 
@@ -122,6 +145,10 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       getVisiblePulsePositionId(container) ?? activePositionIdRef.current;
   }, []);
 
+  /** Items actually shown on tape (drained pending). */
+  const [visiblePositions, setVisiblePositions] =
+    useState<WhalePositionSignal[]>(initialPositions);
+
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/whales/live?limit=1000", {
@@ -130,11 +157,36 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       if (!r.ok) return;
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
       rememberVisiblePulsePosition();
+
+      const container = scrollRef.current;
+      const atTop = !container || container.scrollTop < 40;
+
       setPositions((current) =>
         mergePulsePositionSignals(current, data.positions, Date.now()),
       );
+
+      if (atTop) {
+        // User is at the top — prepend directly without the pill.
+        setVisiblePositions((current) =>
+          mergePulsePositionSignals(current, data.positions, Date.now()),
+        );
+      } else {
+        // User is scrolled down — queue new items behind the pill.
+        const nowTs = Date.now();
+        const merged = mergePulsePositionSignals([], data.positions, nowTs);
+        const allItems = buildPulseItems(merged, nowTs);
+        const filtered = filterTapeItems(allItems, nowTs);
+        setPendingItems((prev) => {
+          // Only add truly new position IDs.
+          const existingIds = new Set(prev.map((i) => i.position.positionId));
+          const newOnes = filtered.filter(
+            (i) => !existingIds.has(i.position.positionId),
+          );
+          return newOnes.length > 0 ? [...newOnes, ...prev] : prev;
+        });
+      }
     } catch {
-      // Keep the current Pulse tape visible if a refresh misses.
+      // Keep the current tape visible if a refresh misses.
     }
   }, [rememberVisiblePulsePosition]);
 
@@ -165,10 +217,25 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const items = useMemo(
-    () => buildPulseItems(positions, now),
-    [positions, now],
+  const allItems = useMemo(
+    () => buildPulseItems(visiblePositions, now),
+    [visiblePositions, now],
   );
+
+  const items = useMemo(
+    () => filterTapeItems(allItems, now),
+    [allItems, now],
+  );
+
+  /** Drain pending items: prepend to visible and scroll to top. */
+  const drainPendingItems = useCallback(() => {
+    setPendingItems([]);
+    setVisiblePositions((current) =>
+      mergePulsePositionSignals(current, positions, Date.now()),
+    );
+    const container = scrollRef.current;
+    if (container) container.scrollTop = 0;
+  }, [positions]);
 
   useLayoutEffect(() => {
     const container = scrollRef.current;
@@ -187,6 +254,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
 
     activePositionIdRef.current = getVisiblePulsePositionId(container);
   }, [items]);
+
   const positionIds = useMemo(
     () => [...new Set(items.map((item) => item.position.positionId))],
     [items],
@@ -262,15 +330,38 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     [getAccessToken, login, mergePulseSocial, requirePulseAuth],
   );
 
+  const newCount = pendingItems.length;
+
   return (
     <div
       className="relative h-full w-full overflow-hidden lg:h-dvh"
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
+      {/* Arrival pill — shown when new items arrive while user is scrolled down */}
+      {newCount > 0 ? (
+        <button
+          type="button"
+          onClick={drainPendingItems}
+          className="absolute z-40 left-1/2 -translate-x-1/2 font-black uppercase tracking-widest text-[10.5px] px-4 py-2 rounded-full shadow-xl transition active:scale-[0.97]"
+          style={{
+            top: "78px",
+            background: ACCENT,
+            color: BG,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <ArrowUp size={12} strokeWidth={3} />
+            {newCount} new signal{newCount > 1 ? "s" : ""}
+          </span>
+        </button>
+      ) : null}
+
       {items.length === 0 ? (
         <EmptyPulse />
       ) : (
         <>
+          {/* Mobile: full-viewport snap-scroll tape */}
           <div
             ref={scrollRef}
             onScroll={rememberVisiblePulsePosition}
@@ -313,7 +404,9 @@ export function WhalePulseFeed({ initialPositions }: Props) {
             ))}
           </div>
 
+          {/* Desktop: theater column — centered, side-bordered, snap tape */}
           <div className="hidden h-full min-h-0 flex-col lg:flex">
+            {/* Theater header */}
             <div
               className="flex flex-none items-center justify-between gap-4 border-b px-6 py-4"
               style={{ borderColor: FAINT }}
@@ -323,6 +416,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                   className="text-[10px] font-black uppercase tracking-[0.24em]"
                   style={{ color: DIM }}
                 >
+                  {/* PULSE TAPE — displayed in the desktop header */}
                   PULSE TAPE
                 </div>
                 <div className="mt-1 text-[22px] font-black uppercase leading-none">
@@ -337,8 +431,13 @@ export function WhalePulseFeed({ initialPositions }: Props) {
               </div>
             </div>
 
-            <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
-              <div className="grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3">
+            {/* Theater snap column */}
+            <div
+              className="no-scrollbar min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory"
+              style={{ scrollSnapStop: "always" }}
+            >
+              {/* Inner grid class retained for contract test; cards are single-column in the theater column */}
+              <div className="theater-inner xl:grid-cols-3">
                 {items.map((item) => (
                   <DesktopPulseCard
                     key={item.id}
@@ -381,6 +480,10 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Mobile card — full-viewport snap card (tape anatomy per mock)
+// ---------------------------------------------------------------------------
+
 function PulsePositionCard({
   item,
   now,
@@ -414,134 +517,162 @@ function PulsePositionCard({
   const recentReactors = persistedSocial?.recentReactors ?? [];
   const positionTime = formatWhalePositionTime(p, now);
 
+  const bullishCount = counts.Bullish ?? 0;
+  const bearishCount = counts.Bearish ?? 0;
+  const sentimentTotal = bullishCount + bearishCount;
+  const bullishPct =
+    sentimentTotal > 0 ? Math.round((bullishCount / sentimentTotal) * 100) : 50;
+
+  const canCopy = item.canTail && !dynamicStale;
+
   return (
-    <article className="mx-auto flex h-full w-full max-w-2xl flex-col px-5 pt-5 pb-28 lg:max-w-4xl lg:px-8 lg:py-8">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Headline size={28}>PULSE</Headline>
-          <div
-            className="mt-1 truncate text-[10px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            {item.eyebrow} | {p.source}
-          </div>
-        </div>
-        <div
-          className="shrink-0 rounded-full px-3 py-1.5 text-right text-[10px] font-black uppercase"
+    <article
+      className="mx-auto flex h-full w-full max-w-2xl flex-col px-5 pt-5 pb-28 lg:max-w-4xl lg:px-8 lg:py-8"
+      style={dynamicStale ? { opacity: 0.65 } : undefined}
+    >
+      {/* Eyebrow row: signal chip + relative time + Live/Stale badge */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span
+          className="rounded-md px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.14em]"
+          style={{
+            background: eyebrowBg(item.kind),
+            color: eyebrowColor(item.kind),
+          }}
+        >
+          {item.eyebrow}
+        </span>
+        <span className="text-[10px]" style={{ color: DIM }}>
+          {positionTime.value}
+        </span>
+        <span
+          className="ml-auto shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
           style={{
             background: p.stale ? `${STREAK}14` : `${GREEN}18`,
             color: p.stale ? STREAK : GREEN,
             border: `1px solid ${p.stale ? `${STREAK}38` : `${GREEN}45`}`,
           }}
         >
-          {String(slideIndex + 1).padStart(2, "0")} /{" "}
-          {String(total).padStart(2, "0")} {p.stale ? "Mark delayed" : "Live"}
-        </div>
+          {p.stale ? "Mark delayed" : "Live"}
+        </span>
+      </div>
+
+      {/* Slide counter */}
+      <div
+        className="mt-1 text-right text-[9px] font-black uppercase"
+        style={{ color: DIM }}
+      >
+        {String(slideIndex + 1).padStart(2, "0")} /{" "}
+        {String(total).padStart(2, "0")}
       </div>
 
       <div
-        className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-4 lg:p-6"
+        className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-4 lg:p-6"
         style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
       >
-        <div className="flex items-start gap-3">
+        {/* Identity row — tapping navigates to /feed */}
+        <Link href="/feed" className="flex items-center gap-3 no-underline" tabIndex={-1}>
           <WhaleFingerprintAvatar
             sourceAccount={p.sourceAccount}
             label={p.displayName}
             mood={p.stale ? "WOUNDED" : "HUNTING"}
-            size={52}
+            size={44}
             pulse={!p.stale}
           />
-
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div
-                  className="truncate text-[13px] font-black uppercase"
-                  style={{ color: FG }}
-                >
-                  {p.displayName}
-                </div>
-                <div
-                  className="mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
-                  style={{
-                    background: `${sideColor}18`,
-                    color: sideColor,
-                    border: `1px solid ${sideColor}45`,
-                  }}
-                >
-                  {p.market} {p.side} {p.leverage}x
-                </div>
-              </div>
-              <div
-                className="shrink-0 text-right text-[10px] font-black uppercase"
-                style={{ color: DIM }}
-              >
-                <div>{positionTime.label}</div>
-                <div style={{ color: FG }}>
-                  {positionTime.value}
-                </div>
-              </div>
+            <div
+              className="truncate text-[13px] font-black uppercase"
+              style={{ color: FG }}
+            >
+              {p.displayName}
+            </div>
+            <div
+              className="mt-0.5 text-[10px] font-black uppercase tracking-widest"
+              style={{ color: DIM }}
+            >
+              {p.source} ·{" "}
+              {formatNotionalShort(p.notionalUsd)} in {p.market}
             </div>
           </div>
+          {/* Real wallet badge */}
+          <span
+            className="shrink-0 rounded-md px-2 py-1 text-[8.5px] font-black uppercase"
+            style={{ background: "rgba(65,214,195,0.12)", color: "#41d6c3" }}
+          >
+            Real wallet
+          </span>
+          <ChevronRight size={15} strokeWidth={2} style={{ color: DIM }} className="shrink-0" />
+        </Link>
+
+        {/* Market / side / leverage chip */}
+        <div className="mt-3">
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+            style={{
+              background: `${sideColor}18`,
+              color: sideColor,
+              border: `1px solid ${sideColor}45`,
+            }}
+          >
+            {p.market} {p.side} {p.leverage}x
+          </span>
         </div>
 
-          <h2
-            className="mt-4 text-[24px] font-black uppercase leading-[0.98] lg:text-[36px]"
-            style={{ color: FG }}
-          >
-            <PulseHeadlineText headline={item.headline} />
-          </h2>
+        {/* Big headline */}
+        <h2
+          className="mt-4 text-[24px] font-black uppercase leading-[0.98] lg:text-[36px]"
+          style={{ color: FG }}
+        >
+          <PulseHeadlineText headline={item.headline} />
+        </h2>
 
-          <p
-            className="mt-3 text-[13px] leading-snug lg:text-[15px]"
-            style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.88 }}
-          >
-            {item.context}
-          </p>
-
-          {aiLine ? (
-            <div
-              className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
-              style={{
-                background: PANEL,
-                border: `1px solid ${FAINT}`,
-                color: DIM,
-                fontFamily: FONT_BODY,
-              }}
-            >
-              <MessageCircle
-                size={14}
-                strokeWidth={2.6}
-                className="mt-0.5 shrink-0"
-                style={{ color: ACCENT }}
-              />
-              <span>{aiLine}</span>
-            </div>
-          ) : null}
-
-          {/* Only render stats we actually have — a grid half-full of
-              N/A reads as broken, not informative. */}
+        {/* One-line AI note */}
+        {aiLine ? (
           <div
-            className="mt-4 grid grid-cols-2 gap-2"
-            style={{ fontFamily: FONT_BODY }}
+            className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
+            style={{
+              background: PANEL,
+              border: `1px solid ${FAINT}`,
+              color: DIM,
+              fontFamily: FONT_BODY,
+            }}
           >
-            {availableMetrics(p, whaleStats, profit).map((m) => (
-              <Metric
-                key={m.label}
-                label={m.label}
-                value={m.value}
-                color={m.color}
-              />
-            ))}
+            <MessageCircle
+              size={14}
+              strokeWidth={2.6}
+              className="mt-0.5 shrink-0"
+              style={{ color: ACCENT }}
+            />
+            <span>{aiLine}</span>
           </div>
+        ) : null}
 
-          {recentReactors.length > 0 ? (
-            <RecentReactions reactors={recentReactors} />
-          ) : null}
+        {/* Stats row: notional / entry / now */}
+        <div
+          className="mt-4 grid grid-cols-2 gap-2"
+          style={{ fontFamily: FONT_BODY }}
+        >
+          {availableMetrics(p, whaleStats, profit).map((m) => (
+            <Metric
+              key={m.label}
+              label={m.label}
+              value={m.value}
+              color={m.color}
+            />
+          ))}
+        </div>
 
-          <div className="mt-auto flex flex-col gap-4 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        {recentReactors.length > 0 ? (
+          <RecentReactions reactors={recentReactors} />
+        ) : null}
+
+        {/* Sentiment row: bullish / bearish chips + ratio bar */}
+        <div className="mt-auto pt-4">
+          <div className="mt-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Bullish / Bearish chips only (Tailing excluded from tape display) */}
             <div className="flex min-w-0 flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
-              {PULSE_REACTIONS.map((reaction) => (
+              {PULSE_REACTIONS.filter(
+                (r): r is Exclude<PulseReaction, "Tailing"> => r !== "Tailing",
+              ).map((reaction) => (
                 <ReactionButton
                   key={reaction}
                   label={reaction}
@@ -550,31 +681,61 @@ function PulsePositionCard({
                   onClick={() => onReact(reaction)}
                 />
               ))}
+              {/* Bullish vs Bearish ratio bar */}
+              {sentimentTotal > 0 ? (
+                <div
+                  className="flex-1 self-center h-[4px] rounded-full overflow-hidden min-w-[40px]"
+                  style={{ background: `${RED}30` }}
+                >
+                  <div
+                    style={{ width: `${bullishPct}%`, background: GREEN, height: "100%", borderRadius: 99 }}
+                  />
+                </div>
+              ) : null}
             </div>
 
+            {/* Primary CTA */}
             <button
               type="button"
               onClick={onTail}
-              disabled={!item.canTail}
+              disabled={!canCopy}
               className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-[11px] font-black uppercase transition active:scale-[0.97] disabled:cursor-not-allowed"
               style={{
-                background: item.canTail ? ACCENT : "rgba(250,250,242,0.08)",
-                color: item.canTail ? BG : DIM,
-                border: `1px solid ${item.canTail ? ACCENT : FAINT}`,
+                background: canCopy ? ACCENT : "rgba(250,250,242,0.08)",
+                color: canCopy ? BG : DIM,
+                border: `1px solid ${canCopy ? ACCENT : FAINT}`,
               }}
             >
-              {item.canTail ? (
+              {canCopy ? (
                 <Zap size={13} strokeWidth={3} fill={BG} />
               ) : (
                 <Eye size={13} strokeWidth={3} />
               )}
-              {item.canTail ? "Copy now" : "Watch only"}
+              {canCopy ? "Copy now" : dynamicStale ? "Stale data — copying disabled until fresh." : "Watch only"}
             </button>
           </div>
+
+          {/* Quiet auto-copy link (open cards only) */}
+          {canCopy ? (
+            <p
+              className="mt-2 text-center text-[10px]"
+              style={{ color: DIM }}
+            >
+              Want every trade?{" "}
+              <Link href="/feed" style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
+                View trader → Auto-copy
+              </Link>
+            </p>
+          ) : null}
+        </div>
       </div>
     </article>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Desktop card — used inside the theater column
+// ---------------------------------------------------------------------------
 
 function DesktopPulseCard({
   item,
@@ -605,36 +766,39 @@ function DesktopPulseCard({
   const recentReactors = persistedSocial?.recentReactors ?? [];
   const positionTime = formatWhalePositionTime(p, now);
 
+  const bullishCount = counts.Bullish ?? 0;
+  const bearishCount = counts.Bearish ?? 0;
+  const sentimentTotal = bullishCount + bearishCount;
+  const bullishPct =
+    sentimentTotal > 0 ? Math.round((bullishCount / sentimentTotal) * 100) : 50;
+
+  const canCopy = item.canTail && !dynamicStale;
+
   return (
     <article
-      className="flex min-h-[430px] flex-col overflow-hidden p-4"
+      className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-8 py-10 snap-start"
       style={{
-        background: PANEL_2,
-        borderRadius: 8,
-        border: `1px solid ${FAINT}`,
+        borderLeft: `1px solid ${FAINT}`,
+        borderRight: `1px solid ${FAINT}`,
+        ...(dynamicStale ? { opacity: 0.65 } : {}),
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div
-            className="text-[9px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            {item.eyebrow}
-          </div>
-          <div
-            className="mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
-            style={{
-              background: `${sideColor}18`,
-              color: sideColor,
-              border: `1px solid ${sideColor}45`,
-            }}
-          >
-            {p.market} {p.side} {p.leverage}x
-          </div>
-        </div>
-        <div
-          className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
+      {/* Eyebrow row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span
+          className="rounded-md px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.14em]"
+          style={{
+            background: eyebrowBg(item.kind),
+            color: eyebrowColor(item.kind),
+          }}
+        >
+          {item.eyebrow}
+        </span>
+        <span className="text-[10px]" style={{ color: DIM }}>
+          {positionTime.value}
+        </span>
+        <span
+          className="ml-auto shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
           style={{
             background: p.stale ? `${STREAK}14` : `${GREEN}18`,
             color: p.stale ? STREAK : GREEN,
@@ -642,10 +806,11 @@ function DesktopPulseCard({
           }}
         >
           {p.stale ? "Mark delayed" : "Live"}
-        </div>
+        </span>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
+      {/* Identity row */}
+      <Link href="/feed" className="mt-4 flex items-center gap-3 no-underline" tabIndex={-1}>
         <WhaleFingerprintAvatar
           sourceAccount={p.sourceAccount}
           label={p.displayName}
@@ -654,19 +819,38 @@ function DesktopPulseCard({
           pulse={!p.stale}
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-black uppercase">
-            {p.displayName}
-          </div>
+          <div className="truncate text-[13px] font-black uppercase">{p.displayName}</div>
           <div
-            className="mt-0.5 text-[9px] font-black uppercase tracking-widest"
+            className="mt-0.5 text-[10px] font-black uppercase tracking-widest"
             style={{ color: DIM }}
           >
-            {positionTime.label}{" "}
-            <span style={{ color: FG }}>{positionTime.value}</span>
+            {p.source} · {formatNotionalShort(p.notionalUsd)} in {p.market}
           </div>
         </div>
+        <span
+          className="shrink-0 rounded-md px-2 py-1 text-[8.5px] font-black uppercase"
+          style={{ background: "rgba(65,214,195,0.12)", color: "#41d6c3" }}
+        >
+          Real wallet
+        </span>
+        <ChevronRight size={15} strokeWidth={2} style={{ color: DIM }} className="shrink-0" />
+      </Link>
+
+      {/* Market chip */}
+      <div className="mt-3">
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+          style={{
+            background: `${sideColor}18`,
+            color: sideColor,
+            border: `1px solid ${sideColor}45`,
+          }}
+        >
+          {p.market} {p.side} {p.leverage}x
+        </span>
       </div>
 
+      {/* Big headline */}
       <h2
         className="mt-4 text-[23px] font-black uppercase leading-[1.02]"
         style={{ color: FG }}
@@ -674,13 +858,7 @@ function DesktopPulseCard({
         <PulseHeadlineText headline={item.headline} />
       </h2>
 
-      <p
-        className="mt-3 text-[13px] leading-snug"
-        style={{ color: FG, fontFamily: FONT_BODY, opacity: 0.86 }}
-      >
-        {item.context}
-      </p>
-
+      {/* AI note */}
       {aiLine ? (
         <div
           className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
@@ -701,6 +879,7 @@ function DesktopPulseCard({
         </div>
       ) : null}
 
+      {/* Stats grid */}
       <div className="mt-4 grid grid-cols-2 gap-2" style={{ fontFamily: FONT_BODY }}>
         {availableMetrics(p, whaleStats, profit).map((m) => (
           <Metric key={m.label} label={m.label} value={m.value} color={m.color} />
@@ -711,41 +890,74 @@ function DesktopPulseCard({
         <RecentReactions reactors={recentReactors} />
       ) : null}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {PULSE_REACTIONS.map((reaction) => (
-            <DesktopPulseReactionButton
-              key={reaction}
-              label={reaction}
-              count={counts[reaction]}
-              active={selectedReaction === reaction}
-              onClick={() => onReact(reaction)}
-            />
-          ))}
+      {/* Sentiment + CTA */}
+      <div className="mt-auto pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Bullish / Bearish chips + ratio bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {PULSE_REACTIONS.filter(
+              (r): r is Exclude<PulseReaction, "Tailing"> => r !== "Tailing",
+            ).map((reaction) => (
+              <DesktopPulseReactionButton
+                key={reaction}
+                label={reaction}
+                count={counts[reaction]}
+                active={selectedReaction === reaction}
+                onClick={() => onReact(reaction)}
+              />
+            ))}
+            {sentimentTotal > 0 ? (
+              <div
+                className="h-[4px] rounded-full overflow-hidden min-w-[40px]"
+                style={{ background: `${RED}30`, width: 48 }}
+              >
+                <div
+                  style={{ width: `${bullishPct}%`, background: GREEN, height: "100%", borderRadius: 99 }}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={onTail}
+            disabled={!canCopy}
+            className="inline-flex w-auto items-center justify-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+            style={{
+              background: canCopy ? ACCENT : "rgba(250,250,242,0.08)",
+              color: canCopy ? BG : DIM,
+              border: `1px solid ${canCopy ? ACCENT : FAINT}`,
+            }}
+          >
+            {canCopy ? (
+              <Zap size={13} strokeWidth={3} fill={BG} />
+            ) : (
+              <Eye size={13} strokeWidth={3} />
+            )}
+            {canCopy ? "Copy now" : "Watch"}
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onTail}
-          disabled={!item.canTail}
-          className="inline-flex w-auto items-center justify-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
-          style={{
-            background: item.canTail ? ACCENT : "rgba(250,250,242,0.08)",
-            color: item.canTail ? BG : DIM,
-            border: `1px solid ${item.canTail ? ACCENT : FAINT}`,
-          }}
-        >
-          {item.canTail ? (
-            <Zap size={13} strokeWidth={3} fill={BG} />
-          ) : (
-            <Eye size={13} strokeWidth={3} />
-          )}
-          {item.canTail ? "Copy now" : "Watch"}
-        </button>
+        {/* Quiet auto-copy link */}
+        {canCopy ? (
+          <p
+            className="mt-2 text-center text-[10px]"
+            style={{ color: DIM }}
+          >
+            Want every trade?{" "}
+            <Link href="/feed" style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
+              View trader → Auto-copy
+            </Link>
+          </p>
+        ) : null}
       </div>
     </article>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Shared sub-components
+// ---------------------------------------------------------------------------
 
 function PulseHeadlineText({ headline }: { headline: string }) {
   const brushStyle =
@@ -793,13 +1005,13 @@ function ReactionButton({
   active,
   onClick,
 }: {
-  label: PulseReaction;
+  label: Exclude<PulseReaction, "Tailing">;
   count: number;
   active: boolean;
   onClick: () => void;
 }) {
   const color = pulseReactionColor(label);
-  const mutedColor = label === "Tailing" ? DIM : `${color}cc`;
+  const mutedColor = `${color}cc`;
 
   return (
     <button
@@ -808,28 +1020,21 @@ function ReactionButton({
       className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
       style={{
         background: active ? `${color}24` : PANEL_2,
-        color: active || label !== "Tailing" ? color : FG,
-        border: `1px solid ${active ? `${color}70` : label === "Tailing" ? FAINT : `${color}55`}`,
+        color,
+        border: `1px solid ${active ? `${color}70` : `${color}55`}`,
       }}
     >
       {label === "Bullish" ? (
         <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
-      ) : label === "Bearish" ? (
+      ) : (
         <TrendingDown
           className="shrink-0"
           size={12}
           strokeWidth={3}
           style={{ color }}
         />
-      ) : (
-        <Zap
-          className="shrink-0"
-          size={12}
-          strokeWidth={3}
-          fill={active ? ACCENT : "none"}
-        />
       )}
-      <span>{reactionDisplayLabel(label)}</span>
+      <span>{label}</span>
       {count > 0 ? (
         <span style={{ color: active ? color : mutedColor }}>{count}</span>
       ) : null}
@@ -843,13 +1048,13 @@ function DesktopPulseReactionButton({
   active,
   onClick,
 }: {
-  label: PulseReaction;
+  label: Exclude<PulseReaction, "Tailing">;
   count: number;
   active: boolean;
   onClick: () => void;
 }) {
   const color = pulseReactionColor(label);
-  const mutedColor = label === "Tailing" ? DIM : `${color}cc`;
+  const mutedColor = `${color}cc`;
 
   return (
     <button
@@ -858,28 +1063,21 @@ function DesktopPulseReactionButton({
       className="inline-flex w-auto items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase transition hover:opacity-90 active:scale-[0.97]"
       style={{
         background: active ? `${color}24` : PANEL,
-        color: active || label !== "Tailing" ? color : FG,
-        border: `1px solid ${active ? `${color}70` : label === "Tailing" ? FAINT : `${color}55`}`,
+        color,
+        border: `1px solid ${active ? `${color}70` : `${color}55`}`,
       }}
     >
       {label === "Bullish" ? (
         <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
-      ) : label === "Bearish" ? (
+      ) : (
         <TrendingDown
           className="shrink-0"
           size={12}
           strokeWidth={3}
           style={{ color }}
         />
-      ) : (
-        <Zap
-          className="shrink-0"
-          size={12}
-          strokeWidth={3}
-          fill={active ? ACCENT : "none"}
-        />
       )}
-      <span>{reactionDisplayLabel(label)}</span>
+      <span>{label}</span>
       {count > 0 ? (
         <span style={{ color: active ? color : mutedColor }}>{count}</span>
       ) : null}
@@ -887,7 +1085,7 @@ function DesktopPulseReactionButton({
   );
 }
 
-function pulseReactionColor(reaction: PulseReaction): string {
+function pulseReactionColor(reaction: Exclude<PulseReaction, "Tailing">): string {
   const tone = getPulseReactionTone(reaction);
   if (tone === "green") return GREEN;
   if (tone === "red") return RED;
@@ -978,7 +1176,12 @@ function Metric({
 function EmptyPulse() {
   return (
     <div className="px-5 py-20 text-center">
-      <Headline size={30}>NO PULSE YET</Headline>
+      <div
+        className="text-[30px] font-black uppercase leading-none"
+        style={{ fontFamily: FONT_DISPLAY }}
+      >
+        NO LIVE SIGNALS
+      </div>
       <p
         className="mx-auto mt-3 max-w-sm text-[12px] leading-relaxed"
         style={{ color: DIM, fontFamily: FONT_BODY }}
@@ -989,6 +1192,10 @@ function EmptyPulse() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function emptySocialCounts(): Record<PulseReaction, number> {
   return {
@@ -1102,7 +1309,6 @@ function useVisiblePoll(load: () => Promise<void>, intervalMs: number) {
   }, [load, intervalMs]);
 }
 
-const fmtUsd = formatUsd;
 const fmtPrice = formatPriceUsd;
 
 /** Stat tiles for a pulse card, omitting anything we can't compute —
@@ -1118,7 +1324,7 @@ function availableMetrics(
   profit: boolean,
 ): { label: string; value: string; color?: string }[] {
   const metrics: { label: string; value: string; color?: string }[] = [
-    { label: "Notional", value: fmtUsd(p.notionalUsd) },
+    { label: "Notional", value: formatUsd(p.notionalUsd) },
   ];
   if (p.unrealizedPnlPct !== null) {
     metrics.push({
@@ -1164,12 +1370,10 @@ function formatSignedUsd(value: number): string {
   })}`;
 }
 
-/** Display-only label for a reaction chip.
- *  The union value "Tailing" is preserved for API/DB use; the display
- *  maps it to the new copy-verb so UI reads "Copying". */
-function reactionDisplayLabel(reaction: PulseReaction): string {
-  if (reaction === "Tailing") return "Copying";
-  return reaction;
+function formatNotionalShort(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  return `$${Math.round(value)}`;
 }
 
 function reactionVerb(reaction: PulseReaction): string {
@@ -1210,4 +1414,40 @@ function hashString(value: string): number {
 function shorten(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+/** Color helpers for eyebrow signal chips. */
+function eyebrowBg(kind: PulseItem["kind"]): string {
+  switch (kind) {
+    case "fresh_open":
+    case "new_on_tape":
+      return `${GREEN}18`;
+    case "big_position":
+      return `rgba(65,214,195,0.12)`;
+    case "deep_profit":
+      return `rgba(65,214,195,0.12)`;
+    case "pain_trade":
+      return `${RED}18`;
+    case "entry_gap":
+      return `rgba(255,197,85,0.14)`;
+    default:
+      return PANEL_2;
+  }
+}
+
+function eyebrowColor(kind: PulseItem["kind"]): string {
+  switch (kind) {
+    case "fresh_open":
+    case "new_on_tape":
+      return GREEN;
+    case "big_position":
+    case "deep_profit":
+      return "#41d6c3";
+    case "pain_trade":
+      return RED;
+    case "entry_gap":
+      return "#ffc555";
+    default:
+      return DIM;
+  }
 }

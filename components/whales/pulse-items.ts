@@ -99,7 +99,7 @@ function itemsForPosition(position: PositionPayload, nowMs: number): PulseItem[]
         headline:
           performanceHeadline(position) ??
           `${position.market} ${position.side} is already up ${pnl.toFixed(1)}%`,
-        context: "Tailing now means entering after part of the whale's move has already happened.",
+        context: "Copying now means entering after part of the whale's move has already happened.",
         nowMs,
       }),
     );
