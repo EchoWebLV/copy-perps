@@ -231,6 +231,13 @@ pub mod arena {
     /// crank-payer PDA signing via seeds, with the validator's fee vault
     /// attached, which lifts MagicBlock's 10-sponsored-commits-per-account
     /// quota (the 0xa0000000 "commit nonce 10/10" failure mode).
+    ///
+    /// ONE intent per account (MagicBlock-confirmed root cause of the
+    /// 2026-06-12 wedge): the validator finalizes each intent as a single
+    /// base-layer transaction touching every account in the bundle, and a
+    /// 3-account bundle already exceeds the base-layer compute budget —
+    /// the commit-intent tx fails on ComputationalBudget and retries
+    /// forever. Per-account intents keep every finalize tx minimal.
     pub fn commit_state<'info>(
         ctx: Context<'info, CommitState<'info>>,
         _market_id: u8,
@@ -257,18 +264,29 @@ pub mod arena {
             ArenaError::InvalidFeeVault
         );
 
+        // One builder per account: each build_and_invoke_signed is one CPI
+        // to the magic program scheduling one independent single-account
+        // intent. Defensive CU note: measured on the local ER harness,
+        // 3 intents in this one instruction consumed ~109k CU (~36k per
+        // intent) against the default 200k/ix budget — fine at our
+        // N = market + 2-4 bots, but at ~5 accounts this instruction nears
+        // its own ceiling. If the roster grows past that, fall back to
+        // commit_state taking an account_index and the crank invoking it
+        // once per account in separate ER txs.
         let mut accounts = vec![ctx.accounts.market_state.to_account_info()];
         accounts.extend(ctx.remaining_accounts.iter().cloned());
         let crank_payer_seeds: &[&[u8]] =
             &[CRANK_PAYER_SEED, &[ctx.bumps.crank_payer]];
-        MagicIntentBundleBuilder::new(
-            ctx.accounts.crank_payer.to_account_info(),
-            ctx.accounts.magic_context.to_account_info(),
-            ctx.accounts.magic_program.to_account_info(),
-        )
-        .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
-        .commit(&accounts)
-        .build_and_invoke_signed(&[crank_payer_seeds])?;
+        for account in accounts {
+            MagicIntentBundleBuilder::new(
+                ctx.accounts.crank_payer.to_account_info(),
+                ctx.accounts.magic_context.to_account_info(),
+                ctx.accounts.magic_program.to_account_info(),
+            )
+            .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
+            .commit(&[account])
+            .build_and_invoke_signed(&[crank_payer_seeds])?;
+        }
         Ok(())
     }
 
@@ -277,19 +295,30 @@ pub mod arena {
     /// undelegation halts the arena until re-delegation. (The config PDA is
     /// not delegated; the ER serves it as a read-only clone from the base
     /// layer, which the local ephemeral harness exercises.)
+    ///
+    /// ONE intent per account, same as commit_state: the multi-account
+    /// commit_and_undelegate bundle is the exact call that wedged the
+    /// 2026-06-12 undelegation — its single base-layer finalize tx for all
+    /// 3 accounts failed on ComputationalBudget and retried forever
+    /// (MagicBlock-confirmed). Per-account intents undelegate each account
+    /// in its own base-layer tx; accounts therefore flip back to the
+    /// program independently rather than atomically, which the admin-only
+    /// redelegate flow already tolerates (it polls every account).
     pub fn undelegate_all<'info>(
         ctx: Context<'info, UndelegateAll<'info>>,
         _market_id: u8,
     ) -> Result<()> {
         let mut accounts = vec![ctx.accounts.market_state.to_account_info()];
         accounts.extend(ctx.remaining_accounts.iter().cloned());
-        MagicIntentBundleBuilder::new(
-            ctx.accounts.admin.to_account_info(),
-            ctx.accounts.magic_context.to_account_info(),
-            ctx.accounts.magic_program.to_account_info(),
-        )
-        .commit_and_undelegate(&accounts)
-        .build_and_invoke()?;
+        for account in accounts {
+            MagicIntentBundleBuilder::new(
+                ctx.accounts.admin.to_account_info(),
+                ctx.accounts.magic_context.to_account_info(),
+                ctx.accounts.magic_program.to_account_info(),
+            )
+            .commit_and_undelegate(&[account])
+            .build_and_invoke()?;
+        }
         Ok(())
     }
 }

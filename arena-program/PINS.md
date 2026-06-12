@@ -524,6 +524,38 @@ per delegated account (magic program error 0xa0000000 "current commit nonce
 10 reached the limit of 10"); 5-min commit cadence burned the quota in
 ~50 min.
 
+**2026-06-12 follow-up — the stalled finalize root cause is CONFIRMED by
+MagicBlock**: their validator's commit-intent tx for our 3-account bundle —
+`4wuVM2uxWjMGwWRYcR5hqZUfi5QDWuouSTxDJnN3JTgmH3sUyKpwDPj4XDv32ThoaKXhqFdCuGF17equ24fAe6m3`
+— fails on ComputationalBudget on the base layer and retries forever
+(that's what wedged the undelegation). Multi-account intent bundles
+finalize as ONE base-layer tx touching every bundled account, and 3
+accounts already exceed the validator's base-layer compute budget. Their
+team is checking internally on the validator side.
+
+**Fix (shipped with this entry): ONE intent per account.** `commit_state`
+and `undelegate_all` now loop — one `MagicIntentBundleBuilder` →
+`.commit(&[single account])` / `.commit_and_undelegate(&[single account])`
+→ `build_and_invoke(_signed)` per account (market_state first, then each
+remaining bot). Each call is one CPI scheduling one independent intent, so
+every base-layer finalize tx touches exactly one account. Instruction
+signatures unchanged (IDL delta is doc comments only) — crank-deps.ts /
+redelegate.ts needed no changes. Local ER harness proof (7/7): the
+fee-vault commit test now asserts one scheduling line per account, N
+DISTINCT base-layer commit sigs, each landing err-free; undelegate
+semantics unchanged (all accounts end program-owned on base, asserted).
+ER CU measured: 3 intents in one commit_state ix = 108,763 CU (~36k per
+intent) against the default 200k/ix budget → ~5 accounts is the ceiling
+for the multi-CPI shape; past that, fall back to a `commit_state(
+account_index)` cranked once per account in separate ER txs (defensive
+note also in lib.rs). Undelegation atomicity note: accounts now flip back
+to the program independently, not in one tx — redelegate.ts already polls
+every account, so no change needed.
+
+**Deploy status: the devnet program still has the OLD multi-account bundle
+shape** — d300d12/c2c62b7 (fee vault) and this per-account fix are all
+undeployed until the controller runs the lockstep deploy post-unstick.
+
 ### Design (shipped, local-ER verified; devnet deploy pending post-incident)
 
 `commit_state` now pays its own Magic intent bundles — no per-account quota

@@ -11,7 +11,6 @@ import * as anchor from "@coral-xyz/anchor";
 import { BN, Program, web3 } from "@coral-xyz/anchor";
 import { assert } from "chai";
 import {
-  GetCommitmentSignature,
   delegationRecordPdaFromDelegatedAccount,
   magicFeeVaultPdaFromValidator,
 } from "@magicblock-labs/ephemeral-rollups-sdk";
@@ -120,6 +119,58 @@ const MAX_AGE_SECS = new BN("10000000000");
     tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
     tx = await erProvider.wallet.signTransaction(tx);
     return erProvider.sendAndConfirm(tx, [], { skipPreflight: true });
+  }
+
+  // Plural GetCommitmentSignature (the SDK helper only parses the FIRST
+  // "ScheduledCommitSent signature: " log line). Since the per-account
+  // intent fix (PINS.md "magic_fee_vault commits", 2026-06-12 incident) one
+  // commit/undelegate ER tx schedules N independent single-account intents,
+  // each logging its own scheduling line and finalizing as its OWN
+  // base-layer tx — multi-account bundles exceeded the validator's
+  // base-layer compute budget and retried forever.
+  async function getCommitmentSignatures(erSig: string): Promise<string[]> {
+    const scheduling = await erConnection.getTransaction(erSig, {
+      maxSupportedTransactionVersion: 0,
+    });
+    // Operational breadcrumb for the defensive CU note in commit_state: how
+    // much ER compute the N scheduling CPIs cost in this one instruction.
+    console.log(
+      `      scheduling ER tx consumed ${scheduling?.meta?.computeUnitsConsumed ?? "?"} CU`,
+    );
+    const logs = scheduling?.meta?.logMessages ?? [];
+    const prefix = "ScheduledCommitSent signature: ";
+    const scheduledSigs = logs
+      .filter((l) => l.includes(prefix))
+      .map((l) => l.split(prefix)[1]);
+    assert.isAbove(
+      scheduledSigs.length,
+      0,
+      `no scheduled commit intents in ER logs:\n${logs.join("\n")}`,
+    );
+    const baseSigs: string[] = [];
+    for (const sig of scheduledSigs) {
+      // The ScheduledCommitSent record lands on the ER asynchronously once
+      // the validator realizes the intent on the base layer — poll for it.
+      let sent = null;
+      for (let i = 0; i < 75 && !sent; i++) {
+        sent = await erConnection.getTransaction(sig, {
+          maxSupportedTransactionVersion: 0,
+        });
+        if (!sent) await new Promise((r) => setTimeout(r, 200));
+      }
+      assert.isNotNull(sent, `ScheduledCommitSent tx ${sig} never landed on the ER`);
+      const sentLogs = sent!.meta?.logMessages ?? [];
+      const basePrefix = "ScheduledCommitSent signature[0]: ";
+      const base = sentLogs
+        .find((l) => l.includes(basePrefix))
+        ?.split(basePrefix)[1];
+      assert.isString(
+        base,
+        `no base-layer signature in ScheduledCommitSent logs:\n${sentLogs.join("\n")}`,
+      );
+      baseSigs.push(base!);
+    }
+    return baseSigs;
   }
 
   it("initializes config, market and both bots on the base layer", async () => {
@@ -305,7 +356,7 @@ const MAX_AGE_SECS = new BN("10000000000");
     );
   });
 
-  it("commits ER state to the base layer via the magic fee vault", async () => {
+  it("commits ER state to the base layer via per-account fee-vault intents", async () => {
     const erBefore = await erProgram.account.marketState.fetch(marketPda);
     const payerBefore = await erConnection.getBalance(crankPayerPda);
     const tx = await program.methods
@@ -321,9 +372,39 @@ const MAX_AGE_SECS = new BN("10000000000");
       .transaction();
     const erSig = await sendViaEr(tx);
 
-    // Wait for the commit to land on the base layer, then compare state.
-    const baseSig = await GetCommitmentSignature(erSig, erConnection);
-    assert.isString(baseSig);
+    // ONE intent per account: market + each bot must each schedule its own
+    // intent and finalize as its own base-layer tx. A single multi-account
+    // bundle is the ComputationalBudget failure mode this guards against
+    // (PINS.md 2026-06-12 incident, MagicBlock-confirmed).
+    const baseSigs = await getCommitmentSignatures(erSig);
+    assert.equal(
+      baseSigs.length,
+      1 + botMetas.length,
+      "expected one commit intent per account (market + each bot)",
+    );
+    assert.equal(
+      new Set(baseSigs).size,
+      baseSigs.length,
+      "per-account intents must finalize as distinct base-layer txs",
+    );
+    // Every per-account commit tx must actually land (and succeed) on base.
+    // commitment is explicit: the base provider connection defaults to
+    // `processed`, which getTransaction rejects.
+    for (const sig of baseSigs) {
+      let baseTx = null;
+      for (let i = 0; i < 30 && !baseTx; i++) {
+        baseTx = await provider.connection.getTransaction(sig, {
+          maxSupportedTransactionVersion: 0,
+          commitment: "confirmed",
+        });
+        if (!baseTx) await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.isNotNull(baseTx, `base-layer commit tx ${sig} not found`);
+      assert.isNull(
+        baseTx!.meta?.err ?? null,
+        `base-layer commit tx ${sig} failed: ${JSON.stringify(baseTx!.meta?.err)}`,
+      );
+    }
     const baseMs = await program.account.marketState.fetch(marketPda);
     assert.equal(
       baseMs.lastPrice.toString(),
