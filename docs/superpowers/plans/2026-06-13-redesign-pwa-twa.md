@@ -123,6 +123,8 @@ Label map (UI strings only; component/file names, API routes, and DB fields keep
 
 - [ ] **Step 1:** Page heading: `My copies` with subtitle `Everything you're copying, in one place.` Tab order: **Subscriptions** (the CopyTradingPanel content, promoted out of the Open tab), **Open**, **History**, **Wins** (renders the leaderboard feed component inline).
 - [ ] **Step 2:** Source badge on every `CopyRow`: derive from the row's source kind (already in data per the June audit — whale / bot / autopilot) → `WHALE COPY` (teal), `AI COPY` (purple), `AUTOPILOT` (yellow). One badge component, reused.
+
+  > **Decision (shipped):** badges render as `REAL WALLET` / `AI BOT` / `AUTOPILOT` via the shared `copySourceBadge()` helper (`lib/positions/copy-row.ts`) — arena bots key on `botId`, autopilot rows (null botId + botName) get the yellow `AutopilotBadge`, whales teal. Regression-tested in `copy-row.test.ts`.
 - [ ] **Step 3:** Unify terminology: `Stake` everywhere (PositionRow's `Cost` → `Stake`).
 - [ ] **Step 4:** Keep `/leaderboard` route alive (it now also lives as the Wins tab); add a `Share win` button on positive-PnL history rows if not present.
 - [ ] **Step 5:** Gate + commit: `git commit -m "feat(portfolio): My copies — subscriptions first, source badges, Wins tab"`

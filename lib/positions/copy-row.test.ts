@@ -61,10 +61,10 @@ describe("copySourceBadge", () => {
     ).toBe("ai");
   });
 
-  it("returns null for autopilot rows (botId null, botName 'Autopilot')", () => {
+  it("returns autopilot for autopilot rows (botId null, botName set) — never ai", () => {
     expect(
       copySourceBadge({ botId: null, botName: "Autopilot", whaleId: null, whaleName: null }),
-    ).toBe(null);
+    ).toBe("autopilot");
   });
 
   it("returns 'wallet' for whale rows (whaleName present)", () => {

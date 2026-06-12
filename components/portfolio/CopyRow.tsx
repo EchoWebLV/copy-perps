@@ -7,7 +7,7 @@ import { Connection } from "@solana/web3.js";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { sendDepositWithSponsorFallback } from "@/components/tail/deposit-signing";
 import { formatCopySourceLabel, copySourceBadge } from "@/lib/positions/copy-row";
-import { AiBotBadge, RealWalletBadge } from "@/components/v2/ui";
+import { AiBotBadge, RealWalletBadge, AutopilotBadge } from "@/components/v2/ui";
 
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
@@ -308,6 +308,8 @@ export function CopyRow({ row, onClosed }: Props) {
             </span>
             {copySourceBadge(row) === "ai" ? (
               <AiBotBadge />
+            ) : copySourceBadge(row) === "autopilot" ? (
+              <AutopilotBadge />
             ) : copySourceBadge(row) === "wallet" ? (
               <RealWalletBadge />
             ) : null}

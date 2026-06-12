@@ -273,6 +273,19 @@ export function RealWalletBadge({ size = "md" }: { size?: "sm" | "md" }) {
   );
 }
 
+/** Yellow "AUTOPILOT" badge for positions opened by the user's autopilot session. */
+export function AutopilotBadge({ size = "md" }: { size?: "sm" | "md" }) {
+  const _ = size; // reserved for future padding differences
+  return (
+    <span
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+      style={{ color: ACCENT, background: "#2b2702", border: `1px solid ${ACCENT}44` }}
+    >
+      AUTOPILOT
+    </span>
+  );
+}
+
 /** Snapchat-style streak counter — fire emoji + tabular number. */
 export function StreakBadge({ count }: { count: number }) {
   return (

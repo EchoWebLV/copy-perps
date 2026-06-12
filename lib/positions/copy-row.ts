@@ -6,11 +6,11 @@ export interface CopySourceLike {
   botId?: string | null;
 }
 
-export type CopySourceBadge = "ai" | "wallet" | null;
+export type CopySourceBadge = "ai" | "wallet" | "autopilot" | null;
 
 /** Derive the badge type for a portfolio row.
- *  Keys on `botId` only — rows where botId is null but botName is "Autopilot"
- *  are autopilot rows, not arena-bot rows, and must return null. */
+ *  Arena bots key on `botId`; autopilot rows carry a botName with a null
+ *  botId and get their own badge — they must never read as arena "ai". */
 export function copySourceBadge(row: {
   botId?: string | null;
   botName?: string | null;
@@ -18,6 +18,7 @@ export function copySourceBadge(row: {
   whaleName?: string | null;
 }): CopySourceBadge {
   if (row.botId) return "ai";
+  if (row.botName) return "autopilot";
   if (row.whaleName || row.whaleId) return "wallet";
   return null;
 }
