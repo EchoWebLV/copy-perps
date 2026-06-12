@@ -113,6 +113,22 @@ describe("Portfolio layout contract", () => {
     expect(page).not.toContain("Select a bot or position");
   });
 
+  it("renders a visible My copies heading with subtitle above the net-worth hero", () => {
+    const page = source();
+
+    // Heading block must be present
+    expect(page).toContain(">My copies<");
+    expect(page).toContain("Everything you");
+    expect(page).toContain("copying, in one place");
+
+    // Heading must appear before the net-worth BigNum so it sits above the hero
+    const headingIdx = page.indexOf(">My copies<");
+    const netWorthIdx = page.indexOf("formatMaybeUsd(totalNetWorth, portfolioBalancesReady)");
+    expect(headingIdx).toBeGreaterThan(-1);
+    expect(netWorthIdx).toBeGreaterThan(-1);
+    expect(headingIdx).toBeLessThan(netWorthIdx);
+  });
+
   it("renders the Wins tab from the shared LeaderboardFeed component", () => {
     const page = source();
 

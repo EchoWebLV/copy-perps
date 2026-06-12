@@ -513,6 +513,20 @@ export default function PortfolioPage() {
         {ready && authenticated && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex-none">
+              {/* Page heading — "My copies" + subtitle */}
+              <div className="mb-3">
+                <Stamp label="Portfolio" />
+                <div className="mt-0.5">
+                  <Headline size={26}>My copies</Headline>
+                </div>
+                <p
+                  className="mt-1 text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  Everything you&apos;re copying, in one place.
+                </p>
+              </div>
+
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <Stamp label={freshnessLabel} />
