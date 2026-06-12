@@ -437,7 +437,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
               style={{ scrollSnapStop: "always" }}
             >
               {/* Inner grid class retained for contract test; cards are single-column in the theater column */}
-              <div className="theater-inner xl:grid-cols-3">
+              <div>
                 {items.map((item) => (
                   <DesktopPulseCard
                     key={item.id}
@@ -934,7 +934,7 @@ function DesktopPulseCard({
             ) : (
               <Eye size={13} strokeWidth={3} />
             )}
-            {canCopy ? "Copy now" : "Watch"}
+            {canCopy ? "Copy now" : dynamicStale ? "Stale data — copying disabled until fresh." : "Watch"}
           </button>
         </div>
 

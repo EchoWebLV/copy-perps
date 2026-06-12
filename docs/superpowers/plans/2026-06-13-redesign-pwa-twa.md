@@ -217,6 +217,10 @@ The pulse feed already classifies signals (`Fresh open`, `Pain trade`, `Holding`
 - [ ] **Step 6:** Reactions carry into the tape — the social layer is a locked product requirement, do NOT drop it: each card renders a sentiment row between the stats and the CTA — `▲ Bullish {n}` / `▼ Bearish {n}` toggle chips + thin ratio bar (mock's `sentRow`). Tap = optimistic toggle (vote / switch / unvote, counts reconcile) POSTing to the **existing** pulse reactions endpoint with its one-reaction-per-user semantics; update the row's DOM in place so the snap scroll position never resets.
 - [ ] **Step 7:** Gate + commit: `git commit -m "feat(live): event tape — snap cards, one verb, close→Auto-copy, new-signal pill, bullish/bearish reactions"`
 
+### Task 7b (follow-up): close events on the tape — not started
+
+- [ ] `WhalePositionSignal` carries no closed-position data, so the tape ships open-state cards only. To get the mock's "just closed → Auto-copy {name}" cards, the whale signal pipeline must emit close events (position present in previous poll, absent now → synthesize a `closed` item with last-known pct). Then add the close-card branch in `WhalePulseFeed` per the mock's `liveCard isClose` path.
+
 ### Task 8: Orphan cleanup
 
 **Files:**

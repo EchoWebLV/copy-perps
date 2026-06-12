@@ -136,7 +136,7 @@ describe("whale analysis helpers", () => {
       summary:
         "Whale One is carrying a 10x long on BTC with about $25K live.",
       thesis:
-        "The mark is 6.0% above entry, so the trade is already working. Tailing now means buying after the whale's fill and relying on continued upside.",
+        "The mark is 6.0% above entry, so the trade is already working. Copying now means buying after the whale's fill and relying on continued upside.",
       risk:
         "10x leverage makes entry timing matter. Followers enter at the live mark, may not share the whale's margin, and can be forced out before the whale closes.",
       confidence: 0.25,

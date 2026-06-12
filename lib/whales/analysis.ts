@@ -135,7 +135,7 @@ function fallbackThesis(args: Pick<
   }
 
   if (args.side === "long" && delta > 0) {
-    return `The mark is ${abs}% above entry, so the trade is already working. Tailing now means buying after the whale's fill and relying on continued upside.`;
+    return `The mark is ${abs}% above entry, so the trade is already working. Copying now means buying after the whale's fill and relying on continued upside.`;
   }
 
   if (args.side === "long") {
@@ -143,7 +143,7 @@ function fallbackThesis(args: Pick<
   }
 
   if (delta < 0) {
-    return `The mark is ${abs}% below entry, so the short is already working. Tailing now means entering after part of the downside move has happened.`;
+    return `The mark is ${abs}% below entry, so the short is already working. Copying now means entering after part of the downside move has happened.`;
   }
 
   return `The mark is ${abs}% above entry, so the whale is holding a losing short. That reads as a contrarian downside setup with tight timing risk.`;
