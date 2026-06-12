@@ -14,7 +14,7 @@
 // with a compact 1D · 7D · 30D · Equity segmented sort in the same row —
 // no heat sort, no snap scroll, no tape.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { useArenaLive } from "@/lib/arena/use-arena-live";
@@ -29,8 +29,9 @@ import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvat
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
 import { formatPriceUsd } from "@/components/whales/whale-money";
 import { whaleDisplayName } from "@/lib/whales/alias";
+import { classifyQuery, filterTraders, type SearchableTrader } from "@/lib/search/traders";
 import { botCopyCta, type BotCopyCta } from "./bot-tail-source";
-import { DesktopWhaleCard, SkeletonDesktopWhaleCard } from "./DesktopWhaleCard";
+import { DesktopWhaleCard, SkeletonDesktopWhaleCard, SentimentRow, type TraderSentiment } from "./DesktopWhaleCard";
 import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
 import {
@@ -107,6 +108,12 @@ export function UnifiedFeed({ initialWhales }: Props) {
 
   const [filter, setFilter] = useState<FeedEntityFilter>("all");
   const [sortKey, setSortKey] = useState<FeedSortKey>("pnl1d");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Sentiment: reaction counts aggregated per whale across their open positions.
+  // Fetched lazily from /api/pulse/social (unauthenticated — public read).
+  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>({});
+  useWhaleSentiment(whales, setSentiment);
 
   const botNames = useMemo(() => Object.keys(bots), [bots]);
 
@@ -125,10 +132,46 @@ export function UnifiedFeed({ initialWhales }: Props) {
     return rankFeedEntries(entries, filter, sortKey, rankNow);
   }, [whales, bots, botNames, filter, sortKey, rankNow]);
 
+  // Client-side search filter applied after ranking.
+  const queryKind = searchQuery.trim() ? classifyQuery(searchQuery) : "text";
+  const filteredRanked = useMemo(() => {
+    if (!searchQuery.trim() || queryKind === "wallet") return ranked;
+    const searchable: SearchableTrader[] = ranked.map((entry) => {
+      if (entry.kind === "whale") {
+        const p = entry.whale.payload;
+        return {
+          id: `whale:${p.whaleId}`,
+          kind: "whale",
+          name: whaleDisplayName(p.displayName, p.sourceAccount),
+          markets: p.openPositions.map((pos) => pos.market),
+        };
+      }
+      const persona = ARENA_PERSONAS[entry.name];
+      return {
+        id: `bot:${entry.name}`,
+        kind: "bot",
+        name: persona?.display ?? entry.name,
+        markets: entry.bot?.positions
+          .filter((pos) => pos.active)
+          .map((pos) => arenaMarketTicker(pos.marketId)) ?? [],
+        desc: persona?.blurb,
+      };
+    });
+    const matchedIds = new Set(filterTraders(searchable, searchQuery).map((t) => t.id));
+    return ranked.filter((entry) => {
+      const id =
+        entry.kind === "whale"
+          ? `whale:${entry.whale.payload.whaleId}`
+          : `bot:${entry.name}`;
+      return matchedIds.has(id);
+    });
+  }, [ranked, searchQuery, queryKind]);
+
   const whalesPending = !loaded && whales.length === 0;
   const botsPending = mode === "loading" && botNames.length > 0;
   const showSkeletons =
-    ranked.length === 0 &&
+    filteredRanked.length === 0 &&
+    !searchQuery.trim() &&
     (filter === "bots" ? botsPending : whalesPending || botsPending);
 
   return (
@@ -138,11 +181,19 @@ export function UnifiedFeed({ initialWhales }: Props) {
     >
       <BalancePill />
 
+      {/* Search bar — above filter pills. */}
+      <div
+        className="flex flex-none items-center gap-2 border-b px-3 pt-12 pb-2 lg:px-6 lg:pt-4 lg:pb-2"
+        style={{ borderColor: FAINT }}
+      >
+        <SearchBar value={searchQuery} onChange={setSearchQuery} />
+      </div>
+
       {/* One control row: entity pills left, compact sort right. Horizontal
           scroll instead of wrapping when a narrow viewport runs out of
           room — wrapped pills read as a broken layout. */}
       <div
-        className="no-scrollbar flex flex-none items-center justify-between gap-2 overflow-x-auto border-b px-3 pb-2 pt-12 lg:px-6 lg:pb-3 lg:pt-4"
+        className="no-scrollbar flex flex-none items-center justify-between gap-2 overflow-x-auto border-b px-3 pb-2 pt-2 lg:px-6 lg:pb-3"
         style={{ borderColor: FAINT }}
       >
         <EntityPills filter={filter} onChange={setFilter} />
@@ -150,87 +201,118 @@ export function UnifiedFeed({ initialWhales }: Props) {
       </div>
 
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-28 pt-3 lg:px-6 lg:pb-8">
-        {/* Below lg: the Invo-style stacked feed, untouched. */}
-        <div className="mx-auto flex w-full max-w-xl flex-col gap-3 lg:hidden">
-          {showSkeletons ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonFeedCard key={i} />
-            ))
-          ) : ranked.length === 0 ? (
-            <EmptyFeed
-              filter={filter}
-              arenaConfigured={botNames.length > 0}
-              onReset={() => setFilter("all")}
-            />
-          ) : (
-            ranked.map((entry) =>
-              entry.kind === "whale" ? (
-                <WhaleFeedCard
-                  key={entry.whale.payload.whaleId}
-                  whale={entry.whale}
-                  sortKey={sortKey}
-                  now={now}
-                  onTail={(source) => setTailSource(source)}
-                  onCopy={(target) => setCopyTarget(target)}
-                />
-              ) : (
-                <BotFeedCard
-                  key={entry.name}
-                  name={entry.name}
-                  bot={entry.bot}
-                  market={market}
-                  lastUpdateMs={lastUpdateMs}
-                  now={now}
-                  onTail={(source) => setTailSource(source)}
-                  onCopy={(target) => setCopyTarget(target)}
-                />
-              ),
-            )
-          )}
-        </div>
-
-        {/* lg and up: the classic card grid (founder feedback) over the SAME
-            ranked entries — resurrected DesktopWhaleCard for whales, the
-            arena BotCard for bots. Rank chips follow the active sort. */}
-        <div className="mx-auto hidden w-full max-w-6xl auto-rows-max grid-cols-2 gap-3 lg:grid xl:grid-cols-3">
-          {showSkeletons ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonDesktopWhaleCard key={i} />
-            ))
-          ) : ranked.length === 0 ? (
-            <div className="col-span-full">
-              <EmptyFeed
-                filter={filter}
-                arenaConfigured={botNames.length > 0}
-                onReset={() => setFilter("all")}
+        {/* Wallet address result — overrides normal list when the query is a
+            valid Solana address. Opens CopyModal prefilled via flash-wallet. */}
+        {queryKind === "wallet" && searchQuery.trim() ? (
+          <>
+            <div className="mx-auto flex w-full max-w-xl flex-col gap-3 lg:hidden">
+              <WalletResultCard
+                address={searchQuery.trim()}
+                onCopy={(target) => setCopyTarget(target)}
               />
             </div>
-          ) : (
-            ranked.map((entry, idx) =>
-              entry.kind === "whale" ? (
-                <DesktopWhaleCard
-                  key={entry.whale.payload.whaleId}
-                  whale={entry.whale}
-                  rank={idx + 1}
-                  now={now}
-                  onTail={(source) => setTailSource(source)}
-                  onCopy={(target) => setCopyTarget(target)}
-                />
+            <div className="mx-auto hidden w-full max-w-6xl lg:block">
+              <WalletResultCard
+                address={searchQuery.trim()}
+                onCopy={(target) => setCopyTarget(target)}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Below lg: the Invo-style stacked feed, untouched. */}
+            <div className="mx-auto flex w-full max-w-xl flex-col gap-3 lg:hidden">
+              {showSkeletons ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonFeedCard key={i} />
+                ))
+              ) : filteredRanked.length === 0 ? (
+                searchQuery.trim() ? (
+                  <EmptySearch onClear={() => setSearchQuery("")} />
+                ) : (
+                  <EmptyFeed
+                    filter={filter}
+                    arenaConfigured={botNames.length > 0}
+                    onReset={() => setFilter("all")}
+                  />
+                )
               ) : (
-                <GridBotCard
-                  key={entry.name}
-                  name={entry.name}
-                  bot={entry.bot}
-                  market={market}
-                  lastUpdateMs={lastUpdateMs}
-                  now={now}
-                  onTail={(source) => setTailSource(source)}
-                  onCopy={(target) => setCopyTarget(target)}
-                />
-              ),
-            )
-          )}
-        </div>
+                filteredRanked.map((entry) =>
+                  entry.kind === "whale" ? (
+                    <WhaleFeedCard
+                      key={entry.whale.payload.whaleId}
+                      whale={entry.whale}
+                      sortKey={sortKey}
+                      now={now}
+                      sentiment={sentiment[entry.whale.payload.whaleId] ?? null}
+                      onTail={(source) => setTailSource(source)}
+                      onCopy={(target) => setCopyTarget(target)}
+                    />
+                  ) : (
+                    <BotFeedCard
+                      key={entry.name}
+                      name={entry.name}
+                      bot={entry.bot}
+                      market={market}
+                      lastUpdateMs={lastUpdateMs}
+                      now={now}
+                      onTail={(source) => setTailSource(source)}
+                      onCopy={(target) => setCopyTarget(target)}
+                    />
+                  ),
+                )
+              )}
+            </div>
+
+            {/* lg and up: the classic card grid (founder feedback) over the SAME
+                ranked entries — resurrected DesktopWhaleCard for whales, the
+                arena BotCard for bots. Rank chips follow the active sort. */}
+            <div className="mx-auto hidden w-full max-w-6xl auto-rows-max grid-cols-2 gap-3 lg:grid xl:grid-cols-3">
+              {showSkeletons ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonDesktopWhaleCard key={i} />
+                ))
+              ) : filteredRanked.length === 0 ? (
+                <div className="col-span-full">
+                  {searchQuery.trim() ? (
+                    <EmptySearch onClear={() => setSearchQuery("")} />
+                  ) : (
+                    <EmptyFeed
+                      filter={filter}
+                      arenaConfigured={botNames.length > 0}
+                      onReset={() => setFilter("all")}
+                    />
+                  )}
+                </div>
+              ) : (
+                filteredRanked.map((entry, idx) =>
+                  entry.kind === "whale" ? (
+                    <DesktopWhaleCard
+                      key={entry.whale.payload.whaleId}
+                      whale={entry.whale}
+                      rank={idx + 1}
+                      now={now}
+                      sentiment={sentiment[entry.whale.payload.whaleId] ?? null}
+                      onTail={(source) => setTailSource(source)}
+                      onCopy={(target) => setCopyTarget(target)}
+                    />
+                  ) : (
+                    <GridBotCard
+                      key={entry.name}
+                      name={entry.name}
+                      bot={entry.bot}
+                      market={market}
+                      lastUpdateMs={lastUpdateMs}
+                      now={now}
+                      onTail={(source) => setTailSource(source)}
+                      onCopy={(target) => setCopyTarget(target)}
+                    />
+                  ),
+                )
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <TailModal
@@ -253,12 +335,14 @@ function WhaleFeedCard({
   whale,
   sortKey,
   now,
+  sentiment,
   onTail,
   onCopy,
 }: {
   whale: WhaleTraderSignal;
   sortKey: FeedSortKey;
   now: number;
+  sentiment: TraderSentiment | null;
   onTail: (source: TailSource) => void;
   onCopy: (target: CopyModalTarget) => void;
 }) {
@@ -371,6 +455,10 @@ function WhaleFeedCard({
           />
         </div>
       </div>
+
+      {sentiment && sentiment.total > 0 ? (
+        <SentimentRow sentiment={sentiment} />
+      ) : null}
 
       {position ? (
         <PositionPanel
@@ -1117,4 +1205,202 @@ function useNowTick(): number {
     return () => clearInterval(id);
   }, []);
   return now;
+}
+
+// ─────────────────────────── search bar ───────────────────────────────────
+
+function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative w-full">
+      <span
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px]"
+        style={{ color: DIM }}
+        aria-hidden
+      >
+        🔍
+      </span>
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search traders, assets, or paste a wallet"
+        className="w-full rounded-xl border bg-transparent py-2 pl-9 pr-3 text-[12px] font-bold uppercase tracking-widest placeholder:normal-case placeholder:tracking-normal placeholder:font-normal focus:outline-none"
+        style={{
+          background: PANEL,
+          borderColor: FAINT,
+          color: FG,
+        }}
+        aria-label="Search traders"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-black uppercase tracking-widest transition hover:opacity-80"
+          style={{ color: DIM }}
+          aria-label="Clear search"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────── wallet address result ────────────────────────────
+
+/** Shown when the search query classifies as a Solana wallet address. */
+function WalletResultCard({
+  address,
+  onCopy,
+}: {
+  address: string;
+  onCopy: (target: CopyModalTarget) => void;
+}) {
+  const short = `${address.slice(0, 4)}…${address.slice(-4)}`;
+  return (
+    <article
+      className="rounded-2xl border p-3.5"
+      style={{ background: PANEL, borderColor: FAINT }}
+    >
+      <div className="flex items-center gap-2.5">
+        <WhaleFingerprintAvatar sourceAccount={address} label={short} size={40} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="truncate font-mono text-[12px] font-bold"
+              style={{ color: FG }}
+            >
+              {address}
+            </span>
+          </div>
+          <div
+            className="mt-1 text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            Paste-a-wallet result
+          </div>
+        </div>
+      </div>
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() =>
+            onCopy({
+              kind: "flash-wallet",
+              key: address,
+              label: short,
+              emoji: "👤",
+            })
+          }
+          className="w-full rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+          style={{
+            background: ACCENT,
+            color: BG,
+            boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+          }}
+        >
+          Auto-copy this wallet
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// ─────────────────────── empty search state ───────────────────────────────
+
+function EmptySearch({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-5 text-center">
+      <Headline size={24}>NO MATCHES</Headline>
+      <p
+        className="mt-3 text-[11px] font-black uppercase tracking-widest"
+        style={{ color: DIM }}
+      >
+        Nothing matches. Try an asset like &quot;SOL&quot;, a name, or paste a Solana wallet address.
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="mt-5 rounded-2xl px-5 py-2.5 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+        style={{ background: ACCENT, color: BG }}
+      >
+        Clear search
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────── sentiment aggregation ────────────────────────────
+
+type PulseApiSocial = Record<
+  string,
+  { reactionCounts: { Bullish?: number; Bearish?: number; Tailing?: number } }
+>;
+
+/** Fetches reaction counts for all whale open positions and aggregates them
+ *  per whale. Refreshes once when the whale roster changes. */
+function useWhaleSentiment(
+  whales: WhaleTraderSignal[],
+  setSentiment: (value: Record<string, TraderSentiment>) => void,
+) {
+  // Build a stable "all position IDs" key to detect roster changes.
+  const positionIdsKey = useMemo(() => {
+    return whales
+      .flatMap((w) => w.payload.openPositions.map((pos) => pos.positionId))
+      .sort()
+      .join(",");
+  }, [whales]);
+
+  // Map positionId → whaleId for aggregation.
+  const positionToWhale = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const whale of whales) {
+      for (const pos of whale.payload.openPositions) {
+        map.set(pos.positionId, whale.payload.whaleId);
+      }
+    }
+    return map;
+  }, [whales]);
+
+  const fetchedKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!positionIdsKey || fetchedKeyRef.current === positionIdsKey) return;
+    fetchedKeyRef.current = positionIdsKey;
+
+    const positionIds = positionIdsKey.split(",").filter(Boolean);
+    if (positionIds.length === 0) return;
+
+    const encoded = positionIds.map(encodeURIComponent).join(",");
+    void fetch(`/api/pulse/social?positionIds=${encoded}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { social?: PulseApiSocial } | null) => {
+        if (!data?.social) return;
+        // Aggregate bullish + total per whale across all their positions.
+        const agg = new Map<string, { bullish: number; total: number }>();
+        for (const [positionId, record] of Object.entries(data.social)) {
+          const whaleId = positionToWhale.get(positionId);
+          if (!whaleId) continue;
+          const counts = record.reactionCounts;
+          const bullish = counts.Bullish ?? 0;
+          const bearish = counts.Bearish ?? 0;
+          const tailing = counts.Tailing ?? 0;
+          const subtotal = bullish + bearish + tailing;
+          const existing = agg.get(whaleId) ?? { bullish: 0, total: 0 };
+          agg.set(whaleId, {
+            bullish: existing.bullish + bullish,
+            total: existing.total + subtotal,
+          });
+        }
+        const result: Record<string, TraderSentiment> = {};
+        for (const [whaleId, counts] of agg) {
+          result[whaleId] = counts;
+        }
+        setSentiment(result);
+      })
+      .catch(() => {
+        // Sentiment is non-critical — silently ignore fetch failures.
+      });
+  }, [positionIdsKey, positionToWhale, setSentiment]);
 }

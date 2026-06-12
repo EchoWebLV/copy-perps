@@ -40,16 +40,24 @@ import {
   STREAK,
 } from "@/components/v2/ui";
 
+export interface TraderSentiment {
+  bullish: number;
+  total: number;
+}
+
 export function DesktopWhaleCard({
   whale,
   rank,
   now,
+  sentiment,
   onTail,
   onCopy,
 }: {
   whale: WhaleTraderSignal;
   rank: number;
   now: number;
+  /** Aggregated reaction counts across the whale's open positions. */
+  sentiment?: TraderSentiment | null;
   onTail: (source: TailSource) => void;
   /** Standing auto-copy (Copy modal) — armed flat or live. */
   onCopy?: (target: {
@@ -149,6 +157,10 @@ export function DesktopWhaleCard({
           active={exposureSummary.totalCount > 0}
         />
       </div>
+
+      {sentiment && sentiment.total > 0 ? (
+        <SentimentRow sentiment={sentiment} />
+      ) : null}
 
       <WhalePnlGraph
         points={p.stats.pnlCurve}
@@ -284,6 +296,29 @@ export function DesktopWhaleCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/** Bullish/bearish sentiment aggregate row — mirrors the mock `.tcsent`. */
+export function SentimentRow({ sentiment }: { sentiment: TraderSentiment }) {
+  const pct = sentiment.total > 0 ? Math.round((sentiment.bullish / sentiment.total) * 100) : 0;
+  const bullish = pct >= 50;
+  return (
+    <div
+      className="mt-2 flex items-center gap-1.5 text-[10px] font-bold tracking-[.04em]"
+      aria-label={`${pct}% bullish, ${sentiment.total} votes`}
+    >
+      <span style={{ color: bullish ? GREEN : RED }}>{pct}% bullish</span>
+      <span style={{ color: DIM }}>· {sentiment.total} votes</span>
+      <div
+        className="flex-1 overflow-hidden rounded-full"
+        style={{ height: 4, background: `${RED}33`, minWidth: 40 }}
+      >
+        <div
+          style={{ width: `${pct}%`, height: "100%", background: GREEN, borderRadius: 9999 }}
+        />
+      </div>
+    </div>
   );
 }
 
