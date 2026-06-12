@@ -11,7 +11,7 @@ describe("WhalePulseFeed route contract", () => {
 
     expect(routeSource).toContain("WhalePulseFeed");
     expect(routeSource).toContain("buildWhalePositionSignals(1000)");
-    expect(routeSource).toContain('<AppShell railTitle="Pulse" hideEmptyRail>');
+    expect(routeSource).toContain('<AppShell railTitle="Live" hideEmptyRail>');
     expect(routeSource).not.toContain("WhaleAnalysisStream");
   });
 

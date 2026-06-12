@@ -9,11 +9,11 @@ import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
 // Pulse CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
-  { href: "/feed", icon: Flame, label: "Feed" },
-  { href: "/trade", icon: ChartCandlestick, label: "Scalp" },
+  { href: "/feed", icon: Flame, label: "Traders" },
+  { href: "/trade", icon: ChartCandlestick, label: "Trade" },
 ];
 const RIGHT_TABS = [
-  { href: "/portfolio", icon: PieChart, label: "Folio" },
+  { href: "/portfolio", icon: PieChart, label: "Portfolio" },
   // The page at /deposit is wallet funding + withdrawals, not settings.
   { href: "/deposit", icon: Wallet, label: "Wallet" },
 ];
@@ -51,7 +51,7 @@ export function BottomNav() {
           href="/chatter"
           prefetch={false}
           className="relative flex flex-1 items-center justify-center"
-          aria-label="Pulse open positions"
+          aria-label="Live open positions"
         >
           <span
             className="absolute -top-5 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-[3px]"
@@ -82,7 +82,7 @@ export function BottomNav() {
             className="pt-6 text-[10px] font-black uppercase tracking-widest"
             style={{ color: FG, opacity: pulseActive ? 1 : 0.55 }}
           >
-            Pulse
+            Live
           </span>
         </Link>
 

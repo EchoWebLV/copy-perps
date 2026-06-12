@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 
 export const DESKTOP_NAV_ITEMS = [
-  { href: "/feed", label: "Feed", icon: Flame },
-  { href: "/trade", label: "Scalp", icon: ChartCandlestick },
-  { href: "/chatter", label: "Pulse", icon: Zap },
-  { href: "/portfolio", label: "Folio", icon: PieChart },
+  { href: "/feed", label: "Traders", icon: Flame },
+  { href: "/trade", label: "Trade", icon: ChartCandlestick },
+  { href: "/chatter", label: "Live", icon: Zap },
+  { href: "/portfolio", label: "Portfolio", icon: PieChart },
   // The page at /deposit is wallet funding + withdrawals, not settings.
   { href: "/deposit", label: "Wallet", icon: Wallet },
 ] as const;

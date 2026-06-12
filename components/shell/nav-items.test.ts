@@ -19,10 +19,10 @@ describe("desktop shell nav contract", () => {
 
   it("labels the main trading surfaces without legacy heat or bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Feed",
-      "Scalp",
-      "Pulse",
-      "Folio",
+      "Traders",
+      "Trade",
+      "Live",
+      "Portfolio",
       // /deposit is funding + withdrawals, so the tab says Wallet.
       "Wallet",
     ]);
@@ -33,10 +33,10 @@ describe("desktop shell nav contract", () => {
   });
 
   it("uses the same primary trade icons on desktop and mobile", () => {
-    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Scalp")?.icon).toBe(
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Trade")?.icon).toBe(
       ChartCandlestick,
     );
-    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Pulse")?.icon).toBe(
+    expect(DESKTOP_NAV_ITEMS.find((item) => item.label === "Live")?.icon).toBe(
       Zap,
     );
   });
@@ -55,13 +55,13 @@ describe("desktop shell nav contract", () => {
     );
 
     expect(bottomNav).toContain(
-      '{ href: "/trade", icon: ChartCandlestick, label: "Scalp" }',
+      '{ href: "/trade", icon: ChartCandlestick, label: "Trade" }',
     );
     expect(bottomNav).not.toContain('label: "Heat"');
     expect(bottomNav).not.toContain('href: "/live"');
     expect(bottomNav).toContain("pathname.startsWith(\"/trade\")");
     expect(bottomNav).toContain('href="/chatter"');
-    expect(bottomNav).toContain('aria-label="Pulse open positions"');
+    expect(bottomNav).toContain('aria-label="Live open positions"');
     expect(bottomNav).toContain('src="/nav-swipe-face-yellow.png"');
     // The mascot ring only lights up when Pulse is the active tab.
     expect(bottomNav).toContain("borderColor: pulseActive ? ACCENT");
