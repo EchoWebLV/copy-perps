@@ -305,7 +305,7 @@ export function CopyRow({ row, onClosed }: Props) {
             >
               {statusMeta.label}
             </span>
-            {row.botId || row.botName ? (
+            {row.botId ? (
               <span
                 className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
                 style={{ color: "#b79bff", background: "#251b40", border: "1px solid #3b2f66" }}
