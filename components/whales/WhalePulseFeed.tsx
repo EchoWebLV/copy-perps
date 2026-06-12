@@ -34,6 +34,7 @@ import {
   GREEN,
   PANEL,
   PANEL_2,
+  RealWalletBadge,
   RED,
   STREAK,
 } from "@/components/v2/ui";
@@ -55,6 +56,7 @@ import {
   restoreVisiblePulsePosition,
 } from "./pulse-scroll-stability";
 import { mergePulsePositionSignals } from "./pulse-position-retention";
+import { selectPendingItems } from "./pulse-pending";
 import { formatPriceUsd, formatUsd } from "./whale-money";
 import { formatWhalePositionTime } from "./whale-position-age";
 
@@ -136,7 +138,14 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   // Arrival pill: pending items that haven't been drained to the visible tape yet.
   const [pendingItems, setPendingItems] = useState<PulseItem[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const desktopScrollRef = useRef<HTMLDivElement | null>(null);
   const activePositionIdRef = useRef<string | null>(null);
+  /** Tracks the positionIds currently shown in visiblePositions so load() can
+   *  dedupe without needing to read state inside its callback. Updated whenever
+   *  visiblePositions changes. */
+  const visiblePositionIdsRef = useRef<ReadonlySet<string>>(
+    new Set(initialPositions.map((s) => s.payload.positionId)),
+  );
 
   const rememberVisiblePulsePosition = useCallback(() => {
     const container = scrollRef.current;
@@ -149,6 +158,14 @@ export function WhalePulseFeed({ initialPositions }: Props) {
   const [visiblePositions, setVisiblePositions] =
     useState<WhalePositionSignal[]>(initialPositions);
 
+  // Keep the ref in sync so load() can read visible ids without capturing
+  // stale state inside the callback.
+  useEffect(() => {
+    visiblePositionIdsRef.current = new Set(
+      visiblePositions.map((s) => s.payload.positionId),
+    );
+  }, [visiblePositions]);
+
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/whales/live?limit=1000", {
@@ -158,8 +175,16 @@ export function WhalePulseFeed({ initialPositions }: Props) {
       const data = (await r.json()) as { positions: WhalePositionSignal[] };
       rememberVisiblePulsePosition();
 
-      const container = scrollRef.current;
-      const atTop = !container || container.scrollTop < 40;
+      // Fix 3: atTop = true only when EVERY mounted scroll container with
+      // non-zero height is within 40px of its top. Covers mobile + desktop.
+      const mobileContainer = scrollRef.current;
+      const desktopContainer = desktopScrollRef.current;
+      const containers = [mobileContainer, desktopContainer].filter(
+        (c): c is HTMLDivElement => c !== null && c.clientHeight > 0,
+      );
+      const atTop =
+        containers.length === 0 ||
+        containers.every((c) => c.scrollTop < 40);
 
       setPositions((current) =>
         mergePulsePositionSignals(current, data.positions, Date.now()),
@@ -171,17 +196,32 @@ export function WhalePulseFeed({ initialPositions }: Props) {
           mergePulsePositionSignals(current, data.positions, Date.now()),
         );
       } else {
-        // User is scrolled down — queue new items behind the pill.
         const nowTs = Date.now();
         const merged = mergePulsePositionSignals([], data.positions, nowTs);
         const allItems = buildPulseItems(merged, nowTs);
         const filtered = filterTapeItems(allItems, nowTs);
-        setPendingItems((prev) => {
-          // Only add truly new position IDs.
-          const existingIds = new Set(prev.map((i) => i.position.positionId));
-          const newOnes = filtered.filter(
-            (i) => !existingIds.has(i.position.positionId),
+
+        // Fix 2: refresh marks / lastSeenAtMs in-place for positionIds already
+        // visible, WITHOUT adding/removing/reordering entries (so scroll cannot
+        // re-anchor). New positionIds follow the pill path below.
+        setVisiblePositions((current) => {
+          const freshById = new Map(
+            data.positions.map((s) => [s.payload.positionId, s]),
           );
+          const updated = current.map((signal) => {
+            const fresh = freshById.get(signal.payload.positionId);
+            return fresh ?? signal;
+          });
+          // Only allocate a new array when something actually changed.
+          return updated.some((s, i) => s !== current[i]) ? updated : current;
+        });
+
+        // Fix 1: dedupe newOnes against BOTH the visiblePositions positionIds
+        // (tracked via ref, updated on every render) AND current pending.
+        setPendingItems((prev) => {
+          const visibleIds = visiblePositionIdsRef.current;
+          const pendingIds = new Set(prev.map((i) => i.position.positionId));
+          const newOnes = selectPendingItems(filtered, visibleIds, pendingIds);
           return newOnes.length > 0 ? [...newOnes, ...prev] : prev;
         });
       }
@@ -227,14 +267,21 @@ export function WhalePulseFeed({ initialPositions }: Props) {
     [allItems, now],
   );
 
-  /** Drain pending items: prepend to visible and scroll to top. */
+  /** Drain pending items: prepend to visible and scroll the active container to top. */
   const drainPendingItems = useCallback(() => {
     setPendingItems([]);
     setVisiblePositions((current) =>
       mergePulsePositionSignals(current, positions, Date.now()),
     );
-    const container = scrollRef.current;
-    if (container) container.scrollTop = 0;
+    // Scroll whichever container is visible (has height) back to top.
+    const mobileContainer = scrollRef.current;
+    const desktopContainer = desktopScrollRef.current;
+    const containers = [mobileContainer, desktopContainer].filter(
+      (c): c is HTMLDivElement => c !== null && c.clientHeight > 0,
+    );
+    for (const c of containers) {
+      c.scrollTop = 0;
+    }
   }, [positions]);
 
   useLayoutEffect(() => {
@@ -408,7 +455,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
           <div className="hidden h-full min-h-0 flex-col lg:flex">
             {/* Theater header */}
             <div
-              className="flex flex-none items-center justify-between gap-4 border-b px-6 py-4"
+              className="relative flex flex-none items-center justify-between gap-4 border-b px-6 py-4"
               style={{ borderColor: FAINT }}
             >
               <div>
@@ -429,14 +476,33 @@ export function WhalePulseFeed({ initialPositions }: Props) {
               >
                 Whale positions
               </div>
+              {/* Desktop arrival pill — shown inside the header when scrolled down */}
+              {newCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={drainPendingItems}
+                  className="absolute left-1/2 -translate-x-1/2 bottom-[-20px] z-40 font-black uppercase tracking-widest text-[10.5px] px-4 py-2 rounded-full shadow-xl transition active:scale-[0.97]"
+                  style={{
+                    background: ACCENT,
+                    color: BG,
+                    boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
+                  }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ArrowUp size={12} strokeWidth={3} />
+                    {newCount} new signal{newCount > 1 ? "s" : ""}
+                  </span>
+                </button>
+              ) : null}
             </div>
 
             {/* Theater snap column */}
             <div
+              ref={desktopScrollRef}
+              onScroll={rememberVisiblePulsePosition}
               className="no-scrollbar min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory"
               style={{ scrollSnapStop: "always" }}
             >
-              {/* Inner grid class retained for contract test; cards are single-column in the theater column */}
               <div>
                 {items.map((item) => (
                   <DesktopPulseCard
@@ -593,13 +659,7 @@ function PulsePositionCard({
               {formatNotionalShort(p.notionalUsd)} in {p.market}
             </div>
           </div>
-          {/* Real wallet badge */}
-          <span
-            className="shrink-0 rounded-md px-2 py-1 text-[8.5px] font-black uppercase"
-            style={{ background: "rgba(65,214,195,0.12)", color: "#41d6c3" }}
-          >
-            Real wallet
-          </span>
+          <RealWalletBadge />
           <ChevronRight size={15} strokeWidth={2} style={{ color: DIM }} className="shrink-0" />
         </Link>
 
@@ -827,12 +887,7 @@ function DesktopPulseCard({
             {p.source} · {formatNotionalShort(p.notionalUsd)} in {p.market}
           </div>
         </div>
-        <span
-          className="shrink-0 rounded-md px-2 py-1 text-[8.5px] font-black uppercase"
-          style={{ background: "rgba(65,214,195,0.12)", color: "#41d6c3" }}
-        >
-          Real wallet
-        </span>
+        <RealWalletBadge />
         <ChevronRight size={15} strokeWidth={2} style={{ color: DIM }} className="shrink-0" />
       </Link>
 

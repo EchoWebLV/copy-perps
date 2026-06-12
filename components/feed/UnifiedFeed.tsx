@@ -1380,6 +1380,10 @@ function useWhaleSentiment(
     const positionIds = capturedKey.split(",").filter(Boolean);
     if (positionIds.length === 0) return;
 
+    // Stale-guard: cancelled = true when the effect re-runs (positionIdsKey
+    // changed) before the fetch resolves.
+    let cancelled = false;
+
     // Chunk into ≤100-id batches to stay within the server-side cap.
     const chunks: string[][] = [];
     for (let i = 0; i < positionIds.length; i += SENTIMENT_CHUNK_SIZE) {
@@ -1397,8 +1401,8 @@ function useWhaleSentiment(
       }),
     )
       .then((responses) => {
-        // Stale-guard: drop if the roster changed while fetches were in flight.
-        if (capturedKey !== positionIdsKey) return;
+        // Stale-guard: drop if the effect was cleaned up while fetches were in flight.
+        if (cancelled) return;
 
         // Merge all chunk payloads into one social map.
         const merged: PulseApiSocial = {};
@@ -1431,13 +1435,17 @@ function useWhaleSentiment(
           result[whaleId] = counts;
         }
 
-        // Fix 2: latch the key only after a successful resolve.
+        // Latch the key only after a successful, non-cancelled commit.
         fetchedKeyRef.current = capturedKey;
         setSentiment(result);
       })
       .catch(() => {
         // Sentiment is non-critical — silently ignore unexpected failures.
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [positionIdsKey, positionToWhale]);
 
   return sentiment;

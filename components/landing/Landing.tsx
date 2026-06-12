@@ -599,7 +599,7 @@ const STEPS = [
   },
   {
     num: "02",
-    title: "Tail",
+    title: "Copy",
     body: "Pick a whale, pick a stake. Your position mirrors theirs on Solana. Same side, same market, sized to your money. One tap, no order forms.",
   },
   {
@@ -693,7 +693,7 @@ const SURFACES = [
     icon: Zap,
     tab: "Live",
     title: "The tape, narrated",
-    body: "Every whale open and close the second it happens, as a scrollable feed. React, comment, and tail straight from the timeline.",
+    body: "Every whale open and close the second it happens, as a scrollable feed. React, comment, and copy straight from the timeline.",
   },
   {
     icon: PieChart,

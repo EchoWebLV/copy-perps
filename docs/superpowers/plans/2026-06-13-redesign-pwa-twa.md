@@ -74,6 +74,8 @@ Label map (UI strings only; component/file names, API routes, and DB fields keep
 - [ ] **Step 4:** Gate: `npm run typecheck && npm test`. Update any snapshot/contract tests that asserted old strings.
 - [ ] **Step 5:** Commit: `git commit -m "feat(copy): one verb — Copy now / Auto-copy, unified auto-close wording, $1–$20+custom ladder, entry-gap disclosure"`
 
+> **Decision (shipped):** brand taglines keep the word "Tail" ("Watch the whales. Tail the signal.", "Don't trade. Tail.", "N tailing" counters); all ACTION labels and instructional copy use Copy now / Auto-copy.
+
 ### Task 3: AI-bot visual treatment (purple)
 
 **Files:**
@@ -216,6 +218,8 @@ The pulse feed already classifies signals (`Fresh open`, `Pain trade`, `Holding`
 - [ ] **Step 5:** Arrival mechanics: the feed already polls; on a poll that yields new items while the user is scrolled below the first card, do **not** re-anchor — show a floating `↑ N new signals` pill (fixed below the header) that, on tap, prepends and scrolls to top. If the user is at the top, prepend directly.
 - [ ] **Step 6:** Reactions carry into the tape — the social layer is a locked product requirement, do NOT drop it: each card renders a sentiment row between the stats and the CTA — `▲ Bullish {n}` / `▼ Bearish {n}` toggle chips + thin ratio bar (mock's `sentRow`). Tap = optimistic toggle (vote / switch / unvote, counts reconcile) POSTing to the **existing** pulse reactions endpoint with its one-reaction-per-user semantics; update the row's DOM in place so the snap scroll position never resets.
 - [ ] **Step 7:** Gate + commit: `git commit -m "feat(live): event tape — snap cards, one verb, close→Auto-copy, new-signal pill, bullish/bearish reactions"`
+
+> **Deviations (accepted):** identity rows link to plain `/feed` (no search prefill — no `searchParams` consumption exists in the current routing layer); reactions are server-confirmed rather than optimistic (the existing `/api/pulse/social` POST path is the source of truth, no local-only state layer was added).
 
 ### Task 7b (follow-up): close events on the tape — not started
 
