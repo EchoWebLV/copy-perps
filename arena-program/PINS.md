@@ -782,3 +782,17 @@ failure mode).
 Mainnet gate addendum: do NOT undelegate the market on a validator without
 this fix (the undelegation finalize for a 3.6KB account may co-pack and
 fail the same way — that is exactly the market-0 wedge).
+
+### 2026-06-12 ~11:00 EEST: MagicBlock unstuck the v1 accounts — generation retired
+
+MagicBlock confirmed "the accounts should be undelegated" and on-chain agrees:
+market-0 `BTk9M99…`, scalper-v1 `Fgbev9Y…`, rider-v1 `Az5PA1S…` are all
+base-owned by the arena program again. As planned they RETIRE here: no
+re-delegation, final ER-committed state (the v1 PnL history) stays readable
+on base forever. Watcher killed. They asked for our versions (sent: Anchor
+1.0.2 / anchor-lang 1.0.2, ephemeral-rollups-sdk 0.14.3 with the anchor
+feature, TS @magicblock-labs/ephemeral-rollups-sdk 0.14.3 +
+@coral-xyz/anchor 0.32.1, commits via MagicIntentBundleBuilder one account
+per intent with magic_fee_vault). Market-1 finalize co-packing (entry above)
+is STILL failing as of this note (base data 68m stale, newest attempt FAIL)
+— their targeted unstick did not include the estimator fix.
