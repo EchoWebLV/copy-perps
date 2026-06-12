@@ -305,6 +305,21 @@ export function CopyRow({ row, onClosed }: Props) {
             >
               {statusMeta.label}
             </span>
+            {row.botId || row.botName ? (
+              <span
+                className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+                style={{ color: "#b79bff", background: "#251b40", border: "1px solid #3b2f66" }}
+              >
+                AI BOT
+              </span>
+            ) : row.whaleName || row.whaleId ? (
+              <span
+                className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+                style={{ color: "#41d6c3", background: "#0c2b28", border: "1px solid #41d6c344" }}
+              >
+                REAL WALLET
+              </span>
+            ) : null}
             <div className="truncate text-[15px] font-black leading-tight text-white">
               {row.market} {row.side.toUpperCase()}
               {leverageText}

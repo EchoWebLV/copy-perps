@@ -414,7 +414,7 @@ export default function DepositPage() {
           >
             MADE IN GWAK.GG / 2026
             <br />
-            SERIES 01 OF 12 · v0.1.4-paper
+            SERIES 01 OF 12 · v0.1.4
           </div>
         </>
       )}

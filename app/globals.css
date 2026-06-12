@@ -9,6 +9,8 @@
   --color-accent: #fae500; /* acid yellow */
   --color-up: #1de78b; /* P/L positive */
   --color-down: #ff3b54; /* P/L negative */
+  --color-ai: #b79bff; /* AI-bot purple text/badge */
+  --color-ai-dim: #251b40; /* AI-bot purple background tint */
 }
 
 * {

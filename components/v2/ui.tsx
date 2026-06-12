@@ -14,6 +14,11 @@ export const ACCENT = "#fae500"; // snapchat-y acid yellow
 export const GREEN = "#1de78b"; // P/L positive — vibrant trading-app green
 export const RED = "#ff3b54"; // P/L negative
 export const STREAK = "#ff8a2a"; // streak fire orange
+export const AI = "#b79bff"; // AI-bot purple — badge text + avatar ring
+export const AI_DIM = "#251b40"; // AI-bot purple — card background tint
+export const AI_BORDER = "#3b2f66"; // AI-bot purple — card border
+export const TEAL = "#41d6c3"; // Real-wallet teal — whale badge text
+export const TEAL_DIM = "#0c2b28"; // Real-wallet teal — whale badge background
 
 // var(--font-archivo) is loaded via next/font in app/layout.tsx — a real
 // webfont so the brand renders identically on Apple/Android/Windows.

@@ -9,7 +9,7 @@
 import type { ReactNode } from "react";
 import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
-import { DIM, FAINT, GREEN, RED } from "@/components/v2/ui";
+import { AI, AI_BORDER, AI_DIM, DIM, FAINT, GREEN, RED } from "@/components/v2/ui";
 
 /** $ price for the header/positions: 2dp ≥ $1, 4dp below (memecoin-safe). */
 export function fmtArenaPrice(price: number): string {
@@ -67,7 +67,11 @@ export function BotCard({
 
   return (
     <div
-      className={`rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-4 text-left ${onOpen ? "cursor-pointer transition-colors hover:border-white/25" : ""}`}
+      className={`rounded-3xl p-4 text-left ${onOpen ? "cursor-pointer transition-colors" : ""}`}
+      style={{
+        background: AI_DIM,
+        border: `1px solid ${AI_BORDER}`,
+      }}
       onClick={onOpen}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
@@ -81,7 +85,16 @@ export function BotCard({
       {/* header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="text-2xl leading-none" aria-hidden>
+          <span
+            className="flex shrink-0 items-center justify-center rounded-xl text-2xl leading-none"
+            style={{
+              width: 40,
+              height: 40,
+              boxShadow: `0 0 0 2px ${AI}`,
+              background: "rgba(183,155,255,0.08)",
+            }}
+            aria-hidden
+          >
             {persona?.emoji ?? "🤖"}
           </span>
           <div className="min-w-0">
@@ -97,10 +110,10 @@ export function BotCard({
           </div>
         </div>
         <span
-          className="flex-none rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
-          style={{ color: DIM, borderColor: FAINT }}
+          className="flex-none rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
+          style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
         >
-          on-chain strategy
+          AI BOT
         </span>
       </div>
 

@@ -35,6 +35,9 @@ import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
 import {
   ACCENT,
+  AI,
+  AI_BORDER,
+  AI_DIM,
   BG,
   DIM,
   FAINT,
@@ -45,6 +48,8 @@ import {
   PANEL,
   PANEL_2,
   RED,
+  TEAL,
+  TEAL_DIM,
 } from "@/components/v2/ui";
 import {
   ACTIVE_TRADER_WINDOW_MS,
@@ -312,6 +317,7 @@ function WhaleFeedCard({
               <span className="truncate text-[15px] font-black uppercase leading-tight">
                 {name}
               </span>
+              <RealWalletBadge />
               <SourceChip label={sourceChipLabel(p.source)} />
             </div>
             <div
@@ -488,14 +494,17 @@ function BotFeedCard({
 
   return (
     <article
-      className="rounded-2xl border p-3.5"
-      style={{ background: PANEL, borderColor: FAINT }}
+      className="rounded-2xl p-3.5"
+      style={{ background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[20px] leading-none"
-            style={{ background: PANEL_2, borderColor: FAINT }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[20px] leading-none"
+            style={{
+              background: "rgba(183,155,255,0.08)",
+              boxShadow: `0 0 0 2px ${AI}`,
+            }}
             aria-hidden
           >
             {persona?.emoji ?? "🤖"}
@@ -505,7 +514,7 @@ function BotFeedCard({
               <span className="truncate text-[15px] font-black uppercase leading-tight">
                 {display}
               </span>
-              <SourceChip label="BOT" />
+              <AiBotBadge />
               <BotFreshness lastUpdateMs={lastUpdateMs} now={now} />
             </div>
             <div
@@ -751,6 +760,30 @@ function SourceChip({ label }: { label: string }) {
       style={{ color: DIM, borderColor: FAINT, background: PANEL_2 }}
     >
       {label}
+    </span>
+  );
+}
+
+/** Purple "AI BOT" badge used on every bot card surface. */
+function AiBotBadge() {
+  return (
+    <span
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+      style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
+    >
+      AI BOT
+    </span>
+  );
+}
+
+/** Teal "REAL WALLET" badge used on every whale card surface. */
+function RealWalletBadge() {
+  return (
+    <span
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+      style={{ color: TEAL, background: TEAL_DIM, border: `1px solid ${TEAL}44` }}
+    >
+      REAL WALLET
     </span>
   );
 }
