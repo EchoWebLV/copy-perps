@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gwak.gg — redesign mock</title>
+<style>
+  :root{
+    --bg:#0a0a0d; --panel:#15151b; --panel2:#1d1d25; --line:#2a2a34;
+    --txt:#f2f2f0; --dim:#8d8d98; --dim2:#5e5e68;
+    --acc:#f5e04b; --acc-ink:#171302;
+    --green:#46e092; --green-dim:#123325; --red:#ff6a64; --red-dim:#39181a;
+    --amber:#ffc555; --amber-dim:#332408; --teal:#41d6c3; --teal-dim:#0c2b28;
+    --ai:#b79bff; --ai-dim:#251b40;
+  }
+  *{box-sizing:border-box; -webkit-font-smoothing:antialiased}
+  body{margin:0; background:#000; font-family:"Archivo","Inter",system-ui,-apple-system,sans-serif; color:var(--txt)}
+  .stage{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+         background:radial-gradient(800px 500px at 50% 0%, #17170f 0%, #000 70%)}
+  .phone{width:393px; height:830px; background:var(--bg); border:1px solid #26262e; border-radius:38px;
+         overflow:hidden; position:relative; display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  @media (max-width:480px){ .stage{padding:0} .phone{width:100%; height:100vh; border-radius:0; border:none} }
+
+  .mocktag{position:absolute; top:0; left:50%; transform:translateX(-50%); z-index:60; font-size:9px; letter-spacing:.18em;
+           color:#6b6b74; background:#101015; border:1px solid var(--line); border-top:none; padding:3px 10px; border-radius:0 0 8px 8px}
+
+  header{display:flex; align-items:center; gap:10px; padding:26px 16px 12px; flex:none}
+  .logo{font-weight:900; font-size:15px; letter-spacing:.02em}
+  .logo b{color:var(--acc)}
+  .pill{margin-left:auto; background:var(--panel); border:1px solid var(--line); border-radius:999px;
+        padding:7px 12px; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--green)}
+  .bell{position:relative; width:36px; height:36px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
+        display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .bell svg{width:17px; height:17px; stroke:var(--txt)}
+  .bell .dot{position:absolute; top:6px; right:7px; min-width:15px; height:15px; padding:0 4px; border-radius:999px;
+             background:var(--acc); color:var(--acc-ink); font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center}
+
+  main{flex:1; overflow-y:auto; padding:4px 14px 110px; scrollbar-width:none}
+  main::-webkit-scrollbar{display:none}
+
+  .seg{display:flex; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:3px; gap:2px}
+  .seg button{flex:1; border:none; background:transparent; color:var(--dim); font:inherit; font-size:11px; font-weight:800;
+              letter-spacing:.1em; padding:8px 0; border-radius:999px; cursor:pointer; text-transform:uppercase}
+  .seg button.on{background:var(--acc); color:var(--acc-ink)}
+
+  .search{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line);
+          border-radius:14px; padding:11px 13px; margin:12px 0 10px}
+  .search svg{width:15px; height:15px; stroke:var(--dim); flex:none}
+  .search input{flex:1; background:none; border:none; outline:none; color:var(--txt); font:inherit; font-size:13px}
+  .search input::placeholder{color:var(--dim2)}
+
+  .chiprow{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap}
+  .chip{font-size:10px; font-weight:800; letter-spacing:.1em; color:var(--dim); background:var(--panel);
+        border:1px solid var(--line); padding:6px 11px; border-radius:999px; cursor:pointer; text-transform:uppercase}
+  .chip.on{color:var(--acc-ink); background:var(--acc); border-color:var(--acc)}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:15px; margin-bottom:12px}
+  .card.dimmed{opacity:.55}
+  .rowtop{display:flex; align-items:center; gap:10px}
+  .ava{width:42px; height:42px; border-radius:12px; flex:none; display:flex; align-items:center; justify-content:center;
+       font-size:19px; font-weight:900; color:#0c0c0f}
+  .nm{font-size:16px; font-weight:900; letter-spacing:.02em; text-transform:uppercase}
+  .sub{font-size:10px; color:var(--dim); letter-spacing:.08em; margin-top:2px; text-transform:uppercase}
+  .pnlbig{margin-left:auto; text-align:right}
+  .pnlbig .v{font-size:16px; font-weight:900}
+  .pnlbig .l{font-size:9px; color:var(--dim); letter-spacing:.12em}
+  .badge{font-size:8.5px; font-weight:900; letter-spacing:.1em; padding:3px 7px; border-radius:6px; text-transform:uppercase}
+  .b-real{background:var(--teal-dim); color:var(--teal)}
+  .b-paper{background:var(--amber-dim); color:var(--amber)}
+  .b-live{background:var(--green-dim); color:var(--green)}
+  .b-stale{background:#26262c; color:var(--dim)}
+  .b-ai{background:var(--ai-dim); color:var(--ai)}
+  .card.ai{border-color:#3b2f66; background:#161320}
+  .ava.ai{box-shadow:0 0 0 2px var(--ai)}
+
+  .trade{display:flex; align-items:center; gap:8px; background:var(--panel2); border-radius:12px; padding:10px 12px; margin-top:11px}
+  .trade .mkt{font-weight:900; font-size:14px}
+  .side{font-size:9.5px; font-weight:900; letter-spacing:.08em; padding:3px 7px; border-radius:6px}
+  .side.long{background:var(--green-dim); color:var(--green)}
+  .side.short{background:var(--red-dim); color:var(--red)}
+  .trade .meta{font-size:10.5px; color:var(--dim)}
+  .trade .pct{margin-left:auto; font-weight:900; font-size:13px}
+  .flat{font-size:10.5px; color:var(--dim2); letter-spacing:.1em; background:var(--panel2); border:1px dashed var(--line);
+        border-radius:12px; padding:11px 12px; margin-top:11px; text-transform:uppercase}
+
+  .btns{display:flex; gap:8px; margin-top:12px}
+  .btn{flex:1; border:none; font:inherit; font-size:11.5px; font-weight:900; letter-spacing:.1em; padding:13px 0;
+       border-radius:13px; cursor:pointer; text-transform:uppercase}
+  .btn.p{background:var(--acc); color:var(--acc-ink)}
+  .btn.s{background:var(--panel2); color:var(--txt); border:1px solid var(--line)}
+  .btn.danger{background:var(--red-dim); color:var(--red)}
+  .btn:disabled{opacity:.4; cursor:default}
+  .btn.sm{flex:none; padding:9px 14px; font-size:10px; border-radius:10px}
+
+  .gap-note{display:flex; gap:7px; align-items:flex-start; background:var(--amber-dim); border-radius:10px; padding:9px 11px;
+            font-size:11px; color:var(--amber); line-height:1.45; margin-top:10px}
+  .verify{font-size:10px; color:var(--dim); margin-top:9px; letter-spacing:.04em}
+  .verify a{color:var(--teal); text-decoration:none; font-weight:700}
+
+  .h2{font-size:11px; font-weight:900; letter-spacing:.16em; color:var(--dim); margin:18px 2px 9px; text-transform:uppercase}
+  .empty{border:1px dashed var(--line); border-radius:16px; padding:22px 16px; text-align:center; color:var(--dim2);
+         font-size:12px; line-height:1.6}
+
+  .pos{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:13px 14px; margin-bottom:10px}
+  .pos .r1{display:flex; align-items:center; gap:8px}
+  .pos .src{font-size:10px; color:var(--dim); letter-spacing:.06em}
+  .pos .r2{display:flex; align-items:center; gap:14px; margin-top:9px; font-size:11px; color:var(--dim)}
+  .pos .r2 b{color:var(--txt); font-size:12.5px}
+  .pos .pnl{margin-left:auto; text-align:right}
+
+  .subrow{display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line);
+          border-radius:16px; padding:12px 14px; margin-bottom:10px}
+  .subrow .meta{font-size:10.5px; color:var(--dim); margin-top:3px}
+
+  nav{position:absolute; bottom:0; left:0; right:0; display:flex; background:rgba(10,10,13,.92); backdrop-filter:blur(12px);
+      border-top:1px solid var(--line); padding:10px 8px 22px; z-index:40}
+  nav button{flex:1; background:none; border:none; color:var(--dim2); font:inherit; cursor:pointer; display:flex;
+             flex-direction:column; align-items:center; gap:4px; font-size:9px; font-weight:800; letter-spacing:.12em; position:relative; text-transform:uppercase}
+  nav button.on{color:var(--acc)}
+  nav button svg{width:21px; height:21px; stroke:currentColor}
+  nav .navdot{position:absolute; top:-2px; right:24%; width:8px; height:8px; border-radius:99px; background:var(--acc)}
+
+  .scrim{position:absolute; inset:0; background:rgba(0,0,0,.6); z-index:45; opacity:0; pointer-events:none; transition:opacity .2s}
+  .scrim.show{opacity:1; pointer-events:auto}
+  .sheet{position:absolute; left:0; right:0; bottom:0; background:var(--panel); border-radius:26px 26px 0 0;
+         border-top:1px solid var(--line); padding:10px 18px 30px; z-index:50; transform:translateY(calc(100% + 60px)); transition:transform .25s; max-height:78%; overflow-y:auto}
+  .sheet.show{transform:translateY(0)}
+  .grab{width:38px; height:4px; border-radius:99px; background:var(--line); margin:4px auto 14px}
+  .sheet h3{margin:0; font-size:17px; font-weight:900; text-transform:uppercase; letter-spacing:.02em}
+  .sheet .sub2{font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5}
+  .stakes{display:flex; gap:8px; margin:16px 0 10px}
+  .stake{flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px 0;
+         text-align:center; font-weight:900; font-size:14px; cursor:pointer}
+  .stake.on{background:#fff; color:#111; border-color:#fff}
+  .tog{display:flex; align-items:center; gap:10px; background:var(--panel2); border-radius:12px; padding:12px 13px; margin-top:10px; cursor:pointer}
+  .tog .box{width:20px; height:20px; border-radius:6px; border:1.5px solid var(--dim2); flex:none; display:flex; align-items:center; justify-content:center}
+  .tog.on .box{background:var(--green); border-color:var(--green); color:#06210f; font-weight:900; font-size:13px}
+  .tog .t1{font-size:12.5px; font-weight:700}
+  .tog .t2{font-size:10.5px; color:var(--dim); margin-top:2px}
+  .finefine{font-size:10.5px; color:var(--dim); line-height:1.55; background:var(--panel2); border-radius:10px; padding:10px 12px; margin-top:10px}
+
+  .notif{display:flex; gap:10px; padding:12px 4px; border-bottom:1px solid var(--line)}
+  .notif:last-child{border-bottom:none}
+  .nico{width:32px; height:32px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; font-size:14px}
+  .notif .t1{font-size:12.5px; font-weight:700; line-height:1.4}
+  .notif .t2{font-size:10px; color:var(--dim); margin-top:2px}
+
+  .toast{position:absolute; top:54px; left:50%; transform:translate(-50%,-20px); background:#fff; color:#111;
+         font-size:12px; font-weight:800; padding:10px 16px; border-radius:999px; z-index:70; opacity:0; transition:all .25s;
+         pointer-events:none; white-space:nowrap; max-width:88%; overflow:hidden; text-overflow:ellipsis}
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+
+  .newpill{position:absolute; top:78px; left:50%; transform:translateX(-50%); z-index:35; background:var(--acc);
+           color:var(--acc-ink); font-size:10.5px; font-weight:900; letter-spacing:.08em; padding:8px 14px;
+           border-radius:999px; cursor:pointer; display:none; text-transform:uppercase; box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  .g{color:var(--green)} .r{color:var(--red)} .d{color:var(--dim)}
+  .tabh{font-size:21px; font-weight:900; text-transform:uppercase; letter-spacing:.01em; margin:6px 2px 2px}
+  .tabsub{font-size:11px; color:var(--dim); margin:0 2px 14px}
+
+  .lever{display:flex; gap:8px; margin-top:10px}
+  .lever .stake{font-size:12px; padding:11px 0}
+  .warnrow{display:flex; gap:8px; align-items:center; background:var(--red-dim); color:var(--red); border-radius:10px;
+           padding:9px 11px; font-size:10.5px; line-height:1.4; margin-top:10px}
+  .tier{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:12px 13px; margin-top:9px; cursor:pointer}
+  .tier.on{border-color:var(--acc)}
+  .tier .t1{font-size:12.5px; font-weight:900; letter-spacing:.04em}
+  .tier .t2{font-size:10.5px; color:var(--dim); margin-top:3px; line-height:1.45}
+  .tier .risk{font-size:10px; color:var(--red); margin-top:4px}
+  .addr{display:flex; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--line); border-radius:12px;
+        padding:12px 13px; font-family:ui-monospace,monospace; font-size:11.5px; color:var(--dim); margin-top:10px}
+
+  nav button.center{flex:none; width:78px}
+  .cbtn{width:54px; height:54px; border-radius:999px; background:var(--acc); display:flex; align-items:center;
+        justify-content:center; margin-top:-26px; border:4px solid var(--bg); box-shadow:0 6px 20px rgba(245,224,75,.3)}
+  .cbtn svg{width:23px; height:23px; stroke:var(--acc-ink)}
+  main.livemode{padding:0; scroll-snap-type:y mandatory}
+  .live-card{height:100%; scroll-snap-align:start; display:flex; flex-direction:column; justify-content:center;
+             padding:20px 22px 120px; border-bottom:1px solid var(--line); position:relative}
+  .eyebrow{font-size:9.5px; font-weight:900; letter-spacing:.14em; padding:4px 9px; border-radius:6px; text-transform:uppercase}
+  .headline{font-size:29px; line-height:1.12; font-weight:900; text-transform:uppercase; margin:14px 0 6px}
+  .headline .hl{padding:0 7px; border-radius:7px; white-space:nowrap}
+  .hl.up{background:var(--green); color:#06210f}
+  .hl.down{background:var(--red); color:#330b09}
+  .lnote{font-size:12px; color:var(--dim); line-height:1.55; margin:6px 0 4px}
+  .lstats{display:flex; gap:20px; margin:12px 0 2px; font-size:10px; color:var(--dim); letter-spacing:.08em; text-transform:uppercase}
+  .lstats b{display:block; color:var(--txt); font-size:14px; margin-top:3px; letter-spacing:0}
+  .swipe{position:absolute; bottom:100px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--dim2); letter-spacing:.2em; text-transform:uppercase}
+
+  @media (min-width:900px){
+    .stage{padding:0; display:block}
+    .phone{width:100%; height:100vh; border:none; border-radius:0; box-shadow:none;
+           display:grid; grid-template-columns:222px 1fr; grid-template-rows:auto 1fr}
+    header{grid-column:2; grid-row:1; padding:18px 28px 12px}
+    main{grid-column:2; grid-row:2; padding:10px max(32px, calc((100% - 1120px)/2)) 60px}
+    main[data-tab="copies"], main[data-tab="trade"], main[data-tab="wallet"]{
+      padding:10px max(32px, calc((100% - 700px)/2)) 60px}
+    nav{grid-column:1; grid-row:1/3; position:static; flex-direction:column; justify-content:flex-start;
+        gap:4px; padding:22px 12px; border-top:none; border-right:1px solid var(--line); backdrop-filter:none}
+    nav button{flex:none; flex-direction:row; justify-content:flex-start; gap:12px; width:100%;
+               padding:11px 14px; font-size:11px; border-radius:12px}
+    nav button.on{background:var(--panel)}
+    nav button svg{width:19px; height:19px}
+    nav button.center{width:100%}
+    .cbtn{width:34px; height:34px; margin:-5px 0 -5px -7px; border-width:2px; box-shadow:none}
+    .cbtn svg{width:17px; height:17px}
+    nav .navdot{right:12px; top:50%; transform:translateY(-50%)}
+    .cards{display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:14px; align-items:start}
+    .card{margin-bottom:0}
+    .search{max-width:520px}
+    main.livemode{padding:0}
+    .live-card{max-width:580px; margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line)}
+    .sheet{left:50%; right:auto; width:480px; bottom:30px; border-radius:26px; border:1px solid var(--line);
+           transform:translate(-50%, calc(100% + 80px))}
+    .sheet.show{transform:translate(-50%,0)}
+    .toast{top:20px}
+    .newpill{top:64px}
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+<div class="phone">
+  <div class="mocktag">DESIGN MOCK · SIMULATED DATA</div>
+  <header>
+    <div class="logo">GWAK<b>.GG</b></div>
+    <div class="pill" id="balPill">$48.20 READY</div>
+    <div class="bell" id="bellBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <div class="dot" id="bellDot" style="display:none">0</div>
+    </div>
+  </header>
+  <div class="toast" id="toast"></div>
+  <div class="newpill" id="newPill" onclick="drainTape()"></div>
+  <main id="main"></main>
+  <nav id="nav"></nav>
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"></div>
+</div>
+</div>
+
+<script>
+// ---------- state ----------
+const S = {
+  tab: 'traders',
+  view: 'top',           // top | live
+  filter: 'all',         // all | whales | bots
+  q: '',
+  balance: 48.20,
+  copies: [],            // open copied positions
+  history: [],
+  subs: [],              // auto-copy subscriptions
+  notifs: [],
+  unread: 0,
+  copiesBadge: false,
+  tape: [], newCount: 0, liveBadge: false,
+};
+
+const TRADERS = [
+  { id:'iron-wolf', kind:'whale', name:'Iron Wolf', src:'Hyperliquid', col:'#9be15d', equity:13.6e6, pnl1d:573000, pnl30d:3.4e6,
+    open:2, live:true, trade:{ mkt:'ETH', side:'long', lev:20, entry:1615, mark:1666, size:'$22.2M' } },
+  { id:'ghost-seal', kind:'whale', name:'Ghost Seal', src:'Hyperliquid', col:'#6db5f2', equity:14.0e6, pnl1d:344000, pnl30d:1.8e6,
+    open:3, live:true, trade:{ mkt:'ZEC', side:'short', lev:10, entry:462.9, mark:413.7, size:'$3.2M' } },
+  { id:'scalper', kind:'bot', name:'Scalper', src:'AI strategy', col:'#f5e04b', equity:1000, pnl1d:0, pnl30d:0,
+    open:0, live:true, desc:'15s momentum · 100x', flat:true },
+  { id:'berserker', kind:'bot', name:'Berserker', src:'AI strategy', col:'#f08a5d', equity:855.66, pnl1d:-105.04, pnl30d:-105.04,
+    open:1, live:true, desc:'Hair-trigger scalps · 25x', trade:{ mkt:'SOL', side:'long', lev:25, entry:66.6, mark:66.5, size:'$66' } },
+  { id:'greedy-mantis', kind:'whale', name:'Greedy Mantis', src:'Pacifica', col:'#b39df0', equity:18.6e6, pnl1d:220000, pnl30d:880000,
+    open:3, live:false, staleFor:'3d', trade:{ mkt:'BTC', side:'long', lev:40, entry:67200, mark:68400, size:'$8.1M' } },
+  { id:'neon-octopus', kind:'whale', name:'Neon Octopus', src:'Pacifica', col:'#d4537e', equity:2.1e6, pnl1d:-89000, pnl30d:-310000,
+    open:1, live:true, trade:{ mkt:'HYPE', side:'long', lev:40, entry:27.40, mark:27.29, size:'$1.4M' } },
+];
+
+function ago(ts){ const sec=Math.max(0,(Date.now()-ts)/1000);
+  return sec<60?'just now': sec<3600? Math.floor(sec/60)+'m ago' : Math.floor(sec/3600)+'h ago'; }
+function snapTrade(t){ return t.trade? {...t.trade} : null; }
+function tapeEvent(id, kind, eyebrow, ebg, ecol, ageMs, note, extra){
+  const t=TRADERS.find(x=>x.id===id);
+  return Object.assign({traderId:id, kind, eyebrow, ebg, ecol, ts:Date.now()-ageMs, note, trade:snapTrade(t)}, extra||{});
+}
+function initTape(){
+  S.tape=[
+    tapeEvent('iron-wolf','open','Fresh open','var(--green-dim)','var(--green)',2*60000,
+      '$22.2M live on Hyperliquid. New enough that your fill is still near theirs.'),
+    tapeEvent('berserker','open','AI entry','var(--ai-dim)','var(--ai)',4*60000,
+      'On-chain strategy fired. The program decided — the record is on-chain and can\u2019t be backfilled.'),
+    tapeEvent('neon-octopus','open','Pain trade','var(--red-dim)','var(--red)',16*60000,
+      '40x against the move. Mirroring pain is a choice — they may be averaging in, or getting carried out.'),
+    tapeEvent('ghost-seal','open','Deep in profit','var(--teal-dim)','var(--teal)',31*60000,
+      'The short is printing. A late copy enters at today\u2019s price, not theirs — mind the gap.'),
+  ];
+}
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const fmt = n => (n<0?'-':'+') + '$' + Math.abs(n).toLocaleString(undefined,{maximumFractionDigits: Math.abs(n)<100?2:0});
+const fmtK = n => { const a=Math.abs(n); const s=(n<0?'-':'+')+'$'; return a>=1e6 ? s+(a/1e6).toFixed(1)+'M' : a>=1e3 ? s+(a/1e3).toFixed(0)+'K' : s+a.toFixed(0); };
+const fmtP = n => '$' + n.toLocaleString(undefined, {maximumFractionDigits: n>=1000?0:2});
+const cls = n => n>=0?'g':'r';
+const pct = t => { const d=(t.mark-t.entry)/t.entry*100*(t.side==='short'?-1:1); return d*t.lev; };
+const esc = s => s.replace(/</g,'&lt;');
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),2600); }
+function notify(icon, bg, t1, t2){
+  S.notifs.unshift({icon, bg, t1, t2, time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+  S.unread++; renderBell();
+}
+function renderBell(){ const d=$('bellDot'); if(S.unread>0){ d.style.display='flex'; d.textContent=S.unread; } else d.style.display='none'; }
+
+// ---------- traders tab ----------
+function traderCard(t){
+  const isWallet = t.kind==='wallet';
+  const badge = t.kind==='bot' ? '<span class="badge b-ai">AI bot</span>'
+              : '<span class="badge b-real">Real wallet</span>';
+  const liveB = t.live ? '<span class="badge b-live">Live</span>' : `<span class="badge b-stale">Seen ${t.staleFor} ago</span>`;
+  const p = t.trade ? pct(t.trade) : 0;
+  const tradeRow = t.trade ? `
+    <div class="trade">
+      <span class="mkt">${t.trade.mkt}</span>
+      <span class="side ${t.trade.side}">${t.trade.lev}x ${t.trade.side}</span>
+      <span class="meta">${t.trade.size} · entry ${fmtP(t.trade.entry)}</span>
+      <span class="pct ${cls(p)}">${p>=0?'+':''}${p.toFixed(1)}%</span>
+    </div>`
+    : `<div class="flat">Flat — waiting for a breakout</div>`;
+  const verify = t.kind==='bot' ? `<div class="verify">Strategy runs as an on-chain program — record can’t be backfilled. <a href="#" onclick="return false">Verify ↗</a></div>` : '';
+  const stale = !t.live;
+  return `<div class="card ${stale?'dimmed':''} ${t.kind==='bot'?'ai':''}">
+    <div class="rowtop">
+      <div class="ava ${t.kind==='bot'?'ai':''}" style="background:${t.col}">${t.name[0]}</div>
+      <div>
+        <div class="nm">${t.name}</div>
+        <div class="sub">${t.src} ${t.desc? '· '+t.desc:''}</div>
+      </div>
+      <div class="pnlbig">
+        <div class="v ${cls(t.pnl1d)}">${fmtK(t.pnl1d)}</div>
+        <div class="l">P&L 1D · EQ ${t.equity>=1e6?'$'+(t.equity/1e6).toFixed(1)+'M':'$'+t.equity.toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:6px; margin-top:9px">${badge}${liveB}</div>
+    ${pnlSpark(t)}
+    ${tradeRow}
+    ${verify}
+    <div class="btns">
+      <button class="btn p" ${stale||!t.trade?'disabled':''} onclick="openCopyNow('${t.id}')">Copy now</button>
+      <button class="btn s" ${stale?'disabled':''} onclick="openAutoCopy('${t.id}')">Auto-copy</button>
+    </div>
+    ${stale?'<div class="verify" style="color:var(--dim2)">Stale data — copying disabled until this wallet shows fresh activity.</div>':''}
+  </div>`;
+}
+
+function liveTape(){
+  const items = [
+    {t:'2m ago', who:'Berserker', what:'opened SOL 25x long', kind:'bot', id:'berserker'},
+    {t:'9m ago', who:'Iron Wolf', what:'added to ETH 20x long (+61% on trade)', kind:'whale', id:'iron-wolf'},
+    {t:'31m ago', who:'Ghost Seal', what:'ZEC 10x short now +108%', kind:'whale', id:'ghost-seal'},
+    {t:'44m ago', who:'Scalper', what:'went flat — waiting for breakout', kind:'bot', id:null},
+  ];
+  return items.map(i=>`<div class="card" style="padding:13px 15px">
+    <div style="display:flex; align-items:center; gap:8px">
+      <span class="badge ${i.kind==='bot'?'b-paper':'b-real'}">${i.kind==='bot'?'On-chain':'Real'}</span>
+      <div style="font-size:12.5px"><b>${i.who}</b> <span class="d">${i.what}</span></div>
+      <span class="d" style="margin-left:auto; font-size:10px; flex:none">${i.t}</span>
+    </div>
+    ${i.id?`<div class="btns" style="margin-top:10px"><button class="btn p sm" onclick="openCopyNow('${i.id}')">Copy now</button><button class="btn s sm" onclick="openAutoCopy('${i.id}')">Auto-copy</button></div>`:''}
+  </div>`).join('');
+}
+
+function isSolAddr(q){ return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q.trim()); }
+
+function hashId(str){ let h=0; for(const c of str) h=(h*31 + c.charCodeAt(0))|0; return h; }
+function rng(seed){ let s=seed; return ()=>{ s|=0; s=(s+0x6D2B79F5)|0; let t=Math.imul(s^(s>>>15),1|s);
+  t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+function pnlSpark(t){
+  const v = t.pnl30d ?? t.pnl1d*8;
+  const up = v>0, flat = v===0;
+  const col = flat? '#5e5e68' : up? '#46e092' : '#ff6a64';
+  const r = rng(hashId(t.id));
+  let y = flat? 30 : up? 46 : 14;
+  const pts=[];
+  for(let x=0; x<=320; x+=8){
+    pts.push(x+','+y.toFixed(1));
+    y += (r()-0.5)*7 + (flat?0 : up? -0.85 : 0.85);
+    y = Math.max(4, Math.min(56, y));
+  }
+  const last = pts[pts.length-1].split(',');
+  return `<div style="margin-top:11px">
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:9px; color:var(--dim2); letter-spacing:.12em; text-transform:uppercase">
+      <span>P&amp;L · 30d</span><span class="${flat?'d':up?'g':'r'}" style="font-weight:800; font-size:10.5px; letter-spacing:.02em">${flat?'$0':fmtK(v)}</span></div>
+    <svg width="100%" height="56" viewBox="0 0 320 56" preserveAspectRatio="none" style="margin-top:4px; display:block">
+      <polygon points="0,56 ${pts.join(' ')} 320,56" fill="${col}" opacity="0.09"/>
+      <polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.8"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="2.5" fill="${col}"/>
+    </svg></div>`;
+}
+
+function spark(p){
+  let y = p>=0 ? 52 : 16, pts=[];
+  for(let x=0; x<=340; x+=10){
+    pts.push(x.toFixed(0)+','+y.toFixed(1));
+    y += (Math.random()-0.5)*8 + (p>=0?-1.1:1.1);
+    y = Math.max(5, Math.min(65, y));
+  }
+  return `<svg width="100%" height="70" viewBox="0 0 340 70" preserveAspectRatio="none" style="margin-top:8px">
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${p>=0?'#46e092':'#ff6a64'}" stroke-width="2"/></svg>`;
+}
+
+function liveCard(ev, idx){
+  const t=TRADERS.find(x=>x.id===ev.traderId);
+  const tr=ev.trade, isClose=ev.kind==='close';
+  const p=tr?pct(tr):0;
+  const headline = isClose
+    ? `${tr.mkt} ${tr.lev}x ${tr.side} closed <span class="hl ${ev.realizedPct>=0?'up':'down'}">${ev.realizedPct>=0?'+':''}${ev.realizedPct.toFixed(1)}%</span>`
+    : `${tr.mkt} ${tr.lev}x ${tr.side} is already <span class="hl ${p>=0?'up':'down'}">${p>=0?'up':'down'} ${Math.abs(p).toFixed(1)}%</span>`;
+  const stats = isClose
+    ? `<div class="lstats"><span>Realized<b class="g">${ev.realizedUsd}</b></span><span>Notional<b>${tr.size}</b></span><span>Held<b>${ev.held}</b></span></div>`
+    : `<div class="lstats"><span>Notional<b>${tr.size}</b></span><span>Entry<b>${fmtP(tr.entry)}</b></span><span>Now<b>${fmtP(tr.mark)}</b></span></div>`;
+  const cta = isClose
+    ? `<div class="btns" style="margin-top:14px"><button class="btn p" onclick="openAutoCopy('${t.id}')">Auto-copy ${t.name}</button></div>
+       <div style="text-align:center; margin-top:10px; font-size:10px; color:var(--dim2); letter-spacing:.06em">Missed it? Auto-copy mirrors their next trade automatically.</div>`
+    : `<div class="btns" style="margin-top:14px"><button class="btn p" onclick="openCopyNow('${t.id}')">Copy now</button></div>
+       <div style="text-align:center; margin-top:10px; font-size:10px; color:var(--dim2); letter-spacing:.06em">Want every trade? <a href="#" onclick="viewTrader('${t.id}');return false" style="color:var(--dim); font-weight:800; text-decoration:none">View trader → Auto-copy</a></div>`;
+  return `<div class="live-card">
+      <div style="display:flex; align-items:center; gap:8px">
+        <span class="eyebrow" style="background:${ev.ebg}; color:${ev.ecol}">${ev.eyebrow}</span>
+        <span class="d" style="font-size:10px">${ago(ev.ts)}</span>
+        <span class="badge ${t.kind==='bot'?'b-ai':'b-real'}" style="margin-left:auto">${t.kind==='bot'?'AI bot':'Real wallet'}</span>
+      </div>
+      <div class="rowtop" style="margin-top:16px; cursor:pointer" onclick="viewTrader('${t.id}')">
+        <div class="ava ${t.kind==='bot'?'ai':''}" style="background:${t.col}">${t.name[0]}</div>
+        <div><div class="nm">${t.name}</div><div class="sub">${t.src} · ${tr.size} in ${tr.mkt}</div></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#5e5e68" stroke-width="2" style="width:16px; height:16px; margin-left:auto"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      <div class="headline">${headline}</div>
+      <div class="lnote">${ev.note}</div>
+      ${spark(isClose?ev.realizedPct:p)}
+      ${stats}
+      ${cta}
+      ${idx===0?'<div class="swipe">Swipe or scroll for next ↑</div>':''}
+    </div>`;
+}
+function rLive(){ return S.tape.map((ev,i)=>liveCard(ev,i)).join(''); }
+function pushTapeEvent(ev){
+  S.tape.unshift(ev);
+  if(S.tab==='live'){
+    const m=$('main');
+    if(m.scrollTop<40){ render(); m.scrollTop=0; }
+    else { S.newCount++; const np=$('newPill'); np.textContent='↑ '+S.newCount+' new signal'+(S.newCount>1?'s':''); np.style.display='block'; }
+  } else { S.liveBadge=true; renderNav(); }
+}
+function drainTape(){ S.newCount=0; $('newPill').style.display='none'; render(); $('main').scrollTop=0; }
+function startTapeSim(){
+  setTimeout(()=>{
+    const t=TRADERS.find(x=>x.id==='scalper');
+    t.trade={mkt:'SOL', side:'long', lev:100, entry:66.58, mark:66.60, size:'$100'}; t.open=1;
+    pushTapeEvent(tapeEvent('scalper','open','AI entry','var(--ai-dim)','var(--ai)',0,
+      'Scalper broke its flat streak — 15s momentum fired on SOL. The program decided; the tape can’t be faked.'));
+  }, 10000);
+  setTimeout(()=>{
+    pushTapeEvent(tapeEvent('ghost-seal','open','Adds to short','var(--teal-dim)','var(--teal)',0,
+      'Ghost Seal pressed the ZEC short again — size up 12%. Conviction, or stubbornness.'));
+  }, 24000);
+  setTimeout(()=>{
+    const t=TRADERS.find(x=>x.id==='iron-wolf');
+    const tr=snapTrade(t), p2=pct(tr);
+    pushTapeEvent(tapeEvent('iron-wolf','close','Just closed','var(--green-dim)','var(--green)',0,
+      'Iron Wolf banked the ETH long. Anyone auto-copying closed with them, automatically.',
+      {trade:tr, realizedPct:p2, realizedUsd:'+$702K', held:'5h 12m'}));
+    t.trade=null;
+  }, 38000);
+}
+
+// ---------- traders tab ----------
+function rTraders(){
+  let list = TRADERS;
+  if (S.filter==='whales') list = list.filter(t=>t.kind==='whale');
+  if (S.filter==='bots') list = list.filter(t=>t.kind==='bot');
+  const q = S.q.trim().toLowerCase();
+  let walletCard = '';
+  if (isSolAddr(S.q)) {
+    const short = S.q.slice(0,4)+'…'+S.q.slice(-4);
+    walletCard = traderCard({ id:'pasted-wallet', kind:'wallet', name:short, src:'Flash wallet · found 2 open positions', col:'#41d6c3',
+      equity:152000, pnl1d:8400, pnl30d:31000, open:2, live:true, trade:{mkt:'SOL', side:'long', lev:12, entry:64.1, mark:66.5, size:'$31K'} });
+    list = [];
+  } else if (q) {
+    list = list.filter(t => t.name.toLowerCase().includes(q) || (t.trade && t.trade.mkt.toLowerCase().includes(q)) || (t.desc||'').toLowerCase().includes(q));
+  }
+  return `
+    <div class="tabh">Traders</div>
+    <p class="tabsub">Real whale wallets and AI bots. One tap to copy.</p>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="qInput" placeholder="Search traders, assets, or paste a wallet" value="${esc(S.q)}">
+    </div>
+    <div class="chiprow">
+      <span class="chip ${S.filter==='all'?'on':''}" onclick="S.filter='all';render()">All</span>
+      <span class="chip ${S.filter==='whales'?'on':''}" onclick="S.filter='whales';render()">Whales</span>
+      <span class="chip ${S.filter==='bots'?'on':''}" onclick="S.filter='bots';render()">Bots</span>
+    </div>
+    <div class="cards">${walletCard || list.map(traderCard).join('') || '<div class="empty">Nothing matches. Try an asset like “SOL”, a name, or paste a Solana wallet address.</div>'}</div>
+  `;
+}
+
+// ---------- copies tab ----------
+function rCopies(){
+  const subs = S.subs.map((s,i)=>`<div class="subrow">
+      <div class="ava ${s.kind==='bot'?'ai':''}" style="background:${s.col}; width:34px; height:34px; border-radius:10px; font-size:15px">${s.name[0]}</div>
+      <div>
+        <div style="font-size:13px; font-weight:800">${s.name} <span class="badge ${s.paused?'b-stale':'b-live'}" style="margin-left:4px">${s.paused?'Paused':'Live'}</span></div>
+        <div class="meta">$${s.stake}/trade · mirrors leverage · auto-close · ${s.opens} opened</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:6px">
+        <button class="btn s sm" onclick="togglePause(${i})">${s.paused?'Resume':'Pause'}</button>
+        <button class="btn danger sm" onclick="stopSub(${i})">Stop</button>
+      </div>
+    </div>`).join('');
+
+  const open = S.copies.map((c,i)=>`<div class="pos">
+      <div class="r1">
+        <b style="font-size:14px">${c.mkt}</b>
+        <span class="side ${c.side}">${c.lev}x ${c.side}</span>
+        <span class="badge ${c.srcKind==='bot'?'b-ai':'b-real'}">${c.srcKind==='bot'?'AI copy':'Whale copy'}</span>
+        <span class="src" style="margin-left:auto">${c.auto?'auto-copy':'copy'} · ${c.src}</span>
+      </div>
+      <div class="r2">
+        <span>Stake <b>$${c.stake.toFixed(2)}</b></span>
+        <span>Now <b>${fmtP(c.mark)}</b></span>
+        <div class="pnl"><b class="${cls(c.pnl)}" style="font-size:14px">${fmt(c.pnl)}</b></div>
+      </div>
+      <div class="btns" style="margin-top:10px">
+        ${c.autoClose?`<div class="finefine" style="margin:0; flex:1; display:flex; align-items:center">Closes automatically when ${c.src} closes</div>`:''}
+        <button class="btn s sm" onclick="closeCopy(${i})">Close</button>
+      </div>
+    </div>`).join('');
+
+  const hist = S.history.map(h=>`<div class="pos" style="opacity:.75">
+      <div class="r1">
+        <b style="font-size:13px">${h.mkt}</b>
+        <span class="side ${h.side}">${h.lev}x ${h.side}</span>
+        <span class="src">${h.reason}</span>
+        <div class="pnl" style="margin-left:auto"><b class="${cls(h.pnl)}">${fmt(h.pnl)}</b></div>
+      </div>
+      ${h.pnl>0?`<div class="btns" style="margin-top:9px"><button class="btn s sm" onclick="toast('Shared to Wins — your alias, stake and PnL are public')">Share win</button></div>`:''}
+    </div>`).join('');
+
+  return `
+    <div class="tabh">My copies</div>
+    <p class="tabsub">Everything you’re copying, in one place.</p>
+    <div class="h2">Auto-copy subscriptions</div>
+    ${subs || '<div class="empty">No subscriptions. “Auto-copy” a trader and every new trade they make is mirrored with your stake.</div>'}
+    <div class="h2">Open positions</div>
+    ${open || '<div class="empty">Nothing open. Find a trader and tap “Copy now”.</div>'}
+    <div class="h2">History</div>
+    ${hist || '<div class="empty">Closed copies land here, with honest chain-verified PnL.</div>'}
+  `;
+}
+function togglePause(i){ S.subs[i].paused=!S.subs[i].paused; render(); }
+function stopSub(i){ S.subs.splice(i,1); toast('Auto-copy stopped'); render(); }
+function closeCopy(i){
+  const c=S.copies.splice(i,1)[0];
+  S.balance += c.stake + c.pnl;
+  S.history.unshift({mkt:c.mkt, side:c.side, lev:c.lev, pnl:c.pnl, reason:'closed by you'});
+  notify('✕','var(--red-dim)',`Closed ${c.mkt} ${c.side} — ${fmt(c.pnl)}`,`Manual close · stake returned`);
+  toast(`Closed ${c.mkt} ${fmt(c.pnl)}`);
+  render(); renderBell();
+  $('balPill').textContent='$'+S.balance.toFixed(2)+' READY';
+}
+
+// ---------- trade tab ----------
+let tradeMode='manual', tLev=20, tDegen=false, tTier=0;
+function rTrade(){
+  const manual = `
+    <div class="chiprow" style="margin-top:14px"><span class="chip on">SOL</span><span class="chip">ETH</span><span class="chip">BTC</span></div>
+    <div class="seg"><button class="on">Long</button><button>Short</button></div>
+    <div class="h2">Stake</div>
+    <div class="stakes"><div class="stake">$1</div><div class="stake on">$5</div><div class="stake">$10</div><div class="stake">$50</div></div>
+    <div class="h2">Leverage</div>
+    <div class="lever">
+      ${[10,20,50].map(l=>`<div class="stake ${tLev===l&&!tDegen?'on':''}" onclick="tLev=${l};tDegen=false;render()">${l}x</div>`).join('')}
+      <div class="stake ${tDegen?'on':''}" onclick="tDegen=!tDegen;render()" style="color:${tDegen?'#111':'var(--red)'}">Degen</div>
+    </div>
+    ${tDegen?`<div class="lever">${[125,250,500].map(l=>`<div class="stake ${tLev===l?'on':''}" onclick="tLev=${l};render()">${l}x</div>`).join('')}</div>
+    <div class="warnrow">⚠ At ${tLev>=125?tLev:125}x a ${(100/(tLev>=125?tLev:125)).toFixed(2)}% move against you liquidates. Fees eat a big share of that range.</div>`:''}
+    <button class="btn p" style="width:100%; margin-top:14px" onclick="toast('Mock — would open Long SOL ${tDegen?tLev:tLev}x with $5')">Open long SOL · ${tDegen?tLev:tLev}x · $5</button>
+    <div class="finefine">You pick entries and exits. Default is ${tLev<125?tLev+'x':'20x'} — degen leverage is opt-in, never the default.</div>`;
+
+  const tiers=[
+    {n:'Cruise — 50x', d:'10% of budget per trade, up to 2 at once. TP +100% / SL −50% attached.', r:'At 50x a 2% adverse move liquidates.'},
+    {n:'Sweat — 150x', d:'5% of budget, one trade at a time. TP +100% / SL −50%.', r:'At 150x a ~0.7% adverse move liquidates.'},
+    {n:'Full degen — 500x', d:'$1–10 stakes, one trade at a time. TP +150% / SL −50%.', r:'At 500x a 0.1% move can liquidate.'}];
+  const auto = `
+    <div class="h2">Budget ($5–$200)</div>
+    <div class="stakes"><div class="stake on">$5</div><div class="stake">$20</div><div class="stake">$50</div><div class="stake">$100</div></div>
+    ${tiers.map((t,i)=>`<div class="tier ${tTier===i?'on':''}" onclick="tTier=${i};render()">
+      <div class="t1">${t.n}</div><div class="t2">${t.d}</div><div class="risk">${t.r}</div></div>`).join('')}
+    <div class="tog" onclick="this.classList.toggle('on')"><div class="box">✓</div>
+      <div><div class="t1">I get it — this AI trades my budget</div><div class="t2">It scans BTC/ETH/SOL for 15-minute breakouts. The budget is the most it can lose.</div></div></div>
+    <button class="btn p" style="width:100%; margin-top:12px" onclick="toast('Mock — autopilot session would start')">Start autopilot</button>`;
+
+  return `
+    <div class="tabh">Trade</div>
+    <p class="tabsub">Your own trades — separate from copying. Safe defaults, degen by choice.</p>
+    <div class="seg">
+      <button class="${tradeMode==='manual'?'on':''}" onclick="tradeMode='manual';render()">Manual — you trade</button>
+      <button class="${tradeMode==='auto'?'on':''}" onclick="tradeMode='auto';render()">Autopilot — AI trades</button>
+    </div>
+    ${tradeMode==='manual'?manual:auto}
+  `;
+}
+
+// ---------- wallet tab ----------
+function rWallet(){
+  return `
+    <div class="tabh">Wallet</div>
+    <p class="tabsub">Funding only. No settings hiding in here.</p>
+    <div class="card" style="text-align:center; padding:24px 16px">
+      <div class="sub">Ready to trade</div>
+      <div style="font-size:34px; font-weight:900; margin-top:6px">$${S.balance.toFixed(2)}</div>
+      <div class="btns" style="margin-top:16px">
+        <button class="btn p" onclick="S.balance+=25; toast('Mock deposit +$25'); render()">Add funds</button>
+        <button class="btn s" onclick="toast('Mock — withdraw flow')">Withdraw</button>
+      </div>
+    </div>
+    <div class="h2">Your USDC address</div>
+    <div class="addr">7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU
+      <button class="btn s sm" style="margin-left:auto" onclick="toast('Copied address')">Copy</button></div>
+  `;
+}
+
+// ---------- nav / render ----------
+const NAV = [
+  {id:'traders', label:'Traders', ico:'<path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>'},
+  {id:'copies', label:'Copies', ico:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'},
+  {id:'live', label:'Live', center:true, ico:'<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>'},
+  {id:'trade', label:'Trade', ico:'<path d="M3 17l5-5 4 4 8-8"/><path d="M14 7h7v7"/>'},
+  {id:'wallet', label:'Wallet', ico:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h.01"/><path d="M3 10h18"/>'},
+];
+function renderNav(){
+  $('nav').innerHTML = NAV.map(n=> n.center
+    ? `<button class="center ${S.tab===n.id?'on':''}" onclick="go('${n.id}')">
+         ${n.id==='live'&&S.liveBadge?'<span class="navdot"></span>':''}
+         <div class="cbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2">${n.ico}</svg></div>${n.label}</button>`
+    : `<button class="${S.tab===n.id?'on':''}" onclick="go('${n.id}')">
+         ${n.id==='copies'&&S.copiesBadge?'<span class="navdot"></span>':''}
+         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8">${n.ico}</svg>${n.label}</button>`).join('');
+}
+function go(t){
+  S.tab=t;
+  if(t==='copies') S.copiesBadge=false;
+  if(t==='live'){ S.liveBadge=false; S.newCount=0; const np=$('newPill'); if(np) np.style.display='none'; }
+  render(); $('main').scrollTop=0;
+}
+function viewTrader(id){ const t=TRADERS.find(x=>x.id===id); if(!t) return; S.q=t.name; S.filter='all'; go('traders'); }
+function render(){
+  const m=$('main');
+  m.dataset.tab = S.tab;
+  m.classList.toggle('livemode', S.tab==='live');
+  m.innerHTML = S.tab==='traders'?rTraders() : S.tab==='copies'?rCopies() : S.tab==='live'?rLive() : S.tab==='trade'?rTrade() : rWallet();
+  renderNav();
+  const q=$('qInput');
+  if(q){ q.addEventListener('input', e=>{ S.q=e.target.value; const sc=q.selectionStart; render(); const nq=$('qInput'); nq.focus(); nq.setSelectionRange(sc,sc); }); }
+}
+
+// ---------- sheets (copy flows + notifications) ----------
+let sheetStake=10, sheetAutoClose=true, sheetTrader=null, sheetMode='now';
+function openSheet(html){ $('sheet').innerHTML=html; $('sheet').classList.add('show'); $('scrim').classList.add('show'); }
+function closeSheet(){ $('sheet').classList.remove('show'); $('scrim').classList.remove('show'); }
+$('scrim').onclick=closeSheet;
+
+function getTrader(id){
+  if(id==='pasted-wallet') return { id, kind:'wallet', name:S.q.slice(0,4)+'…'+S.q.slice(-4), col:'#41d6c3', src:'Flash wallet',
+    trade:{mkt:'SOL', side:'long', lev:12, entry:64.1, mark:66.5, size:'$31K'} };
+  return TRADERS.find(t=>t.id===id);
+}
+
+function sheetBody(){
+  const t=sheetTrader, isNow=sheetMode==='now';
+  const gap = t.trade ? ((t.trade.mark-t.trade.entry)/t.trade.entry*100) : 0;
+  const gapLine = isNow && t.trade ? `<div class="gap-note">⚠ <span><b>Entry gap:</b> ${t.kind==='bot'?'bot entry':'their entry'} ${fmtP(t.trade.entry)} → your est. fill ${fmtP(t.trade.mark)} (${gap>=0?'+':''}${gap.toFixed(1)}%). You enter at today’s price, not theirs.</span></div>` : '';
+  const PRESETS=[1,5,10,20];
+  const chips=PRESETS.map(v=>`<div class="stake ${sheetStake===v?'on':''}" data-v="${v}" onclick="setStake(${v},false)">$${v}</div>`).join('');
+  const customRow=`<div class="search" style="margin:0 0 4px">
+    <span style="color:var(--dim2); font-weight:800">$</span>
+    <input id="customStake" type="number" min="1" inputmode="numeric" placeholder="Custom amount"
+      value="${PRESETS.includes(sheetStake)?'':sheetStake}"
+      oninput="const n=Math.floor(Number(this.value)); if(n>=1) setStake(n,true)">
+  </div>`;
+  return `<div class="grab"></div>
+    <h3>${isNow?'Copy now':'Auto-copy'} — ${t.name}</h3>
+    <div class="sub2">${isNow
+      ? `Mirror ${t.trade?`their open <b>${t.trade.mkt} ${t.trade.lev}x ${t.trade.side}</b>`:'their position'} once, with your stake.`
+      : `Mirror <b>every new trade</b> ${t.name} makes, with your stake per trade, until you stop.`}</div>
+    <div class="h2" style="margin-top:14px">${isNow?'Stake':'Stake per trade'} (USDC)</div>
+    <div class="stakes">${chips}</div>
+    ${customRow}
+    ${gapLine}
+    <div class="tog ${sheetAutoClose?'on':''}" onclick="sheetAutoClose=!sheetAutoClose;refreshSheet()">
+      <div class="box">${sheetAutoClose?'✓':''}</div>
+      <div><div class="t1">Close when ${t.name} closes</div>
+      <div class="t2">${sheetAutoClose?'We watch the source and exit when they do.':'Off — you exit manually from My copies.'}</div></div>
+    </div>
+    <div class="finefine" id="capLine">${capText()}</div>
+    <button class="btn p" id="sheetCta" style="width:100%; margin-top:14px" onclick="confirmSheet()">${isNow?`Copy with $${sheetStake}`:`Start auto-copy · $${sheetStake}/trade`}</button>
+    <button class="btn s" style="width:100%; margin-top:8px" onclick="closeSheet()">Cancel</button>`;
+}
+function refreshSheet(){ $('sheet').innerHTML = sheetBody(); }
+function capText(){
+  return sheetMode==='now'
+    ? 'One position, one tap. Skips the entry if it has already run >1% past their price.'
+    : `Mirrors direction and leverage at your stake. Daily cap $${sheetStake*4} · one position per market at a time.`;
+}
+function setStake(v, fromCustom){
+  sheetStake = v;
+  const sh = $('sheet');
+  sh.querySelectorAll('.stake[data-v]').forEach(el=>el.classList.toggle('on', !fromCustom && Number(el.dataset.v)===v));
+  if(!fromCustom){ const ci=sh.querySelector('#customStake'); if(ci) ci.value=''; }
+  const cta=sh.querySelector('#sheetCta');
+  if(cta) cta.textContent = sheetMode==='now' ? `Copy with $${v}` : `Start auto-copy · $${v}/trade`;
+  const cap=sh.querySelector('#capLine');
+  if(cap) cap.textContent = capText();
+}
+function openCopyNow(id){ sheetTrader=getTrader(id); sheetMode='now'; sheetStake=10; sheetAutoClose=true; openSheet(sheetBody()); }
+function openAutoCopy(id){ sheetTrader=getTrader(id); sheetMode='auto'; sheetStake=10; sheetAutoClose=true; openSheet(sheetBody()); }
+
+function confirmSheet(){
+  const t=sheetTrader;
+  if(sheetMode==='now'){
+    const c={ src:t.name, srcKind:t.kind, col:t.col, mkt:t.trade.mkt, side:t.trade.side, lev:t.trade.lev,
+              stake:sheetStake, mark:t.trade.mark, pnl:0, autoClose:sheetAutoClose, auto:false };
+    S.copies.push(c); S.balance-=sheetStake; S.copiesBadge=true;
+    notify('⚡','var(--green-dim)',`Copied ${t.name} — ${c.mkt} ${c.lev}x ${c.side} with $${sheetStake}`,`Fill ${fmtP(c.mark)} · auto-close ${sheetAutoClose?'on':'off'}`);
+    toast(`Copied ${t.name} · $${sheetStake} on ${c.mkt} ${c.side}`);
+    if(sheetAutoClose) scheduleSourceClose(c, 14000);
+  } else {
+    S.subs.push({ name:t.name, col:t.col, kind:t.kind, stake:sheetStake, paused:false, opens:0 });
+    notify('▶','var(--teal-dim)',`Auto-copy armed — ${t.name}`,`$${sheetStake} per trade · waiting for their next entry`);
+    toast(`Auto-copy armed — ${t.name}`);
+    scheduleSubOpen(S.subs.length-1, 9000);
+  }
+  closeSheet(); renderBell();
+  if(S.tab==='live') renderNav(); else render();
+  $('balPill').textContent = '$'+S.balance.toFixed(2)+' READY';
+}
+
+// ---------- notifications sheet ----------
+$('bellBtn').onclick = () => {
+  S.unread=0; renderBell();
+  const items = S.notifs.length ? S.notifs.map(n=>`<div class="notif">
+      <div class="nico" style="background:${n.bg}">${n.icon}</div>
+      <div><div class="t1">${n.t1}</div><div class="t2">${n.t2} · ${n.time}</div></div>
+    </div>`).join('') : '<div class="empty" style="margin-top:8px">No alerts yet. Copy a trader and we’ll tell you everything that happens — opens, closes, and auto-closes.</div>';
+  openSheet(`<div class="grab"></div><h3>Activity</h3><div class="sub2">Every copy event, the moment it happens.</div><div style="margin-top:10px">${items}</div>`);
+};
+
+// ---------- simulation ----------
+function scheduleSourceClose(c, ms){
+  setTimeout(()=>{
+    const i=S.copies.indexOf(c); if(i<0) return;
+    const final = c.stake * (0.12 + Math.random()*0.25);
+    S.copies.splice(i,1);
+    S.balance += c.stake + final;
+    S.history.unshift({mkt:c.mkt, side:c.side, lev:c.lev, pnl:final, reason:`${c.src} closed → auto-close fired`});
+    notify('✓','var(--green-dim)',`Auto-close fired: ${fmt(final)} on ${c.mkt}`,`${c.src} exited — your copy closed with them`);
+    toast(`${c.src} closed ${c.mkt} → you're out ${fmt(final)}`);
+    S.copiesBadge=true;
+    if(S.tab==='live') renderNav(); else render();
+    $('balPill').textContent='$'+S.balance.toFixed(2)+' READY';
+  }, ms);
+}
+function scheduleSubOpen(idx, ms){
+  setTimeout(()=>{
+    const s=S.subs[idx]; if(!s || s.paused) return;
+    const mkts=[['SOL','long',25,66.5],['ETH','short',20,1666],['BTC','long',40,68400]];
+    const m=mkts[Math.floor(Math.random()*mkts.length)];
+    const c={src:s.name, srcKind:s.kind, col:s.col, mkt:m[0], side:m[1], lev:m[2], stake:s.stake, mark:m[3], pnl:0, autoClose:true, auto:true};
+    S.copies.push(c); s.opens++; S.balance-=s.stake; S.copiesBadge=true;
+    notify('⚡','var(--teal-dim)',`Auto-copy opened ${c.mkt} ${c.lev}x ${c.side} — $${s.stake}`,`${s.name} just entered · mirrored at ${fmtP(c.mark)}`);
+    toast(`Auto-copy: ${s.name} opened ${c.mkt} ${c.side} → you're in with $${s.stake}`);
+    if(S.tab==='live') renderNav(); else render();
+    $('balPill').textContent='$'+S.balance.toFixed(2)+' READY';
+    scheduleSourceClose(c, 12000 + Math.random()*6000);
+  }, ms);
+}
+setInterval(()=>{
+  TRADERS.forEach(t=>{ if(t.trade && t.live) t.trade.mark *= (1 + (Math.random()-0.5)*0.0012); });
+  S.copies.forEach(c=>{ c.pnl += (Math.random()-0.42) * c.stake * 0.04; c.mark *= (1 + (Math.random()-0.5)*0.0012); });
+  if(S.tab==='traders' || S.tab==='copies') render();
+}, 2500);
+
+// ---------- boot ----------
+initTape(); render(); renderBell(); startTapeSim();
+</script>
+</body>
+</html>
