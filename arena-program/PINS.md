@@ -819,3 +819,33 @@ handoff prereq as the rest of flash-tail).
 Roster plan: test-aggro-v2 STAYS in the Railway crank roster as soak fuel
 (trades + 3-account commits = co-packing evidence for MagicBlock); remove
 from ARENA_BOTS + NEXT_PUBLIC_ARENA_BOTS before any public deploy.
+
+## PHASE 1.5 EXECUTED: ARENA LIVE ON MAINNET (2026-06-12 ~12:15 EEST)
+
+Founder funded the admin wallet to 4.896 SOL; full runbook executed in ~6 min:
+
+- **Program deployed to MAINNET**, same id `6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC`
+  (347227b build — fee-vault + per-account intents + spam guard):
+  `4o5Po8AMGnLHLzU5V1Le9VCnNpaiFbcM11BEKWXaCjK7rc4fFZ29AZoEDNswB6dogQMz1cNWLGoKUPmaG9v8ybsV`.
+  Upgrade authority kept on the admin keypair — `solana program close`
+  recovers the ~3.05 SOL programdata rent (founder asked for recoverability;
+  do NOT set immutable). ~/.config/solana/id.json must be backed up.
+- **Bootstrap (init-devnet.ts with mainnet env)**: config + market 0 +
+  scalper-v1 + rider-v1 + crank-payer, all delegated to the **EU validator**
+  `MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e` (eu.magicblock.app).
+  PDAs are byte-identical to devnet market-0 generation (same program +
+  seeds, different cluster): market `BTk9M99…`, scalper `Fgbev9Y…`,
+  rider `Az5PA1S…`, crank-payer `6TpDj4Z…`.
+- **Crank payer funded 0.1 SOL** via the lamports shuttle (program SPLxh1…
+  verified present on mainnet): `4Hntdi8xXa8GvAw25rLJLjSJA69KGDThH88nJaSPFbFwM4x6kvm9UKgDxsi7oG9SJnRoRiiTPSY4GzCxK1z1h1F4`.
+- **Smokes green on the EU mainnet validator**: tick×2 folds real Pyth Lazer
+  SOL prints (updates 1→2, pathLen advancing); commit-once → ER
+  `4StdSfywpgMHteoWPvYizetZXTaU65D4EmUiACToZLCKRmMbE8HLhWvsTbRFNbCuMY7juG4tNw2EXNC2QmmC8GhJ`
+  → 3 independent err-free MAINNET base finalizes (market `62kZHGSR…`,
+  scalper `5f9vzwxf…`, rider `2JWrUDCE…`). Crank-payer debit again 0 —
+  billing inactive/deferred on the EU validator too; 0.1 SOL fuel standing by.
+- **Railway arena-crank flipped to mainnet env** (eu endpoint, MEUGG pin,
+  market 0, v1 roster). Devnet market-1 generation freezes in place as the
+  rehearsal record (test-aggro-v2 retired with it).
+- Local UI env → mainnet (cluster label "mainnet"); browser-verified live.
+  Prod web still ships the arena UI with the pending merge.
