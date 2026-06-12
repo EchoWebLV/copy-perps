@@ -157,6 +157,22 @@ export function isSupportedFlashMarket(
   return normalizeFlashMarket(value) !== null;
 }
 
+/** Flash's place_trigger_order rejects positions below a collateral floor
+ *  with 6034 MinCollateral no matter the trigger level or kind. Measured
+ *  empirically on mainnet (2026-06-12) by simulating SL placements across
+ *  live positions: $0.94/$0.99/$2.26/$6.85/$7.48 all rejected; $9.99/$11.02
+ *  accepted — i.e. the floor sits in ($7.48, $9.99]. We gate at $10 so the
+ *  user gets an honest message instead of an opaque on-chain failure. */
+export const TRIGGER_MIN_COLLATERAL_USD = 10;
+
+export function assertTriggerCollateral(collateralUsd: number): void {
+  if (collateralUsd >= TRIGGER_MIN_COLLATERAL_USD) return;
+  throw new FlashPerpsError(
+    "InvalidTrigger",
+    `TP/SL needs a position with at least $${TRIGGER_MIN_COLLATERAL_USD} collateral — this one has $${collateralUsd.toFixed(2)}. Open with a larger stake (≈$12+) to use triggers.`,
+  );
+}
+
 /** getClosePositionQuote returns `fees` at 8 decimals (verified on-chain
  *  2026-06-12: a $2.26 close fee came back as 226_019_104), unlike the
  *  quote's other USD fields and unlike position.collateralUsd (6 decimals).
@@ -546,6 +562,7 @@ export class FlashPerpsService {
     );
     if (!raw) throw new FlashPerpsError("PositionNotOpen");
     const position = PositionAccount.from(positionPk, raw);
+    assertTriggerCollateral(bnToNumber(position.collateralUsd, USD_DECIMALS));
 
     // Exit fee from a live close quote — feeds getTriggerPriceFromRoiSync.
     let exitFeeUsd: AnchorBN;

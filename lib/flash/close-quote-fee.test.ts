@@ -23,3 +23,22 @@ describe("close-quote fee scaling", () => {
     expect(closeQuoteFeeToUsd6(new BN(0)).toString()).toBe("0");
   });
 });
+
+describe("trigger collateral floor", () => {
+  it("rejects below $10 with an honest message, passes at/above", async () => {
+    const { assertTriggerCollateral, TRIGGER_MIN_COLLATERAL_USD, FlashPerpsError } =
+      await import("./perps");
+    expect(TRIGGER_MIN_COLLATERAL_USD).toBe(10);
+    expect(() => assertTriggerCollateral(0.99)).toThrowError(
+      /at least \$10 collateral.*\$0\.99/,
+    );
+    try {
+      assertTriggerCollateral(7.48);
+    } catch (e) {
+      expect(e).toBeInstanceOf(FlashPerpsError);
+      expect((e as InstanceType<typeof FlashPerpsError>).code).toBe("InvalidTrigger");
+    }
+    expect(() => assertTriggerCollateral(10)).not.toThrow();
+    expect(() => assertTriggerCollateral(443.65)).not.toThrow();
+  });
+});
