@@ -29,17 +29,43 @@
 //
 // Preconditions: the crank payer PDA exists AND is delegated (the shuttle
 // reads the destination's delegation record — init-devnet.ts does both).
-// The SDK only lives in arena-program/node_modules, hence the deep relative
-// import below (its transitive deps resolve from that tree at runtime).
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { web3 } from "@coral-xyz/anchor";
-import {
-  deriveLamportsPda,
-  lamportsDelegatedTransferIx,
-} from "../../arena-program/node_modules/@magicblock-labs/ephemeral-rollups-sdk/lib/index.js";
+
+// The SDK only lives in arena-program/node_modules — a tree the web build
+// never installs (Railway runs the root npm ci only), so a static import
+// breaks `next build`'s typecheck there. require() through a computed path
+// keeps tsc out of it; signatures pinned here, verified against the SDK's
+// ephemeralAta.d.ts.
+function loadSdk(): {
+  deriveLamportsPda(
+    payer: web3.PublicKey,
+    destination: web3.PublicKey,
+    salt: Uint8Array,
+  ): [web3.PublicKey, number];
+  lamportsDelegatedTransferIx(
+    payer: web3.PublicKey,
+    destination: web3.PublicKey,
+    amount: bigint,
+    salt: Uint8Array,
+  ): web3.TransactionInstruction;
+} {
+  const sdkPath = path.join(
+    __dirname,
+    "../../arena-program/node_modules/@magicblock-labs/ephemeral-rollups-sdk/lib/index.js",
+  );
+  try {
+    return require(sdkPath);
+  } catch {
+    throw new Error(
+      "ephemeral-rollups-sdk not found — run `npm install` inside arena-program/ first",
+    );
+  }
+}
+const { deriveLamportsPda, lamportsDelegatedTransferIx } = loadSdk();
 
 // magicblock-delegation-program-api 3.0.0 (PINS.md Task 12 gotcha — NOT the
 // older ...teabpTabdBah id).
