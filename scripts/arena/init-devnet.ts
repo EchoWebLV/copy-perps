@@ -92,11 +92,36 @@ const RIDER_PARAMS: Record<string, number> = {
   maxHoldTicks: 240,
   exitFavorableBps: 150,
 };
+// Aggressive personas (mainnet roster additions, 2026-06-12): same ring
+// momentum, hair-trigger thresholds — they trade routine noise instead of
+// waiting for real breakouts, so the feed always has action.
+const BERSERKER_PARAMS: Record<string, number> = {
+  readSpan: 1,
+  breakoutBps: 10,
+  activityMultBps: 11000, // 1.1x average path
+  trendFilter: 0,
+  stakeFracBps: 1000,
+  leverage: 25,
+  maxHoldTicks: 40, // ~100s at the 15s-bucket crank cadence
+  exitFavorableBps: 20,
+};
+const DEGEN_PARAMS: Record<string, number> = {
+  readSpan: 1,
+  breakoutBps: 5,
+  activityMultBps: 10000, // 1.0x — fires on almost any wiggle
+  trendFilter: 0,
+  stakeFracBps: 1000,
+  leverage: 50,
+  maxHoldTicks: 20, // ~50s
+  exitFavorableBps: 10,
+};
 const BOT_PARAMS: Record<string, Record<string, number>> = {
   "scalper-v1": SCALPER_PARAMS,
   "rider-v1": RIDER_PARAMS,
   "scalper-v2": SCALPER_PARAMS,
   "rider-v2": RIDER_PARAMS,
+  "berserker-v1": BERSERKER_PARAMS,
+  "degen-v1": DEGEN_PARAMS,
 };
 
 const BOTS: { name: string; params: Record<string, number> }[] = (

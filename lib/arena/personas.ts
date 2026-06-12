@@ -43,6 +43,16 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     emoji: "🏄",
     blurb: "1m trend rider, 20x",
   },
+  "berserker-v1": {
+    display: "Berserker",
+    emoji: "🪓",
+    blurb: "hair-trigger scalps, 25x",
+  },
+  "degen-v1": {
+    display: "Degen",
+    emoji: "🎰",
+    blurb: "trades every wiggle, 50x",
+  },
 };
 
 /** utf8 bytes zero-padded/truncated to 16 — identical to init-devnet.ts
