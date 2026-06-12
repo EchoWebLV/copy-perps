@@ -157,6 +157,19 @@ export function isSupportedFlashMarket(
   return normalizeFlashMarket(value) !== null;
 }
 
+/** getClosePositionQuote returns `fees` at 8 decimals (verified on-chain
+ *  2026-06-12: a $2.26 close fee came back as 226_019_104), unlike the
+ *  quote's other USD fields and unlike position.collateralUsd (6 decimals).
+ *  Rescale before mixing it into 6dp USD math — fed raw into
+ *  getTriggerPriceFromRoiSync it inflates the exit fee 100×, swamps the ROI
+ *  term, and every TP/SL computes to ≈ entry price (on-chain rejects 6049
+ *  InvalidStopLossPrice / 6034 MinCollateral). */
+export const CLOSE_QUOTE_FEE_DECIMALS = 8;
+
+export function closeQuoteFeeToUsd6(fees: AnchorBN): AnchorBN {
+  return fees.div(new BN(10 ** (CLOSE_QUOTE_FEE_DECIMALS - USD_DECIMALS)));
+}
+
 export function assertFlashTrade(input: {
   amountUsd: number;
   leverage: number;
@@ -507,7 +520,7 @@ export class FlashPerpsService {
         inputSymbol: "USDC",
         collateralSymbol,
         receiveUsd: bnToNumber(quote.receiveTokenAmountUsd, USD_DECIMALS),
-        feesUsd: bnToNumber(quote.fees, USD_DECIMALS),
+        feesUsd: bnToNumber(quote.fees, CLOSE_QUOTE_FEE_DECIMALS),
         isProfitable: quote.isProfitable,
       },
       position: applyCloseQuoteToSummary(
@@ -536,6 +549,8 @@ export class FlashPerpsService {
 
     // Exit fee from a live close quote — feeds getTriggerPriceFromRoiSync.
     let exitFeeUsd: AnchorBN;
+    let markPriceUsd: number;
+    let liqPriceUsd: number;
     try {
       const quote = await client.getClosePositionQuote(
         positionPk,
@@ -548,7 +563,9 @@ export class FlashPerpsService {
         null,
         owner,
       );
-      exitFeeUsd = quote.fees;
+      exitFeeUsd = closeQuoteFeeToUsd6(quote.fees);
+      markPriceUsd = contractPriceToNumber(quote.markPrice);
+      liqPriceUsd = contractPriceToNumber(quote.existingLiquidationPrice);
     } catch (err) {
       throw new FlashPerpsError("QuoteFailed", String(err));
     }
@@ -570,6 +587,39 @@ export class FlashPerpsService {
       throw new FlashPerpsError("InvalidTrigger", String(err));
     }
     const triggerPrice = triggerOraclePrice.toContractOraclePrice();
+    // Pre-flight what the program will enforce (pool.rs): a long SL must sit
+    // between liquidation and mark, a long TP above mark — mirrored for
+    // shorts. Failing here turns an inevitable on-chain 6049/6050 into a
+    // friendly 400 with the actual constraint in the message.
+    {
+      const t = contractPriceToNumber(triggerPrice);
+      const fmt = (v: number) => `$${v.toFixed(2)}`;
+      const isLong = req.side === "long";
+      if (req.kind === "sl") {
+        const aboveMark = isLong ? t >= markPriceUsd : t <= markPriceUsd;
+        const pastLiq = isLong ? t <= liqPriceUsd : t >= liqPriceUsd;
+        if (aboveMark) {
+          throw new FlashPerpsError(
+            "InvalidTrigger",
+            `stop loss ${fmt(t)} is past the current price ${fmt(markPriceUsd)} — pick a smaller loss`,
+          );
+        }
+        if (pastLiq) {
+          throw new FlashPerpsError(
+            "InvalidTrigger",
+            `stop loss ${fmt(t)} is beyond the liquidation price ${fmt(liqPriceUsd)} — pick a tighter stop`,
+          );
+        }
+      } else {
+        const belowMark = isLong ? t <= markPriceUsd : t >= markPriceUsd;
+        if (belowMark) {
+          throw new FlashPerpsError(
+            "InvalidTrigger",
+            `take profit ${fmt(t)} is behind the current price ${fmt(markPriceUsd)} — pick a larger gain`,
+          );
+        }
+      }
+    }
     const isStopLoss = req.kind === "sl";
     const collateralSymbol = this.collateralSymbolForMarket(poolConfig, market);
 
