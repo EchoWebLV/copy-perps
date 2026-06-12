@@ -11,6 +11,7 @@ import type { ArenaBot } from "@/lib/arena/decode";
 import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
 import { parseArenaEnv } from "@/lib/arena/use-arena-live";
+import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
 import { BG, DIM, FAINT, FG, GREEN, RED, Headline } from "@/components/v2/ui";
 import { fmtArenaPrice } from "./BotCard";
 
@@ -182,21 +183,25 @@ export function BotProfile({
         >
           Decisions are made by program code running in a MagicBlock Ephemeral
           Rollup; prices come from the Pyth Lazer oracle feed operated by
-          MagicBlock. Devnet demo.
+          MagicBlock.{" "}
+          {isDevnetEndpoint(env?.endpoint)
+            ? "Devnet demo."
+            : "State is committed to Solana mainnet — check it yourself:"}
           {pda && (
             <div className="mt-2 flex flex-wrap gap-3">
               <a
-                href={`https://solscan.io/account/${pda}?cluster=devnet`}
+                href={solscanAccountUrl(pda, env?.endpoint)}
                 target="_blank"
                 rel="noreferrer"
                 className="underline underline-offset-2"
                 style={{ color: FG }}
               >
-                view raw bot account (devnet)
+                view raw bot account
+                {isDevnetEndpoint(env?.endpoint) ? " (devnet)" : ""}
               </a>
               {env && (
                 <a
-                  href={`https://solscan.io/account/${env.programId.toBase58()}?cluster=devnet`}
+                  href={solscanAccountUrl(env.programId.toBase58(), env.endpoint)}
                   target="_blank"
                   rel="noreferrer"
                   className="underline underline-offset-2"

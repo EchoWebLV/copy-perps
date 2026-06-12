@@ -8,7 +8,8 @@
 // only the transport indicator stays a skeleton.
 
 import { useEffect, useState } from "react";
-import { isStale, useArenaLive } from "@/lib/arena/use-arena-live";
+import { isStale, parseArenaEnv, useArenaLive } from "@/lib/arena/use-arena-live";
+import { isDevnetEndpoint } from "@/lib/arena/solscan";
 import {
   BG,
   DIM,
@@ -119,7 +120,10 @@ export function ArenaRoster() {
             >
               Decisions are made by program code running in a MagicBlock
               Ephemeral Rollup; prices come from the Pyth Lazer oracle feed
-              operated by MagicBlock. Devnet demo.
+              operated by MagicBlock.{" "}
+              {isDevnetEndpoint(parseArenaEnv()?.endpoint)
+                ? "Devnet demo."
+                : "State is committed to Solana mainnet."}
             </p>
           </>
         )}
