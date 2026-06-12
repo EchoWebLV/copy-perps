@@ -24,16 +24,22 @@ describe("Flash fast perps game contract", () => {
     expect(page).toContain("Flash minimum position is $10 notional");
   });
 
-  it("defaults manual Scalp to Flash Degen mode at 500x", () => {
+  it("defaults manual Scalp to standard mode at 20x — degen is opt-in", () => {
     const page = source();
 
     expect(page).toContain('type TradeMode = "standard" | "degen"');
     expect(page).toContain("const DEGEN_LEVERAGES = [125, 250, 500] as const");
-    expect(page).toContain('useState<TradeMode>("degen")');
-    expect(page).toContain("useState(500)");
+    // New safe default: standard 20x (not degen 500x).
+    expect(page).toContain('useState<TradeMode>("standard")');
+    expect(page).toContain("useState(20)");
+    expect(page).not.toContain('useState<TradeMode>("degen")');
+    expect(page).not.toContain("useState(500)");
     expect(page).toContain("mode: tradeMode");
     expect(page).toContain('result.phase === "sent"');
     expect(page).toContain('`${side.toUpperCase()} ${market} ${leverage}x`');
+    // Liquidation warning shown for all degen leverages (≥125x).
+    expect(page).toContain("leverage >= 125");
+    expect(page).toContain("(100 / leverage).toFixed(2)}% move against you liquidates.");
   });
 
   it("opens and closes through Flash routes with user-signed transactions", () => {

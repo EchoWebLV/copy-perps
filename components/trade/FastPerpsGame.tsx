@@ -297,9 +297,9 @@ export function FastPerpsGame() {
 
   const [market, setMarket] = useState<Market>("SOL");
   const [side, setSide] = useState<TradeSide>("long");
-  const [tradeMode, setTradeMode] = useState<TradeMode>("degen");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("standard");
   const [stake, setStake] = useState(1);
-  const [leverage, setLeverage] = useState(500);
+  const [leverage, setLeverage] = useState(20);
   const [customStake, setCustomStake] = useState("");
   const [positions, setPositions] = useState<FlashPosition[]>([]);
   const [busy, setBusy] = useState(false);
@@ -1184,6 +1184,14 @@ export function FastPerpsGame() {
                     );
                   })}
                 </div>
+                {leverage >= 125 && (
+                  <div
+                    className="mt-1.5 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest"
+                    style={{ background: `${RED}18`, color: RED, border: `1px solid ${RED}45` }}
+                  >
+                    At {leverage}x a {(100 / leverage).toFixed(2)}% move against you liquidates.
+                  </div>
+                )}
               </div>
             </>
           )}
