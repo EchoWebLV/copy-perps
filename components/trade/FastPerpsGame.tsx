@@ -6,11 +6,6 @@ import { usePrivy, useSessionSigners, type User } from "@privy-io/react-auth";
 import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
-import { OracleLiveBadge } from "@/components/trade/OracleLiveBadge";
-import {
-  ScalpOracleFooter,
-  ScalpOracleHero,
-} from "@/components/trade/ScalpOracleHero";
 import {
   flashLeverageOptionsForMarket,
   flashMarketConfigForSymbol,
@@ -961,9 +956,6 @@ export function FastPerpsGame() {
           aria-label="Live chart"
           className="min-h-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:flex-col"
         >
-          {/* Template-style oracle hero (pyth-template.magicblock.app):
-              market pill + Connected badge + big glowing live price. */}
-          <ScalpOracleHero market={market} />
           {/* The hero graph. Idle (no position) it plots the selected market's
               live mark tinted by the chosen side; with a position open it
               flips to the colored money line. Mobile shows a compact idle
@@ -1013,9 +1005,6 @@ export function FastPerpsGame() {
               side={selectedPosition ? selectedPosition.side : side}
             />
           </div>
-          {/* Template-style footer: on-chain account caption + price-update
-              counter + live stream cards. */}
-          <ScalpOracleFooter market={market} />
         </section>
 
         <aside
@@ -1672,8 +1661,7 @@ function LivePerpGraph({
       ];
 
   return (
-    <div ref={containerRef} className="relative h-full w-full">
-      <OracleLiveBadge />
+    <div ref={containerRef} className="h-full w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"

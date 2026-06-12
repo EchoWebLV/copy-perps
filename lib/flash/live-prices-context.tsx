@@ -26,16 +26,14 @@ type FlashLiveMarks = Partial<Record<FlashLivePriceSymbol, FlashLiveMark>>;
 interface FlashLivePriceContextValue {
   marks: FlashLiveMarks;
   /** Wall-clock ms of the last mark delivered by the ER oracle ws
-   *  (0 = never). Lets the UI badge "live oracle" vs SSE-only honestly. */
+   *  (0 = never). Operational signal — lets UI distinguish oracle-fed from
+   *  SSE-fallback honestly if it ever needs to. */
   lastOracleDeliveryMs: number;
-  /** Total ER oracle deliveries this mount (the template-style counter). */
-  oracleUpdateCount: number;
 }
 
 const FlashLivePriceContext = createContext<FlashLivePriceContextValue>({
   marks: {},
   lastOracleDeliveryMs: 0,
-  oracleUpdateCount: 0,
 });
 
 /** ER pushes arrive every ~50ms per feed; rendering each one would re-render
@@ -64,12 +62,10 @@ export function FlashLivePriceProvider({
 }) {
   const [marks, setMarks] = useState<FlashLiveMarks>({});
   const [lastOracleDeliveryMs, setLastOracleDeliveryMs] = useState(0);
-  const [oracleUpdateCount, setOracleUpdateCount] = useState(0);
   // Logs "oracle live" exactly once per mount (operational breadcrumb).
   const oracleSeenRef = useRef(false);
   // Throttle buffers: latest pending mark per symbol + delivery accounting.
   const pendingMarksRef = useRef<FlashLiveMarks>({});
-  const pendingCountRef = useRef(0);
   const pendingDeliveryMsRef = useRef(0);
 
   // Single flush loop for both sources: applies the freshest buffered mark
@@ -77,11 +73,9 @@ export function FlashLivePriceProvider({
   useEffect(() => {
     const id = setInterval(() => {
       const pending = pendingMarksRef.current;
-      const pendingCount = pendingCountRef.current;
       const pendingDeliveryMs = pendingDeliveryMsRef.current;
-      if (Object.keys(pending).length === 0 && pendingCount === 0) return;
+      if (Object.keys(pending).length === 0 && pendingDeliveryMs === 0) return;
       pendingMarksRef.current = {};
-      pendingCountRef.current = 0;
       pendingDeliveryMsRef.current = 0;
       if (Object.keys(pending).length > 0) {
         setMarks((current) => {
@@ -93,9 +87,6 @@ export function FlashLivePriceProvider({
           }
           return merged;
         });
-      }
-      if (pendingCount > 0) {
-        setOracleUpdateCount((n) => n + pendingCount);
       }
       if (pendingDeliveryMs > 0) {
         setLastOracleDeliveryMs(pendingDeliveryMs);
@@ -169,7 +160,6 @@ export function FlashLivePriceProvider({
               );
             }
             buffer(symbol, mark);
-            pendingCountRef.current += 1;
             pendingDeliveryMsRef.current = Date.now();
           },
           { commitment: "processed" },
@@ -186,8 +176,8 @@ export function FlashLivePriceProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ marks, lastOracleDeliveryMs, oracleUpdateCount }),
-    [marks, lastOracleDeliveryMs, oracleUpdateCount],
+    () => ({ marks, lastOracleDeliveryMs }),
+    [marks, lastOracleDeliveryMs],
   );
   return (
     <FlashLivePriceContext.Provider value={value}>
@@ -203,16 +193,4 @@ export function useFlashLiveMarks(): FlashLiveMarks {
 /** Wall-clock ms of the last ER-oracle mark delivery (0 = never). */
 export function useFlashOracleDeliveryMs(): number {
   return useContext(FlashLivePriceContext).lastOracleDeliveryMs;
-}
-
-/** Template-style stats: total ER deliveries + last delivery time. */
-export function useFlashOracleStats(): {
-  updateCount: number;
-  lastDeliveryMs: number;
-} {
-  const ctx = useContext(FlashLivePriceContext);
-  return {
-    updateCount: ctx.oracleUpdateCount,
-    lastDeliveryMs: ctx.lastOracleDeliveryMs,
-  };
 }
