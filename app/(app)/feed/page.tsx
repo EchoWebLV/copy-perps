@@ -21,7 +21,7 @@ export default async function FeedPage() {
     : [];
 
   return (
-    <AppShell railTitle="Feed" hideEmptyRail>
+    <AppShell railTitle="Traders" hideEmptyRail>
       <UnifiedFeed initialWhales={initialWhales} />
       <BottomNav />
     </AppShell>

@@ -427,11 +427,11 @@ function PhoneShowcase() {
               className="flex items-center justify-around border-t px-2 pt-2 pb-3"
               style={{ borderColor: FAINT }}
             >
-              <NavSlot icon={<Flame size={15} />} label="Whales" active />
-              <NavSlot icon={<ChartCandlestick size={15} />} label="Scalp" />
-              <NavSlot icon={<Zap size={15} />} label="Pulse" />
-              <NavSlot icon={<PieChart size={15} />} label="Folio" />
-              <NavSlot icon={<Settings size={15} />} label="Settings" />
+              <NavSlot icon={<Flame size={15} />} label="Traders" active />
+              <NavSlot icon={<ChartCandlestick size={15} />} label="Trade" />
+              <NavSlot icon={<Zap size={15} />} label="Live" />
+              <NavSlot icon={<PieChart size={15} />} label="Portfolio" />
+              <NavSlot icon={<Settings size={15} />} label="Wallet" />
             </div>
           </div>
         </div>
@@ -679,25 +679,25 @@ function SectionEyebrow({ children }: { children: ReactNode }) {
 const SURFACES = [
   {
     icon: Flame,
-    tab: "Whales",
+    tab: "Traders",
     title: "The roster",
     body: "Every tracked wallet ranked by heat, with live P/L curves and open exposure. The best traders on-chain, lined up like a leaderboard.",
   },
   {
     icon: ChartCandlestick,
-    tab: "Scalp",
+    tab: "Trade",
     title: "You vs. the candle",
     body: "Feeling yourself? Skip the whales and go direct. One-tap long or short with leverage. Fast in, fast out.",
   },
   {
     icon: Zap,
-    tab: "Pulse",
+    tab: "Live",
     title: "The tape, narrated",
     body: "Every whale open and close the second it happens, as a scrollable feed. React, comment, and tail straight from the timeline.",
   },
   {
     icon: PieChart,
-    tab: "Folio",
+    tab: "Portfolio",
     title: "Your receipts",
     body: "Every copy you're riding and everything you've banked, marked to market live. Green or red, the folio doesn't lie.",
   },

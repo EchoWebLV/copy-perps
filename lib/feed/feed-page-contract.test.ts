@@ -16,7 +16,7 @@ describe("feed page contract", () => {
     expect(source).toContain("buildCompactRosterWithTimeout");
     expect(source).toContain("initialWhales={initialWhales}");
     expect(source).not.toContain("initialWhales={[]}");
-    expect(source).toContain('<AppShell railTitle="Feed" hideEmptyRail>');
+    expect(source).toContain('<AppShell railTitle="Traders" hideEmptyRail>');
     expect(source).not.toContain("buildWhaleTraderSignals");
     expect(source).not.toContain("buildWhalePositionSignals");
   });
