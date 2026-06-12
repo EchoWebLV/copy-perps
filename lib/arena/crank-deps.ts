@@ -37,11 +37,17 @@ import {
 } from "@/lib/arena/lease";
 import type { CrankDeps, CrankMarket, TickPlanEntry } from "./crank";
 
-// Oracle feed per market id. Market 0 = SOL/USD pushed by MagicBlock's devnet
-// oracle (PINS.md Spike B — PDA is cluster-independent). BTC/ETH markets get
-// their feeds added here when init-devnet grows them.
+// Oracle feed per market id. Markets 0 and 1 are both SOL/USD pushed by
+// MagicBlock's devnet oracle (PINS.md Spike B — PDA is cluster-independent):
+// market 0 is the original wedged delegation (2026-06-12 incident), market 1
+// its live successor. BTC/ETH markets get their feeds added here when
+// init-devnet grows them.
+const SOL_FEED = new web3.PublicKey(
+  "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu",
+);
 const FEEDS: Record<number, web3.PublicKey> = {
-  0: new web3.PublicKey("ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu"),
+  0: SOL_FEED,
+  1: SOL_FEED,
 };
 
 // magicblock-delegation-program-api 3.0.0 id (PINS.md Task 12 gotchas — NOT
@@ -57,7 +63,18 @@ const DELEGATION_PROGRAM_ID = new web3.PublicKey(
 // this validator, so a different ER deployment needs ARENA_ER_VALIDATOR set.
 const DEFAULT_ER_VALIDATOR = "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57";
 
-const MARKET_ID = 0;
+// u8 market PDA seed byte, env-overridable so the crank can follow a market
+// migration (ARENA_MARKET_ID=1 since the 2026-06-12 wedge sidestep) without
+// a code change. Parsed lazily in buildRealCrankDeps so a bad value fails
+// loudly at startup, not at module load.
+function resolveMarketId(): number {
+  const raw = process.env.ARENA_MARKET_ID?.trim() || "0";
+  const id = Number.parseInt(raw, 10);
+  if (!Number.isInteger(id) || id < 0 || id > 255) {
+    throw new Error(`ARENA_MARKET_ID must be a u8, got "${raw}"`);
+  }
+  return id;
+}
 const DEFAULT_BOTS = "scalper-v1,rider-v1";
 // Worst-case wait for an ER signature status before declaring the tick lost.
 // The devnet ER confirms in well under a second; the 5s cap only bites while
@@ -124,6 +141,10 @@ export async function buildRealCrankDeps(): Promise<CrankDeps> {
   if (botNames.length === 0) {
     throw new Error("ARENA_BOTS resolved to zero personas");
   }
+  const MARKET_ID = resolveMarketId();
+  if (!FEEDS[MARKET_ID]) {
+    throw new Error(`no oracle feed configured for market ${MARKET_ID}`);
+  }
 
   const payer = loadCrankKeypair();
   const er = new web3.Connection(erEndpoint, "confirmed");
@@ -159,7 +180,7 @@ export async function buildRealCrankDeps(): Promise<CrankDeps> {
     )[0].toBase58(),
   );
   console.log(
-    `[arena] crank deps: program=${program.programId.toBase58()} er=${erEndpoint} payer=${payer.publicKey.toBase58()} bots=${botNames.join(",")}`,
+    `[arena] crank deps: program=${program.programId.toBase58()} er=${erEndpoint} payer=${payer.publicKey.toBase58()} market=${MARKET_ID} bots=${botNames.join(",")}`,
   );
 
   const botMetas = (pubkeys: string[]) =>

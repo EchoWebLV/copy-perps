@@ -18,7 +18,10 @@ export interface ArenaPersona {
   blurb: string;
 }
 
-/** Display metadata keyed by on-chain persona name. */
+/** Display metadata keyed by on-chain persona name.
+ *  v2 personas are the live roster on market 1 — fresh accounts stood up to
+ *  sidestep the wedged v1 delegations (PINS.md 2026-06-12 incident). Same
+ *  strategies and display names; only the on-chain identity differs. */
 export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
   "scalper-v1": {
     display: "Scalper",
@@ -26,6 +29,16 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     blurb: "15s momentum, 100x",
   },
   "rider-v1": {
+    display: "Trend Rider",
+    emoji: "🏄",
+    blurb: "1m trend rider, 20x",
+  },
+  "scalper-v2": {
+    display: "Scalper",
+    emoji: "⚡",
+    blurb: "15s momentum, 100x",
+  },
+  "rider-v2": {
     display: "Trend Rider",
     emoji: "🏄",
     blurb: "1m trend rider, 20x",

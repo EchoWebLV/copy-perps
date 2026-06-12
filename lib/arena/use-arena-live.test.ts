@@ -64,13 +64,35 @@ describe("parseArenaEnv", () => {
     expect(env!.botNames).toEqual(["scalper-v1", "rider-v1"]);
   });
 
+  it("parses the market id, defaulting and clamping bad values to 0", () => {
+    expect(parseArenaEnv({ programId: PROGRAM_ID_B58 })!.marketId).toBe(0);
+    expect(
+      parseArenaEnv({ programId: PROGRAM_ID_B58, marketId: "1" })!.marketId,
+    ).toBe(1);
+    expect(
+      parseArenaEnv({ programId: PROGRAM_ID_B58, marketId: " 7 " })!.marketId,
+    ).toBe(7);
+    // Out-of-u8 or garbage → 0 (fail-closed to the canonical market).
+    expect(
+      parseArenaEnv({ programId: PROGRAM_ID_B58, marketId: "256" })!.marketId,
+    ).toBe(0);
+    expect(
+      parseArenaEnv({ programId: PROGRAM_ID_B58, marketId: "-1" })!.marketId,
+    ).toBe(0);
+    expect(
+      parseArenaEnv({ programId: PROGRAM_ID_B58, marketId: "abc" })!.marketId,
+    ).toBe(0);
+  });
+
   it("reads NEXT_PUBLIC_ARENA_* from process.env by default", () => {
     vi.stubEnv("NEXT_PUBLIC_ARENA_PROGRAM_ID", PROGRAM_ID_B58);
     vi.stubEnv("NEXT_PUBLIC_ARENA_ER_ENDPOINT", "https://er.example.com");
     vi.stubEnv("NEXT_PUBLIC_ARENA_BOTS", "a-bot,b-bot");
+    vi.stubEnv("NEXT_PUBLIC_ARENA_MARKET_ID", "1");
     expect(parseArenaEnv()).toMatchObject({
       endpoint: "https://er.example.com",
       botNames: ["a-bot", "b-bot"],
+      marketId: 1,
     });
     vi.stubEnv("NEXT_PUBLIC_ARENA_PROGRAM_ID", undefined);
     expect(parseArenaEnv()).toBeNull();

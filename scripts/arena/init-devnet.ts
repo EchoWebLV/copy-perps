@@ -51,37 +51,66 @@ export const personaId = (name: string): number[] => {
   return Array.from(buf);
 };
 
-const MARKET_ID = 0;
+// u8 market PDA seed byte. Env-overridable (ARENA_MARKET_ID) so a fresh
+// market can be stood up without touching a wedged one — market 0 is the
+// original delegation stuck in the 2026-06-12 undelegation incident
+// (PINS.md); market 1 is its live successor.
+const MARKET_ID = (() => {
+  const raw = process.env.ARENA_MARKET_ID?.trim() || "0";
+  const id = Number.parseInt(raw, 10);
+  if (!Number.isInteger(id) || id < 0 || id > 255) {
+    throw new Error(`ARENA_MARKET_ID must be a u8, got "${raw}"`);
+  }
+  return id;
+})();
 const START_BALANCE = new BN(1_000_000_000); // $1,000 in micro-USD
 
-const BOTS: { name: string; params: Record<string, number> }[] = [
-  {
-    name: "scalper-v1",
-    params: {
-      readSpan: 1,
-      breakoutBps: 60,
-      activityMultBps: 14000,
-      trendFilter: 1, // u8 0/1 — bool is not Pod (state.rs)
-      stakeFracBps: 1000,
-      leverage: 100,
-      maxHoldTicks: 90,
-      exitFavorableBps: 100,
-    },
-  },
-  {
-    name: "rider-v1",
-    params: {
-      readSpan: 4,
-      breakoutBps: 80,
-      activityMultBps: 14000,
-      trendFilter: 1,
-      stakeFracBps: 1000,
-      leverage: 20,
-      maxHoldTicks: 240,
-      exitFavorableBps: 150,
-    },
-  },
-];
+// Strategy params per persona name. The roster actually initialized comes
+// from ARENA_BOTS (comma-separated names, default the v1 pair) — every name
+// must have an entry here. v2 personas are byte-for-byte the same strategies
+// as v1 on fresh PDAs (wedge sidestep — see MARKET_ID note above).
+const SCALPER_PARAMS: Record<string, number> = {
+  readSpan: 1,
+  breakoutBps: 60,
+  activityMultBps: 14000,
+  trendFilter: 1, // u8 0/1 — bool is not Pod (state.rs)
+  stakeFracBps: 1000,
+  leverage: 100,
+  maxHoldTicks: 90,
+  exitFavorableBps: 100,
+};
+const RIDER_PARAMS: Record<string, number> = {
+  readSpan: 4,
+  breakoutBps: 80,
+  activityMultBps: 14000,
+  trendFilter: 1,
+  stakeFracBps: 1000,
+  leverage: 20,
+  maxHoldTicks: 240,
+  exitFavorableBps: 150,
+};
+const BOT_PARAMS: Record<string, Record<string, number>> = {
+  "scalper-v1": SCALPER_PARAMS,
+  "rider-v1": RIDER_PARAMS,
+  "scalper-v2": SCALPER_PARAMS,
+  "rider-v2": RIDER_PARAMS,
+};
+
+const BOTS: { name: string; params: Record<string, number> }[] = (
+  process.env.ARENA_BOTS || "scalper-v1,rider-v1"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((name) => {
+    const params = BOT_PARAMS[name];
+    if (!params) {
+      throw new Error(
+        `no strategy params for persona "${name}" — add it to BOT_PARAMS in init-devnet.ts`,
+      );
+    }
+    return { name, params };
+  });
 
 function baseRpcUrl(): string {
   if (process.env.ARENA_DEVNET_RPC) return process.env.ARENA_DEVNET_RPC;

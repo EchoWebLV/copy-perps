@@ -648,3 +648,43 @@ the pattern):
   equity, flat state) → profile modal (stats grid, empty-tape copy, Solscan
   devnet links to the real bot PDA + program). Production build green with
   /arena in the route table.
+
+## Market-1 generation: wedge sidestep LIVE on devnet (2026-06-12 morning)
+
+Rather than wait for MagicBlock to unstick the market-0 undelegation (their
+internal check pending — see the 2026-06-12 incident entry), a fresh
+generation was stood up next to it. Market 0 + scalper-v1/rider-v1 stay
+wedged-delegated until MagicBlock's fix and then simply retire (no
+re-delegation planned); `/tmp/arena-recover2.sh` watches for the ownership
+flip purely as a courtesy signal.
+
+- **Program upgraded in place** to the 4a1b35e build (magic_fee_vault +
+  per-account intents): `3LCsyrwhnwHKquTDRqLHn2HhV4R38u9p7CnQ1Fj57SRDrZCJCu7SxTqadjsYDgY6Girba7RGZUjTeiF65FVHYX9e`.
+  Lockstep concern moot — every consumer of the old shape was already dead
+  (market-0 ticks failing 3007 since the wedge).
+- **Market id is now env-driven everywhere** (`ARENA_MARKET_ID`, default 0):
+  init-devnet.ts / tick-once.ts / redelegate.ts / commit-once.ts /
+  lib/arena/crank-deps.ts / parseArenaEnv (`NEXT_PUBLIC_ARENA_MARKET_ID`).
+  Roster params keyed by persona name in init-devnet.ts BOT_PARAMS
+  (v2 == v1 strategies byte-for-byte, fresh PDAs).
+- **Live generation (all delegated to MAS1…zk57, validator pinned):**
+  - market 1 `F45qAoXf4ZnBvBLcFmNUws9GGhGyjn6MZQMvgfgrtZML`
+    (init `2J3KfZVbPHuky4XbFnp9D5SDZ3XBVdLxHa1zrwuTmiieo3GsrW4upFFR52UHBmXEU1e7aPUBNi4u4AJsmhuy5ncm`)
+  - scalper-v2 `82pSMR2Qj1T27SXmWBxnvUBwVZWYEBzixAGT5ke1ttxH`
+  - rider-v2 `2XbMh7EGTDBkJbUo1zSpQFqRDzdJ3SP3dXNx2Egy5eXY`
+  - crank-payer `6TpDj4Z5h1v9MqFNpvSy4nYZFQB2Yrhgov6MKUpmveWS`, delegated
+    then funded 0.2 SOL via the lamports shuttle
+    (`3Dd8sbebHAd18Sob1w5ikJWqyn1STVeJ7iPUC35xWeNh6Y1bYVQkdWgEa1zr4Kt5GXQvXaesG3quhvuEkLxDHStL`)
+- **Per-account intents PROVEN on the real devnet validator** —
+  scripts/arena/commit-once.ts (new ops tool: force one commit + assert
+  per-account base finalize). ER commit
+  `4h6yVCxm3EvFivKPGBDDNp35VkCGndQ2ioKLLUw9SAvXiazt3KMxcBWijPmeQAUATQend8gr5uJ1k87kkw3tiyUx`
+  → three independent err-free base finalizes:
+  market-1 `RzHNJwndW8Lv8qUHE2uw4U7tBmERQ7dezQfJkq2Kzec8tbVRD8VHBxuWFQg9tYCW5EGMSMDeK37RxHQPc4HCPxb`,
+  scalper-v2 `4DDy8RSXqTybo1yBuzpmWr2wzRDbHLW7R7MDNMrT4wgEoirH8YGfSix9fnLnXisQPCVcKFeUNN9G58f9e6fuvw7G`,
+  rider-v2 `3CYr5B77fTPWeqf66JKYC3emzDtbEZJ9kgyo4Fioujv5fEda6peCvbq4btyRy8wSXAhkV2oE4a7WwqeYPpQTXJvv`.
+  This is byte-for-byte the operation class that wedged market 0.
+- **Crank-payer debit observed: 0 lamports on devnet too** (same as local).
+  Billing appears inactive/deferred; the quota-lift proof is therefore
+  "commit #11 lands" during the soak (sponsored path died at exactly 10).
+  Re-measure fund-crank-payer.ts sizing once billing activates.

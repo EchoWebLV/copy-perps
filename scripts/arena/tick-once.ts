@@ -31,8 +31,17 @@ import { Program, web3 } from "@coral-xyz/anchor";
 const SOL_FEED = new web3.PublicKey(
   "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu",
 );
-const MARKET_ID = 0;
-const BOT_NAMES = ["scalper-v1", "rider-v1"];
+// Market + roster follow the env (ARENA_MARKET_ID / ARENA_BOTS) so this smoke
+// works against any market generation — defaults match the original Task 13
+// deployment (market 0, v1 bots).
+const MARKET_ID = Number.parseInt(
+  process.env.ARENA_MARKET_ID?.trim() || "0",
+  10,
+);
+const BOT_NAMES = (process.env.ARENA_BOTS || "scalper-v1,rider-v1")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const personaId = (name: string): number[] => {
   const buf = Buffer.alloc(16);

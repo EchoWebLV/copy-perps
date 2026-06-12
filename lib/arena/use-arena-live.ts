@@ -48,12 +48,17 @@ export interface ArenaEnvConfig {
   programId: PublicKey;
   endpoint: string;
   botNames: string[];
+  /** u8 market id (the market PDA seed byte). Market 0 = the original devnet
+   *  market wedged by the 2026-06-12 undelegation incident (PINS.md); its
+   *  live successor runs as market 1. */
+  marketId: number;
 }
 
 export interface RawArenaEnv {
   programId?: string;
   endpoint?: string;
   bots?: string;
+  marketId?: string;
 }
 
 /** Parse the client arena env. Returns null when the program id is missing
@@ -66,6 +71,7 @@ export function parseArenaEnv(
     programId: process.env.NEXT_PUBLIC_ARENA_PROGRAM_ID,
     endpoint: process.env.NEXT_PUBLIC_ARENA_ER_ENDPOINT,
     bots: process.env.NEXT_PUBLIC_ARENA_BOTS,
+    marketId: process.env.NEXT_PUBLIC_ARENA_MARKET_ID,
   },
 ): ArenaEnvConfig | null {
   const idStr = raw.programId?.trim();
@@ -80,10 +86,19 @@ export function parseArenaEnv(
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  // Market id must be a valid PDA seed byte; anything unparseable falls back
+  // to 0 (same fail-closed spirit as the defaults above — the page renders,
+  // pointed at the canonical market).
+  const parsedMarket = Number.parseInt(raw.marketId?.trim() || "0", 10);
+  const marketId =
+    Number.isInteger(parsedMarket) && parsedMarket >= 0 && parsedMarket <= 255
+      ? parsedMarket
+      : 0;
   return {
     programId,
     endpoint: raw.endpoint?.trim() || DEFAULT_ER_ENDPOINT,
     botNames: botNames.length > 0 ? botNames : [...DEFAULT_BOT_NAMES],
+    marketId,
   };
 }
 
@@ -167,7 +182,7 @@ export function useArenaLive(): ArenaLive {
 
     const conn = getArenaConnection(env.endpoint);
     const accounts = [
-      marketPda(env.programId),
+      marketPda(env.programId, env.marketId),
       ...env.botNames.map((n) => botPda(n, env.programId)),
     ];
 

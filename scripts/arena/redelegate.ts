@@ -27,6 +27,13 @@ const BOTS = (process.env.ARENA_BOTS || "scalper-v1,rider-v1")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+// Market follows ARENA_MARKET_ID like every other arena script. To reset the
+// ORIGINAL wedged generation explicitly:
+//   ARENA_MARKET_ID=0 ARENA_BOTS=scalper-v1,rider-v1 npx tsx ... redelegate.ts
+const MARKET_ID = Number.parseInt(
+  process.env.ARENA_MARKET_ID?.trim() || "0",
+  10,
+);
 
 const personaId = (name: string): Buffer => {
   const buf = Buffer.alloc(16);
@@ -74,7 +81,7 @@ async function main() {
     program.programId,
   );
   const [marketPda] = web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("market"), Buffer.from([0])],
+    [Buffer.from("market"), Buffer.from([MARKET_ID])],
     program.programId,
   );
   const botMetas = BOTS.map((name) => ({
@@ -92,7 +99,7 @@ async function main() {
   if (marketOwner?.equals(DELEGATION_PROGRAM_ID)) {
     console.log("undelegating via ER (commit_and_undelegate)...");
     const tx = await program.methods
-      .undelegateAll(0)
+      .undelegateAll(MARKET_ID)
       .accountsPartial({
         config: configPda,
         admin: admin.publicKey,
