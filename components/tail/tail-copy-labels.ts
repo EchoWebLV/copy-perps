@@ -30,14 +30,6 @@ export function whaleTailFollowingText({
   return `${sourceName}'s ${copyableCount} ready position${copyableCount === 1 ? "" : "s"}`;
 }
 
-export function whaleTailAutoCloseLabel(
-  positions: WhaleTailPosition[],
-): string {
-  return isSinglePosition(positions)
-    ? "Close my copy when position closes"
-    : "Close my copies when whale closes";
-}
-
 export function whaleTailPrimaryCta({
   positions,
   effectiveStake,

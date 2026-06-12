@@ -829,7 +829,7 @@ function ReactionButton({
           fill={active ? ACCENT : "none"}
         />
       )}
-      <span>{label}</span>
+      <span>{reactionDisplayLabel(label)}</span>
       {count > 0 ? (
         <span style={{ color: active ? color : mutedColor }}>{count}</span>
       ) : null}
@@ -879,7 +879,7 @@ function DesktopPulseReactionButton({
           fill={active ? ACCENT : "none"}
         />
       )}
-      <span>{label}</span>
+      <span>{reactionDisplayLabel(label)}</span>
       {count > 0 ? (
         <span style={{ color: active ? color : mutedColor }}>{count}</span>
       ) : null}
@@ -1164,8 +1164,16 @@ function formatSignedUsd(value: number): string {
   })}`;
 }
 
+/** Display-only label for a reaction chip.
+ *  The union value "Tailing" is preserved for API/DB use; the display
+ *  maps it to the new copy-verb so UI reads "Copying". */
+function reactionDisplayLabel(reaction: PulseReaction): string {
+  if (reaction === "Tailing") return "Copying";
+  return reaction;
+}
+
 function reactionVerb(reaction: PulseReaction): string {
-  if (reaction === "Tailing") return "is tailing";
+  if (reaction === "Tailing") return "is copying";
   if (reaction === "Bullish") return "is bullish";
   return "is bearish";
 }

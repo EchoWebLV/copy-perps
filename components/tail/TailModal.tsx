@@ -13,7 +13,7 @@ import {
   flashTradeModeForLeverage,
   maxFlashLeverageForMarket,
 } from "@/lib/flash/markets";
-import { useLiveMark } from "@/lib/pacifica/live-context";
+import { useLiveMarks } from "@/lib/pacifica/live-context";
 import { formatPriceUsd, formatUsd } from "@/components/whales/whale-money";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import type { TailSource, WhaleTailPosition } from "./tail-types";
@@ -295,11 +295,13 @@ export function TailModal({ open, onClose, source }: Props) {
   const copyLeverage = showWhaleLeverageControl
     ? boundedWhaleLeverage
     : undefined;
-  const liveMark = useLiveMark(
-    source?.kind === "whale"
-      ? activeWhalePosition?.asset ?? ""
-      : source?.asset ?? "",
-  );
+  const liveMarks = useLiveMarks();
+  const liveMark =
+    liveMarks[
+      source?.kind === "whale"
+        ? activeWhalePosition?.asset ?? ""
+        : source?.asset ?? ""
+    ];
 
   // Reset modal state every time it opens with a new source.
   useEffect(() => {
@@ -442,7 +444,7 @@ export function TailModal({ open, onClose, source }: Props) {
         throw new Error("No executable whale positions are available to copy.");
       }
       if (source.kind === "whale" && preflightBlocked) {
-        throw new Error(preflight.error ?? "This tail is not available.");
+        throw new Error(preflight.error ?? "This copy is not available.");
       }
 
       const requestTail = async (copyPosition?: WhaleTailPosition) => {
@@ -958,20 +960,46 @@ export function TailModal({ open, onClose, source }: Props) {
                 />
               </div>
               {/* Entry-gap disclosure: honest about the price difference
-                  between the source's entry and the user's estimated fill. */}
+                  between the source's entry and the user's estimated fill.
+                  For bundles, we anchor to the highest-leverage executable
+                  position so that both numbers come from the same asset.
+                  We only show the line when a genuine mark exists (live WS
+                  price or the position's cached currentMark) — never the
+                  entryMark fallback, which would produce a spurious +0.0%. */}
               {(() => {
+                // Pick the reference position: highest-leverage executable
+                // for bundles, otherwise the single active position.
+                const refPosition: WhaleTailPosition | null = (() => {
+                  if (source.kind !== "whale") return null;
+                  if (isWhaleBundle) {
+                    const byLev = [...executableWhalePositions].sort(
+                      (a, b) => b.leverage - a.leverage,
+                    );
+                    return byLev[0] ?? null;
+                  }
+                  return activeWhalePosition;
+                })();
+
                 const sourceEntry =
                   source.kind === "whale"
-                    ? isWhaleBundle
-                      ? (() => {
-                          const byLev = [...executableWhalePositions].sort(
-                            (a, b) => b.leverage - a.leverage,
-                          );
-                          return byLev[0]?.entryMark ?? null;
-                        })()
-                      : activeWhalePosition?.entryMark ?? null
+                    ? refPosition?.entryMark ?? null
                     : source.entryMark;
-                const fillEst = markValue;
+
+                // Genuine mark: live WS tick or cached currentMark.
+                // Explicitly exclude entryMark to avoid a fake +0.0% gap.
+                const genuineMark =
+                  source.kind === "whale"
+                    ? (liveMarks[refPosition?.asset ?? ""] ??
+                       refPosition?.currentMark ??
+                       null)
+                    : (liveMarks[source.asset] ?? null);
+
+                const fillEst = genuineMark;
+                const refAsset =
+                  source.kind === "whale"
+                    ? refPosition?.asset ?? source.asset
+                    : source.asset;
+
                 if (
                   sourceEntry == null ||
                   !Number.isFinite(sourceEntry) ||
@@ -985,7 +1013,7 @@ export function TailModal({ open, onClose, source }: Props) {
                 const sign = gapPct >= 0 ? "+" : "";
                 return (
                   <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-[11px] leading-snug text-amber-200/80">
-                    <span className="font-semibold text-amber-200">Entry gap:</span>{" "}
+                    <span className="font-semibold text-amber-200">Entry gap ({refAsset}):</span>{" "}
                     their entry {fmtPrice(sourceEntry)} → your est. fill{" "}
                     {fmtPrice(fillEst)} ({sign}
                     {gapPct.toFixed(1)}%). You enter at today&apos;s price, not
@@ -1030,7 +1058,7 @@ export function TailModal({ open, onClose, source }: Props) {
             {showWhaleLeverageControl ? (
               <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
                 <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
-                  <span>Tail leverage</span>
+                  <span>Copy leverage</span>
                   <span className="text-white">{boundedWhaleLeverage}x</span>
                 </div>
                 <div className="mb-3 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2">
@@ -1079,7 +1107,7 @@ export function TailModal({ open, onClose, source }: Props) {
                     setError(null);
                   }}
                   disabled={submitting || maxWhaleLeverage <= 1}
-                  aria-label="Tail leverage"
+                  aria-label="Copy leverage"
                   className="w-full accent-emerald-400"
                 />
                 <div className="mt-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/35">

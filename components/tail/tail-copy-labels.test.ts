@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WhaleTailPosition } from "./tail-types";
 import {
-  whaleTailAutoCloseLabel,
   whaleTailFollowingText,
   whaleTailPositionsHeading,
   whaleTailPrimaryCta,
@@ -26,9 +25,6 @@ describe("tail copy labels", () => {
       positions: [solLong],
       copyableCount: 1,
     })).toBe("Whale One's SOL LONG position");
-    expect(whaleTailAutoCloseLabel([solLong])).toBe(
-      "Close my copy when position closes",
-    );
     expect(whaleTailPrimaryCta({
       positions: [solLong],
       effectiveStake: 10,
@@ -47,9 +43,6 @@ describe("tail copy labels", () => {
       positions,
       copyableCount: 2,
     })).toBe("Whale One's 2 ready positions");
-    expect(whaleTailAutoCloseLabel(positions)).toBe(
-      "Close my copies when whale closes",
-    );
     expect(whaleTailPrimaryCta({
       positions,
       effectiveStake: 10,

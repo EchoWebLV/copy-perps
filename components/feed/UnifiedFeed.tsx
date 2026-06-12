@@ -587,7 +587,7 @@ function BotCopyButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
       style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
-      aria-label="Copy this trader"
+      aria-label="Auto-copy this trader"
     >
       Auto-copy
     </button>

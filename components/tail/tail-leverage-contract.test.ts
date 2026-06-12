@@ -11,7 +11,7 @@ describe("TailModal single whale leverage control", () => {
 
     expect(source).toContain("showWhaleLeverageControl");
     expect(source).toContain("isSingleWhalePosition");
-    expect(source).toContain("Tail leverage");
+    expect(source).toContain("Copy leverage");
     expect(source).toContain("Decrease leverage");
     expect(source).toContain("Increase leverage");
     expect(source).toContain("setWhaleLeverage");
