@@ -59,13 +59,14 @@ export function BottomNav() {
               background: BG,
               // Only the active tab gets the full acid ring + glow —
               // otherwise the mascot reads as "you are here" on every page.
-              borderColor: pulseActive ? ACCENT : `${ACCENT}55`,
+              // Full opacity + a solid BG halo either way: the half-faded
+              // version read as a rendering glitch over scrolled content.
+              borderColor: pulseActive ? ACCENT : `${ACCENT}77`,
               boxShadow: pulseActive
-                ? `0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
-                : `0 6px 18px rgba(0,0,0,0.55), inset 0 -3px 0 rgba(0,0,0,0.18)`,
+                ? `0 0 0 4px ${BG}, 0 8px 28px ${ACCENT}99, inset 0 -3px 0 rgba(0,0,0,0.18)`
+                : `0 0 0 4px ${BG}, 0 6px 18px rgba(0,0,0,0.55), inset 0 -3px 0 rgba(0,0,0,0.18)`,
               transform: pulseActive ? "scale(1.05)" : "scale(1)",
-              opacity: pulseActive ? 1 : 0.82,
-              transition: "transform 200ms, box-shadow 200ms, opacity 200ms",
+              transition: "transform 200ms, box-shadow 200ms",
             }}
           >
             <Image

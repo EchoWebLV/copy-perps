@@ -412,3 +412,16 @@ body {
     transition: none;
   }
 }
+
+/* Live mark-price shimmer: remounted on value change (key={markPrice}),
+   the animation flashes accent then settles to the inherited color. */
+.mark-flash {
+  animation: mark-flash 700ms ease-out;
+}
+@keyframes mark-flash {
+  0% { color: #fae500; }
+  100% { color: inherit; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mark-flash { animation: none; }
+}

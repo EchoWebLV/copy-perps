@@ -75,12 +75,43 @@ export function feedSortValue(entry: FeedEntry, sortKey: FeedSortKey): number {
     : botSortValue(entry.bot, sortKey);
 }
 
-/** Filter to the selected entity kind, then rank by the sort value desc.
- *  Stable for ties (Array#sort), so equal-valued entries keep input order. */
+/** A trader is "actively trading" when its newest open position was
+ *  opened/seen inside this window — dormant rich whales rank below live
+ *  action regardless of P&L (the feed sells NOW, not net worth). */
+export const ACTIVE_TRADER_WINDOW_MS = 24 * 60 * 60_000;
+
+/** Newest position timestamp for a whale (opened or last-seen basis —
+ *  either way it's "when did this trader last do something"). */
+export function whaleLastActivityMs(whale: WhaleTraderSignal): number {
+  let newest = 0;
+  for (const pos of whale.payload.openPositions) {
+    if (Number.isFinite(pos.openedAtMs) && pos.openedAtMs > newest) {
+      newest = pos.openedAtMs;
+    }
+  }
+  return newest;
+}
+
+/** Freshness bucket: 1 = actively trading, 0 = dormant/flat. Loaded bots
+ *  are always active (they tick on the ER and re-enter within minutes);
+ *  unloaded bots sink. nowMs <= 0 (hydration-safe first paint) treats all
+ *  as active so SSR and the first client render agree. */
+export function feedFreshnessBucket(entry: FeedEntry, nowMs: number): number {
+  if (nowMs <= 0) return 1;
+  if (entry.kind === "bot") return entry.bot === null ? 0 : 1;
+  const lastActivity = whaleLastActivityMs(entry.whale);
+  if (lastActivity <= 0) return 0; // flat whale — nothing live to copy
+  return nowMs - lastActivity <= ACTIVE_TRADER_WINDOW_MS ? 1 : 0;
+}
+
+/** Filter to the selected entity kind, then rank actively-trading entries
+ *  above dormant ones, each tier by the sort value desc. Stable for ties
+ *  (Array#sort), so equal-valued entries keep input order. */
 export function rankFeedEntries(
   entries: FeedEntry[],
   filter: FeedEntityFilter,
   sortKey: FeedSortKey,
+  nowMs = 0,
 ): FeedEntry[] {
   const filtered =
     filter === "all"
@@ -88,9 +119,12 @@ export function rankFeedEntries(
       : entries.filter((entry) =>
           filter === "whales" ? entry.kind === "whale" : entry.kind === "bot",
         );
-  return [...filtered].sort(
-    (a, b) => feedSortValue(b, sortKey) - feedSortValue(a, sortKey),
-  );
+  return [...filtered].sort((a, b) => {
+    const freshness =
+      feedFreshnessBucket(b, nowMs) - feedFreshnessBucket(a, nowMs);
+    if (freshness !== 0) return freshness;
+    return feedSortValue(b, sortKey) - feedSortValue(a, sortKey);
+  });
 }
 
 // ───────────────────────────── header P&L ─────────────────────────────────
@@ -201,6 +235,15 @@ function trimCompact(value: number, maximumFractionDigits: number): string {
     maximumFractionDigits,
     minimumFractionDigits: 0,
   });
+}
+
+/** Compact unsigned USD: $92.2M / $15.8K / $487. Full digits are noise at
+ *  feed scale — nobody reads $92,227,195. */
+export function formatCompactUsd(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `$${trimCompact(abs / 1_000_000, 1)}M`;
+  if (abs >= 10_000) return `$${trimCompact(abs / 1_000, 1)}K`;
+  return `$${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 export const SOURCE_CHIP_LABELS: Record<string, string> = {

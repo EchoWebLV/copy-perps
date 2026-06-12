@@ -28,6 +28,7 @@ import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatWhalePositionAge } from "@/components/whales/whale-position-age";
 import { formatPriceUsd } from "@/components/whales/whale-money";
+import { whaleDisplayName } from "@/lib/whales/alias";
 import { botCopyCta, type BotCopyCta } from "./bot-tail-source";
 import { DesktopWhaleCard, SkeletonDesktopWhaleCard } from "./DesktopWhaleCard";
 import { Sparkline } from "./Sparkline";
@@ -46,6 +47,7 @@ import {
   RED,
 } from "@/components/v2/ui";
 import {
+  ACTIVE_TRADER_WINDOW_MS,
   FEED_ENTITY_OPTIONS,
   FEED_SORT_OPTIONS,
   FRESH_POSITION_MS,
@@ -56,6 +58,7 @@ import {
   botPnlPct,
   botPositionPnlPct,
   formatCompactSignedUsd,
+  formatCompactUsd,
   formatFeedAge,
   formatSignedPct,
   primaryBotPosition,
@@ -102,6 +105,9 @@ export function UnifiedFeed({ initialWhales }: Props) {
 
   const botNames = useMemo(() => Object.keys(bots), [bots]);
 
+  // Coarse minute tick for ranking: freshness buckets only move on hour
+  // scales, and re-sorting every second would shuffle cards mid-scroll.
+  const rankNow = now > 0 ? Math.floor(now / 60_000) * 60_000 : 0;
   const ranked = useMemo(() => {
     const entries: FeedEntry[] = [
       ...whales.map((whale) => ({ kind: "whale" as const, whale })),
@@ -111,8 +117,8 @@ export function UnifiedFeed({ initialWhales }: Props) {
         bot: bots[name],
       })),
     ];
-    return rankFeedEntries(entries, filter, sortKey);
-  }, [whales, bots, botNames, filter, sortKey]);
+    return rankFeedEntries(entries, filter, sortKey, rankNow);
+  }, [whales, bots, botNames, filter, sortKey, rankNow]);
 
   const whalesPending = !loaded && whales.length === 0;
   const botsPending = mode === "loading" && botNames.length > 0;
@@ -127,17 +133,18 @@ export function UnifiedFeed({ initialWhales }: Props) {
     >
       <BalancePill />
 
-      {/* One control row: entity pills left, compact sort right. flex-wrap
-          only matters on sub-360px screens — everywhere else it's one row. */}
+      {/* One control row: entity pills left, compact sort right. Horizontal
+          scroll instead of wrapping when a narrow viewport runs out of
+          room — wrapped pills read as a broken layout. */}
       <div
-        className="flex flex-none flex-wrap items-center justify-between gap-2 border-b px-3 pb-2 pt-12 lg:px-6 lg:pb-3 lg:pt-4"
+        className="no-scrollbar flex flex-none items-center justify-between gap-2 overflow-x-auto border-b px-3 pb-2 pt-12 lg:px-6 lg:pb-3 lg:pt-4"
         style={{ borderColor: FAINT }}
       >
         <EntityPills filter={filter} onChange={setFilter} />
         <SortControl sortKey={sortKey} onChange={setSortKey} />
       </div>
 
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-24 pt-3 lg:px-6 lg:pb-8">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-28 pt-3 lg:px-6 lg:pb-8">
         {/* Below lg: the Invo-style stacked feed, untouched. */}
         <div className="mx-auto flex w-full max-w-xl flex-col gap-3 lg:hidden">
           {showSkeletons ? (
@@ -251,6 +258,7 @@ function WhaleFeedCard({
   onCopy: (target: CopyModalTarget) => void;
 }) {
   const p = whale.payload;
+  const name = whaleDisplayName(p.displayName, p.sourceAccount);
   // now starts at 0 (hydration-safe); isSourceFresh treats a future lastSeen
   // as fresh, so the first paint matches what the 1s tick will compute.
   const tail = buildWhaleTailSource(p, now);
@@ -277,6 +285,13 @@ function WhaleFeedCard({
     now > 0 &&
     position.openedAtKnown !== false &&
     now - position.openedAtMs < FRESH_POSITION_MS;
+  // Dormant = newest position is older than the active-trader window; the
+  // CTA goes quiet (ghost) so the loud accent slab means "trading NOW".
+  const dormant =
+    position !== null &&
+    now > 0 &&
+    (position.openedAtMs <= 0 ||
+      now - position.openedAtMs > ACTIVE_TRADER_WINDOW_MS);
   const moreCount = Math.max(0, p.openPositionsCount - 1);
   const closes = useMiniCandles(position?.market ?? null);
 
@@ -290,36 +305,40 @@ function WhaleFeedCard({
           <FeedAvatar
             avatarUrl={p.avatarUrl}
             sourceAccount={p.sourceAccount}
-            label={p.displayName}
+            label={name}
           />
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[15px] font-black uppercase leading-tight">
-                {p.displayName}
+                {name}
               </span>
               <SourceChip label={sourceChipLabel(p.source)} />
-              {ageMs !== null && (
-                <span
-                  className="shrink-0 text-[11px] font-bold"
-                  style={{ color: DIM }}
-                >
-                  · {formatFeedAge(ageMs)}
-                </span>
-              )}
             </div>
             <div
-              className="mt-1 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              className="mt-1 flex items-center gap-2.5 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
               style={{ color: DIM }}
             >
-              <span>Equity ${Math.round(p.stats.equityUsdc).toLocaleString("en-US")}</span>
+              <span>Equity {formatCompactUsd(p.stats.equityUsdc)}</span>
               <span>{p.openPositionsCount} open</span>
+              {ageMs !== null && (
+                <span className="flex shrink-0 items-center gap-1">
+                  {ageMs < FRESH_POSITION_MS && (
+                    <span
+                      className="h-1.5 w-1.5 animate-pulse rounded-full"
+                      style={{ background: GREEN }}
+                      aria-hidden
+                    />
+                  )}
+                  {formatFeedAge(ageMs)}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         {/* Whale payloads carry no wins/losses counts (winRatePct1d is null
             from every stats path) — so no W/L block here, P&L only. */}
-        <div className="flex shrink-0 items-start gap-3.5 text-right">
+        <div className="flex shrink-0 items-start gap-2 text-right">
           <div>
             <div
               className="text-[9px] font-black uppercase tracking-widest"
@@ -339,7 +358,7 @@ function WhaleFeedCard({
               onCopy({
                 kind: "whale",
                 key: `${p.source}:${p.sourceAccount}`,
-                label: p.displayName,
+                label: name,
                 emoji: "🐋",
               })
             }
@@ -363,18 +382,32 @@ function WhaleFeedCard({
           footer={whalePositionFooter(position, now)}
           cta={
             tail ? (
-              <button
-                type="button"
-                onClick={() => onTail(tail)}
-                className="w-full rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
-                style={{
-                  background: ACCENT,
-                  color: BG,
-                  boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
-                }}
-              >
-                Tail
-              </button>
+              // Dormant positions (nothing opened in 24h) drop the loud
+              // accent slab — five identical yellow CTAs in a row is how
+              // users stop seeing any of them. Live action stays loud.
+              dormant ? (
+                <button
+                  type="button"
+                  onClick={() => onTail(tail)}
+                  className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+                  style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
+                >
+                  Tail
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onTail(tail)}
+                  className="w-full rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+                  style={{
+                    background: ACCENT,
+                    color: BG,
+                    boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+                  }}
+                >
+                  Tail
+                </button>
+              )
             ) : (
               <DisabledCta label="Tail — unavailable" />
             )
@@ -458,8 +491,8 @@ function BotFeedCard({
       className="rounded-2xl border p-3.5"
       style={{ background: PANEL, borderColor: FAINT }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[20px] leading-none"
             style={{ background: PANEL_2, borderColor: FAINT }}
@@ -476,31 +509,21 @@ function BotFeedCard({
               <BotFreshness lastUpdateMs={lastUpdateMs} now={now} />
             </div>
             <div
-              className="mt-1 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              className="mt-1 flex items-center gap-2.5 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
               style={{ color: DIM }}
             >
               <span>
-                Equity ${Math.round(bot.balanceUsd + openStakeUsd).toLocaleString("en-US")}
+                Equity {formatCompactUsd(bot.balanceUsd + openStakeUsd)}
               </span>
-              <span>{bot.trades} trades</span>
-              <span>Fees ${bot.feesUsd.toFixed(2)}</span>
+              <span className="flex items-center gap-1">
+                <WinLossSquare value={wins} color={GREEN} label="wins" />
+                <WinLossSquare value={losses} color={RED} label="losses" />
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-start gap-3.5 text-right">
-          <div>
-            <div
-              className="text-[9px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
-            >
-              Win Rate
-            </div>
-            <div className="mt-0.5 flex items-center justify-end gap-1">
-              <WinLossSquare value={wins} color={GREEN} label="wins" />
-              <WinLossSquare value={losses} color={RED} label="losses" />
-            </div>
-          </div>
+        <div className="flex shrink-0 items-start gap-2 text-right">
           <div>
             <div
               className="text-[9px] font-black uppercase tracking-widest"
@@ -562,9 +585,9 @@ function BotCopyButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border px-2.5 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+      className="rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
       style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
-      aria-label="Copy this bot"
+      aria-label="Copy this trader"
     >
       Copy
     </button>
@@ -664,9 +687,11 @@ function GridBotCard({
 
 function BotFreshness({ lastUpdateMs, now }: { lastUpdateMs: number; now: number }) {
   if (lastUpdateMs <= 0 || now <= 0) return null;
+  // An update that landed between ticks can sit "in the future" for up to
+  // a second — clamp instead of rendering the negative-age dash.
   return (
     <span className="shrink-0 text-[11px] font-bold" style={{ color: DIM }}>
-      · {formatFeedAge(now - lastUpdateMs)}
+      · {formatFeedAge(Math.max(0, now - lastUpdateMs))}
     </span>
   );
 }
@@ -796,15 +821,29 @@ function PositionPanel({
             style={{ color: DIM }}
           >
             Entry {formatPriceUsd(entryPrice)}
-            {markPrice !== null && <> → Mark {formatPriceUsd(markPrice)}</>}
+            {markPrice !== null && (
+              <>
+                {" "}
+                →{" "}
+                <span key={markPrice} className="mark-flash">
+                  Mark {formatPriceUsd(markPrice)}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="shrink-0 text-right">
           <div
-            className="text-[13px] font-black tabular-nums leading-none"
+            className="text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            This trade
+          </div>
+          <div
+            className="mt-0.5 text-[13px] font-black tabular-nums leading-none"
             style={{ color: pnlColor }}
           >
-            P&L: {pnlPct === null ? "—" : formatSignedPct(pnlPct)}
+            {pnlPct === null ? "—" : formatSignedPct(pnlPct)}
           </div>
           <div
             className="mt-1.5 text-[11px] font-bold tabular-nums"
@@ -813,7 +852,7 @@ function PositionPanel({
             {liqPrice != null && Number.isFinite(liqPrice) && liqPrice > 0 ? (
               <>Liq {formatPriceUsd(liqPrice)}</>
             ) : notionalUsd != null && Number.isFinite(notionalUsd) ? (
-              <>Size ${Math.round(notionalUsd).toLocaleString("en-US")}</>
+              <>Size {formatCompactUsd(notionalUsd)}</>
             ) : null}
           </div>
         </div>
@@ -826,6 +865,7 @@ function PositionPanel({
             entryPrice={entryPrice}
             color={pnlColor === DIM ? "rgba(250,250,242,0.45)" : pnlColor}
             height={40}
+            live={fresh}
           />
           {chartLabel && (
             <span

@@ -1,5 +1,6 @@
 import type { TailSource, WhaleTailPosition } from "@/components/tail/tail-types";
 import { isSourceFresh } from "@/lib/whales/identity";
+import { whaleDisplayName } from "@/lib/whales/alias";
 import { isWhaleTailPositionCopyable } from "@/components/tail/whale-tail";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { isFlashCopyableMarket } from "@/lib/flash/markets";
@@ -57,7 +58,9 @@ export function buildWhaleTailSource(
   return {
     kind: "whale",
     whaleId: whale.whaleId,
-    displayName: whale.displayName,
+    // Address-ish placeholders become the deterministic alias so the modal
+    // matches the card the user tapped.
+    displayName: whaleDisplayName(whale.displayName, whale.sourceAccount),
     avatarUrl: whale.avatarUrl,
     sourceAccount: whale.sourceAccount,
     sourcePositionId: primary.sourcePositionId,

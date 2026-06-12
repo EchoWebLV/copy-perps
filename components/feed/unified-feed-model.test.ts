@@ -188,6 +188,53 @@ describe("rankFeedEntries", () => {
     ).toBe(true);
   });
 
+  it("ranks actively-trading whales above richer dormant ones", () => {
+    const NOW = 1_000 * 60 * 60 * 100; // arbitrary fixed clock
+    const dormantRich = makeWhale(
+      { pnl1dUsdc: 9_999 },
+      {
+        whaleId: "dormant",
+        openPositionsCount: 1,
+        openPositions: [
+          { openedAtMs: NOW - 48 * 60 * 60_000 } as never,
+        ],
+      },
+    );
+    const activePoor = makeWhale(
+      { pnl1dUsdc: 10 },
+      {
+        whaleId: "active",
+        openPositionsCount: 1,
+        openPositions: [{ openedAtMs: NOW - 60_000 } as never],
+      },
+    );
+    const ranked = rankFeedEntries(
+      [
+        { kind: "whale", whale: dormantRich },
+        { kind: "whale", whale: activePoor },
+      ],
+      "whales",
+      "pnl1d",
+      NOW,
+    );
+    expect(
+      ranked.map((e) => (e.kind === "whale" ? e.whale.payload.whaleId : "")),
+    ).toEqual(["active", "dormant"]);
+    // Hydration-safe first paint (nowMs 0) keeps the pure value order.
+    const firstPaint = rankFeedEntries(
+      [
+        { kind: "whale", whale: dormantRich },
+        { kind: "whale", whale: activePoor },
+      ],
+      "whales",
+      "pnl1d",
+      0,
+    );
+    expect(
+      firstPaint.map((e) => (e.kind === "whale" ? e.whale.payload.whaleId : "")),
+    ).toEqual(["dormant", "active"]);
+  });
+
   it("does not mutate the input order", () => {
     const before = [...entries];
     rankFeedEntries(entries, "all", "equity");

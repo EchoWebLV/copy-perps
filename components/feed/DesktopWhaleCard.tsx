@@ -21,6 +21,7 @@ import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
 import { WhaleFingerprintAvatar } from "@/components/whales/WhaleFingerprintAvatar";
 import { formatSignedWhaleUsd } from "@/components/whales/whale-money";
 import { formatWhalePositionTime } from "@/components/whales/whale-position-age";
+import { whaleDisplayName } from "@/lib/whales/alias";
 import {
   buildPnlChartPath,
   buildWhaleExposureSummary,
@@ -58,6 +59,7 @@ export function DesktopWhaleCard({
   }) => void;
 }) {
   const p = whale.payload;
+  const displayName = whaleDisplayName(p.displayName, p.sourceAccount);
   const exposureSummary = buildWhaleExposureSummary(p.openPositions, now);
   const lastSeenAtMs = p.lastSeenAt === null ? null : Date.parse(p.lastSeenAt);
   const fresh =
@@ -99,14 +101,14 @@ export function DesktopWhaleCard({
         </div>
         <WhaleFingerprintAvatar
           sourceAccount={p.sourceAccount}
-          label={p.displayName}
+          label={displayName}
           mood={fresh ? "HUNTING" : "WOUNDED"}
           size={44}
           pulse={fresh && p.openPositionsCount > 0}
         />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[18px] font-black uppercase leading-none">
-            {p.displayName}
+            {displayName}
           </div>
           <div
             className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-widest"
@@ -405,7 +407,17 @@ function FreshnessBadge({ stale }: { stale: boolean }) {
   // "Delayed" = our snapshot of this whale is aging, not that the trade is
   // dead — amber, not alarm-red.
   return (
-    <span style={{ color: stale ? STREAK : GREEN }}>
+    <span
+      className="inline-flex items-center gap-1"
+      style={{ color: stale ? STREAK : GREEN }}
+    >
+      {!stale && (
+        <span
+          className="h-1.5 w-1.5 animate-pulse rounded-full"
+          style={{ background: GREEN }}
+          aria-hidden
+        />
+      )}
       {stale ? "DELAYED" : "LIVE"}
     </span>
   );
@@ -466,6 +478,10 @@ function shortAccount(account: string): string {
 }
 
 function fmtUsd(v: number): string {
+  // Compact at feed scale — $92,227,195 is noise, $92.2M is a number.
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `$${trimCompact(abs / 1_000_000, 1)}M`;
+  if (abs >= 10_000) return `$${trimCompact(abs / 1_000, 1)}K`;
   return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
@@ -493,7 +509,7 @@ function fmtPct(v: number | null): string {
 }
 
 function formatPeriodPnl(value: number, hasPortfolioStats: boolean): string {
-  return hasPortfolioStats ? formatSignedWhaleUsd(value) : "N/A";
+  return hasPortfolioStats ? formatCompactSignedWhaleUsd(value) : "N/A";
 }
 
 function periodPnlColor(value: number, hasPortfolioStats: boolean): string {
