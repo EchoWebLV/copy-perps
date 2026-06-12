@@ -2,6 +2,7 @@
 // Aesthetic: dark trading-app substrate, Snapchat-yellow CTA + story-ring
 // avatars, hypebeast condensed headlines + factory stamps.
 
+import React from "react";
 import type { ReactNode } from "react";
 
 export const BG = "#0e0d10"; // warm near-black
@@ -235,6 +236,40 @@ export function YellowButton({
     >
       {children}
     </button>
+  );
+}
+
+/** Purple "AI BOT" badge used on every bot card surface.
+ *  `size="md"` (default) → text-[8px] chrome; `size="sm"` → same.
+ *  Pass custom `children` to override the chip text (e.g. "AI BOTS" for roster header). */
+export function AiBotBadge({
+  size = "md",
+  children = "AI BOT",
+}: {
+  size?: "sm" | "md";
+  children?: React.ReactNode;
+}) {
+  const _ = size; // reserved for future padding differences
+  return (
+    <span
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+      style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Teal "REAL WALLET" badge used on every whale card surface. */
+export function RealWalletBadge({ size = "md" }: { size?: "sm" | "md" }) {
+  const _ = size; // reserved for future padding differences
+  return (
+    <span
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
+      style={{ color: TEAL, background: TEAL_DIM, border: `1px solid ${TEAL}44` }}
+    >
+      REAL WALLET
+    </span>
   );
 }
 

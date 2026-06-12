@@ -6,7 +6,8 @@ import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { useEmbeddedSolanaWallet } from "@/lib/privy/use-solana-wallet";
 import { sendDepositWithSponsorFallback } from "@/components/tail/deposit-signing";
-import { formatCopySourceLabel } from "@/lib/positions/copy-row";
+import { formatCopySourceLabel, copySourceBadge } from "@/lib/positions/copy-row";
+import { AiBotBadge, RealWalletBadge } from "@/components/v2/ui";
 
 const RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? "https://api.mainnet-beta.solana.com";
@@ -305,20 +306,10 @@ export function CopyRow({ row, onClosed }: Props) {
             >
               {statusMeta.label}
             </span>
-            {row.botId ? (
-              <span
-                className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
-                style={{ color: "#b79bff", background: "#251b40", border: "1px solid #3b2f66" }}
-              >
-                AI BOT
-              </span>
-            ) : row.whaleName || row.whaleId ? (
-              <span
-                className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
-                style={{ color: "#41d6c3", background: "#0c2b28", border: "1px solid #41d6c344" }}
-              >
-                REAL WALLET
-              </span>
+            {copySourceBadge(row) === "ai" ? (
+              <AiBotBadge />
+            ) : copySourceBadge(row) === "wallet" ? (
+              <RealWalletBadge />
             ) : null}
             <div className="truncate text-[15px] font-black leading-tight text-white">
               {row.market} {row.side.toUpperCase()}

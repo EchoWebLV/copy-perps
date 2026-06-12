@@ -35,10 +35,9 @@ import {
   GREEN,
   PANEL,
   PANEL_2,
+  RealWalletBadge,
   RED,
   STREAK,
-  TEAL,
-  TEAL_DIM,
 } from "@/components/v2/ui";
 
 export function DesktopWhaleCard({
@@ -116,12 +115,7 @@ export function DesktopWhaleCard({
             className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-widest"
             style={{ color: DIM }}
           >
-            <span
-              className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
-              style={{ color: TEAL, background: TEAL_DIM, border: `1px solid ${TEAL}44` }}
-            >
-              REAL WALLET
-            </span>
+            <RealWalletBadge />
             <span>{p.source}</span>
             <span>{shortAccount(p.sourceAccount)}</span>
             <FreshnessBadge stale={p.stale} />

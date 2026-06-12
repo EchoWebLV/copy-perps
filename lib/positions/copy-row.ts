@@ -6,6 +6,22 @@ export interface CopySourceLike {
   botId?: string | null;
 }
 
+export type CopySourceBadge = "ai" | "wallet" | null;
+
+/** Derive the badge type for a portfolio row.
+ *  Keys on `botId` only — rows where botId is null but botName is "Autopilot"
+ *  are autopilot rows, not arena-bot rows, and must return null. */
+export function copySourceBadge(row: {
+  botId?: string | null;
+  botName?: string | null;
+  whaleId?: string | null;
+  whaleName?: string | null;
+}): CopySourceBadge {
+  if (row.botId) return "ai";
+  if (row.whaleName || row.whaleId) return "wallet";
+  return null;
+}
+
 function truncateAddress(address: string): string {
   if (address.length <= 8) return address;
   if (address.startsWith("0x") && address.length > 10) {

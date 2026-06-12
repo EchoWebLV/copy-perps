@@ -89,10 +89,16 @@ Label map (UI strings only; component/file names, API routes, and DB fields keep
 --color-ai-dim: #251b40;
 ```
 
+  > **Decision (shipped):** The CSS `@theme` tokens exist but the codebase convention is JS token constants from `components/v2/ui.tsx` — JS constants are the source of truth. The shared `AiBotBadge` and `RealWalletBadge` components are defined there and consumed across all badge sites.
+
 - [ ] **Step 2:** Bot cards in `UnifiedFeed.tsx` and `BotCard.tsx`: replace the `ON-CHAIN STRATEGY` badge with an `AI BOT` badge (`bg-ai-dim text-ai`), add a subtle purple card border (`border-[#3b2f66]`) and slightly purple-shifted card background, and a 2px purple ring on the bot avatar. Whale cards get a `REAL WALLET` badge (`text-teal` family) — whales otherwise unchanged. Match the mock exactly.
 - [ ] **Step 3:** Keep the trust line on bot surfaces: `Strategy runs as an on-chain program — record can't be backfilled.` with the Solscan verify link where it exists today. The word "paper" must not appear anywhere user-visible: `git grep -ni "paper" components/ app/ | grep -v paper_positions` → only code identifiers allowed.
 - [ ] **Step 4:** P&L chart parity: whale cards already render a P&L history sparkline (find its data source in `UnifiedFeed.tsx` / the whale card component). Bot cards must render the same chart anatomy under the badges row (the mock's `P&L · 30D` area chart). If no bot equity-history series exists yet (the ER `Bot` account stores stats, not a series), render the chart from the bot's closed-trade history in `fills`/arena projections; if neither exists, ship the card without the chart and add a `bot equity history series` follow-up task to this plan — do not fake a curve.
 - [ ] **Step 5:** Gate + commit: `git commit -m "feat(ui): AI-bot purple treatment — badge, card tint, avatar ring; REAL WALLET badge on whales"`
+
+### Task 3b (follow-up): bot equity history series
+
+- [ ] The ER `Bot` account has no equity curve (64-entry tape only); derive a persisted per-bot equity series (e.g., projection from arena fills/closes) so bot cards can render the same P&L chart as whales. Not started.
 
 ### Task 4: Trade page safe defaults
 

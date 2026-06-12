@@ -12,7 +12,7 @@ import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
 import { parseArenaEnv } from "@/lib/arena/use-arena-live";
 import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
-import { AI, AI_BORDER, AI_DIM, BG, DIM, FAINT, FG, GREEN, RED, Headline } from "@/components/v2/ui";
+import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline } from "@/components/v2/ui";
 import { fmtArenaPrice } from "./BotCard";
 
 const TOKEN_COLORS = { GREEN, RED, DIM } as const;
@@ -93,12 +93,7 @@ export function BotProfile({
             <div>
               <div className="flex items-center gap-2">
                 <Headline size={20}>{persona?.display ?? name}</Headline>
-                <span
-                  className="rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest"
-                  style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
-                >
-                  AI BOT
-                </span>
+                <AiBotBadge />
               </div>
               <div
                 className="mt-0.5 text-[10px] font-bold uppercase tracking-widest"

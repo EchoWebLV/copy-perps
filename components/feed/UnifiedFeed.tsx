@@ -38,6 +38,7 @@ import {
   AI,
   AI_BORDER,
   AI_DIM,
+  AiBotBadge,
   BG,
   DIM,
   FAINT,
@@ -47,9 +48,8 @@ import {
   Headline,
   PANEL,
   PANEL_2,
+  RealWalletBadge,
   RED,
-  TEAL,
-  TEAL_DIM,
 } from "@/components/v2/ui";
 import {
   ACTIVE_TRADER_WINDOW_MS,
@@ -764,29 +764,7 @@ function SourceChip({ label }: { label: string }) {
   );
 }
 
-/** Purple "AI BOT" badge used on every bot card surface. */
-function AiBotBadge() {
-  return (
-    <span
-      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
-      style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
-    >
-      AI BOT
-    </span>
-  );
-}
-
-/** Teal "REAL WALLET" badge used on every whale card surface. */
-function RealWalletBadge() {
-  return (
-    <span
-      className="shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest leading-none"
-      style={{ color: TEAL, background: TEAL_DIM, border: `1px solid ${TEAL}44` }}
-    >
-      REAL WALLET
-    </span>
-  );
-}
+// AiBotBadge and RealWalletBadge are now imported from @/components/v2/ui.
 
 function PositionPanel({
   asset,

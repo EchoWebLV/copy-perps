@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCopySourceLabel } from "./copy-row";
+import { formatCopySourceLabel, copySourceBadge } from "./copy-row";
 
 describe("formatCopySourceLabel", () => {
   it("uses the whale name before bot and leader metadata", () => {
@@ -51,5 +51,37 @@ describe("formatCopySourceLabel", () => {
 
   it("falls back safely when old rows are missing source metadata", () => {
     expect(formatCopySourceLabel({})).toBe("Copy tail");
+  });
+});
+
+describe("copySourceBadge", () => {
+  it("returns 'ai' for arena bot rows (botId present)", () => {
+    expect(
+      copySourceBadge({ botId: "blitz", botName: "Blitz", whaleId: null, whaleName: null }),
+    ).toBe("ai");
+  });
+
+  it("returns null for autopilot rows (botId null, botName 'Autopilot')", () => {
+    expect(
+      copySourceBadge({ botId: null, botName: "Autopilot", whaleId: null, whaleName: null }),
+    ).toBe(null);
+  });
+
+  it("returns 'wallet' for whale rows (whaleName present)", () => {
+    expect(
+      copySourceBadge({ botId: null, botName: null, whaleId: null, whaleName: "Iron Wolf" }),
+    ).toBe("wallet");
+  });
+
+  it("returns 'wallet' for whale rows identified by whaleId only", () => {
+    expect(
+      copySourceBadge({ botId: null, botName: null, whaleId: "HL:0xabc", whaleName: null }),
+    ).toBe("wallet");
+  });
+
+  it("returns null for manual wallet rows with all fields null", () => {
+    expect(
+      copySourceBadge({ botId: null, botName: null, whaleId: null, whaleName: null }),
+    ).toBe(null);
   });
 });

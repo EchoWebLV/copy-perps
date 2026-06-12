@@ -11,9 +11,7 @@ import { useEffect, useState } from "react";
 import { isStale, parseArenaEnv, useArenaLive } from "@/lib/arena/use-arena-live";
 import { isDevnetEndpoint } from "@/lib/arena/solscan";
 import {
-  AI,
-  AI_BORDER,
-  AI_DIM,
+  AiBotBadge,
   BG,
   DIM,
   FAINT,
@@ -51,18 +49,7 @@ export function ArenaRoster() {
       >
         <div>
           <div className="flex items-center gap-2">
-            <span
-              className="rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
-              style={{ color: AI, background: AI_DIM, border: `1px solid ${AI_BORDER}` }}
-            >
-              AI BOT
-            </span>
-            <span
-              className="text-[10px] font-black uppercase tracking-[0.24em]"
-              style={{ color: DIM }}
-            >
-              Arena
-            </span>
+            <AiBotBadge>AI BOTS</AiBotBadge>
           </div>
           <div className="mt-1 flex items-center gap-2">
             <Headline size={22}>Arena</Headline>
