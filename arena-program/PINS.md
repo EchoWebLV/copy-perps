@@ -796,3 +796,26 @@ feature, TS @magicblock-labs/ephemeral-rollups-sdk 0.14.3 +
 per intent with magic_fee_vault). Market-1 finalize co-packing (entry above)
 is STILL failing as of this note (base data 68m stale, newest attempt FAIL)
 — their targeted unstick did not include the estimator fix.
+
+### 2026-06-12 ~11:30 EEST: Tail-flow verified live end to end (Task: bot copy)
+
+test-aggro-v2 (G3YAcrRJ…4pE1, market 1) made its first autonomous trades:
+OPEN $100 long 5x @66.270 → EXIT_FAVORABLE @66.314 (win), OPEN @66.359 →
+EXIT_MAX_HOLD @66.214 (loss); fees $1.199838 = exactly 4 fills × 6bps ×
+$500 notional; balance $1000 → $998.04, 1W/1L. The TS reference strategy
+replayed over the live ring flags long breakouts at precisely the on-chain
+open timestamps (live-data parity, not just fixtures).
+
+Browser-verified during the NEXT open (long 5x entry=66.464 liq=53.836):
+/feed bots pill → aggro card shows the position panel (5X LONG badge,
+Entry→Mark, Liq, live P&L, on-chain sparkline + entry line, "NEW POSITION ·
+OPENED <1M AGO") → TAIL button → TailModal renders ASSET/SIDE/MARK +
+"ENTRY $66.46 · LIQ ≈ $53.17", stake presets, receipt (notional 5× of
+stake, est. taker fee, ~20% liq buffer, "You're following test-aggro-v2's
+MKT1 LONG"), CTA gated on wallet connect (logged out — correct). The signed
+Flash tx remains the one unverified step (needs the founder's wallet — same
+handoff prereq as the rest of flash-tail).
+
+Roster plan: test-aggro-v2 STAYS in the Railway crank roster as soak fuel
+(trades + 3-account commits = co-packing evidence for MagicBlock); remove
+from ARENA_BOTS + NEXT_PUBLIC_ARENA_BOTS before any public deploy.
