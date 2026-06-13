@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS (2026-06-13):** Phases 1–4 (Tasks 1–14) COMPLETE on branch `feat/redesign-pwa` — 24 commits, pushed, each task spec+quality reviewed; typecheck clean, 918 tests, `next build` green. Remaining: the deploy checkpoint (gated on the standing Privy security prerequisites + a $1 live verify) and Phase 5 (TWA + Seeker dApp Store — human-gated: keystore, Bubblewrap, on-chain NFT mint). Follow-up tasks logged in-plan: Task 3b (bot equity history series), Task 7b (close-event tape cards).
+
 **Goal:** Port the approved v9 redesign (one Copy verb, AI-bot treatment, LIVE event tape in the center slot, Traders search, in-app + push notifications) into the production app, harden it as an installable PWA, and package it as a TWA ready for Solana Seeker dApp Store submission.
 
 **Architecture:** Pure UI/language refactor first (no route moves), then IA consolidation on the existing routes, then an additive notification-event pipeline that web push and (later) native push both consume, then PWA service worker, then a Bubblewrap TWA wrapper published via the Solana dApp Store CLI. One web codebase throughout; the TWA loads the hosted app at gwak.gg.
