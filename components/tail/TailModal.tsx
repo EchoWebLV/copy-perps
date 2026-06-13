@@ -742,7 +742,6 @@ export function TailModal({ open, onClose, source }: Props) {
     (displayPosition?.side ?? source.side) === "long"
       ? "text-emerald-400"
       : "text-rose-400";
-  const sideLabel = source.side.toUpperCase();
   const markValue =
     liveMark ??
     (source.kind === "whale"
@@ -762,6 +761,38 @@ export function TailModal({ open, onClose, source }: Props) {
     !hasCopyableSource ||
     preflight.checking ||
     preflightBlocked;
+
+  // ── Single-source context line ─────────────────────────────────────────
+  // Bundles describe a mix (the grid above); a single whale position or a bot
+  // source collapses to one honest line — asset · side · source leverage, with
+  // entry / mark / liq and a live-vs-snapshot status. This one line replaces
+  // both the old Asset/Side/Mark grid AND the single-row "Position to copy".
+  const contextPosition =
+    source.kind === "whale" ? activeWhalePosition : null;
+  const contextEntry =
+    source.kind === "whale"
+      ? contextPosition?.entryMark ?? null
+      : source.entryMark;
+  const contextSide: "long" | "short" =
+    source.kind === "whale"
+      ? contextPosition?.side ?? source.side
+      : source.side;
+  const contextSourceLeverage =
+    source.kind === "whale" ? sourceWhaleLeverage : source.leverage;
+  const contextLiq =
+    contextEntry == null
+      ? null
+      : approxLiqPrice(contextEntry, contextSide, contextSourceLeverage);
+  const contextStatus: "live" | "snapshot" | "unavailable" =
+    source.kind !== "whale"
+      ? "live"
+      : !activeWhalePosition ||
+          !isWhaleTailPositionMarketCopyable(activeWhalePosition)
+        ? "unavailable"
+        : isWhaleTailPositionCopyable(activeWhalePosition, now)
+          ? "live"
+          : "snapshot";
+  const liqBufferPct = 100 / Math.max(1, displayLeverage);
 
   return (
     <div
@@ -848,45 +879,42 @@ export function TailModal({ open, onClose, source }: Props) {
             </div>
           </div>
         ) : (
-          <div className="mx-5 mb-4 rounded-2xl bg-white/[0.03] border border-white/5 p-4 grid grid-cols-3 gap-3">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-                Asset
+          <div className="mx-5 mb-4 rounded-2xl bg-white/[0.03] border border-white/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="text-base font-bold text-white">
+                  {displayAsset}
+                </span>
+                <span className={`text-sm font-bold ${sideColor}`}>
+                  {displaySide}
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                  {contextSourceLeverage}× source
+                </span>
               </div>
-              <div className="text-sm font-semibold text-white">
-                {displayAsset}
-              </div>
+              <span
+                className={`shrink-0 text-[10px] font-black uppercase tracking-widest ${
+                  contextStatus === "live"
+                    ? "text-emerald-400"
+                    : contextStatus === "snapshot"
+                      ? "text-amber-300"
+                      : "text-white/30"
+                }`}
+              >
+                {contextStatus === "live"
+                  ? "● Live"
+                  : contextStatus === "snapshot"
+                    ? "Snapshot"
+                    : "Not available"}
+              </span>
             </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-                Side
-              </div>
-              <div className={`text-sm font-semibold ${sideColor}`}>
-                {displaySide} {displayLeverage}×
-              </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-white/40">
+              {contextEntry != null ? (
+                <span>Entry {fmtPrice(contextEntry)}</span>
+              ) : null}
+              <span>Mark {markText}</span>
+              {contextLiq != null ? <span>Liq ≈ {fmtPrice(contextLiq)}</span> : null}
             </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-                Mark
-              </div>
-              <div className="text-sm font-semibold text-white">{markText}</div>
-            </div>
-            {/* Bot sources: surface the source entry (and approx liq) the
-                whale position rows already show — the Mark cell alone would
-                hide the entry→mark gap once a live mark arrives. */}
-            {source.kind === "bot" ? (
-              <div className="col-span-3 border-t border-white/5 pt-2 text-[10px] uppercase tracking-widest text-white/35">
-                Entry {fmtPrice(source.entryMark)}
-                {(() => {
-                  const liq = approxLiqPrice(
-                    source.entryMark,
-                    source.side,
-                    source.leverage,
-                  );
-                  return liq === null ? null : ` · Liq ≈ ${fmtPrice(liq)}`;
-                })()}
-              </div>
-            ) : null}
           </div>
         )}
 
@@ -959,6 +987,17 @@ export function TailModal({ open, onClose, source }: Props) {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl pl-8 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
                 />
               </div>
+              {/* Inline order math — replaces the old 4-row summary block for
+                  single/bot sources (bundles keep the full preview below). */}
+              {!isWhaleBundle ? (
+                <div className="mb-3 text-[11px] text-white/45">
+                  ≈{" "}
+                  <span className="font-semibold text-white">
+                    {formatUsd(notional)}
+                  </span>{" "}
+                  notional at {displayLeverage}× · ~${estFeeUsd.toFixed(3)} fee
+                </div>
+              ) : null}
               {/* Entry-gap disclosure: honest about the price difference
                   between the source's entry and the user's estimated fill.
                   For bundles, we anchor to the highest-leverage executable
@@ -1059,7 +1098,14 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
                 <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
                   <span>Copy leverage</span>
-                  <span className="text-white">{boundedWhaleLeverage}x</span>
+                  <span className="text-white">
+                    {boundedWhaleLeverage}x
+                    <span className="ml-1 text-white/35">
+                      {boundedWhaleLeverage === sourceWhaleLeverage
+                        ? "· matches source"
+                        : `· source ${sourceWhaleLeverage}x`}
+                    </span>
+                  </span>
                 </div>
                 <div className="mb-3 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2">
                   <button
@@ -1118,7 +1164,9 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
             ) : null}
 
-            {source.kind === "whale" ? (
+            {/* Single positions live in the one-line context card up top; only
+                multi-asset bundles need the scrollable per-position list. */}
+            {isWhaleBundle ? (
               <div className="mx-5 mb-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
                 <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
                   <span>{whaleTailPositionsHeading(whaleTailPositions)}</span>
@@ -1207,17 +1255,15 @@ export function TailModal({ open, onClose, source }: Props) {
               </div>
             ) : null}
 
-            {/* Order preview */}
-            <div className="mx-5 mb-4 rounded-2xl bg-white/[0.02] border border-white/5 p-3 space-y-1.5 text-xs">
+            {/* Order preview — bundles keep the full multi-position summary;
+                single/bot sources fold this into the inline line + CTA note. */}
+            {isWhaleBundle ? (
+              <div className="mx-5 mb-4 rounded-2xl bg-white/[0.02] border border-white/5 p-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-white/60">
                 <span>Notional</span>
                 <span className="text-white">
                   {formatUsd(notional)}{" "}
-                  {source.kind === "whale"
-                    ? isSingleWhalePosition
-                      ? `(${boundedWhaleLeverage}× of $${effectiveStake.toFixed(2)})`
-                      : `($${effectiveStake.toFixed(2)} per copied position)`
-                    : `(${source.leverage}× of $${effectiveStake.toFixed(2)})`}
+                  {`($${effectiveStake.toFixed(2)} per copied position)`}
                 </span>
               </div>
               <div className="flex justify-between text-white/60">
@@ -1227,28 +1273,25 @@ export function TailModal({ open, onClose, source }: Props) {
               <div className="flex justify-between text-white/60">
                 <span>Liq. buffer</span>
                 <span className="text-white">
-                  {source.kind === "whale" && !isSingleWhalePosition
-                    ? bundleLevMax > 0
-                      ? `~${(100 / bundleLevMax).toFixed(1)}%–${(
-                          100 / Math.max(1, bundleLevMin)
-                        ).toFixed(1)}% adverse move`
-                      : "—"
-                    : `~${(100 / Math.max(1, displayLeverage)).toFixed(1)}% adverse move`}
+                  {bundleLevMax > 0
+                    ? `~${(100 / bundleLevMax).toFixed(1)}%–${(
+                        100 / Math.max(1, bundleLevMin)
+                      ).toFixed(1)}% adverse move`
+                    : "—"}
                 </span>
               </div>
               <div className="flex justify-between text-white/60">
                 <span>You're following</span>
                 <span className="text-white">
-                  {source.kind === "whale"
-                    ? whaleTailFollowingText({
-                        sourceName,
-                        positions: whaleTailPositions,
-                        copyableCount: executableWhalePositions.length,
-                      })
-                    : `${sourceName}'s ${source.asset} ${sideLabel}`}
+                  {whaleTailFollowingText({
+                    sourceName,
+                    positions: whaleTailPositions,
+                    copyableCount: executableWhalePositions.length,
+                  })}
                 </span>
               </div>
-            </div>
+              </div>
+            ) : null}
 
             {/* Status / error */}
             {status || preflight.checking ? (
@@ -1292,6 +1335,16 @@ export function TailModal({ open, onClose, source }: Props) {
                           : "No copyable positions"
                         : `Copy with $${effectiveStake.toFixed(0)}`}
               </button>
+              {/* Risk note that the old 4-row summary used to carry, folded
+                  under the button for single/bot sources. */}
+              {!isWhaleBundle && hasCopyableSource ? (
+                <div className="mt-2 text-center text-[11px] text-white/40">
+                  {contextLiq != null ? (
+                    <>Liq ≈ {fmtPrice(contextLiq)} · </>
+                  ) : null}
+                  ~{liqBufferPct.toFixed(1)}% buffer
+                </div>
+              ) : null}
               {!wallet ? (
                 <div className="mt-2 text-center text-xs text-white/40">
                   Connect your wallet to copy.
