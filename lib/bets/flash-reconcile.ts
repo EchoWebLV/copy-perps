@@ -7,6 +7,7 @@ import {
   parseFlashTailMeta,
   type FlashTailMeta,
 } from "./flash-tail-meta";
+import { buildEvent, emitNotification } from "@/lib/notifications/emit";
 
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const STALE_PENDING_MS = 5 * 60_000;
@@ -407,6 +408,19 @@ export async function runFlashReconcileSweep(args?: {
 
     await deps.markClosedExternal({ betId: bet.id, meta: bet.meta, nowIso });
     externalized += 1;
+    // Non-fatal notification: position died externally (liquidation / SL).
+    // userId IS available on ReconcileBet (from bets.userId column).
+    try {
+      await emitNotification(
+        buildEvent("copy-closed", {
+          userId: bet.userId,
+          source: bet.meta.sourceName ?? bet.meta.market,
+          market: bet.meta.market,
+        }),
+      );
+    } catch {
+      // already swallowed by emitNotification; belt-and-suspenders
+    }
   }
 
   return { checked, reaped, externalized };

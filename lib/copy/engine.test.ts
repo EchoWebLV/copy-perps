@@ -475,4 +475,60 @@ describe("tickCopyEngine close pass", () => {
     expect(result.targets).toBe(0);
     expect(deps.fetchSourcePositions).not.toHaveBeenCalled();
   });
+
+  it("calls emit with copy-opened event on successful confirmOpen", async () => {
+    const emitSpy = vi.fn();
+    const deps = makeDeps({
+      listActiveSubscriptions: vi.fn(async () => [sub()]),
+      fetchSourcePositions: vi.fn(async () => [botPosition()]),
+      emit: emitSpy,
+    });
+    await tickCopyEngine(createCopyEngineState(), deps);
+
+    expect(emitSpy).toHaveBeenCalledOnce();
+    const event = emitSpy.mock.calls[0]![0];
+    expect(event.kind).toBe("copy-opened");
+    expect(event.userId).toBe("user-1");
+    expect(event.title).toContain("Degen");
+    expect(event.title).toContain("SOL");
+  });
+
+  it("calls emit with auto-close event on successful confirmClose", async () => {
+    const emitSpy = vi.fn();
+    const bet = autoCloseBet({ sourcePositionId: "arena:degen-v1:123" });
+    const deps = makeDeps({
+      listOpenAutoCloseBets: vi.fn(async () => [bet]),
+      fetchSourcePositions: vi.fn(async () => []), // source gone → close fires
+      emit: emitSpy,
+    });
+    await tickCopyEngine(createCopyEngineState(), deps);
+
+    expect(emitSpy).toHaveBeenCalledOnce();
+    const event = emitSpy.mock.calls[0]![0];
+    expect(event.kind).toBe("auto-close");
+    expect(event.userId).toBe("user-1");
+    expect(event.title).toContain("SOL");
+  });
+
+  it("does not call emit when emit dep is omitted (optional)", async () => {
+    // makeDeps does not include emit, so this just confirms no error
+    const deps = makeDeps({
+      listActiveSubscriptions: vi.fn(async () => [sub()]),
+      fetchSourcePositions: vi.fn(async () => [botPosition()]),
+    });
+    const result = await tickCopyEngine(createCopyEngineState(), deps);
+    expect(result.opened).toBe(1); // still succeeds without emit
+  });
+
+  it("does not propagate an emit error into the tick result", async () => {
+    const deps = makeDeps({
+      listActiveSubscriptions: vi.fn(async () => [sub()]),
+      fetchSourcePositions: vi.fn(async () => [botPosition()]),
+      emit: vi.fn(() => { throw new Error("emit exploded"); }),
+    });
+    const result = await tickCopyEngine(createCopyEngineState(), deps);
+    // opened still counts — the emit error was swallowed
+    expect(result.opened).toBe(1);
+    expect(result.errors).toHaveLength(0);
+  });
 });

@@ -18,6 +18,7 @@
 import {
   FLASH_MIN_NOTIONAL_USD,
 } from "@/lib/flash/perps";
+import { buildEvent, type NotificationEventPayload } from "@/lib/notifications/emit";
 import {
   flashLeverageBoundsForMarket,
   flashTradeModeForLeverage,
@@ -98,6 +99,11 @@ export interface CopyEngineDeps {
   /** Full pipeline, log-only: no opens, no closes, no DB writes. */
   dryRun: boolean;
   now(): Date;
+  /**
+   * Optional notification emitter. Called AFTER a money operation succeeds.
+   * Must never throw into the tick — callers also wrap in try/catch.
+   */
+  emit?: (event: NotificationEventPayload) => void;
 }
 
 export interface CopyEngineState {
@@ -296,6 +302,19 @@ export async function tickCopyEngine(
           `bet ${bet.betId}: close CAS miss (already closed elsewhere)`,
         );
       }
+      // Emit AFTER confirmClose. pnlUsd is not available here (receiveUsd
+      // is the gross receive estimate, not net P/L). We emit auto-close
+      // without pnl; the reconcile sweep derives chain pnl later.
+      try {
+        deps.emit?.(
+          buildEvent("auto-close", {
+            userId: bet.userId,
+            source: bet.meta.sourceName ?? sourceKey,
+            market: bet.meta.market,
+            // pnlUsd intentionally omitted — not available at this seam
+          }),
+        );
+      } catch {}
       result.closed += 1;
       console.log(
         `[copy] CLOSE bet=${bet.betId} ${bet.meta.market} ${bet.meta.side} — source ${sourceKey} exited`,
@@ -456,6 +475,19 @@ export async function tickCopyEngine(
             if (!ok) {
               console.warn(`[copy] confirmOpen CAS miss bet=${betId}`);
             }
+            // Emit AFTER the money operation succeeds. Non-fatal.
+            try {
+              deps.emit?.(
+                buildEvent("copy-opened", {
+                  userId: sub.userId,
+                  source: sub.targetLabel ?? sub.targetKey,
+                  market: position.market,
+                  side: position.side,
+                  leverage: resolved.leverage,
+                  stakeUsd: sub.stakeUsdc,
+                }),
+              );
+            } catch {}
           } catch (err) {
             // Never let bookkeeping turn a landed trade into a tick error;
             // the row stays pending for the reconcile sweep.
@@ -593,5 +625,11 @@ export function buildCopyEngineDeps(): CopyEngineDeps {
     },
     dryRun: process.env.COPY_DRY_RUN === "true",
     now: () => new Date(),
+    emit: (event) => {
+      // emitNotification is self-safe (swallows its own errors).
+      import("@/lib/notifications/emit").then(({ emitNotification }) => {
+        emitNotification(event);
+      }).catch(() => undefined);
+    },
   };
 }

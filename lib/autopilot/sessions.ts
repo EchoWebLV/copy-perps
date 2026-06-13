@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import { autopilotSessions, bets, users } from "@/lib/db/schema";
 import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
 import { isTierName, type TierName } from "./tiers";
+import { buildEvent, emitNotification } from "@/lib/notifications/emit";
 
 export const MIN_BUDGET_USD = 5;
 export const MAX_BUDGET_USD = 200;
@@ -179,7 +180,22 @@ export async function stopSession(args: {
       ),
     )
     .returning();
-  return row ? toSession(row) : null;
+  const session = row ? toSession(row) : null;
+  // Emit AFTER the CAS succeeds (row is returned only when the update matched).
+  if (session) {
+    try {
+      await emitNotification(
+        buildEvent("autopilot-ended", {
+          userId: session.userId,
+          status: "stopped",
+          realizedPnlUsd: session.realizedPnlUsd,
+        }),
+      );
+    } catch {
+      // already swallowed by emitNotification
+    }
+  }
+  return session;
 }
 
 /** Engine-only: CAS active -> exhausted | target. */
@@ -187,7 +203,7 @@ export async function endSession(args: {
   sessionId: string;
   status: "exhausted" | "target";
 }): Promise<void> {
-  await db
+  const [row] = await db
     .update(autopilotSessions)
     .set({ status: args.status, endedAt: new Date() })
     .where(
@@ -195,7 +211,22 @@ export async function endSession(args: {
         eq(autopilotSessions.id, args.sessionId),
         eq(autopilotSessions.status, "active"),
       ),
-    );
+    )
+    .returning();
+  // Only emit when the CAS actually transitioned a row (no-op CAS miss = no emit).
+  if (row) {
+    try {
+      await emitNotification(
+        buildEvent("autopilot-ended", {
+          userId: row.userId,
+          status: args.status,
+          realizedPnlUsd: row.realizedPnlUsd,
+        }),
+      );
+    } catch {
+      // already swallowed by emitNotification
+    }
+  }
 }
 
 // A holder whose lease expired mid-tick (180s TTL) can overlap the new
