@@ -432,7 +432,7 @@ export const notificationEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(), // 'copy-opened' | 'copy-closed' | 'auto-close' | 'source-closed' | 'autopilot-ended' | 'subscription-paused'
     title: text("title").notNull(),
     body: text("body").notNull(),
@@ -456,7 +456,7 @@ export const pushSubscriptions = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     endpoint: text("endpoint").notNull().unique(),
     p256dh: text("p256dh").notNull(),
     auth: text("auth").notNull(),
