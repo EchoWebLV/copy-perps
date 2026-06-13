@@ -18,9 +18,11 @@ const RPC_URL =
 interface Props {
   maxUsd: number;
   onComplete: () => void;
+  /** Override the closed-state trigger styling (e.g. to match a Wallet CTA). */
+  triggerClassName?: string;
 }
 
-export function WithdrawButton({ maxUsd, onComplete }: Props) {
+export function WithdrawButton({ maxUsd, onComplete, triggerClassName }: Props) {
   const [open, setOpen] = useState(false);
   const [destination, setDestination] = useState("");
   const [amount, setAmount] = useState("");
@@ -103,7 +105,10 @@ export function WithdrawButton({ maxUsd, onComplete }: Props) {
       <button
         onClick={() => setOpen(true)}
         disabled={maxUsd <= 0}
-        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
+        className={
+          triggerClassName ??
+          "rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
+        }
       >
         Withdraw
       </button>

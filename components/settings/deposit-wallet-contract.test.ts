@@ -36,15 +36,29 @@ describe("Deposit wallet recovery UI", () => {
     expect(source).toContain("!wallet?.address && walletError");
   });
 
-  it("puts legacy feed prefs behind a flag and shows profile sharing", () => {
+  it("is funding-only — no feed prefs, profile sharing, or jupUSD convert", () => {
     const source = readFileSync(
       join(process.cwd(), "app/(app)/deposit/page.tsx"),
       "utf8",
     );
 
-    expect(source).toContain("feedRailPrefsVisible()");
-    expect(source).toContain("showFeedPrefs");
-    expect(source).toContain("<ProfileShareCard");
+    // Mock direction: "Funding only. No settings hiding in here."
+    expect(source).not.toContain("feedRailPrefsVisible");
+    expect(source).not.toContain("<ProfileShareCard");
+    expect(source).not.toContain("CONVERT JUPUSD");
+    expect(source).not.toContain("depositDevToolsVisible");
+  });
+
+  it("leads with a Ready-to-trade balance and Add funds / Withdraw", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/(app)/deposit/page.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("Ready to trade");
+    expect(source).toContain("ADD FUNDS");
+    expect(source).toContain("<WithdrawButton");
+    expect(source).toContain("Your USDC address");
   });
 
   it("does not reserve an empty desktop rail when settings rail features are hidden", () => {
