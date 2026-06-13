@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartCandlestick, Flame, Wallet, PieChart } from "lucide-react";
+import { ChartCandlestick, Flame, Wallet, Copy } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 
@@ -11,10 +11,11 @@ import { NotificationBell } from "@/components/shell/NotificationBell";
 // Pulse CTA elevates above the bar like the camera button in Snapchat.
 const LEFT_TABS = [
   { href: "/feed", icon: Flame, label: "Traders" },
-  { href: "/trade", icon: ChartCandlestick, label: "Trade" },
+  // /portfolio is now framed as "Copies" — everything you're copying.
+  { href: "/portfolio", icon: Copy, label: "Copies" },
 ];
 const RIGHT_TABS = [
-  { href: "/portfolio", icon: PieChart, label: "Portfolio" },
+  { href: "/trade", icon: ChartCandlestick, label: "Trade" },
   // The page at /deposit is wallet funding + withdrawals, not settings.
   { href: "/deposit", icon: Wallet, label: "Wallet" },
 ];

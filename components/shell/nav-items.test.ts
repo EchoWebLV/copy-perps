@@ -8,9 +8,9 @@ describe("desktop shell nav contract", () => {
   it("exposes the main app destinations in display order", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.href)).toEqual([
       "/feed",
-      "/trade",
-      "/chatter",
       "/portfolio",
+      "/chatter",
+      "/trade",
       "/deposit",
     ]);
     // The /live heat + tape surfaces are gone — nothing should link there.
@@ -20,9 +20,10 @@ describe("desktop shell nav contract", () => {
   it("labels the main trading surfaces without legacy heat or bot roster copy", () => {
     expect(DESKTOP_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Traders",
-      "Trade",
+      // /portfolio is framed as Copies in the new nav.
+      "Copies",
       "Live",
-      "Portfolio",
+      "Trade",
       // /deposit is funding + withdrawals, so the tab says Wallet.
       "Wallet",
     ]);

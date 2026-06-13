@@ -1,16 +1,17 @@
 import {
   ChartCandlestick,
+  Copy,
   Flame,
-  PieChart,
   Wallet,
   Zap,
 } from "lucide-react";
 
 export const DESKTOP_NAV_ITEMS = [
   { href: "/feed", label: "Traders", icon: Flame },
-  { href: "/trade", label: "Trade", icon: ChartCandlestick },
+  // /portfolio is now framed as "Copies" — everything you're copying.
+  { href: "/portfolio", label: "Copies", icon: Copy },
   { href: "/chatter", label: "Live", icon: Zap },
-  { href: "/portfolio", label: "Portfolio", icon: PieChart },
+  { href: "/trade", label: "Trade", icon: ChartCandlestick },
   // The page at /deposit is wallet funding + withdrawals, not settings.
   { href: "/deposit", label: "Wallet", icon: Wallet },
 ] as const;
