@@ -78,6 +78,7 @@ import {
 } from "./unified-feed-model";
 
 const POLL_MS = 30_000;
+const FEED_SEARCH_KEY = "gwak:feed-search";
 
 interface Props {
   initialWhales: WhaleTraderSignal[];
@@ -112,12 +113,35 @@ export function UnifiedFeed({ initialWhales }: Props) {
   const [sortKey, setSortKey] = useState<FeedSortKey>("pnl1d");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Prefill the search from a `?q=` param so "View trader" links on the LIVE
-  // tape land here focused on that trader (their card shows; Auto-copy is on it).
+  // Wrap the setter so every user-driven search change is also persisted for
+  // the session — leaving Traders and coming back (or re-tapping the tab)
+  // otherwise unmounts the feed and wipes the typed query. Cleared search
+  // removes the saved value so it doesn't resurrect.
+  const setSearch = useCallback((value: string) => {
+    setSearchQuery(value);
+    try {
+      if (value) sessionStorage.setItem(FEED_SEARCH_KEY, value);
+      else sessionStorage.removeItem(FEED_SEARCH_KEY);
+    } catch {
+      // sessionStorage unavailable (private mode / SSR) — non-fatal.
+    }
+  }, []);
+
+  // Restore on mount: a `?q=` deep-link (e.g. a LIVE "View trader" link) wins,
+  // otherwise fall back to the last search saved this session.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("q");
-    if (q) setSearchQuery(q);
-  }, []);
+    if (q) {
+      setSearch(q);
+      return;
+    }
+    try {
+      const saved = sessionStorage.getItem(FEED_SEARCH_KEY);
+      if (saved) setSearchQuery(saved);
+    } catch {
+      // ignore
+    }
+  }, [setSearch]);
 
   // Sentiment: reaction counts aggregated per whale across their open positions.
   // Fetched lazily from /api/pulse/social (unauthenticated — public read).
@@ -196,7 +220,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
         className="flex flex-none items-center gap-2 border-b px-3 pt-12 pb-2 lg:px-6 lg:pt-4 lg:pb-2"
         style={{ borderColor: FAINT }}
       >
-        <SearchBar value={searchQuery} onChange={setSearchQuery} />
+        <SearchBar value={searchQuery} onChange={setSearch} />
       </div>
 
       {/* One control row: entity pills left, compact sort right. Horizontal
@@ -238,7 +262,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                 ))
               ) : filteredRanked.length === 0 ? (
                 searchQuery.trim() ? (
-                  <EmptySearch onClear={() => setSearchQuery("")} />
+                  <EmptySearch onClear={() => setSearch("")} />
                 ) : (
                   <EmptyFeed
                     filter={filter}
@@ -288,7 +312,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
               ) : filteredRanked.length === 0 ? (
                 <div className="col-span-full">
                   {searchQuery.trim() ? (
-                    <EmptySearch onClear={() => setSearchQuery("")} />
+                    <EmptySearch onClear={() => setSearch("")} />
                   ) : (
                     <EmptyFeed
                       filter={filter}

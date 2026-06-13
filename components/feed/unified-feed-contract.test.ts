@@ -145,3 +145,18 @@ describe("dead surfaces stay dead", () => {
     expect(read("components/shell/BottomNav.tsx")).not.toContain("/live");
   });
 });
+
+describe("search survives leaving + returning to Traders", () => {
+  it("persists the query to sessionStorage and restores it on mount", () => {
+    const source = read(FEED);
+    expect(source).toContain('FEED_SEARCH_KEY = "gwak:feed-search"');
+    // Persist on user-driven change; clear removes it so it can't resurrect.
+    expect(source).toContain("sessionStorage.setItem(FEED_SEARCH_KEY");
+    expect(source).toContain("sessionStorage.removeItem(FEED_SEARCH_KEY)");
+    // Restore on mount (a ?q= deep-link still wins).
+    expect(source).toContain("sessionStorage.getItem(FEED_SEARCH_KEY)");
+    // SearchBar + clear buttons go through the persisting setter.
+    expect(source).toContain("onChange={setSearch}");
+    expect(source).toContain('onClear={() => setSearch("")}');
+  });
+});
