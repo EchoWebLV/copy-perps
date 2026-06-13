@@ -426,6 +426,49 @@ export const autopilotSessions = pgTable(
   }),
 );
 
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    kind: text("kind").notNull(), // 'copy-opened' | 'copy-closed' | 'auto-close' | 'source-closed' | 'autopilot-ended' | 'subscription-paused'
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    meta: jsonb("meta"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    userCreatedIdx: index("notification_events_user_created_idx").on(
+      t.userId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    userIdx: index("push_subscriptions_user_idx").on(t.userId),
+  }),
+);
+
 // Standing copy-trade of one target per row: when the target opens a Flash
 // position the copy engine mirrors it with stakeUsdc, and (if autoClose)
 // closes the mirror when the target exits. Copied positions themselves are
