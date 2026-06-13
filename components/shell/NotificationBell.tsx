@@ -62,9 +62,14 @@ export function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Bumped whenever the user marks-read (handleOpen). A poll that started
+  // before the bump must not overwrite the optimistic unread:0 with its stale
+  // count when it resolves afterward — otherwise the badge flickers back.
+  const markGenRef = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     if (!authenticated) return;
+    const gen = markGenRef.current;
     try {
       const token = await getAccessToken();
       const res = await fetch("/api/notifications", {
@@ -73,7 +78,11 @@ export function NotificationBell() {
       if (!res.ok) return;
       const data = (await res.json()) as { events: NotificationDto[]; unread: number };
       setEvents(data.events);
-      setUnread(data.unread);
+      // A mark-read happened while this poll was in flight — keep the events
+      // but drop the now-stale unread count (optimistic 0 stands).
+      if (gen === markGenRef.current) {
+        setUnread(data.unread);
+      }
     } catch {
       // non-fatal — bell is observability only
     }
@@ -137,7 +146,8 @@ export function NotificationBell() {
   const handleOpen = useCallback(async () => {
     setOpen((v) => !v);
     if (!open && unread > 0) {
-      // Optimistically zero the badge
+      // Optimistically zero the badge; invalidate any in-flight poll's unread.
+      markGenRef.current += 1;
       setUnread(0);
       setEvents((prev) => prev.map((e) => ({ ...e, readAt: e.readAt ?? new Date().toISOString() })));
       // Fire-and-forget mark-all-read
