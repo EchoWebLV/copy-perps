@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ACCENT, BG, DIM, FAINT, FG, FONT_DISPLAY, PANEL } from "@/components/v2/ui";
 import { DESKTOP_NAV_ITEMS, isShellNavActive } from "./nav-items";
+import { NotificationBell } from "./NotificationBell";
 
 export function DesktopNav() {
   const pathname = usePathname();
@@ -52,6 +53,12 @@ export function DesktopNav() {
             </Link>
           );
         })}
+      </div>
+      {/* Notification bell pinned to the bottom of the desktop sidebar —
+          reachable from all primary surfaces (Trade, Portfolio, Wallet, etc.)
+          since DesktopNav is rendered inside every AppShell. */}
+      <div className="mt-auto">
+        <NotificationBell />
       </div>
     </nav>
   );
