@@ -89,7 +89,6 @@ pub enum FloorReject {
     Cooldown,
     TradeCap,
     StopRequired,
-    StopOutOfRange,
     LowConfidence,
 }
 
@@ -130,9 +129,10 @@ pub fn precheck_open(
     if stop_bps == 0 {
         return Err(FloorReject::StopRequired);
     }
-    if stop_bps < p.min_stop_bps || stop_bps > p.max_stop_bps {
-        return Err(FloorReject::StopOutOfRange);
-    }
+    // Clamp a non-zero stop into the safe band rather than rejecting — the
+    // program GUARANTEES a sane stop on every position (model judgment, code
+    // survival). An out-of-band stop would otherwise mean the bot never trades.
+    let stop_bps = stop_bps.clamp(p.min_stop_bps, p.max_stop_bps);
 
     let lev = leverage.clamp(1, p.max_leverage.max(1));
     let stake = if p.risk_sizing != 0 {
@@ -568,11 +568,14 @@ mod tests {
     }
 
     #[test]
-    fn precheck_clamps_leverage_and_stake() {
+    fn precheck_clamps_leverage_stake_and_stop() {
         let b = bot(START);
-        let plan = precheck_open(&b, 5_000, 999, 5_000, 200, 0, 80).unwrap();
+        let plan = precheck_open(&b, 5_000, 999, 5_000, 1_000, 0, 80).unwrap();
         assert_eq!(plan.leverage, 15); // clamped to max_leverage
         assert_eq!(plan.stake_micro, 200_000_000); // 2000bps cap, not 5000
+        assert_eq!(plan.stop_bps, 500); // 1000bps clamped to max_stop_bps
+        // a too-narrow stop clamps up to the minimum
+        assert_eq!(precheck_open(&b, 5_000, 10, 1_000, 10, 0, 80).unwrap().stop_bps, 50);
     }
 
     #[test]
@@ -589,8 +592,6 @@ mod tests {
         b.trades_today = 0;
         assert_eq!(precheck_open(&b, 5_000, 10, 1_000, 200, 0, 50), Err(FloorReject::LowConfidence));
         assert_eq!(precheck_open(&b, 5_000, 10, 1_000, 0, 0, 80), Err(FloorReject::StopRequired));
-        assert_eq!(precheck_open(&b, 5_000, 10, 1_000, 10, 0, 80), Err(FloorReject::StopOutOfRange));
-        assert_eq!(precheck_open(&b, 5_000, 10, 1_000, 600, 0, 80), Err(FloorReject::StopOutOfRange));
     }
 
     // risk_sizing: budget = 1e9 * 200/10000 = 20_000_000 ; stake = 20e6 * 10000/(10*200)=100_000_000

@@ -1803,11 +1803,6 @@
     },
     {
       "code": 6012,
-      "name": "StopOutOfRange",
-      "msg": "stop loss outside the allowed range"
-    },
-    {
-      "code": 6013,
       "name": "UnknownAccount",
       "msg": "unknown account type in remaining_accounts"
     }

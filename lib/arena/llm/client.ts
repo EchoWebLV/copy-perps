@@ -54,7 +54,12 @@ export function createLlmClient(cfg: { provider: LlmProvider; modelId?: string }
         const model =
           cfg.provider === "xai"
             ? createXai({ apiKey: keyFromEnv("XAI_API_KEY") })(modelId)
-            : createAnthropic({ apiKey: keyFromEnv("ANTHROPIC_API_KEY") })(modelId);
+            : // @ai-sdk/anthropic v3 posts to /messages (missing /v1/) and 404s;
+              // pin the baseURL so calls land at /v1/messages. Drop on v4.
+              createAnthropic({
+                baseURL: "https://api.anthropic.com/v1",
+                apiKey: keyFromEnv("ANTHROPIC_API_KEY"),
+              })(modelId);
         const { object } = await generateObject({
           model,
           schema: decisionSchema,

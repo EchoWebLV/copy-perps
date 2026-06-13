@@ -286,9 +286,6 @@ pub mod arena {
                     Err(paper_llm::FloorReject::StopRequired) => {
                         return Err(ArenaError::StopRequired.into())
                     }
-                    Err(paper_llm::FloorReject::StopOutOfRange) => {
-                        return Err(ArenaError::StopOutOfRange.into())
-                    }
                 }
             }
             DECISION_CLOSE => {
@@ -812,8 +809,6 @@ pub enum ArenaError {
     TradeCapReached,
     #[msg("open decision requires a stop loss")]
     StopRequired,
-    #[msg("stop loss outside the allowed range")]
-    StopOutOfRange,
     #[msg("unknown account type in remaining_accounts")]
     UnknownAccount,
 }

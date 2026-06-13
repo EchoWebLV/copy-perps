@@ -154,6 +154,27 @@ export function renderBookBlock(bot: ArenaLlmBot): string {
   ].join("\n");
 }
 
+export interface FloorBounds {
+  maxLeverage: number;
+  minStopBps: number;
+  maxStopBps: number;
+  maxStakeFracBps: number;
+  confidenceFloor: number; // 0..100
+}
+
+/** Tell the model the floor it must stay inside — the program rejects OPENs that
+ *  violate these, so a decision outside the range simply does nothing. */
+export function renderConstraints(p: FloorBounds): string {
+  return (
+    `Hard limits (enforced on-chain — an OPEN outside them is REJECTED, so it does nothing):\n` +
+    `  • leverage 1–${p.maxLeverage}x\n` +
+    `  • stop loss ${(p.minStopBps / 100).toFixed(1)}%–${(p.maxStopBps / 100).toFixed(1)}% (mandatory on every OPEN)\n` +
+    `  • position size ≤ ${(p.maxStakeFracBps / 100).toFixed(0)}% of equity\n` +
+    `  • confidence ≥ ${(p.confidenceFloor / 100).toFixed(2)} or the trade is skipped\n` +
+    `Pick values INSIDE these limits or you forfeit the trade.`
+  );
+}
+
 /** Full prompt: per-bot system/persona block + identical market block + own book. */
 export function renderPromptFor(args: {
   systemBlock: string;
@@ -162,6 +183,8 @@ export function renderPromptFor(args: {
 }): string {
   return [
     args.systemBlock.trim(),
+    "",
+    renderConstraints(args.bot.params),
     "",
     renderMarketBlock(args.brief),
     "",

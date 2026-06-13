@@ -105,11 +105,12 @@ describe("evaluateDecision floor", () => {
     });
   });
 
-  it("rejects a stop outside the allowed range", () => {
-    expect(evaluateDecision(openDecision({ stopLossPct: 0.001 }), params, flat, NOW).kind).toBe("skip");
-    expect(evaluateDecision(openDecision({ stopLossPct: 0.06 }), params, flat, NOW)).toEqual({
-      kind: "skip",
-      reason: "StopOutOfRange",
-    });
+  it("clamps an out-of-band stop instead of rejecting", () => {
+    const wide = evaluateDecision(openDecision({ stopLossPct: 0.06 }), params, flat, NOW); // 600bps
+    expect(wide.kind).toBe("send");
+    if (wide.kind === "send") expect(wide.args.stopBps).toBe(500); // clamped to maxStopBps
+    const narrow = evaluateDecision(openDecision({ stopLossPct: 0.001 }), params, flat, NOW); // 10bps
+    expect(narrow.kind).toBe("send");
+    if (narrow.kind === "send") expect(narrow.args.stopBps).toBe(50); // clamped to minStopBps
   });
 });

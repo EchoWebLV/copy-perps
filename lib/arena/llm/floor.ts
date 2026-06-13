@@ -31,13 +31,7 @@ export interface LlmBotLiveState {
   lastDecisionTs: number; // unix seconds
 }
 
-export type FloorReject =
-  | "Halted"
-  | "Cooldown"
-  | "TradeCap"
-  | "StopRequired"
-  | "StopOutOfRange"
-  | "LowConfidence";
+export type FloorReject = "Halted" | "Cooldown" | "TradeCap" | "StopRequired" | "LowConfidence";
 
 /** Args for the on-chain apply_decision instruction (all integers). */
 export interface ApplyDecisionArgs {
@@ -101,11 +95,11 @@ export function evaluateDecision(
     return { kind: "skip", reason: "LowConfidence" };
   }
 
-  const stopBps = toBps(decision.stopLossPct);
-  if (stopBps === 0) return { kind: "skip", reason: "StopRequired" };
-  if (stopBps < params.minStopBps || stopBps > params.maxStopBps) {
-    return { kind: "skip", reason: "StopOutOfRange" };
-  }
+  const rawStop = toBps(decision.stopLossPct);
+  if (rawStop === 0) return { kind: "skip", reason: "StopRequired" };
+  // Clamp a non-zero stop into the safe band (mirrors the on-chain precheck) so
+  // the bot trades with a guaranteed-sane stop instead of being rejected.
+  const stopBps = Math.min(Math.max(rawStop, params.minStopBps), params.maxStopBps);
 
   const leverage = Math.min(decision.leverage, Math.max(1, params.maxLeverage));
   const stakeFracBps = Math.min(toBps(decision.stakeFracPct), params.maxStakeFracBps);
