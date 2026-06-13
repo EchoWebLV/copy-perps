@@ -8,6 +8,101 @@
   },
   "instructions": [
     {
+      "name": "apply_decision",
+      "docs": [
+        "ER instruction: apply one LLM decision to an LlmBot. Signed by the",
+        "bot's `operator` (the off-chain brain). The program is the final",
+        "authority: it reads the verified oracle price for the fill, enforces the",
+        "safety floor in code (paper_llm::precheck_open clamps leverage/stake and",
+        "rejects on halt / cooldown / trade-cap / missing-or-out-of-range stop),",
+        "then applies the paper open/close. The operator can only choose timing",
+        "and direction — it cannot forge a price, exceed a limit, or trade past",
+        "the kill switch. The deterministic stop/liq/funding/max-hold runs in",
+        "`tick` (the crank) every ~2s, independent of this call.",
+        "",
+        "`action`: 0 HOLD (heartbeat) / 1 OPEN / 2 CLOSE. `side`: 0 long / 1 short",
+        "(OPEN only). Fail-closed: a stale/malformed feed is a no-op success."
+      ],
+      "discriminator": [
+        80,
+        141,
+        46,
+        212,
+        212,
+        18,
+        11,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "feed",
+          "docs": [
+            "(require_keys_eq → WrongFeed); oracle::read_feed parses defensively."
+          ]
+        },
+        {
+          "name": "llm_bot",
+          "writable": true
+        },
+        {
+          "name": "operator",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "market_id",
+          "type": "u8"
+        },
+        {
+          "name": "action",
+          "type": "u8"
+        },
+        {
+          "name": "side",
+          "type": "u8"
+        },
+        {
+          "name": "leverage",
+          "type": "u16"
+        },
+        {
+          "name": "stake_frac_bps",
+          "type": "u16"
+        },
+        {
+          "name": "stop_bps",
+          "type": "u16"
+        },
+        {
+          "name": "tp_bps",
+          "type": "u16"
+        },
+        {
+          "name": "confidence",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "commit_state",
       "docs": [
         "ER instruction: persist the current ER state of the market (+ any Bot",
@@ -563,6 +658,232 @@
       "args": []
     },
     {
+      "name": "delegate_llm_bot",
+      "docs": [
+        "Base-layer instruction: delegate one LlmBot PDA to the ER. Admin-gated.",
+        "Validator pin via the first remaining account is mandatory, as for Bot."
+      ],
+      "discriminator": [
+        117,
+        193,
+        68,
+        124,
+        38,
+        23,
+        241,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "buffer_llm_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "llm_bot_state"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                82,
+                88,
+                52,
+                99,
+                40,
+                236,
+                89,
+                24,
+                89,
+                167,
+                12,
+                24,
+                207,
+                100,
+                194,
+                22,
+                101,
+                177,
+                160,
+                240,
+                129,
+                248,
+                170,
+                198,
+                67,
+                58,
+                242,
+                100,
+                209,
+                18,
+                84,
+                223
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_llm_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "llm_bot_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_llm_bot_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "llm_bot_state"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "llm_bot_state",
+          "docs": [
+            "program via the er-sdk `del` constraint. Field named `llm_bot_state` so",
+            "the macro method is `delegate_llm_bot_state` (distinct from the handler)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  108,
+                  109,
+                  98,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "persona_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "persona_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "delegate_market",
       "docs": [
         "Base-layer instruction: delegate the MarketState PDA to the ER.",
@@ -1000,6 +1321,108 @@
       "args": []
     },
     {
+      "name": "init_llm_bot",
+      "docs": [
+        "Base-layer instruction: create an LLM oracle-bot account. The `operator`",
+        "pubkey is the ONLY key allowed to submit this bot's decisions",
+        "(apply_decision); the off-chain LLM brain holds it. Admin-gated; every",
+        "safety-floor knob is validated to its domain so the floor can never be",
+        "initialized into a nonsensical state."
+      ],
+      "discriminator": [
+        31,
+        248,
+        20,
+        32,
+        223,
+        12,
+        248,
+        129
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "llm_bot",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  108,
+                  109,
+                  98,
+                  111,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "persona_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "persona_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "type": "pubkey"
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "LlmParams"
+            }
+          }
+        },
+        {
+          "name": "starting_balance_micro",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "init_market",
       "discriminator": [
         33,
@@ -1291,6 +1714,19 @@
       ]
     },
     {
+      "name": "LlmBot",
+      "discriminator": [
+        214,
+        230,
+        125,
+        21,
+        0,
+        38,
+        108,
+        74
+      ]
+    },
+    {
       "name": "MarketState",
       "discriminator": [
         0,
@@ -1339,6 +1775,41 @@
       "code": 6006,
       "name": "InvalidFeeVault",
       "msg": "magic fee vault does not match the delegation record's validator"
+    },
+    {
+      "code": 6007,
+      "name": "NotOperator",
+      "msg": "signer is not the bot operator"
+    },
+    {
+      "code": 6008,
+      "name": "Halted",
+      "msg": "bot halted by the daily-loss kill switch"
+    },
+    {
+      "code": 6009,
+      "name": "Cooldown",
+      "msg": "decision cooldown has not elapsed"
+    },
+    {
+      "code": 6010,
+      "name": "TradeCapReached",
+      "msg": "daily trade cap reached"
+    },
+    {
+      "code": 6011,
+      "name": "StopRequired",
+      "msg": "open decision requires a stop loss"
+    },
+    {
+      "code": 6012,
+      "name": "StopOutOfRange",
+      "msg": "stop loss outside the allowed range"
+    },
+    {
+      "code": 6013,
+      "name": "UnknownAccount",
+      "msg": "unknown account type in remaining_accounts"
     }
   ],
   "types": [
@@ -1582,6 +2053,324 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LlmBot",
+      "docs": [
+        "2496 bytes, align 8. Account data = 8-byte discriminator + this.",
+        "",
+        "| offset | size | field                        |",
+        "|--------|------|------------------------------|",
+        "| 0x000  | 32   | operator: Pubkey             |",
+        "| 0x020  | 8    | balance_micro: u64           |",
+        "| 0x028  | 8    | gross_pnl_micro: i64         |",
+        "| 0x030  | 8    | fees_micro: u64              |",
+        "| 0x038  | 8    | funding_paid_micro: u64      |",
+        "| 0x040  | 8    | equity_high_micro: u64       |",
+        "| 0x048  | 8    | day_start_equity_micro: u64  |",
+        "| 0x050  | 8    | seq: u64                     |",
+        "| 0x058  | 8    | day_start_ts: i64            |",
+        "| 0x060  | 8    | last_decision_ts: i64        |",
+        "| 0x068  | 288  | positions: [LlmPosition; 4]  |",
+        "| 0x188  | 2048 | tape: [TapeEntry; 64]        |",
+        "| 0x988  | 24   | params: LlmParams            |",
+        "| 0x9A0  | 16   | persona_id: [u8; 16]         |",
+        "| 0x9B0  | 4    | trades: u32                  |",
+        "| 0x9B4  | 4    | wins: u32                    |",
+        "| 0x9B8  | 2    | trades_today: u16            |",
+        "| 0x9BA  | 2    | tape_head: u16               |",
+        "| 0x9BC  | 1    | halted: u8 (0/1)             |",
+        "| 0x9BD  | 1    | bump: u8                     |",
+        "| 0x9BE  | 2    | _pad                         |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "balance_micro",
+            "type": "u64"
+          },
+          {
+            "name": "gross_pnl_micro",
+            "type": "i64"
+          },
+          {
+            "name": "fees_micro",
+            "type": "u64"
+          },
+          {
+            "name": "funding_paid_micro",
+            "type": "u64"
+          },
+          {
+            "name": "equity_high_micro",
+            "type": "u64"
+          },
+          {
+            "name": "day_start_equity_micro",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "day_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "last_decision_ts",
+            "type": "i64"
+          },
+          {
+            "name": "positions",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "LlmPosition"
+                  }
+                },
+                4
+              ]
+            }
+          },
+          {
+            "name": "tape",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "TapeEntry"
+                  }
+                },
+                64
+              ]
+            }
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "LlmParams"
+              }
+            }
+          },
+          {
+            "name": "persona_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "trades",
+            "type": "u32"
+          },
+          {
+            "name": "wins",
+            "type": "u32"
+          },
+          {
+            "name": "trades_today",
+            "type": "u16"
+          },
+          {
+            "name": "tape_head",
+            "type": "u16"
+          },
+          {
+            "name": "halted",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LlmParams",
+      "docs": [
+        "On-chain safety floor + LLM knobs. 24 bytes, align 4 — ZERO padding so it",
+        "doubles as the `init_llm_bot` Borsh arg (manual impls below, like",
+        "StrategyParams).",
+        "",
+        "| offset | size | field                    |",
+        "|--------|------|--------------------------|",
+        "| 0x00   | 4    | max_hold_ticks: u32      |",
+        "| 0x04   | 4    | decision_cooldown_secs: u32 |",
+        "| 0x08   | 2    | max_leverage: u16        |",
+        "| 0x0A   | 2    | min_stop_bps: u16        |",
+        "| 0x0C   | 2    | max_stop_bps: u16        |",
+        "| 0x0E   | 2    | max_stake_frac_bps: u16  |",
+        "| 0x10   | 2    | max_trades_per_day: u16  |",
+        "| 0x12   | 2    | daily_loss_limit_bps: u16|",
+        "| 0x14   | 2    | funding_bps_per_hour: u16|",
+        "| 0x16   | 1    | confidence_floor: u8     |",
+        "| 0x17   | 1    | risk_sizing: u8 (0/1)    |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "max_hold_ticks",
+            "type": "u32"
+          },
+          {
+            "name": "decision_cooldown_secs",
+            "type": "u32"
+          },
+          {
+            "name": "max_leverage",
+            "type": "u16"
+          },
+          {
+            "name": "min_stop_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_stop_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_stake_frac_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_trades_per_day",
+            "type": "u16"
+          },
+          {
+            "name": "daily_loss_limit_bps",
+            "type": "u16"
+          },
+          {
+            "name": "funding_bps_per_hour",
+            "type": "u16"
+          },
+          {
+            "name": "confidence_floor",
+            "type": "u8"
+          },
+          {
+            "name": "risk_sizing",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LlmPosition",
+      "docs": [
+        "One LLM paper position. 72 bytes, align 8.",
+        "",
+        "| offset | size | field             |",
+        "|--------|------|-------------------|",
+        "| 0x00   | 8    | entry_price: u64  |",
+        "| 0x08   | 8    | stake_micro: u64  |",
+        "| 0x10   | 8    | stop_price: u64   |",
+        "| 0x18   | 8    | tp_price: u64     |",
+        "| 0x20   | 8    | liq_price: u64    |",
+        "| 0x28   | 8    | opened_ts: i64    |",
+        "| 0x30   | 8    | last_funding_ts: i64 |",
+        "| 0x38   | 4    | ticks_held: u32   |",
+        "| 0x3C   | 2    | leverage: u16     |",
+        "| 0x3E   | 1    | active: u8 (0/1)  |",
+        "| 0x3F   | 1    | market_id: u8     |",
+        "| 0x40   | 1    | side: u8          |",
+        "| 0x41   | 7    | _pad              |"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "stake_micro",
+            "type": "u64"
+          },
+          {
+            "name": "stop_price",
+            "type": "u64"
+          },
+          {
+            "name": "tp_price",
+            "type": "u64"
+          },
+          {
+            "name": "liq_price",
+            "type": "u64"
+          },
+          {
+            "name": "opened_ts",
+            "type": "i64"
+          },
+          {
+            "name": "last_funding_ts",
+            "type": "i64"
+          },
+          {
+            "name": "ticks_held",
+            "type": "u32"
+          },
+          {
+            "name": "leverage",
+            "type": "u16"
+          },
+          {
+            "name": "active",
+            "type": "u8"
+          },
+          {
+            "name": "market_id",
+            "type": "u8"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
           }
         ]
       }

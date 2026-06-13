@@ -17,7 +17,13 @@ declare_id!("6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC"); // replaced after f
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const MARKET_SEED: &[u8] = b"market";
 pub const BOT_SEED: &[u8] = b"bot";
+pub const LLM_BOT_SEED: &[u8] = b"llmbot";
 pub const CRANK_PAYER_SEED: &[u8] = b"crank-payer";
+
+// apply_decision action codes (the off-chain brain encodes its decision).
+pub const DECISION_HOLD: u8 = 0;
+pub const DECISION_OPEN: u8 = 1;
+pub const DECISION_CLOSE: u8 = 2;
 
 #[ephemeral]
 #[program]
@@ -95,6 +101,42 @@ pub mod arena {
         Ok(())
     }
 
+    /// Base-layer instruction: create an LLM oracle-bot account. The `operator`
+    /// pubkey is the ONLY key allowed to submit this bot's decisions
+    /// (apply_decision); the off-chain LLM brain holds it. Admin-gated; every
+    /// safety-floor knob is validated to its domain so the floor can never be
+    /// initialized into a nonsensical state.
+    pub fn init_llm_bot(
+        ctx: Context<InitLlmBot>,
+        persona_id: [u8; 16],
+        operator: Pubkey,
+        params: LlmParams,
+        starting_balance_micro: u64,
+    ) -> Result<()> {
+        require!(params.max_leverage >= 1, ArenaError::BadParams);
+        require!(params.max_stake_frac_bps <= 10_000, ArenaError::BadParams);
+        require!(
+            params.min_stop_bps >= 1 && params.min_stop_bps <= params.max_stop_bps,
+            ArenaError::BadParams
+        );
+        require!((params.max_stop_bps as u64) < BPS, ArenaError::BadParams);
+        require!((params.daily_loss_limit_bps as u64) <= BPS, ArenaError::BadParams);
+        require!(params.confidence_floor <= 100, ArenaError::BadParams);
+        require!(params.risk_sizing <= 1, ArenaError::BadParams);
+        require!(params.max_hold_ticks >= 1, ArenaError::BadParams);
+        let bot = &mut ctx.accounts.llm_bot.load_init()?;
+        bot.operator = operator;
+        bot.persona_id = persona_id;
+        bot.params = params;
+        bot.balance_micro = starting_balance_micro;
+        bot.equity_high_micro = starting_balance_micro;
+        bot.day_start_equity_micro = starting_balance_micro;
+        // day_start_ts stays 0 → the first roll_day (crank or apply_decision)
+        // stamps the real day boundary.
+        bot.bump = ctx.bumps.llm_bot;
+        Ok(())
+    }
+
     /// Permissionless crank tick for one market: read the oracle feed, fold
     /// the price into the candle ring, then for each Bot in
     /// remaining_accounts run maintenance (liq / favorable / max-hold exits)
@@ -141,16 +183,141 @@ pub mod arena {
         // writable and maps the bytes in place — zero_copy means there is no
         // stack deserialize frame and no `.exit()` re-serialize: writes land
         // directly in account memory when the RefMut drops.
+        // remaining_accounts may hold deterministic Bot accounts AND LLM
+        // oracle-bot LlmBot accounts. Bot runs the in-program strategy; LlmBot
+        // runs ONLY the deterministic safety floor (funding / stop / tp / liq /
+        // max-hold / kill-switch) — its entries/exits come from apply_decision,
+        // never from in-program logic. Try each loader; fail loudly on anything
+        // that is neither (the crank controls this list).
         for acc in ctx.remaining_accounts {
-            let loader = AccountLoader::<Bot>::try_from(acc)?;
-            let bot = &mut *loader.load_mut()?;
-            paper::maintain(bot, cfg, market_id, read.price, now);
-            let span = bot.params.read_span as usize;
-            let candles = candles::complete_candles(ms, span, MIN_STRAT_CANDLES);
-            if let Some(side) = strategy::decide_ring_momentum(&candles, &bot.params) {
-                paper::try_open(bot, cfg, market_id, side, read.price, now);
+            if let Ok(loader) = AccountLoader::<Bot>::try_from(acc) {
+                let bot = &mut *loader.load_mut()?;
+                paper::maintain(bot, cfg, market_id, read.price, now);
+                let span = bot.params.read_span as usize;
+                let candles = candles::complete_candles(ms, span, MIN_STRAT_CANDLES);
+                if let Some(side) = strategy::decide_ring_momentum(&candles, &bot.params) {
+                    paper::try_open(bot, cfg, market_id, side, read.price, now);
+                }
+            } else if let Ok(loader) = AccountLoader::<LlmBot>::try_from(acc) {
+                let bot = &mut *loader.load_mut()?;
+                paper_llm::roll_day(bot, now);
+                paper_llm::maintain_llm(bot, cfg, market_id, read.price, now);
+            } else {
+                return Err(ArenaError::UnknownAccount.into());
             }
         }
+        Ok(())
+    }
+
+    /// ER instruction: apply one LLM decision to an LlmBot. Signed by the
+    /// bot's `operator` (the off-chain brain). The program is the final
+    /// authority: it reads the verified oracle price for the fill, enforces the
+    /// safety floor in code (paper_llm::precheck_open clamps leverage/stake and
+    /// rejects on halt / cooldown / trade-cap / missing-or-out-of-range stop),
+    /// then applies the paper open/close. The operator can only choose timing
+    /// and direction — it cannot forge a price, exceed a limit, or trade past
+    /// the kill switch. The deterministic stop/liq/funding/max-hold runs in
+    /// `tick` (the crank) every ~2s, independent of this call.
+    ///
+    /// `action`: 0 HOLD (heartbeat) / 1 OPEN / 2 CLOSE. `side`: 0 long / 1 short
+    /// (OPEN only). Fail-closed: a stale/malformed feed is a no-op success.
+    pub fn apply_decision(
+        ctx: Context<ApplyDecision>,
+        market_id: u8,
+        action: u8,
+        side: u8,
+        leverage: u16,
+        stake_frac_bps: u16,
+        stop_bps: u16,
+        tp_bps: u16,
+        confidence: u8,
+    ) -> Result<()> {
+        let cfg = &ctx.accounts.config;
+        let mcfg = cfg
+            .markets
+            .iter()
+            .find(|m| m.active && m.market_id == market_id)
+            .ok_or(ArenaError::UnknownMarket)?;
+        require_keys_eq!(ctx.accounts.feed.key(), mcfg.feed, ArenaError::WrongFeed);
+
+        let now = Clock::get()?.unix_timestamp;
+        let read = {
+            let data = ctx.accounts.feed.try_borrow_data()?;
+            oracle::read_feed(&data, now, cfg.max_age_secs)
+        };
+        let Some(read) = read else {
+            return Ok(()); // stale/malformed feed → no-op success
+        };
+
+        let bot = &mut *ctx.accounts.llm_bot.load_mut()?;
+        require_keys_eq!(
+            ctx.accounts.operator.key(),
+            bot.operator,
+            ArenaError::NotOperator
+        );
+        paper_llm::roll_day(bot, now);
+
+        match action {
+            DECISION_OPEN => {
+                match paper_llm::precheck_open(
+                    bot,
+                    now,
+                    leverage,
+                    stake_frac_bps,
+                    stop_bps,
+                    tp_bps,
+                    confidence,
+                ) {
+                    Ok(plan) => {
+                        let s = if side == 0 {
+                            strategy::Side::Long
+                        } else {
+                            strategy::Side::Short
+                        };
+                        paper_llm::apply_open(bot, cfg, market_id, s, read.price, now, plan);
+                    }
+                    // Low confidence is a soft "do nothing" (HOLD), not an error.
+                    Err(paper_llm::FloorReject::LowConfidence) => {}
+                    Err(paper_llm::FloorReject::Halted) => return Err(ArenaError::Halted.into()),
+                    Err(paper_llm::FloorReject::Cooldown) => return Err(ArenaError::Cooldown.into()),
+                    Err(paper_llm::FloorReject::TradeCap) => {
+                        return Err(ArenaError::TradeCapReached.into())
+                    }
+                    Err(paper_llm::FloorReject::StopRequired) => {
+                        return Err(ArenaError::StopRequired.into())
+                    }
+                    Err(paper_llm::FloorReject::StopOutOfRange) => {
+                        return Err(ArenaError::StopOutOfRange.into())
+                    }
+                }
+            }
+            DECISION_CLOSE => {
+                if let Some(idx) = paper_llm::find_position_in_market(bot, market_id) {
+                    paper_llm::apply_close(bot, cfg, idx, read.price, now, paper_llm::ACT_CLOSE_LLM);
+                }
+                // No open position in this market → benign no-op.
+            }
+            _ => {} // HOLD / unknown → heartbeat only
+        }
+        bot.last_decision_ts = now;
+        Ok(())
+    }
+
+    /// Base-layer instruction: delegate one LlmBot PDA to the ER. Admin-gated.
+    /// Validator pin via the first remaining account is mandatory, as for Bot.
+    pub fn delegate_llm_bot(ctx: Context<DelegateLlmBot>, persona_id: [u8; 16]) -> Result<()> {
+        require!(
+            !ctx.remaining_accounts.is_empty(),
+            ArenaError::MissingValidator
+        );
+        ctx.accounts.delegate_llm_bot_state(
+            &ctx.accounts.admin,
+            &[LLM_BOT_SEED, &persona_id],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
         Ok(())
     }
 
@@ -465,6 +632,66 @@ pub struct DelegateBot<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(persona_id: [u8; 16])]
+pub struct InitLlmBot<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + std::mem::size_of::<LlmBot>(),
+        seeds = [LLM_BOT_SEED, &persona_id],
+        bump
+    )]
+    pub llm_bot: AccountLoader<'info, LlmBot>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+// apply_decision needs no market_state: the LLM decided off-chain; the program
+// only needs the verified feed price for the fill. config is served as a
+// read-only clone on the ER (same as tick). Authority is the operator signer
+// checked against llm_bot.operator in the handler; AccountLoader already
+// enforces owner + LlmBot discriminator, so a fake or foreign account is
+// rejected before the operator check.
+#[derive(Accounts)]
+#[instruction(market_id: u8)]
+pub struct ApplyDecision<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    /// CHECK: handler enforces address == config.markets[market_id].feed
+    /// (require_keys_eq → WrongFeed); oracle::read_feed parses defensively.
+    pub feed: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub llm_bot: AccountLoader<'info, LlmBot>,
+    pub operator: Signer<'info>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+#[instruction(persona_id: [u8; 16])]
+pub struct DelegateLlmBot<'info> {
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ ArenaError::Unauthorized
+    )]
+    pub config: Box<Account<'info, ArenaConfig>>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: PDA address enforced by seeds; handed to the delegation
+    /// program via the er-sdk `del` constraint. Field named `llm_bot_state` so
+    /// the macro method is `delegate_llm_bot_state` (distinct from the handler).
+    #[account(mut, del, seeds = [LLM_BOT_SEED, &persona_id], bump)]
+    pub llm_bot_state: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
 pub struct InitCrankPayer<'info> {
     #[account(
         seeds = [CONFIG_SEED],
@@ -575,4 +802,18 @@ pub enum ArenaError {
     InvalidDelegationRecord,
     #[msg("magic fee vault does not match the delegation record's validator")]
     InvalidFeeVault,
+    #[msg("signer is not the bot operator")]
+    NotOperator,
+    #[msg("bot halted by the daily-loss kill switch")]
+    Halted,
+    #[msg("decision cooldown has not elapsed")]
+    Cooldown,
+    #[msg("daily trade cap reached")]
+    TradeCapReached,
+    #[msg("open decision requires a stop loss")]
+    StopRequired,
+    #[msg("stop loss outside the allowed range")]
+    StopOutOfRange,
+    #[msg("unknown account type in remaining_accounts")]
+    UnknownAccount,
 }
