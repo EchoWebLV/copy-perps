@@ -425,6 +425,13 @@ function WhaleFeedCard({
       now - position.openedAtMs > ACTIVE_TRADER_WINDOW_MS);
   const moreCount = Math.max(0, p.openPositionsCount - 1);
   const closes = useMiniCandles(position?.market ?? null);
+  const autoCopy = () =>
+    onCopy({
+      kind: "whale",
+      key: `${p.source}:${p.sourceAccount}`,
+      label: name,
+      emoji: "🐋",
+    });
 
   return (
     <article
@@ -447,7 +454,7 @@ function WhaleFeedCard({
               <SourceChip label={sourceChipLabel(p.source)} />
             </div>
             <div
-              className="mt-1 flex items-center gap-2.5 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              className="mt-1 flex min-w-0 items-center gap-2.5 overflow-hidden whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
               style={{ color: DIM }}
             >
               <span>Equity {formatCompactUsd(p.stats.equityUsdc)}</span>
@@ -470,31 +477,19 @@ function WhaleFeedCard({
 
         {/* Whale payloads carry no wins/losses counts (winRatePct1d is null
             from every stats path) — so no W/L block here, P&L only. */}
-        <div className="flex shrink-0 items-start gap-2 text-right">
-          <div>
-            <div
-              className="text-[9px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
-            >
-              {header.label}
-            </div>
-            <div
-              className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
-              style={{ color: headerColor }}
-            >
-              {formatCompactSignedUsd(header.usd)}
-            </div>
+        <div className="shrink-0 text-right">
+          <div
+            className="text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            {header.label}
           </div>
-          <BotCopyButton
-            onClick={() =>
-              onCopy({
-                kind: "whale",
-                key: `${p.source}:${p.sourceAccount}`,
-                label: name,
-                emoji: "🐋",
-              })
-            }
-          />
+          <div
+            className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
+            style={{ color: headerColor }}
+          >
+            {formatCompactSignedUsd(header.usd)}
+          </div>
         </div>
       </div>
 
@@ -518,40 +513,51 @@ function WhaleFeedCard({
           chartLabel={`${position.market} · 1m`}
           footer={whalePositionFooter(position, now)}
           cta={
-            tail ? (
-              // Dormant positions (nothing opened in 24h) drop the loud
-              // accent slab — five identical yellow CTAs in a row is how
-              // users stop seeing any of them. Live action stays loud.
-              dormant ? (
+            // Copy now (one-tap tail) + Auto-copy (recurring) sit side by side
+            // so both copy verbs live together at the bottom of the card.
+            <div className="flex items-stretch gap-2">
+              {tail ? (
+                // Dormant positions (nothing opened in 24h) drop the loud
+                // accent slab — a row of identical yellow CTAs is how users
+                // stop seeing any of them. Live action stays loud.
                 <button
                   type="button"
                   onClick={() => onTail(tail)}
-                  className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
-                  style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
+                  className="flex-1 rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
+                  style={
+                    dormant
+                      ? {
+                          background: PANEL_2,
+                          color: FG,
+                          border: `1px solid ${FAINT}`,
+                        }
+                      : {
+                          background: ACCENT,
+                          color: BG,
+                          boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
+                        }
+                  }
                 >
                   Copy now
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onTail(tail)}
-                  className="w-full rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
-                  style={{
-                    background: ACCENT,
-                    color: BG,
-                    boxShadow: `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`,
-                  }}
-                >
-                  Copy now
-                </button>
-              )
-            ) : (
-              <DisabledCta label="Copy now — unavailable" />
-            )
+                <div className="flex-1">
+                  <DisabledCta label="Copy now — unavailable" />
+                </div>
+              )}
+              <AutoCopyButton onClick={autoCopy} />
+            </div>
           }
         />
       ) : (
-        <FlatLine />
+        <>
+          <FlatLine />
+          {/* No live position to mirror, but you can still arm auto-copy for
+              the trader's next entry. */}
+          <div className="mt-3">
+            <AutoCopyButton onClick={autoCopy} full />
+          </div>
+        </>
       )}
     </article>
   );
@@ -597,6 +603,9 @@ function BotFeedCard({
   if (bot === null) return <SkeletonFeedCard />;
 
   const copyCta = botCopyCta({ name, bot, market, lastUpdateMs, nowMs: now });
+  const hasCopyCta = copyCta.state !== "none";
+  const autoCopy = () =>
+    onCopy({ kind: "arena-bot", key: name, label: display, emoji: persona?.emoji });
 
   const wins = bot.wins;
   const losses = Math.max(0, bot.trades - bot.wins);
@@ -649,7 +658,7 @@ function BotFeedCard({
               <BotFreshness lastUpdateMs={lastUpdateMs} now={now} />
             </div>
             <div
-              className="mt-1 flex items-center gap-2.5 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
+              className="mt-1 flex min-w-0 items-center gap-2.5 overflow-hidden whitespace-nowrap text-[10px] font-bold uppercase tracking-widest tabular-nums"
               style={{ color: DIM }}
             >
               <span>
@@ -663,31 +672,19 @@ function BotFeedCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-start gap-2 text-right">
-          <div>
-            <div
-              className="text-[9px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
-            >
-              P&L
-            </div>
-            <div
-              className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
-              style={{ color: pnlColor }}
-            >
-              {formatSignedPct(pnlPct)}
-            </div>
+        <div className="shrink-0 text-right">
+          <div
+            className="text-[9px] font-black uppercase tracking-widest"
+            style={{ color: DIM }}
+          >
+            P&L
           </div>
-          <BotCopyButton
-            onClick={() =>
-              onCopy({
-                kind: "arena-bot",
-                key: name,
-                label: display,
-                emoji: persona?.emoji,
-              })
-            }
-          />
+          <div
+            className="mt-0.5 text-[15px] font-black tabular-nums leading-none"
+            style={{ color: pnlColor }}
+          >
+            {formatSignedPct(pnlPct)}
+          </div>
         </div>
       </div>
 
@@ -709,24 +706,46 @@ function BotFeedCard({
               ? `New position · opened ${formatWhalePositionAge(position.openedTsMs, now)} ago`
               : `Position · opened ${formatWhalePositionAge(position.openedTsMs, now)} ago`
           }
-          cta={<BotTailCta cta={copyCta} onTail={onTail} />}
+          cta={
+            <div className="flex items-stretch gap-2">
+              {hasCopyCta && (
+                <div className="flex-1">
+                  <BotTailCta cta={copyCta} onTail={onTail} />
+                </div>
+              )}
+              <AutoCopyButton onClick={autoCopy} full={!hasCopyCta} />
+            </div>
+          }
         />
       ) : (
-        <FlatLine />
+        <>
+          <FlatLine />
+          {/* Bot is flat now — arm auto-copy for its next entry. */}
+          <div className="mt-3">
+            <AutoCopyButton onClick={autoCopy} full />
+          </div>
+        </>
       )}
     </article>
   );
 }
 
-/** Standing-copy entry point — present whether or not the bot currently
- *  holds a position (arming BEFORE the next entry is the whole point). */
-function BotCopyButton({ onClick }: { onClick: () => void }) {
+/** Standing-copy button — armed whether or not the trader currently holds a
+ *  position (arming BEFORE the next entry is the whole point). Sits next to
+ *  Copy now when there's a live position, full-width when the trader is flat. */
+function AutoCopyButton({
+  onClick,
+  full = false,
+}: {
+  onClick: () => void;
+  full?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
-      style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
+      className={`${full ? "w-full" : "shrink-0 px-4"} rounded-xl py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]`}
+      style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
       aria-label="Auto-copy this trader"
     >
       Auto-copy
