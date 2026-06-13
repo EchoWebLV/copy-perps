@@ -245,6 +245,146 @@ pub struct Bot {
     pub _pad: [u8; 5],
 }
 
+// ============================================================================
+// LLM oracle-bot tier. Separate account type: the `Bot` layout above is locked
+// and LIVE ON MAINNET — never extend it. LlmBot carries the same paper core
+// plus an operator pubkey, an on-chain safety floor (clamps/limits/kill-switch),
+// and per-position stop/tp so `maintain_llm` can enforce the LLM's stop every
+// tick without an LLM call. Same Pod rules: no bool, widest-first, zero padding.
+// ============================================================================
+
+/// One LLM paper position. 72 bytes, align 8.
+///
+/// | offset | size | field             |
+/// |--------|------|-------------------|
+/// | 0x00   | 8    | entry_price: u64  |
+/// | 0x08   | 8    | stake_micro: u64  |
+/// | 0x10   | 8    | stop_price: u64   |
+/// | 0x18   | 8    | tp_price: u64     |
+/// | 0x20   | 8    | liq_price: u64    |
+/// | 0x28   | 8    | opened_ts: i64    |
+/// | 0x30   | 8    | last_funding_ts: i64 |
+/// | 0x38   | 4    | ticks_held: u32   |
+/// | 0x3C   | 2    | leverage: u16     |
+/// | 0x3E   | 1    | active: u8 (0/1)  |
+/// | 0x3F   | 1    | market_id: u8     |
+/// | 0x40   | 1    | side: u8          |
+/// | 0x41   | 7    | _pad              |
+#[zero_copy]
+#[derive(Default)]
+pub struct LlmPosition {
+    pub entry_price: u64,
+    pub stake_micro: u64,
+    pub stop_price: u64,
+    pub tp_price: u64,
+    pub liq_price: u64,
+    pub opened_ts: i64,
+    pub last_funding_ts: i64,
+    pub ticks_held: u32,
+    pub leverage: u16,
+    pub active: u8,
+    pub market_id: u8,
+    pub side: u8,
+    pub _pad: [u8; 7],
+}
+
+/// On-chain safety floor + LLM knobs. 20 bytes, align 4 — ZERO padding so it
+/// doubles as the `init_llm_bot` Borsh arg (manual impls below, like
+/// StrategyParams).
+///
+/// | offset | size | field                    |
+/// |--------|------|--------------------------|
+/// | 0x00   | 4    | decision_cooldown_secs: u32 |
+/// | 0x04   | 2    | max_leverage: u16        |
+/// | 0x06   | 2    | min_stop_bps: u16        |
+/// | 0x08   | 2    | max_stop_bps: u16        |
+/// | 0x0A   | 2    | max_stake_frac_bps: u16  |
+/// | 0x0C   | 2    | max_trades_per_day: u16  |
+/// | 0x0E   | 2    | daily_loss_limit_bps: u16|
+/// | 0x10   | 2    | funding_bps_per_hour: u16|
+/// | 0x12   | 1    | confidence_floor: u8     |
+/// | 0x13   | 1    | risk_sizing: u8 (0/1)    |
+#[zero_copy]
+#[derive(Default)]
+pub struct LlmParams {
+    pub decision_cooldown_secs: u32,
+    pub max_leverage: u16,
+    pub min_stop_bps: u16,
+    pub max_stop_bps: u16,
+    pub max_stake_frac_bps: u16,
+    pub max_trades_per_day: u16,
+    pub daily_loss_limit_bps: u16,
+    pub funding_bps_per_hour: u16,
+    pub confidence_floor: u8, // 0..100
+    pub risk_sizing: u8,      // 0 = LLM stake_frac, 1 = risk-based sizing
+}
+
+// Zero padding (locked by llm_bot_layout_locked) ⇒ Borsh encoding == repr(C)
+// bytes, so the manual impls are just the raw bytes (mirrors StrategyParams).
+impl AnchorSerialize for LlmParams {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        writer.write_all(bytemuck::bytes_of(self))
+    }
+}
+
+impl AnchorDeserialize for LlmParams {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let mut buf = [0u8; core::mem::size_of::<Self>()];
+        reader.read_exact(&mut buf)?;
+        Ok(bytemuck::pod_read_unaligned(&buf))
+    }
+}
+
+/// 2496 bytes, align 8. Account data = 8-byte discriminator + this.
+///
+/// | offset | size | field                        |
+/// |--------|------|------------------------------|
+/// | 0x000  | 32   | operator: Pubkey             |
+/// | 0x020  | 8    | balance_micro: u64           |
+/// | 0x028  | 8    | gross_pnl_micro: i64         |
+/// | 0x030  | 8    | fees_micro: u64              |
+/// | 0x038  | 8    | funding_paid_micro: u64      |
+/// | 0x040  | 8    | equity_high_micro: u64       |
+/// | 0x048  | 8    | day_start_equity_micro: u64  |
+/// | 0x050  | 8    | seq: u64                     |
+/// | 0x058  | 8    | day_start_ts: i64            |
+/// | 0x060  | 8    | last_decision_ts: i64        |
+/// | 0x068  | 288  | positions: [LlmPosition; 4]  |
+/// | 0x188  | 2048 | tape: [TapeEntry; 64]        |
+/// | 0x988  | 20   | params: LlmParams            |
+/// | 0x99C  | 16   | persona_id: [u8; 16]         |
+/// | 0x9AC  | 4    | trades: u32                  |
+/// | 0x9B0  | 4    | wins: u32                    |
+/// | 0x9B4  | 2    | trades_today: u16            |
+/// | 0x9B6  | 2    | tape_head: u16               |
+/// | 0x9B8  | 1    | halted: u8 (0/1)             |
+/// | 0x9B9  | 1    | bump: u8                     |
+/// | 0x9BA  | 6    | _pad                         |
+#[account(zero_copy)]
+pub struct LlmBot {
+    pub operator: Pubkey,
+    pub balance_micro: u64,
+    pub gross_pnl_micro: i64,
+    pub fees_micro: u64,
+    pub funding_paid_micro: u64,
+    pub equity_high_micro: u64,
+    pub day_start_equity_micro: u64,
+    pub seq: u64,
+    pub day_start_ts: i64,
+    pub last_decision_ts: i64,
+    pub positions: [LlmPosition; MAX_POSITIONS],
+    pub tape: [TapeEntry; TAPE_LEN],
+    pub params: LlmParams,
+    pub persona_id: [u8; 16],
+    pub trades: u32,
+    pub wins: u32,
+    pub trades_today: u16,
+    pub tape_head: u16,
+    pub halted: u8,
+    pub bump: u8,
+    pub _pad: [u8; 6],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,5 +414,17 @@ mod tests {
         assert_eq!(align_of::<MarketState>(), 8);
         assert_eq!(size_of::<Bot>(), 2328);
         assert_eq!(align_of::<Bot>(), 8);
+    }
+
+    // Locks the LlmBot tier layout (UI decoder in lib/arena depends on these).
+    #[test]
+    fn llm_bot_layout_locked() {
+        assert_eq!(align_of::<LlmPosition>(), 8);
+        assert_eq!(size_of::<LlmPosition>(), 72);
+        assert_eq!(align_of::<LlmParams>(), 4);
+        assert_eq!(size_of::<LlmParams>(), 20);
+        assert_eq!(align_of::<LlmBot>(), 8);
+        assert_eq!(size_of::<LlmBot>(), 2496);
+        assert!(8 + size_of::<LlmBot>() <= 10_240);
     }
 }
