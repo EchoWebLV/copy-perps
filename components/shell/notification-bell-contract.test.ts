@@ -67,9 +67,9 @@ describe("NotificationBell component contract", () => {
   });
 });
 
-describe("NotificationBell mount in UnifiedFeed", () => {
+describe("NotificationBell mount in BottomNav (global mobile)", () => {
   const source = readFileSync(
-    join(process.cwd(), "components/feed/UnifiedFeed.tsx"),
+    join(process.cwd(), "components/shell/BottomNav.tsx"),
     "utf8",
   );
 
@@ -77,8 +77,10 @@ describe("NotificationBell mount in UnifiedFeed", () => {
     expect(source).toContain('from "@/components/shell/NotificationBell"');
   });
 
-  it("renders NotificationBell in the feed surface", () => {
+  it("renders NotificationBell in a fixed top-right overlay for mobile", () => {
     expect(source).toContain("<NotificationBell");
+    expect(source).toContain("fixed top-3 right-3");
+    expect(source).toContain("lg:hidden");
   });
 });
 

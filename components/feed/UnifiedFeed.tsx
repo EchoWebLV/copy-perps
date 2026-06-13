@@ -22,7 +22,6 @@ import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { BotCard } from "@/components/arena/BotCard";
 import { BalancePill } from "@/components/shell/BalancePill";
-import { NotificationBell } from "@/components/shell/NotificationBell";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { CopyModal, type CopyModalTarget } from "@/components/copy/CopyModal";
 import { buildWhaleTailSource } from "@/components/whales/whale-tail-source";
@@ -180,12 +179,8 @@ export function UnifiedFeed({ initialWhales }: Props) {
       style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
     >
       <BalancePill />
-      {/* Bell: absolute top-right, same z-layer as the balance pill, mobile-only.
-          On desktop the DesktopNav sidebar has no user-specific controls yet;
-          the bell is also placed there via DesktopNav below. */}
-      <div className="absolute top-3 right-3 z-30 lg:hidden">
-        <NotificationBell />
-      </div>
+      {/* Mobile bell is rendered globally by BottomNav (fixed top-3 right-3 z-40 lg:hidden).
+          Desktop bell is rendered by DesktopNav. No per-feed mount needed. */}
 
       {/* Search bar — above filter pills. */}
       <div

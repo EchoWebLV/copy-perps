@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChartCandlestick, Flame, Wallet, PieChart } from "lucide-react";
 import { ACCENT, BG, FG, FAINT, FONT_DISPLAY } from "@/components/v2/ui";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 
 // Snap-style: dark bg, dim icons, yellow underline on active. Center
 // Pulse CTA elevates above the bar like the camera button in Snapchat.
@@ -33,6 +34,12 @@ export function BottomNav() {
   const pulseActive = isActive("/chatter");
 
   return (
+    <>
+      {/* Global mobile notification bell — fixed top-right, all routes. */}
+      <div className="fixed top-3 right-3 z-40 lg:hidden">
+        <NotificationBell />
+      </div>
+
     <nav
       className="fixed bottom-0 left-0 right-0 z-30 border-t-2 lg:hidden"
       style={{
@@ -91,6 +98,7 @@ export function BottomNav() {
         ))}
       </div>
     </nav>
+    </>
   );
 }
 

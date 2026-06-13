@@ -58,9 +58,25 @@ vi.mock("@/lib/db/schema", () => ({
   },
 }));
 
+// Spy on drizzle condition helpers so the POST scoping test can assert
+// that the where clause contains BOTH the user-scoping (eq) and the
+// unread-only guard (isNull) — not a wipe-all or cross-user update.
+vi.mock("drizzle-orm", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("drizzle-orm")>();
+  return {
+    ...actual,
+    eq: vi.fn(actual.eq),
+    isNull: vi.fn(actual.isNull),
+    and: vi.fn(actual.and),
+    desc: vi.fn(actual.desc),
+  };
+});
+
 // ── Import routes AFTER mock declarations ────────────────────────────────────
 
 import { GET, POST } from "@/app/api/notifications/route";
+import { eq, isNull } from "drizzle-orm";
+import { notificationEvents } from "@/lib/db/schema";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -188,6 +204,33 @@ describe("POST /api/notifications", () => {
     expect(await res.json()).toEqual({ ok: true });
     // The update chain was kicked off
     expect(mocks.updateChain.set).toHaveBeenCalledTimes(1);
+    expect(mocks.updateChain.where).toHaveBeenCalledTimes(1);
+  });
+
+  it("scopes the update to the authenticated user only (not cross-user)", async () => {
+    await POST(authedPost());
+    // eq must be called with (notificationEvents.userId, user.id) — scopes to this user
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(
+      notificationEvents.userId,
+      FAKE_USER.id,
+    );
+  });
+
+  it("scopes the update to unread rows only (isNull readAt guard, not a wipe-all)", async () => {
+    await POST(authedPost());
+    // isNull must be called with notificationEvents.readAt — only marks currently-unread rows
+    expect(vi.mocked(isNull)).toHaveBeenCalledWith(notificationEvents.readAt);
+  });
+
+  it("combines both scope guards in a single and() condition", async () => {
+    await POST(authedPost());
+    // and() must be invoked — both user-scope and isNull guard are composed together
+    expect(vi.mocked(isNull)).toHaveBeenCalled();
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(
+      notificationEvents.userId,
+      FAKE_USER.id,
+    );
+    // The where clause received the composed condition (not two separate calls)
     expect(mocks.updateChain.where).toHaveBeenCalledTimes(1);
   });
 });
