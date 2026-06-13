@@ -415,17 +415,15 @@ export function WhalePulseFeed({ initialPositions }: Props) {
             className="no-scrollbar h-full w-full snap-y snap-mandatory overflow-y-scroll lg:hidden"
             style={{ scrollSnapStop: "always" }}
           >
-            {items.map((item, index) => (
+            {items.map((item) => (
               <section
                 key={item.id}
                 data-pulse-position-id={item.position.positionId}
-                className="h-full w-full snap-start"
+                className="h-full w-full snap-start px-3 pt-3 pb-24"
               >
-                <PulsePositionCard
+                <PulseCard
                   item={item}
                   now={now}
-                  slideIndex={index}
-                  total={items.length}
                   whaleStats={statsByWhaleId[item.position.whaleId]}
                   selectedReaction={
                     persistedSocial[item.position.positionId]?.myReaction ??
@@ -504,7 +502,7 @@ export function WhalePulseFeed({ initialPositions }: Props) {
             >
               <div className="grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3">
                 {items.map((item) => (
-                  <DesktopPulseCard
+                  <PulseCard
                     key={item.id}
                     item={item}
                     now={now}
@@ -546,257 +544,12 @@ export function WhalePulseFeed({ initialPositions }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Mobile card — full-viewport snap card (tape anatomy per mock)
+// Pulse card — one shared design for BOTH the mobile snap tape and the
+// desktop grid. Mobile wraps it in a full-screen snap slide; desktop drops it
+// into a grid cell. Same card either way (no per-platform drift).
 // ---------------------------------------------------------------------------
 
-function PulsePositionCard({
-  item,
-  now,
-  slideIndex,
-  total,
-  whaleStats,
-  selectedReaction,
-  persistedSocial,
-  onReact,
-  onTail,
-}: {
-  item: PulseItem;
-  now: number;
-  slideIndex: number;
-  total: number;
-  whaleStats?: PulseWhaleStats;
-  selectedReaction?: PulseReaction;
-  persistedSocial?: PulseApiSocialRecord;
-  onReact: (reaction: PulseReaction) => void;
-  onTail: () => void;
-}) {
-  const rawPosition = item.position;
-  const dynamicStale =
-    rawPosition.stale ||
-    (now > 0 && !isSourceFresh(rawPosition.lastSeenAtMs, undefined, now));
-  const p = { ...rawPosition, stale: dynamicStale };
-  const sideColor = p.side === "long" ? GREEN : RED;
-  const profit = (p.unrealizedPnlPct ?? 0) >= 0;
-  const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
-  const aiLine = buildAiLine(item);
-  const recentReactors = persistedSocial?.recentReactors ?? [];
-  const positionTime = formatWhalePositionTime(p, now);
-
-  const bullishCount = counts.Bullish ?? 0;
-  const bearishCount = counts.Bearish ?? 0;
-  const sentimentTotal = bullishCount + bearishCount;
-  const bullishPct =
-    sentimentTotal > 0 ? Math.round((bullishCount / sentimentTotal) * 100) : 50;
-
-  const canCopy = item.canTail && !dynamicStale;
-
-  return (
-    <article
-      className="mx-auto flex h-full w-full max-w-2xl flex-col px-5 pt-5 pb-28 lg:max-w-4xl lg:px-8 lg:py-8"
-      style={dynamicStale ? { opacity: 0.65 } : undefined}
-    >
-      {/* Eyebrow row: signal chip + relative time + Live/Stale badge */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className="rounded-md px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.14em]"
-          style={{
-            background: eyebrowBg(item.kind),
-            color: eyebrowColor(item.kind),
-          }}
-        >
-          {item.eyebrow}
-        </span>
-        <span className="text-[10px]" style={{ color: DIM }}>
-          {positionTime.value}
-        </span>
-        <span
-          className="ml-auto shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase"
-          style={{
-            background: p.stale ? `${STREAK}14` : `${GREEN}18`,
-            color: p.stale ? STREAK : GREEN,
-            border: `1px solid ${p.stale ? `${STREAK}38` : `${GREEN}45`}`,
-          }}
-        >
-          {p.stale ? "Mark delayed" : "Live"}
-        </span>
-      </div>
-
-      {/* Slide counter */}
-      <div
-        className="mt-1 text-right text-[9px] font-black uppercase"
-        style={{ color: DIM }}
-      >
-        {String(slideIndex + 1).padStart(2, "0")} /{" "}
-        {String(total).padStart(2, "0")}
-      </div>
-
-      <div
-        className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-4 lg:p-6"
-        style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
-      >
-        {/* Identity row — tapping navigates to the trader on /feed */}
-        <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} className="flex items-center gap-3 no-underline" tabIndex={-1}>
-          <WhaleFingerprintAvatar
-            sourceAccount={p.sourceAccount}
-            label={p.displayName}
-            mood={p.stale ? "WOUNDED" : "HUNTING"}
-            size={44}
-            pulse={!p.stale}
-          />
-          <div className="min-w-0 flex-1">
-            <div
-              className="truncate text-[13px] font-black uppercase"
-              style={{ color: FG }}
-            >
-              {p.displayName}
-            </div>
-            <div
-              className="mt-0.5 text-[10px] font-black uppercase tracking-widest"
-              style={{ color: DIM }}
-            >
-              {p.source} ·{" "}
-              {formatNotionalShort(p.notionalUsd)} in {p.market}
-            </div>
-          </div>
-          <RealWalletBadge />
-          <ChevronRight size={15} strokeWidth={2} style={{ color: DIM }} className="shrink-0" />
-        </Link>
-
-        {/* Market / side / leverage chip */}
-        <div className="mt-3">
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
-            style={{
-              background: `${sideColor}18`,
-              color: sideColor,
-              border: `1px solid ${sideColor}45`,
-            }}
-          >
-            {p.market} {p.side} {p.leverage}x
-          </span>
-        </div>
-
-        {/* Big headline */}
-        <h2
-          className="mt-4 text-[24px] font-black uppercase leading-[0.98] lg:text-[36px]"
-          style={{ color: FG }}
-        >
-          <PulseHeadlineText headline={item.headline} />
-        </h2>
-
-        {/* One-line AI note */}
-        {aiLine ? (
-          <div
-            className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
-            style={{
-              background: PANEL,
-              border: `1px solid ${FAINT}`,
-              color: DIM,
-              fontFamily: FONT_BODY,
-            }}
-          >
-            <MessageCircle
-              size={14}
-              strokeWidth={2.6}
-              className="mt-0.5 shrink-0"
-              style={{ color: ACCENT }}
-            />
-            <span>{aiLine}</span>
-          </div>
-        ) : null}
-
-        {/* Stats row: notional / entry / now */}
-        <div
-          className="mt-4 grid grid-cols-2 gap-2"
-          style={{ fontFamily: FONT_BODY }}
-        >
-          {availableMetrics(p, whaleStats, profit).map((m) => (
-            <Metric
-              key={m.label}
-              label={m.label}
-              value={m.value}
-              color={m.color}
-            />
-          ))}
-        </div>
-
-        {recentReactors.length > 0 ? (
-          <RecentReactions reactors={recentReactors} />
-        ) : null}
-
-        {/* Sentiment row: bullish / bearish chips + ratio bar */}
-        <div className="mt-auto pt-4">
-          <div className="mt-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            {/* Bullish / Bearish chips only (Tailing excluded from tape display) */}
-            <div className="flex min-w-0 flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
-              {PULSE_REACTIONS.filter(
-                (r): r is Exclude<PulseReaction, "Tailing"> => r !== "Tailing",
-              ).map((reaction) => (
-                <ReactionButton
-                  key={reaction}
-                  label={reaction}
-                  count={counts[reaction]}
-                  active={selectedReaction === reaction}
-                  onClick={() => onReact(reaction)}
-                />
-              ))}
-              {/* Bullish vs Bearish ratio bar */}
-              {sentimentTotal > 0 ? (
-                <div
-                  className="flex-1 self-center h-[4px] rounded-full overflow-hidden min-w-[40px]"
-                  style={{ background: `${RED}30` }}
-                >
-                  <div
-                    style={{ width: `${bullishPct}%`, background: GREEN, height: "100%", borderRadius: 99 }}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {/* Primary CTA */}
-            <button
-              type="button"
-              onClick={onTail}
-              disabled={!canCopy}
-              className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-[11px] font-black uppercase transition active:scale-[0.97] disabled:cursor-not-allowed"
-              style={{
-                background: canCopy ? ACCENT : "rgba(250,250,242,0.08)",
-                color: canCopy ? BG : DIM,
-                border: `1px solid ${canCopy ? ACCENT : FAINT}`,
-              }}
-            >
-              {canCopy ? (
-                <Zap size={13} strokeWidth={3} fill={BG} />
-              ) : (
-                <Eye size={13} strokeWidth={3} />
-              )}
-              {canCopy ? "Copy now" : dynamicStale ? "Stale data — copying disabled until fresh." : "Watch only"}
-            </button>
-          </div>
-
-          {/* Quiet auto-copy link (open cards only) */}
-          {canCopy ? (
-            <p
-              className="mt-2 text-center text-[10px]"
-              style={{ color: DIM }}
-            >
-              Want every trade?{" "}
-              <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
-                View trader → Auto-copy
-              </Link>
-            </p>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Desktop card — used inside the theater column
-// ---------------------------------------------------------------------------
-
-function DesktopPulseCard({
+function PulseCard({
   item,
   now,
   whaleStats,
@@ -835,7 +588,7 @@ function DesktopPulseCard({
 
   return (
     <article
-      className="flex h-full flex-col rounded-2xl border p-5"
+      className="flex h-full w-full flex-col rounded-2xl border p-5"
       style={{
         background: PANEL,
         borderColor: FAINT,
@@ -917,7 +670,7 @@ function DesktopPulseCard({
         <div
           className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug"
           style={{
-            background: PANEL,
+            background: PANEL_2,
             border: `1px solid ${FAINT}`,
             color: DIM,
             fontFamily: FONT_BODY,
@@ -952,7 +705,7 @@ function DesktopPulseCard({
             {PULSE_REACTIONS.filter(
               (r): r is Exclude<PulseReaction, "Tailing"> => r !== "Tailing",
             ).map((reaction) => (
-              <DesktopPulseReactionButton
+              <PulseReactionButton
                 key={reaction}
                 label={reaction}
                 count={counts[reaction]}
@@ -1053,50 +806,7 @@ function pulseHeadlineColor(tone: PulseHeadlineTone): string {
   return tone === "green" ? GREEN : RED;
 }
 
-function ReactionButton({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: Exclude<PulseReaction, "Tailing">;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const color = pulseReactionColor(label);
-  const mutedColor = `${color}cc`;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[9px] font-black uppercase transition active:scale-[0.97] sm:flex-none sm:gap-1.5 sm:px-3 sm:text-[10px]"
-      style={{
-        background: active ? `${color}24` : PANEL_2,
-        color,
-        border: `1px solid ${active ? `${color}70` : `${color}55`}`,
-      }}
-    >
-      {label === "Bullish" ? (
-        <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
-      ) : (
-        <TrendingDown
-          className="shrink-0"
-          size={12}
-          strokeWidth={3}
-          style={{ color }}
-        />
-      )}
-      <span>{label}</span>
-      {count > 0 ? (
-        <span style={{ color: active ? color : mutedColor }}>{count}</span>
-      ) : null}
-    </button>
-  );
-}
-
-function DesktopPulseReactionButton({
+function PulseReactionButton({
   label,
   count,
   active,
@@ -1116,7 +826,7 @@ function DesktopPulseReactionButton({
       onClick={onClick}
       className="inline-flex w-auto items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase transition hover:opacity-90 active:scale-[0.97]"
       style={{
-        background: active ? `${color}24` : PANEL,
+        background: active ? `${color}24` : PANEL_2,
         color,
         border: `1px solid ${active ? `${color}70` : `${color}55`}`,
       }}

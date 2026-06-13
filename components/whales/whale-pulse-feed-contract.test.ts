@@ -68,15 +68,18 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("lg:hidden");
     // Desktop container (hidden on mobile, shown on desktop)
     expect(componentSource).toContain("hidden h-full min-h-0 flex-col lg:flex");
-    expect(componentSource).toContain("PulsePositionCard");
-    expect(componentSource).toContain("DesktopPulseCard");
+    // ONE shared card design for both mobile and desktop (no per-platform drift)
+    expect(componentSource).toContain("function PulseCard(");
+    expect(componentSource).not.toContain("PulsePositionCard");
+    expect(componentSource).not.toContain("DesktopPulseCard");
     // Desktop is a multi-column card grid (NOT a full-screen theater column)
     expect(componentSource).toContain(
       "grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3",
     );
     expect(componentSource).not.toContain("min-h-screen w-full max-w-xl");
-    expect(componentSource).toContain("DesktopPulseReactionButton");
-    expect(componentSource).toContain("inline-flex w-auto");
+    // One shared reaction button (mobile + desktop)
+    expect(componentSource).toContain("function PulseReactionButton(");
+    expect(componentSource).not.toContain("DesktopPulseReactionButton");
     expect(componentSource).not.toContain('<ul className="divide-y"');
   });
 
@@ -97,25 +100,26 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("formatSignedUsd");
   });
 
-  it("keeps the mobile reaction controls on one row", () => {
+  it("keeps the reaction chips on one wrapping row", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
-    expect(componentSource).toContain("flex-nowrap");
-    expect(componentSource).toContain("sm:flex-wrap");
-    expect(componentSource).toContain('className="shrink-0"');
+    expect(componentSource).toContain("flex flex-wrap items-center gap-2");
   });
 
-  it("keeps extra space between reactions and the Tail button", () => {
+  it("keeps the reactions row and the Copy CTA spaced apart, pinned to the bottom", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
+    // Shared card: reactions + CTA in a justify-between row, pushed to the
+    // card bottom via mt-auto.
+    expect(componentSource).toContain("mt-auto pt-6");
     expect(componentSource).toContain(
-      "mt-auto flex flex-col gap-4 sm:flex-row",
+      "flex flex-wrap items-center justify-between gap-3",
     );
   });
 
