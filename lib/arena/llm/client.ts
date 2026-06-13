@@ -11,16 +11,23 @@ import { readFileSync } from "node:fs";
 import { generateObject } from "ai";
 import { createXai } from "@ai-sdk/xai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { decisionSchema, type LlmDecision } from "./schema";
 
-export type LlmProvider = "xai" | "anthropic";
+export type LlmProvider = "xai" | "anthropic" | "openai";
 
-// Default model ids (configurable per bot in the registry). grok-4.3 matches the
-// existing xAI wiring; claude-opus-4-8 is the current Opus. Cadence is ~3-5 min,
+// Default model ids (configurable per bot in the registry). Cadence is ~3-5 min,
 // so frontier models are affordable.
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   xai: "grok-4.3",
   anthropic: "claude-opus-4-8",
+  openai: "gpt-5",
+};
+
+const KEY_ENV: Record<LlmProvider, string> = {
+  xai: "XAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
 };
 
 // Reads a key from process.env, falling back to .env.local (the dev server only
@@ -54,17 +61,22 @@ export function createLlmClient(cfg: { provider: LlmProvider; modelId?: string }
         const model =
           cfg.provider === "xai"
             ? createXai({ apiKey: keyFromEnv("XAI_API_KEY") })(modelId)
-            : // @ai-sdk/anthropic v3 posts to /messages (missing /v1/) and 404s;
-              // pin the baseURL so calls land at /v1/messages. Drop on v4.
-              createAnthropic({
-                baseURL: "https://api.anthropic.com/v1",
-                apiKey: keyFromEnv("ANTHROPIC_API_KEY"),
-              })(modelId);
+            : cfg.provider === "openai"
+              ? createOpenAI({ apiKey: keyFromEnv("OPENAI_API_KEY") })(modelId)
+              : // @ai-sdk/anthropic v3 posts to /messages (missing /v1/) and 404s;
+                // pin the baseURL so calls land at /v1/messages. Drop on v4.
+                createAnthropic({
+                  baseURL: "https://api.anthropic.com/v1",
+                  apiKey: keyFromEnv("ANTHROPIC_API_KEY"),
+                })(modelId);
         const { object } = await generateObject({
           model,
           schema: decisionSchema,
           prompt,
-          maxOutputTokens: 600,
+          // Generous budget: reasoning models (e.g. gpt-5) spend output tokens
+          // on hidden reasoning before emitting the JSON — too small a cap
+          // yields AI_NoObjectGeneratedError. Terse models ignore the headroom.
+          maxOutputTokens: 4000,
         });
         // Belt-and-suspenders: generateObject already validates against the
         // schema, but re-parse defensively so a malformed object can never
@@ -84,5 +96,5 @@ export function createLlmClient(cfg: { provider: LlmProvider; modelId?: string }
 }
 
 export function hasKeyFor(provider: LlmProvider): boolean {
-  return Boolean(keyFromEnv(provider === "xai" ? "XAI_API_KEY" : "ANTHROPIC_API_KEY"));
+  return Boolean(keyFromEnv(KEY_ENV[provider]));
 }

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.84",
+    "@ai-sdk/openai": "^3.0.71",
     "@ai-sdk/xai": "^3.0.95",
     "@coral-xyz/anchor": "^0.32.1",
     "@neondatabase/serverless": "^1.1.0",

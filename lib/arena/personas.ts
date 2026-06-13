@@ -64,6 +64,16 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     emoji: "🤖",
     blurb: "LLM oracle · Grok 4.3",
   },
+  "gpt-v1": {
+    display: "GPT",
+    emoji: "🟢",
+    blurb: "LLM oracle · GPT-5 · risk-managed",
+  },
+  "vader-v1": {
+    display: "Vader",
+    emoji: "😈",
+    blurb: "LLM oracle · degen contrarian",
+  },
 };
 
 /** utf8 bytes zero-padded/truncated to 16 — identical to init-devnet.ts
