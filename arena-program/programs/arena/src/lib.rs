@@ -6,6 +6,7 @@ use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 pub mod candles;
 pub mod oracle;
 pub mod paper;
+pub mod paper_llm;
 pub mod state;
 pub mod strategy;
 

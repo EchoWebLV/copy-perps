@@ -288,25 +288,27 @@ pub struct LlmPosition {
     pub _pad: [u8; 7],
 }
 
-/// On-chain safety floor + LLM knobs. 20 bytes, align 4 — ZERO padding so it
+/// On-chain safety floor + LLM knobs. 24 bytes, align 4 — ZERO padding so it
 /// doubles as the `init_llm_bot` Borsh arg (manual impls below, like
 /// StrategyParams).
 ///
 /// | offset | size | field                    |
 /// |--------|------|--------------------------|
-/// | 0x00   | 4    | decision_cooldown_secs: u32 |
-/// | 0x04   | 2    | max_leverage: u16        |
-/// | 0x06   | 2    | min_stop_bps: u16        |
-/// | 0x08   | 2    | max_stop_bps: u16        |
-/// | 0x0A   | 2    | max_stake_frac_bps: u16  |
-/// | 0x0C   | 2    | max_trades_per_day: u16  |
-/// | 0x0E   | 2    | daily_loss_limit_bps: u16|
-/// | 0x10   | 2    | funding_bps_per_hour: u16|
-/// | 0x12   | 1    | confidence_floor: u8     |
-/// | 0x13   | 1    | risk_sizing: u8 (0/1)    |
+/// | 0x00   | 4    | max_hold_ticks: u32      |
+/// | 0x04   | 4    | decision_cooldown_secs: u32 |
+/// | 0x08   | 2    | max_leverage: u16        |
+/// | 0x0A   | 2    | min_stop_bps: u16        |
+/// | 0x0C   | 2    | max_stop_bps: u16        |
+/// | 0x0E   | 2    | max_stake_frac_bps: u16  |
+/// | 0x10   | 2    | max_trades_per_day: u16  |
+/// | 0x12   | 2    | daily_loss_limit_bps: u16|
+/// | 0x14   | 2    | funding_bps_per_hour: u16|
+/// | 0x16   | 1    | confidence_floor: u8     |
+/// | 0x17   | 1    | risk_sizing: u8 (0/1)    |
 #[zero_copy]
 #[derive(Default)]
 pub struct LlmParams {
+    pub max_hold_ticks: u32, // deterministic safety backstop (e.g. 24h of ticks)
     pub decision_cooldown_secs: u32,
     pub max_leverage: u16,
     pub min_stop_bps: u16,
@@ -351,15 +353,15 @@ impl AnchorDeserialize for LlmParams {
 /// | 0x060  | 8    | last_decision_ts: i64        |
 /// | 0x068  | 288  | positions: [LlmPosition; 4]  |
 /// | 0x188  | 2048 | tape: [TapeEntry; 64]        |
-/// | 0x988  | 20   | params: LlmParams            |
-/// | 0x99C  | 16   | persona_id: [u8; 16]         |
-/// | 0x9AC  | 4    | trades: u32                  |
-/// | 0x9B0  | 4    | wins: u32                    |
-/// | 0x9B4  | 2    | trades_today: u16            |
-/// | 0x9B6  | 2    | tape_head: u16               |
-/// | 0x9B8  | 1    | halted: u8 (0/1)             |
-/// | 0x9B9  | 1    | bump: u8                     |
-/// | 0x9BA  | 6    | _pad                         |
+/// | 0x988  | 24   | params: LlmParams            |
+/// | 0x9A0  | 16   | persona_id: [u8; 16]         |
+/// | 0x9B0  | 4    | trades: u32                  |
+/// | 0x9B4  | 4    | wins: u32                    |
+/// | 0x9B8  | 2    | trades_today: u16            |
+/// | 0x9BA  | 2    | tape_head: u16               |
+/// | 0x9BC  | 1    | halted: u8 (0/1)             |
+/// | 0x9BD  | 1    | bump: u8                     |
+/// | 0x9BE  | 2    | _pad                         |
 #[account(zero_copy)]
 pub struct LlmBot {
     pub operator: Pubkey,
@@ -382,7 +384,7 @@ pub struct LlmBot {
     pub tape_head: u16,
     pub halted: u8,
     pub bump: u8,
-    pub _pad: [u8; 6],
+    pub _pad: [u8; 2],
 }
 
 #[cfg(test)]
@@ -422,7 +424,7 @@ mod tests {
         assert_eq!(align_of::<LlmPosition>(), 8);
         assert_eq!(size_of::<LlmPosition>(), 72);
         assert_eq!(align_of::<LlmParams>(), 4);
-        assert_eq!(size_of::<LlmParams>(), 20);
+        assert_eq!(size_of::<LlmParams>(), 24);
         assert_eq!(align_of::<LlmBot>(), 8);
         assert_eq!(size_of::<LlmBot>(), 2496);
         assert!(8 + size_of::<LlmBot>() <= 10_240);
