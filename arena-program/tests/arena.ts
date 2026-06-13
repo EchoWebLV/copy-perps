@@ -349,4 +349,119 @@ describe("arena", () => {
       assert.equal(err?.error?.errorCode?.code, "BadParams");
     }
   });
+
+  // ───────────────────── LLM oracle-bot tier (apply_decision) ──────────────
+  // Runs on the plain local validator (no ER): apply_decision reads the static
+  // feed fixture and mutates the LlmBot account directly. Verifies the on-chain
+  // safety floor + operator-signer enforcement at runtime.
+  const LLM_ID = personaId("llm.v1");
+  const [llmPda] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("llmbot"), Buffer.from(LLM_ID)],
+    program.programId,
+  );
+  const operator = anchor.web3.Keypair.generate();
+  const LLM_PARAMS = {
+    maxHoldTicks: 1000,
+    decisionCooldownSecs: 240,
+    maxLeverage: 15,
+    minStopBps: 50,
+    maxStopBps: 500,
+    maxStakeFracBps: 2000,
+    maxTradesPerDay: 5,
+    dailyLossLimitBps: 1500,
+    fundingBpsPerHour: 2,
+    confidenceFloor: 55,
+    riskSizing: 0,
+  };
+  // action 0 HOLD / 1 OPEN / 2 CLOSE; side 0 long / 1 short.
+  const openIx = (
+    over: Partial<{ side: number; lev: number; stake: number; stop: number; tp: number; conf: number }> = {},
+  ) =>
+    program.methods.applyDecision(
+      0,
+      1,
+      over.side ?? 0,
+      over.lev ?? 10,
+      over.stake ?? 1000,
+      over.stop ?? 200,
+      over.tp ?? 400,
+      over.conf ?? 80,
+    );
+
+  it("inits an LLM oracle bot with its operator", async () => {
+    await program.methods
+      .initLlmBot(LLM_ID, operator.publicKey, LLM_PARAMS, START_BALANCE)
+      .accountsPartial({
+        config: configPda,
+        llmBot: llmPda,
+        admin: provider.wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
+    const bot = await program.account.llmBot.fetch(llmPda);
+    assert.equal(bot.operator.toBase58(), operator.publicKey.toBase58());
+    assert.equal(bot.balanceMicro.toString(), START_BALANCE.toString());
+  });
+
+  it("rejects apply_decision from a non-operator signer", async () => {
+    const stranger = anchor.web3.Keypair.generate();
+    try {
+      await openIx()
+        .accountsPartial({ config: configPda, feed: SOL_FEED, llmBot: llmPda, operator: stranger.publicKey })
+        .signers([stranger])
+        .rpc();
+      assert.fail("expected NotOperator");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "NotOperator");
+    }
+  });
+
+  it("rejects an OPEN without a stop loss", async () => {
+    try {
+      await openIx({ stop: 0 })
+        .accountsPartial({ config: configPda, feed: SOL_FEED, llmBot: llmPda, operator: operator.publicKey })
+        .signers([operator])
+        .rpc();
+      assert.fail("expected StopRequired");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "StopRequired");
+    }
+  });
+
+  it("opens a position and clamps leverage to maxLeverage", async () => {
+    await openIx({ lev: 999 })
+      .accountsPartial({ config: configPda, feed: SOL_FEED, llmBot: llmPda, operator: operator.publicKey })
+      .signers([operator])
+      .rpc();
+    const bot = await program.account.llmBot.fetch(llmPda);
+    const pos = bot.positions.find((p: any) => p.active === 1);
+    assert.ok(pos, "expected an open position");
+    assert.equal(pos.leverage, 15); // clamped from 999
+    assert.equal(pos.side, 0);
+    assert.equal(bot.tradesToday, 1);
+    assert.ok(pos.stopPrice.gt(new BN(0)), "stop set");
+  });
+
+  it("rejects a second OPEN inside the cooldown window", async () => {
+    try {
+      await openIx()
+        .accountsPartial({ config: configPda, feed: SOL_FEED, llmBot: llmPda, operator: operator.publicKey })
+        .signers([operator])
+        .rpc();
+      assert.fail("expected Cooldown");
+    } catch (err: any) {
+      assert.equal(err?.error?.errorCode?.code, "Cooldown");
+    }
+  });
+
+  it("closes the open position on a CLOSE decision", async () => {
+    await program.methods
+      .applyDecision(0, 2, 0, 0, 0, 0, 0, 0) // CLOSE
+      .accountsPartial({ config: configPda, feed: SOL_FEED, llmBot: llmPda, operator: operator.publicKey })
+      .signers([operator])
+      .rpc();
+    const bot = await program.account.llmBot.fetch(llmPda);
+    assert.equal(bot.positions.filter((p: any) => p.active === 1).length, 0);
+    assert.equal(bot.trades, 1);
+  });
 });
