@@ -463,8 +463,8 @@ export function WhalePulseFeed({ initialPositions }: Props) {
                   className="text-[10px] font-black uppercase tracking-[0.24em]"
                   style={{ color: DIM }}
                 >
-                  {/* PULSE TAPE — displayed in the desktop header */}
-                  PULSE TAPE
+                  {/* LIVE — desktop grid header eyebrow */}
+                  LIVE
                 </div>
                 <div className="mt-1 text-[22px] font-black uppercase leading-none">
                   {items.length} live signals
@@ -496,14 +496,13 @@ export function WhalePulseFeed({ initialPositions }: Props) {
               ) : null}
             </div>
 
-            {/* Theater snap column */}
+            {/* Desktop grid — multi-column card grid (mobile keeps the tape) */}
             <div
               ref={desktopScrollRef}
               onScroll={rememberVisiblePulsePosition}
-              className="no-scrollbar min-h-0 flex-1 overflow-y-scroll snap-y snap-mandatory"
-              style={{ scrollSnapStop: "always" }}
+              className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5"
             >
-              <div>
+              <div className="grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3">
                 {items.map((item) => (
                   <DesktopPulseCard
                     key={item.id}
@@ -836,10 +835,10 @@ function DesktopPulseCard({
 
   return (
     <article
-      className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-8 py-10 snap-start"
+      className="flex h-full flex-col rounded-2xl border p-5"
       style={{
-        borderLeft: `1px solid ${FAINT}`,
-        borderRight: `1px solid ${FAINT}`,
+        background: PANEL,
+        borderColor: FAINT,
         ...(dynamicStale ? { opacity: 0.65 } : {}),
       }}
     >

@@ -25,8 +25,8 @@ describe("WhalePulseFeed route contract", () => {
       "utf8",
     );
 
-    // PULSE label is retained inside the desktop theater header ("PULSE TAPE")
-    expect(componentSource).toContain("PULSE");
+    // Desktop header eyebrow reads "LIVE" (matches the nav label)
+    expect(componentSource).toContain("LIVE");
     expect(socialSource).toContain("Tailing");
     expect(socialSource).toContain("Bullish");
     expect(socialSource).toContain("Bearish");
@@ -55,25 +55,26 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).not.toContain("RISK");
   });
 
-  it("keeps the mobile snap feed and adds a desktop theater column", () => {
+  it("keeps the mobile snap tape and renders a desktop card grid", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
-    // Mobile snap-scroll tape
+    // Mobile snap-scroll tape (the TikTok-style LIVE feed) is retained
     expect(componentSource).toContain("snap-y snap-mandatory overflow-y-scroll");
     expect(componentSource).toContain('scrollSnapStop: "always"');
     expect(componentSource).toContain("h-full w-full snap-start");
     expect(componentSource).toContain("lg:hidden");
-    // Desktop theater column (hidden on mobile, shown on desktop)
+    // Desktop container (hidden on mobile, shown on desktop)
     expect(componentSource).toContain("hidden h-full min-h-0 flex-col lg:flex");
     expect(componentSource).toContain("PulsePositionCard");
     expect(componentSource).toContain("DesktopPulseCard");
-    // Desktop theater: centered, side-bordered column
-    expect(componentSource).toContain("max-w-xl");
-    // PULSE TAPE label retained in desktop header
-    expect(componentSource).toContain("PULSE TAPE");
+    // Desktop is a multi-column card grid (NOT a full-screen theater column)
+    expect(componentSource).toContain(
+      "grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3",
+    );
+    expect(componentSource).not.toContain("min-h-screen w-full max-w-xl");
     expect(componentSource).toContain("DesktopPulseReactionButton");
     expect(componentSource).toContain("inline-flex w-auto");
     expect(componentSource).not.toContain('<ul className="divide-y"');
