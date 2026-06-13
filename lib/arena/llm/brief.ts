@@ -12,7 +12,7 @@
 // The model gets DERIVED signals (price + indicators + funding + OI/long-short +
 // sentiment + its own book + an explicit timestamp), never raw OHLCV.
 
-import type { Candle } from "../candles";
+import type { Candle } from "../../data/candles";
 import type { MarketSentiment } from "../../data/market-sentiment";
 import { atr, macd, realizedVol, rsi } from "../../data/indicators";
 import type { ArenaLlmBot } from "../decode";

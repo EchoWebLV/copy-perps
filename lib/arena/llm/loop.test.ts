@@ -132,9 +132,9 @@ describe("startLlmBrain", () => {
   });
 
   it("schedules the cadence and runs a decision per bot when enabled", async () => {
-    let captured: (() => void) | null = null;
+    const calls: Array<() => void> = [];
     const fakeSetInterval = vi.fn((fn: () => void) => {
-      captured = fn;
+      calls.push(fn);
       return 1 as unknown as ReturnType<typeof setInterval>;
     });
     const d = deps();
@@ -143,7 +143,8 @@ describe("startLlmBrain", () => {
       setInterval: fakeSetInterval as unknown as typeof setInterval,
     });
     expect(fakeSetInterval).toHaveBeenCalledOnce();
-    captured?.();
+    expect(calls).toHaveLength(1);
+    calls[0]();
     await vi.waitFor(() => expect(d.submit).toHaveBeenCalledOnce());
   });
 });

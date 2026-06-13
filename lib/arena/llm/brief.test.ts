@@ -6,7 +6,7 @@ import {
   sanitizeSentimentText,
   type BriefSources,
 } from "./brief";
-import type { Candle } from "../candles";
+import type { Candle } from "../../data/candles";
 import type { ArenaLlmBot } from "../decode";
 
 function risingCandles(base: number): Candle[] {
