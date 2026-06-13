@@ -2,17 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-  Activity,
-  Check,
-  Copy,
-  History,
-  LogOut,
-  RefreshCw,
-  Trophy,
-  Users,
-  WalletCards,
-} from "lucide-react";
+import { Activity, History, LogOut, RefreshCw, Trophy, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
@@ -27,15 +17,12 @@ import {
   PANEL_2,
   FONT_DISPLAY,
   Headline,
-  BigNum,
   Stamp,
 } from "@/components/v2/ui";
 import {
   PositionRow,
   type PortfolioPosition,
 } from "@/components/portfolio/PositionRow";
-import { WithdrawButton } from "@/components/portfolio/WithdrawButton";
-import { PacificaWithdrawButton } from "@/components/portfolio/PacificaWithdrawButton";
 import {
   useEmbeddedSolanaWallet,
   truncateAddress,
@@ -125,7 +112,9 @@ interface PortfolioResponseData {
   snapshot?: PortfolioSnapshotMetaData;
 }
 
-type PortfolioTab = "subscriptions" | "open" | "history" | "wins" | "wallet";
+// Wallet moved to its own nav tab, so Copies keeps four: subs, open, history,
+// wins.
+type CopiesTab = "subscriptions" | "open" | "history" | "wins";
 
 export default function PortfolioPage() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
@@ -144,8 +133,7 @@ export default function PortfolioPage() {
     useState<PortfolioSnapshotMetaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<PortfolioTab>("subscriptions");
+  const [activeTab, setActiveTab] = useState<CopiesTab>("subscriptions");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const liveMarks = useLiveMarks();
 
@@ -369,69 +357,9 @@ export default function PortfolioPage() {
   const realizedPnl = closedProceeds - closedCost;
   const realizedPnlPct = closedCost > 0 ? (realizedPnl / closedCost) * 100 : 0;
 
-  const copyWalletAddress = useCallback(async () => {
-    if (!wallet?.address) return;
-    await navigator.clipboard.writeText(wallet.address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [wallet?.address]);
-  const portfolioRail = authenticated && isXl ? (
-    <div className="space-y-3">
-      <div
-        className="p-4"
-        style={{
-          background: PANEL,
-          borderRadius: 16,
-          border: `1px solid ${FAINT}`,
-        }}
-      >
-        <Stamp label="Wallet" />
-        <div
-          className="mt-3 font-mono text-[12px] font-black uppercase tracking-widest"
-          style={{ color: DIM }}
-        >
-          {truncateAddress(wallet?.address)}
-        </div>
-        <div
-          className="mt-5 text-[10px] font-black uppercase tracking-widest"
-          style={{ color: DIM }}
-        >
-          Available to trade
-        </div>
-        <div className="mt-1">
-          <BigNum size={26}>
-            {formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
-          </BigNum>
-        </div>
-        {processingFundsUsd > 0 && (
-          <div
-            className="mt-1 text-[10px] font-black uppercase tracking-widest"
-            style={{ color: ACCENT }}
-          >
-            Processing ${processingFundsUsd.toFixed(2)}
-          </div>
-        )}
-      </div>
-
-      <div
-        className="p-4"
-        style={{
-          background: PANEL,
-          borderRadius: 16,
-          border: `1px solid ${FAINT}`,
-        }}
-      >
-        <Stamp label="Actions" />
-        <div className="mt-3 flex flex-col items-stretch gap-2 [&>button]:w-full">
-          <PacificaWithdrawButton onComplete={refreshPortfolio} />
-          <WithdrawButton
-            maxUsd={effectiveWalletStableUsd ?? 0}
-            onComplete={refreshPortfolio}
-          />
-        </div>
-      </div>
-    </div>
-  ) : null;
+  // Wallet identity + funding/withdraw moved to their own Wallet nav tab, so
+  // the Copies desktop rail no longer duplicates them.
+  const portfolioRail = null;
 
   return (
     <AppShell rail={portfolioRail} railTitle="My copies" hideEmptyRail>
@@ -513,86 +441,32 @@ export default function PortfolioPage() {
         {ready && authenticated && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex-none">
-              {/* Page heading — "My copies" + subtitle */}
-              <div className="mb-3">
-                <Stamp label="Portfolio" />
-                <div className="mt-0.5">
+              {/* Page heading — "My copies" + subtitle, with a refresh. */}
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <Headline size={26}>My copies</Headline>
-                </div>
-                <p
-                  className="mt-1 text-[10px] font-black uppercase tracking-widest"
-                  style={{ color: DIM }}
-                >
-                  Everything you&apos;re copying, in one place.
-                </p>
-              </div>
-
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Stamp label={freshnessLabel} />
-                  <div className="mt-1">
-                    <BigNum size={30}>
-                      {formatMaybeUsd(totalNetWorth, portfolioBalancesReady)}
-                    </BigNum>
-                  </div>
-                  {snapshotMeta?.updatedAt && (
-                    <div
-                      className="mt-1 text-[9px] font-black uppercase tracking-widest"
-                      style={{ color: DIM }}
-                    >
-                      Updated {formatSnapshotAge(snapshotMeta.updatedAt)} ago
-                    </div>
-                  )}
+                  <p
+                    className="mt-1 text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}
+                  >
+                    Everything you&apos;re copying, in one place.
+                  </p>
                 </div>
                 <button
                   onClick={() => void refreshPortfolio()}
                   disabled={loading}
-                  className="rounded-xl p-3 transition active:scale-95 disabled:opacity-50"
-                  style={{
-                    background: PANEL,
-                    color: FG,
-                    border: `1px solid ${FAINT}`,
-                  }}
-                  aria-label="Refresh portfolio"
+                  className="shrink-0 rounded-xl p-3 transition active:scale-95 disabled:opacity-50"
+                  style={{ background: PANEL, color: FG, border: `1px solid ${FAINT}` }}
+                  aria-label="Refresh copies"
                 >
-                  <RefreshCw
-                    size={17}
-                    className={loading ? "animate-spin" : ""}
-                  />
+                  <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
                 </button>
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <PortfolioSummaryCard
-                  label="Cash"
-                  value={formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
-                />
-                <PortfolioSummaryCard
-                  label="Open"
-                  value={String(openHoldingCount)}
-                  detail={formatMaybeUsd(positionsValue, portfolioDataReady)}
-                />
-                <PortfolioSummaryCard
-                  label="History"
-                  value={String(closedHoldingCount)}
-                  detail={
-                    closedHoldingCount > 0
-                      ? formatSignedUsd(realizedPnl)
-                      : "No exits"
-                  }
-                  tone={
-                    closedHoldingCount === 0
-                      ? undefined
-                      : realizedPnl >= 0
-                        ? "up"
-                        : "down"
-                  }
-                />
-              </div>
-
-              {/* Tab bar: Subscriptions (standing commitments first), Open, History, Wins, Wallet */}
+              {/* Tab bar — Subscriptions first, then Open, History, Wins.
+                  Wallet is its own nav tab now. */}
               <div
-                className="mt-3 grid grid-cols-5 gap-1 rounded-2xl p-1"
+                className="grid grid-cols-4 gap-1 rounded-2xl p-1"
                 style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
               >
                 {(
@@ -601,7 +475,6 @@ export default function PortfolioPage() {
                     ["open", "Open", openHoldingCount, Activity],
                     ["history", "History", closedHoldingCount, History],
                     ["wins", "Wins", null, Trophy],
-                    ["wallet", "Wallet", null, WalletCards],
                   ] as const
                 ).map(([key, label, count, Icon]) => {
                   const active = activeTab === key;
@@ -618,7 +491,8 @@ export default function PortfolioPage() {
                     >
                       <Icon size={13} strokeWidth={2.8} />
                       <span className="truncate">
-                        {label}{count !== null ? ` · ${count}` : ""}
+                        {label}
+                        {count !== null ? ` · ${count}` : ""}
                       </span>
                     </button>
                   );
@@ -627,7 +501,7 @@ export default function PortfolioPage() {
             </div>
 
             <div className="no-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto pb-24 lg:pb-6">
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-5">
                 {error && (
                   <div
                     className="rounded-xl px-4 py-3 text-[11px] font-black uppercase tracking-widest"
@@ -640,9 +514,8 @@ export default function PortfolioPage() {
                     {error}
                   </div>
                 )}
-                {activeTab === "subscriptions" && (
-                  <SubscriptionsPanel />
-                )}
+                {activeTab === "subscriptions" && <SubscriptionsPanel />}
+
                 {activeTab === "open" && (
                   <OpenPositionsPanel
                     positions={positions}
@@ -656,6 +529,7 @@ export default function PortfolioPage() {
                     refreshPortfolio={refreshPortfolio}
                   />
                 )}
+
                 {activeTab === "history" && (
                   <ClosedPositionsPanel
                     positions={positions}
@@ -667,25 +541,8 @@ export default function PortfolioPage() {
                     refreshPortfolio={refreshPortfolio}
                   />
                 )}
-                {activeTab === "wins" && (
-                  <WinsPanel />
-                )}
-                {activeTab === "wallet" && (
-                  <WalletTabPanel
-                    walletAddress={wallet?.address ?? null}
-                    walletStableUsd={effectiveWalletStableUsd}
-                    walletSol={effectiveWalletSol}
-                    pacificaAvailableUsd={pacificaAvailableUsd}
-                    availableCashUsd={availableCashUsd}
-                    totalNetWorth={totalNetWorth}
-                    portfolioBalancesReady={portfolioBalancesReady}
-                    portfolioDataReady={portfolioDataReady}
-                    processingFundsUsd={processingFundsUsd}
-                    copied={copied}
-                    copyWalletAddress={copyWalletAddress}
-                    refreshPortfolio={refreshPortfolio}
-                  />
-                )}
+
+                {activeTab === "wins" && <WinsPanel />}
                 <button
                   onClick={logout}
                   className="mt-3 flex items-center justify-center gap-2 self-center text-[10px] font-black uppercase tracking-widest transition hover:opacity-100"
@@ -724,45 +581,6 @@ function formatSnapshotAge(iso: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-function PortfolioSummaryCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone?: "up" | "down";
-}) {
-  const toneColor = tone === "up" ? GREEN : tone === "down" ? RED : FG;
-
-  return (
-    <div
-      className="min-w-0 p-2.5"
-      style={{ background: PANEL, borderRadius: 12, border: `1px solid ${FAINT}` }}
-    >
-      <div
-        className="truncate text-[9px] font-black uppercase tracking-widest"
-        style={{ color: DIM }}
-      >
-        {label}
-      </div>
-      <div className="mt-1 truncate text-[16px] font-black leading-none" style={{ color: toneColor }}>
-        {value}
-      </div>
-      {detail && (
-        <div
-          className="mt-1 truncate text-[9px] font-black uppercase tracking-widest"
-          style={{ color: tone ? toneColor : DIM }}
-        >
-          {detail}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SubscriptionsPanel() {
   return (
     <section className="space-y-3">
@@ -776,136 +594,6 @@ function WinsPanel() {
     <section className="space-y-3">
       <LeaderboardFeed />
     </section>
-  );
-}
-
-function WalletTabPanel({
-  walletAddress,
-  walletStableUsd,
-  walletSol,
-  pacificaAvailableUsd,
-  availableCashUsd,
-  totalNetWorth,
-  portfolioBalancesReady,
-  portfolioDataReady,
-  processingFundsUsd,
-  copied,
-  copyWalletAddress,
-  refreshPortfolio,
-}: {
-  walletAddress: string | null;
-  walletStableUsd: number | null;
-  walletSol: number | null;
-  pacificaAvailableUsd: number | null;
-  availableCashUsd: number | null;
-  totalNetWorth: number | null;
-  portfolioBalancesReady: boolean;
-  portfolioDataReady: boolean;
-  processingFundsUsd: number;
-  copied: boolean;
-  copyWalletAddress: () => Promise<void>;
-  refreshPortfolio: () => void | Promise<void>;
-}) {
-  return (
-    <section className="space-y-3">
-      <div
-        className="p-4"
-        style={{ background: PANEL, borderRadius: 14, border: `1px solid ${FAINT}` }}
-      >
-        <Stamp label="Wallet" />
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <WalletMetric
-            label="Net worth"
-            value={formatMaybeUsd(totalNetWorth, portfolioBalancesReady)}
-          />
-          <WalletMetric
-            label="Available"
-            value={formatMaybeUsd(availableCashUsd, portfolioBalancesReady)}
-          />
-          <WalletMetric
-            label="Wallet cash"
-            value={formatMaybeUsd(walletStableUsd, walletStableUsd !== null)}
-          />
-          <WalletMetric
-            label="Trading cash"
-            value={formatMaybeUsd(pacificaAvailableUsd, portfolioDataReady)}
-          />
-        </div>
-        {walletSol != null && (
-          <div
-            className="mt-3 text-[11px] font-black uppercase tracking-widest"
-            style={{ color: DIM }}
-          >
-            GAS {walletSol.toFixed(4)} SOL
-          </div>
-        )}
-        {processingFundsUsd > 0 && (
-          <div
-            className="mt-2 text-[11px] font-black uppercase tracking-widest"
-            style={{ color: ACCENT }}
-          >
-            Processing ${processingFundsUsd.toFixed(2)}
-          </div>
-        )}
-      </div>
-
-      <div
-        className="p-4"
-        style={{ background: PANEL, borderRadius: 14, border: `1px solid ${FAINT}` }}
-      >
-        <div
-          className="text-[10px] font-black uppercase tracking-widest"
-          style={{ color: DIM }}
-        >
-          Wallet address
-        </div>
-        <div
-          className="mt-2 break-all font-mono text-[13px] font-black uppercase leading-relaxed tracking-widest"
-          style={{ color: walletAddress ? FG : DIM }}
-        >
-          {walletAddress ?? "Wallet not ready"}
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 [&>button]:min-h-12 [&>button]:rounded-xl [&>button]:text-[12px] [&>button]:font-black">
-          <button
-            onClick={() => void copyWalletAddress()}
-            disabled={!walletAddress}
-            aria-label="COPY ADDRESS"
-            className="flex items-center justify-center gap-1 border border-white/10 bg-white/5 px-3 py-2 text-white transition active:scale-95 disabled:opacity-40"
-          >
-            {copied ? (
-              <>
-                <Check size={14} strokeWidth={3} style={{ color: GREEN }} />
-                Copied
-              </>
-            ) : (
-              <>
-                <Copy size={14} strokeWidth={2.8} />
-                Copy
-              </>
-            )}
-          </button>
-          <PacificaWithdrawButton onComplete={() => void refreshPortfolio()} />
-          <WithdrawButton
-            maxUsd={walletStableUsd ?? 0}
-            onComplete={() => void refreshPortfolio()}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WalletMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-white/[0.04] p-3">
-      <div
-        className="text-[9px] font-black uppercase tracking-widest"
-        style={{ color: DIM }}
-      >
-        {label}
-      </div>
-      <div className="mt-1 text-[19px] font-black leading-none">{value}</div>
-    </div>
   );
 }
 
