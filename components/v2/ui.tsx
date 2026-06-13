@@ -15,9 +15,10 @@ export const ACCENT = "#fae500"; // snapchat-y acid yellow
 export const GREEN = "#1de78b"; // P/L positive — vibrant trading-app green
 export const RED = "#ff3b54"; // P/L negative
 export const STREAK = "#ff8a2a"; // streak fire orange
-export const AI = "#b79bff"; // AI-bot purple — badge text + avatar ring
-export const AI_DIM = "#251b40"; // AI-bot purple — card background tint
-export const AI_BORDER = "#3b2f66"; // AI-bot purple — card border
+export const AI = "#c7d0db"; // AI-bot metallic silver — badge text + avatar ring
+export const AI_DIM = "#191c21"; // AI-bot metallic — cool dark-steel card tint
+export const AI_BORDER = "#3d4654"; // AI-bot metallic — brushed-steel card border
+export const AI_TINT = "rgba(199,208,219,0.08)"; // AI-bot metallic — faint avatar-tile fill (AI @ 8%)
 export const TEAL = "#41d6c3"; // Real-wallet teal — whale badge text
 export const TEAL_DIM = "#0c2b28"; // Real-wallet teal — whale badge background
 
@@ -239,7 +240,7 @@ export function YellowButton({
   );
 }
 
-/** Purple "AI BOT" badge used on every bot card surface.
+/** Metallic "AI BOT" badge used on every bot card surface.
  *  `size="md"` (default) → text-[8px] chrome; `size="sm"` → same.
  *  Pass custom `children` to override the chip text (e.g. "AI BOTS" for roster header). */
 export function AiBotBadge({

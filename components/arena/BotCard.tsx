@@ -9,7 +9,7 @@
 import type { ReactNode } from "react";
 import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
-import { AI, AI_BORDER, AI_DIM, AiBotBadge, DIM, FAINT, GREEN, RED } from "@/components/v2/ui";
+import { AI, AI_BORDER, AI_DIM, AiBotBadge, DIM, FAINT, GREEN, RED, AI_TINT } from "@/components/v2/ui";
 
 /** $ price for the header/positions: 2dp ≥ $1, 4dp below (memecoin-safe). */
 export function fmtArenaPrice(price: number): string {
@@ -91,7 +91,7 @@ export function BotCard({
               width: 40,
               height: 40,
               boxShadow: `0 0 0 2px ${AI}`,
-              background: "rgba(183,155,255,0.08)",
+              background: AI_TINT,
             }}
             aria-hidden
           >

@@ -12,7 +12,7 @@ import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
 import { parseArenaEnv } from "@/lib/arena/use-arena-live";
 import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
-import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline } from "@/components/v2/ui";
+import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline, AI_TINT } from "@/components/v2/ui";
 import { fmtArenaPrice } from "./BotCard";
 
 const TOKEN_COLORS = { GREEN, RED, DIM } as const;
@@ -84,7 +84,7 @@ export function BotProfile({
                 width: 48,
                 height: 48,
                 boxShadow: `0 0 0 2px ${AI}`,
-                background: "rgba(183,155,255,0.08)",
+                background: AI_TINT,
               }}
               aria-hidden
             >

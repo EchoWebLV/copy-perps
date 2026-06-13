@@ -51,6 +51,7 @@ import {
   PANEL_2,
   RealWalletBadge,
   RED,
+  AI_TINT,
 } from "@/components/v2/ui";
 import {
   ACTIVE_TRADER_WINDOW_MS,
@@ -598,7 +599,7 @@ function BotFeedCard({
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[20px] leading-none"
             style={{
-              background: "rgba(183,155,255,0.08)",
+              background: AI_TINT,
               boxShadow: `0 0 0 2px ${AI}`,
             }}
             aria-hidden
