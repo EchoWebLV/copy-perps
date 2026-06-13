@@ -755,37 +755,59 @@ function GridBotCard({
 }) {
   const cta = botCopyCta({ name, bot, market, lastUpdateMs, nowMs: now });
   const persona = ARENA_PERSONAS[name];
-  const copyButton = (
-    <button
-      type="button"
-      onClick={() =>
-        onCopy({
-          kind: "arena-bot",
-          key: name,
-          label: persona?.display ?? name,
-          emoji: persona?.emoji,
-        })
-      }
-      className="w-full rounded-xl border py-2.5 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.98]"
-      style={{ background: PANEL_2, borderColor: FAINT, color: FG }}
-    >
-      Auto-copy
-    </button>
-  );
+  const canTail = cta.state === "tail";
+  // Mirror the whale card's CTA row exactly so bot/whale cards line up:
+  // Copy now (primary, disabled when there's no live position to copy) +
+  // Auto-copy (secondary, always armable for the next entry).
+  const copyNowLabel = canTail
+    ? "Copy now"
+    : cta.state === "stale"
+      ? "Stale"
+      : "Unavailable";
   return (
     <BotCard
       name={name}
       bot={bot}
       now={now}
       tailCta={
-        cta.state === "none" ? (
-          copyButton
-        ) : (
-          <div className="flex flex-col gap-2">
-            <BotTailCta cta={cta} onTail={onTail} />
-            {copyButton}
-          </div>
-        )
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={!canTail}
+            onClick={() => {
+              if (cta.state === "tail") onTail(cta.source);
+            }}
+            className="flex min-w-0 flex-1 items-center justify-center rounded-xl py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+            style={{
+              background: canTail ? ACCENT : "rgba(250,250,242,0.08)",
+              color: canTail ? BG : DIM,
+              boxShadow: canTail
+                ? `0 3px 0 ${ACCENT}99, inset 0 -2px 0 rgba(0,0,0,0.15)`
+                : "none",
+            }}
+          >
+            {copyNowLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onCopy({
+                kind: "arena-bot",
+                key: name,
+                label: persona?.display ?? name,
+                emoji: persona?.emoji,
+              })
+            }
+            className="shrink-0 rounded-xl border px-3 py-2.5 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+            style={{
+              background: "rgba(250,250,242,0.04)",
+              borderColor: FAINT,
+              color: FG,
+            }}
+          >
+            Auto-copy
+          </button>
+        </div>
       }
     />
   );

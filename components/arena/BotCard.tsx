@@ -67,7 +67,7 @@ export function BotCard({
 
   return (
     <div
-      className={`rounded-3xl p-4 text-left ${onOpen ? "cursor-pointer transition-colors" : ""}`}
+      className={`flex flex-col rounded-3xl p-4 text-left ${onOpen ? "cursor-pointer transition-colors" : ""}`}
       style={{
         background: AI_DIM,
         border: `1px solid ${AI_BORDER}`,
@@ -197,10 +197,12 @@ export function BotCard({
         )}
       </div>
 
-      {/* Stop propagation so a CTA tap never doubles as the card's onOpen. */}
+      {/* Pinned to the card bottom (mt-auto) so the CTA row lines up with the
+          whale cards in the stretched grid. Stop propagation so a CTA tap
+          never doubles as the card's onOpen. */}
       {tailCta ? (
         <div
-          className="mt-3"
+          className="mt-auto pt-3"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
