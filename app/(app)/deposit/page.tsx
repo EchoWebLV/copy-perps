@@ -22,6 +22,7 @@ import {
   depositDevToolsVisible,
   feedRailPrefsVisible,
 } from "@/lib/client-features";
+import { usePushSubscribe } from "@/lib/notifications/use-push-subscribe";
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import {
   decodeBase64Tx,
@@ -63,6 +64,14 @@ export default function DepositPage() {
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const autoCreateAttemptedRef = useRef(false);
+
+  const {
+    permission: pushPermission,
+    subscribing: pushSubscribing,
+    error: pushError,
+    enablePush,
+    supported: pushSupported,
+  } = usePushSubscribe(getAccessToken);
 
   const createAppWallet = useCallback(async () => {
     if (wallet || creatingWallet) return;
@@ -287,6 +296,60 @@ export default function DepositPage() {
               </p>
             ) : null}
           </div>
+
+          {/* Push alerts toggle — only shown when the browser supports push */}
+          {pushSupported ? (
+            <div className="mt-5">
+              <Stamp label="ALERTS" />
+              <div
+                className="mt-2 p-4"
+                style={{
+                  background: PANEL,
+                  borderRadius: 18,
+                  border: `1px solid ${FAINT}`,
+                }}
+              >
+                <div
+                  className="mb-3 text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: DIM }}
+                >
+                  Get OS push alerts when a copy trade opens or closes.
+                </div>
+                {pushPermission === "granted" ? (
+                  <div
+                    className="text-[11px] font-black uppercase tracking-widest"
+                    style={{ color: "#4ade80" }}
+                  >
+                    PUSH ALERTS ON
+                  </div>
+                ) : pushPermission === "denied" ? (
+                  <div
+                    className="text-[11px] font-black uppercase tracking-widest"
+                    style={{ color: "#fb7185" }}
+                  >
+                    BLOCKED — allow notifications in browser settings
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => void enablePush()}
+                    disabled={pushSubscribing}
+                    className="flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
+                    style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
+                  >
+                    {pushSubscribing ? "ENABLING…" : "ENABLE PUSH ALERTS"}
+                  </button>
+                )}
+                {pushError ? (
+                  <p
+                    className="mt-2 text-[10px] font-black uppercase tracking-widest leading-relaxed"
+                    style={{ color: "#fb7185" }}
+                  >
+                    {pushError.slice(0, 160)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           {showDevTools ? (
             <div className="mt-5">

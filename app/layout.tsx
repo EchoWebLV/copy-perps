@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { PrivyClientProvider } from "@/components/providers/PrivyClientProvider";
 import { PostHogProvider } from "@/components/providers/PostHogProvider";
+import { RegisterSW } from "@/components/pwa/RegisterSW";
 import "./globals.css";
 
 // Single variable family with a width axis: normal widths for UI text,
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PostHogProvider>
           <PrivyClientProvider>{children}</PrivyClientProvider>
         </PostHogProvider>
+        <RegisterSW />
         {isVercelDeployment ? (
           <>
             <Analytics />

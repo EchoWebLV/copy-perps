@@ -205,12 +205,9 @@ export function buildEvent(
 // ── DB insert ──────────────────────────────────────────────────────────────
 
 /**
- * Insert a notification event row. Self-contained: swallows all errors and
- * returns void so it can NEVER break a money path.
- *
- * TODO(Task 12): after the DB insert succeeds, send a Web Push notification
- * to the user's subscribed push endpoints here. Look up push subscriptions
- * from the `push_subscriptions` table and call webpush.sendNotification().
+ * Insert a notification event row and send a Web Push to all subscribed
+ * endpoints for the user. Self-contained: swallows all errors and returns
+ * void so it can NEVER break a money path.
  */
 export async function emitNotification(
   event: NotificationEventPayload,
@@ -225,6 +222,17 @@ export async function emitNotification(
       title: event.title,
       body: event.body,
       meta: event.meta ?? null,
+    });
+
+    // Task 12: fire web push after the DB row is confirmed.
+    // sendPushToUser is self-safe (never throws).
+    const { sendPushToUser, notificationUrlForKind } = await import(
+      "@/lib/notifications/push"
+    );
+    await sendPushToUser(event.userId, {
+      title: event.title,
+      body: event.body,
+      url: notificationUrlForKind(event.kind),
     });
   } catch (err) {
     // Never propagate — notifications are observability, not business logic.
