@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gwak.gg — offline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #0a0a0d;
+      color: #e8e8ec;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      max-width: 400px;
+    }
+    .wordmark {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #f5e04b;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #e8e8ec;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #9999aa;
+      margin-bottom: 2rem;
+    }
+    button {
+      background: #f5e04b;
+      color: #0a0a0d;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+    }
+    button:hover {
+      background: #f9ec72;
+    }
+    button:active {
+      background: #e8d340;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="wordmark">gwak.gg</div>
+    <h1>You're offline.</h1>
+    <p>Your positions are safe on-chain — reconnect to manage them.</p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+</body>
+</html>
