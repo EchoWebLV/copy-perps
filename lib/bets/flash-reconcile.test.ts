@@ -1,4 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock emitNotification to prevent real DB calls in tests; keep buildEvent real.
+vi.mock("@/lib/notifications/emit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/notifications/emit")>();
+  return {
+    ...actual,
+    emitNotification: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+import { emitNotification } from "@/lib/notifications/emit";
 import {
   runFlashReconcileSweep,
   usdcDeltaForOwner,
@@ -202,6 +213,10 @@ describe("runFlashReconcileSweep", () => {
 });
 
 describe("runFlashReconcileSweep external-close liveness pass", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const verifiedBet = (id: string, overrides: Partial<FlashTailMeta> = {}) => ({
     id,
     userId: "user-1",
@@ -233,6 +248,12 @@ describe("runFlashReconcileSweep external-close liveness pass", () => {
       nowIso: "2026-06-11T12:00:00.000Z",
     });
     expect(result.externalized).toBe(1);
+    // Notification emitted once with kind "copy-closed" for the expired bet.
+    expect(emitNotification).toHaveBeenCalledOnce();
+    expect(vi.mocked(emitNotification).mock.calls[0][0]).toMatchObject({
+      kind: "copy-closed",
+      userId: "user-1",
+    });
   });
 
   it("leaves a bet alone while its (market, side) position is live", async () => {

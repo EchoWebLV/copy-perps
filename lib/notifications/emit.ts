@@ -10,12 +10,16 @@
 //   A notification emit can NEVER break or alter a money path.
 
 // ── Money formatter ────────────────────────────────────────────────────────
-// Mirrors the mock's `fmt`: sign + $ + 2dp for |n| < 100, else 0dp.
+// Mirrors the mock's `fmt` exactly:
+//   sign + "$" + Math.abs(n).toLocaleString(undefined, {
+//     maximumFractionDigits: Math.abs(n) < 100 ? 2 : 0
+//   })
+// This gives thousands separators (1,235) and drops trailing zeros above $100
+// (25 → "+$25", not "+$25.00").
 function fmtMoney(n: number): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? "-" : "+";
-  const dp = abs < 100 ? 2 : 0;
-  return `${sign}$${abs.toFixed(dp)}`;
+  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: abs < 100 ? 2 : 0 })}`;
 }
 
 // ── Event shape returned by buildEvent ────────────────────────────────────
@@ -130,6 +134,10 @@ export function buildEvent(
     }
 
     case "copy-closed": {
+      // TODO: neither "auto-close" nor "copy-closed" carries net P/L because
+      // gross receive ≠ net at emit time — final P/L is only known after the
+      // reconcile sweep prices the close tx on-chain.  A future enhancement
+      // is a reconcile-time re-emit (or event update) once chain P/L is settled.
       const c = ctx as CopyClosedCtx;
       return {
         userId: c.userId,

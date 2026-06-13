@@ -14,10 +14,21 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// Mock emitNotification to prevent real DB calls; keep buildEvent real.
+vi.mock("@/lib/notifications/emit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/notifications/emit")>();
+  return {
+    ...actual,
+    emitNotification: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+import { emitNotification } from "@/lib/notifications/emit";
 import { buildFlashTailMeta } from "@/lib/bets/flash-tail-meta";
 import {
   AutopilotSessionError,
   clampBudget,
+  endSession,
   getActiveSession,
   getLatestSession,
   listActiveSessions,
@@ -186,6 +197,48 @@ describe("autopilot sessions", () => {
     );
     const stopped = await stopSession({ sessionId: "sess-1", userId: "user-1" });
     expect(stopped?.status).toBe("stopped");
+    expect(emitNotification).toHaveBeenCalledOnce();
+    expect(vi.mocked(emitNotification).mock.calls[0][0]).toMatchObject({
+      kind: "autopilot-ended",
+      userId: "user-1",
+    });
+  });
+
+  // ── endSession ────────────────────────────────────────────────────────────
+
+  it("endSession(exhausted) emits autopilot-ended with status=exhausted + userId", async () => {
+    mocks.update.mockReturnValue(
+      updateChain([sessionRow({ status: "exhausted", endedAt: NOW, userId: "user-1" })]),
+    );
+    await endSession({ sessionId: "sess-1", status: "exhausted" });
+    expect(emitNotification).toHaveBeenCalledOnce();
+    const payload = vi.mocked(emitNotification).mock.calls[0][0];
+    expect(payload).toMatchObject({
+      kind: "autopilot-ended",
+      userId: "user-1",
+    });
+    expect(payload.meta).toMatchObject({ status: "exhausted" });
+  });
+
+  it("endSession(target) emits autopilot-ended with status=target + userId", async () => {
+    mocks.update.mockReturnValue(
+      updateChain([sessionRow({ status: "target", endedAt: NOW, userId: "user-1" })]),
+    );
+    await endSession({ sessionId: "sess-1", status: "target" });
+    expect(emitNotification).toHaveBeenCalledOnce();
+    const payload = vi.mocked(emitNotification).mock.calls[0][0];
+    expect(payload).toMatchObject({
+      kind: "autopilot-ended",
+      userId: "user-1",
+    });
+    expect(payload.meta).toMatchObject({ status: "target" });
+  });
+
+  it("endSession on a CAS miss (no active row) emits nothing", async () => {
+    // update returns empty array — the WHERE clause matched no active row.
+    mocks.update.mockReturnValue(updateChain([]));
+    await endSession({ sessionId: "sess-1", status: "exhausted" });
+    expect(emitNotification).not.toHaveBeenCalled();
   });
 
   it("listActiveSessions joins user identity", async () => {
