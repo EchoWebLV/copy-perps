@@ -495,6 +495,47 @@ export function decodeLlmBot(data: Uint8Array): ArenaLlmBot | null {
   };
 }
 
+/** Map an LlmBot onto the ArenaBot shape so the existing roster/feed cards
+ *  render it unchanged. The LLM tier carries the same balance/pnl/positions/
+ *  tape; per-position stop/tp are dropped and params are stubbed (the cards
+ *  read display metadata from ARENA_PERSONAS, not on-chain params). */
+export function llmBotToArenaBot(b: ArenaLlmBot): ArenaBot {
+  return {
+    balanceUsd: b.balanceUsd,
+    grossPnlUsd: b.grossPnlUsd,
+    feesUsd: b.feesUsd,
+    equityHighUsd: b.equityHighUsd,
+    seq: b.seq,
+    positions: b.positions.map((p) => ({
+      active: p.active,
+      marketId: p.marketId,
+      side: p.side,
+      entryPrice: p.entryPrice,
+      stakeUsd: p.stakeUsd,
+      leverage: p.leverage,
+      openedTsMs: p.openedTsMs,
+      ticksHeld: p.ticksHeld,
+      liqPrice: p.liqPrice,
+    })),
+    tape: b.tape,
+    params: {
+      maxHoldTicks: b.params.maxHoldTicks,
+      breakoutBps: 0,
+      activityMultBps: 0,
+      stakeFracBps: b.params.maxStakeFracBps,
+      leverage: b.params.maxLeverage,
+      exitFavorableBps: 0,
+      readSpan: 1,
+      trendFilter: false,
+    },
+    personaName: b.personaName,
+    trades: b.trades,
+    wins: b.wins,
+    tapeHead: b.tapeHead,
+    bump: b.bump,
+  };
+}
+
 /** Decode a MarketState account (raw account data incl. discriminator).
  *  Returns null if the buffer is too short — fail-closed, never partial. */
 export function decodeMarketState(data: Uint8Array): ArenaMarketState | null {

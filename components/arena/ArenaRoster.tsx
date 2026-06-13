@@ -22,7 +22,6 @@ import {
 } from "@/components/v2/ui";
 import { BotCard, fmtArenaPrice } from "./BotCard";
 import { BotProfile } from "./BotProfile";
-import { OracleBots } from "./OracleBots";
 
 // Literal process.env access so Next.js inlines it at build time.
 const CLUSTER_LABEL =
@@ -128,8 +127,6 @@ export function ArenaRoster() {
             </p>
           </>
         )}
-
-        <OracleBots />
       </div>
 
       {selected && (
