@@ -41,6 +41,7 @@ import {
   Headline,
   Stamp,
 } from "@/components/v2/ui";
+import { InstallNudge } from "@/components/pwa/InstallNudge";
 
 const DEFAULT_FUND_AMOUNT_USD = "25";
 const RPC_URL =
@@ -252,6 +253,10 @@ export default function DepositPage() {
 
       {ready && authenticated && (
         <>
+          {/* PWA install nudge — shown above the deposit button so it's seen
+              on the natural "set up your app" surface. Dismissible. */}
+          <InstallNudge />
+
           {/* Buy with card. */}
           <div>
             <Stamp label="DEPOSIT" />

@@ -79,7 +79,10 @@ describe("NotificationBell mount in BottomNav (global mobile)", () => {
 
   it("renders NotificationBell in a fixed top-right overlay for mobile", () => {
     expect(source).toContain("<NotificationBell");
-    expect(source).toContain("fixed top-3 right-3");
+    // top is driven by safe-area-inset-top via inline style; right-3 and
+    // fixed remain as Tailwind classes.
+    expect(source).toContain("fixed right-3");
+    expect(source).toContain("safe-area-inset-top");
     expect(source).toContain("lg:hidden");
   });
 });
