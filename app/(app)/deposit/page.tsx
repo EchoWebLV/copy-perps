@@ -66,7 +66,7 @@ export default function DepositPage() {
   const autoCreateAttemptedRef = useRef(false);
 
   const {
-    permission: pushPermission,
+    toggleState: pushToggleState,
     subscribing: pushSubscribing,
     error: pushError,
     enablePush,
@@ -315,14 +315,14 @@ export default function DepositPage() {
                 >
                   Get OS push alerts when a copy trade opens or closes.
                 </div>
-                {pushPermission === "granted" ? (
+                {pushToggleState === "on" ? (
                   <div
                     className="text-[11px] font-black uppercase tracking-widest"
                     style={{ color: "#4ade80" }}
                   >
                     PUSH ALERTS ON
                   </div>
-                ) : pushPermission === "denied" ? (
+                ) : pushToggleState === "blocked" ? (
                   <div
                     className="text-[11px] font-black uppercase tracking-widest"
                     style={{ color: "#fb7185" }}
@@ -332,11 +332,11 @@ export default function DepositPage() {
                 ) : (
                   <button
                     onClick={() => void enablePush()}
-                    disabled={pushSubscribing}
+                    disabled={pushToggleState === "enabling"}
                     className="flex w-full items-center justify-center rounded-xl py-3 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97] disabled:opacity-40"
                     style={{ background: PANEL_2, color: FG, border: `1px solid ${FAINT}` }}
                   >
-                    {pushSubscribing ? "ENABLING…" : "ENABLE PUSH ALERTS"}
+                    {pushToggleState === "enabling" ? "ENABLING…" : "ENABLE PUSH ALERTS"}
                   </button>
                 )}
                 {pushError ? (

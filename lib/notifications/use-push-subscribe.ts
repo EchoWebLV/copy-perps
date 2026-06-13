@@ -6,7 +6,7 @@
 // push notifications. Requires the user to be authenticated (pass getAccessToken).
 //
 // Usage:
-//   const { permission, enablePush } = usePushSubscribe(getAccessToken);
+//   const { toggleState, enablePush } = usePushSubscribe(getAccessToken);
 //   <button onClick={enablePush}>Enable push alerts</button>
 
 import { useCallback, useEffect, useState } from "react";
@@ -34,21 +34,92 @@ function isPushSupported(): boolean {
   );
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+// ── deriveToggleState ─────────────────────────────────────────────────────────
+//
+// Pure function mapping the observable state surface to a toggle label.
+// Extracted so it can be unit-tested without a DOM.
+//
+// States:
+//   "on"          — permission granted AND an active push subscription exists
+//   "enable"      — not yet subscribed (default, or granted-but-not-subscribed)
+//   "blocked"     — permission explicitly denied by user
+//   "unsupported" — browser/device doesn't support push
+//   "error"       — transient error (e.g. SW timeout, subscribe failed)
+//   "enabling"    — subscribe in progress
+
+export type ToggleState =
+  | "on"
+  | "enable"
+  | "blocked"
+  | "unsupported"
+  | "error"
+  | "enabling";
+
+export interface ToggleStateInput {
+  supported: boolean;
+  permission: NotificationPermission;
+  subscribed: boolean;
+  subscribing: boolean;
+  error: string | null;
+}
+
+export function deriveToggleState({
+  supported,
+  permission,
+  subscribed,
+  subscribing,
+  error,
+}: ToggleStateInput): ToggleState {
+  if (!supported) return "unsupported";
+  if (permission === "denied") return "blocked";
+  if (subscribing) return "enabling";
+  if (error) return "error";
+  if (permission === "granted" && subscribed) return "on";
+  // covers: permission === "default" OR permission === "granted" but no subscription
+  return "enable";
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 type NotificationPermission = "default" | "granted" | "denied";
+
+const SW_REGISTER_TIMEOUT_MS = 8_000;
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function usePushSubscribe(
   getAccessToken: () => Promise<string | null>,
 ) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
+  // True only when we've confirmed an active PushSubscription exists in the browser.
+  const [subscribed, setSubscribed] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync initial permission state
+  // Sync initial permission state and check for an existing subscription.
   useEffect(() => {
     if (!isPushSupported()) return;
-    setPermission(Notification.permission as NotificationPermission);
+
+    const perm = Notification.permission as NotificationPermission;
+    setPermission(perm);
+
+    // If permission is granted, check whether a real subscription already exists.
+    if (perm === "granted") {
+      void (async () => {
+        try {
+          const reg = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("SW ready timeout")), SW_REGISTER_TIMEOUT_MS),
+            ),
+          ]);
+          const existing = await reg.pushManager.getSubscription();
+          if (existing) setSubscribed(true);
+        } catch {
+          // SW not ready on mount — subscribed stays false, no error surfaced
+        }
+      })();
+    }
   }, []);
 
   const enablePush = useCallback(async () => {
@@ -75,8 +146,17 @@ export function usePushSubscribe(
         return;
       }
 
-      // 2. Get the service worker registration (must already be registered)
-      const reg = await navigator.serviceWorker.ready;
+      // 2. Register (or re-use) the service worker — idempotent.
+      //    Race against a timeout so a stuck registration surfaces an error.
+      const reg = await Promise.race([
+        navigator.serviceWorker.register("/sw.js"),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Couldn't start notifications — try reloading.")),
+            SW_REGISTER_TIMEOUT_MS,
+          ),
+        ),
+      ]);
 
       // 3. Subscribe via push manager
       const keyBytes = urlBase64ToUint8Array(vapidKey);
@@ -105,13 +185,34 @@ export function usePushSubscribe(
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
       }
+
+      // Only flip subscribed after the POST succeeds — permission-granted ≠ subscription-persisted.
+      setSubscribed(true);
     } catch (err) {
       console.error("[usePushSubscribe] enablePush failed:", err);
       setError(err instanceof Error ? err.message : String(err));
+      // Ensure subscribed stays false on any failure path.
+      setSubscribed(false);
     } finally {
       setSubscribing(false);
     }
   }, [getAccessToken]);
 
-  return { permission, subscribing, error, enablePush, supported: isPushSupported() };
+  const toggleState = deriveToggleState({
+    supported: isPushSupported(),
+    permission,
+    subscribed,
+    subscribing,
+    error,
+  });
+
+  return {
+    permission,
+    subscribed,
+    subscribing,
+    error,
+    enablePush,
+    supported: isPushSupported(),
+    toggleState,
+  };
 }
