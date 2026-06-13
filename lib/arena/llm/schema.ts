@@ -23,7 +23,10 @@ export const decisionSchema = z.object({
   stopLossPct: z.number().min(0).max(0.1),
   takeProfitPct: z.number().min(0).max(0.2),
   confidence: z.number().min(0).max(1),
-  reasoning: z.string().max(280),
+  // Metadata only (narration + audit; the on-chain tape stores a reason CODE,
+  // not this text). Generous cap so thorough reasoning doesn't fail validation
+  // and void an otherwise-valid decision.
+  reasoning: z.string().max(600),
 });
 
 export type LlmDecision = z.infer<typeof decisionSchema>;

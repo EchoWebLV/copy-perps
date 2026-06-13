@@ -30,8 +30,9 @@ describe("decisionSchema", () => {
     expect(decisionSchema.safeParse({ ...valid, confidence: 1.5 }).success).toBe(false);
   });
 
-  it("rejects reasoning over 280 chars", () => {
-    expect(decisionSchema.safeParse({ ...valid, reasoning: "x".repeat(281) }).success).toBe(false);
+  it("accepts thorough reasoning but rejects an essay", () => {
+    expect(decisionSchema.safeParse({ ...valid, reasoning: "x".repeat(600) }).success).toBe(true);
+    expect(decisionSchema.safeParse({ ...valid, reasoning: "x".repeat(601) }).success).toBe(false);
   });
 
   it("rejects a non-integer leverage", () => {
