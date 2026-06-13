@@ -10,15 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-  ArrowUp,
-  ChevronRight,
-  Eye,
-  Flame,
-  MessageCircle,
-  TrendingDown,
-  Zap,
-} from "lucide-react";
+import { ArrowUp, ChevronRight, Eye, MessageCircle, Zap } from "lucide-react";
 import Link from "next/link";
 import type { WhalePositionSignal, WhaleTraderSignal } from "@/lib/types";
 import { isSourceFresh } from "@/lib/whales/identity";
@@ -46,8 +38,6 @@ import {
 } from "./pulse-headline";
 import { buildPulseItems, type PulseItem } from "./pulse-items";
 import {
-  getPulseReactionTone,
-  PULSE_REACTIONS,
   type PulseCommentProfile,
   type PulseReaction,
 } from "./pulse-social";
@@ -573,16 +563,8 @@ function PulseCard({
   const p = { ...rawPosition, stale: dynamicStale };
   const sideColor = p.side === "long" ? GREEN : RED;
   const profit = (p.unrealizedPnlPct ?? 0) >= 0;
-  const counts = persistedSocial?.reactionCounts ?? emptySocialCounts();
   const aiLine = buildAiLine(item);
-  const recentReactors = persistedSocial?.recentReactors ?? [];
   const positionTime = formatWhalePositionTime(p, now);
-
-  const bullishCount = counts.Bullish ?? 0;
-  const bearishCount = counts.Bearish ?? 0;
-  const sentimentTotal = bullishCount + bearishCount;
-  const bullishPct =
-    sentimentTotal > 0 ? Math.round((bullishCount / sentimentTotal) * 100) : 50;
 
   const canCopy = item.canTail && !dynamicStale;
 
@@ -693,57 +675,27 @@ function PulseCard({
         ))}
       </div>
 
-      {recentReactors.length > 0 ? (
-        <RecentReactions reactors={recentReactors} />
-      ) : null}
-
-      {/* Sentiment + CTA */}
+      {/* CTA only — Bullish/Bearish voting now lives on the whale trader
+          cards (a Live card flashes by too fast to be worth voting on). */}
       <div className="mt-auto pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Bullish / Bearish chips + ratio bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            {PULSE_REACTIONS.filter(
-              (r): r is Exclude<PulseReaction, "Tailing"> => r !== "Tailing",
-            ).map((reaction) => (
-              <PulseReactionButton
-                key={reaction}
-                label={reaction}
-                count={counts[reaction]}
-                active={selectedReaction === reaction}
-                onClick={() => onReact(reaction)}
-              />
-            ))}
-            {sentimentTotal > 0 ? (
-              <div
-                className="h-[4px] rounded-full overflow-hidden min-w-[40px]"
-                style={{ background: `${RED}30`, width: 48 }}
-              >
-                <div
-                  style={{ width: `${bullishPct}%`, background: GREEN, height: "100%", borderRadius: 99 }}
-                />
-              </div>
-            ) : null}
-          </div>
-
-          <button
-            type="button"
-            onClick={onTail}
-            disabled={!canCopy}
-            className="inline-flex w-auto items-center justify-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
-            style={{
-              background: canCopy ? ACCENT : "rgba(250,250,242,0.08)",
-              color: canCopy ? BG : DIM,
-              border: `1px solid ${canCopy ? ACCENT : FAINT}`,
-            }}
-          >
-            {canCopy ? (
-              <Zap size={13} strokeWidth={3} fill={BG} />
-            ) : (
-              <Eye size={13} strokeWidth={3} />
-            )}
-            {canCopy ? "Copy now" : dynamicStale ? "Stale data — copying disabled until fresh." : "Watch"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onTail}
+          disabled={!canCopy}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[11px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed"
+          style={{
+            background: canCopy ? ACCENT : "rgba(250,250,242,0.08)",
+            color: canCopy ? BG : DIM,
+            border: `1px solid ${canCopy ? ACCENT : FAINT}`,
+          }}
+        >
+          {canCopy ? (
+            <Zap size={13} strokeWidth={3} fill={BG} />
+          ) : (
+            <Eye size={13} strokeWidth={3} />
+          )}
+          {canCopy ? "Copy now" : dynamicStale ? "Stale data — copying disabled until fresh." : "Watch"}
+        </button>
 
         {/* Quiet auto-copy link */}
         {canCopy ? (
@@ -806,110 +758,6 @@ function pulseHeadlineColor(tone: PulseHeadlineTone): string {
   return tone === "green" ? GREEN : RED;
 }
 
-function PulseReactionButton({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: Exclude<PulseReaction, "Tailing">;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const color = pulseReactionColor(label);
-  const mutedColor = `${color}cc`;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex w-auto items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase transition hover:opacity-90 active:scale-[0.97]"
-      style={{
-        background: active ? `${color}24` : PANEL_2,
-        color,
-        border: `1px solid ${active ? `${color}70` : `${color}55`}`,
-      }}
-    >
-      {label === "Bullish" ? (
-        <Flame className="shrink-0" size={12} strokeWidth={3} style={{ color }} />
-      ) : (
-        <TrendingDown
-          className="shrink-0"
-          size={12}
-          strokeWidth={3}
-          style={{ color }}
-        />
-      )}
-      <span>{label}</span>
-      {count > 0 ? (
-        <span style={{ color: active ? color : mutedColor }}>{count}</span>
-      ) : null}
-    </button>
-  );
-}
-
-function pulseReactionColor(reaction: Exclude<PulseReaction, "Tailing">): string {
-  const tone = getPulseReactionTone(reaction);
-  if (tone === "green") return GREEN;
-  if (tone === "red") return RED;
-  return ACCENT;
-}
-
-function RecentReactions({ reactors }: { reactors: PulseApiRecentReactor[] }) {
-  const line = reactors
-    .slice(0, 3)
-    .map((reactor) => `${reactor.profile.handle} ${reactionVerb(reactor.reaction)}`)
-    .join(" | ");
-
-  return (
-    <div
-      className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2"
-      style={{ background: PANEL, border: `1px solid ${FAINT}` }}
-    >
-      <div className="flex -space-x-1">
-        {reactors.slice(0, 3).map((reactor) => (
-          <CommentAvatar
-            key={`${reactor.profile.handle}:${reactor.reaction}`}
-            profile={reactor.profile}
-            label={reactor.profile.displayName}
-          />
-        ))}
-      </div>
-      <div
-        className="min-w-0 truncate text-[10px] font-black uppercase"
-        style={{ color: DIM }}
-      >
-        {line}
-      </div>
-    </div>
-  );
-}
-
-function CommentAvatar({
-  profile,
-  label,
-}: {
-  profile?: PulseCommentProfile;
-  label: string;
-}) {
-  const seed = profile?.avatarSeed ?? label;
-  const colors = avatarColors(seed);
-  return (
-    <span
-      aria-hidden="true"
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[9px] font-black uppercase"
-      style={{
-        background: colors.background,
-        color: colors.foreground,
-        border: `1px solid ${colors.border}`,
-      }}
-    >
-      {avatarLabel(profile?.displayName ?? label)}
-    </span>
-  );
-}
-
 function Metric({
   label,
   value,
@@ -960,14 +808,6 @@ function EmptyPulse() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function emptySocialCounts(): Record<PulseReaction, number> {
-  return {
-    Tailing: 0,
-    Bullish: 0,
-    Bearish: 0,
-  };
-}
 
 function buildPulseWhaleStats(
   whales: WhaleTraderSignal[],

@@ -361,6 +361,38 @@ export const pulseReactions = pgTable(
   }),
 );
 
+// Bullish/Bearish sentiment that attaches to a WHALE (not a transient
+// position) so a vote sticks even as the whale's positions open and close.
+// whaleId is plain text (not an FK) on purpose: sentiment must survive a whale
+// dropping off the live roster. One reaction per (whale, user).
+export const whaleReactions = pgTable(
+  "whale_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    whaleId: text("whale_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reaction: text("reaction").notNull(), // 'Bullish' | 'Bearish'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    whaleUserIdx: uniqueIndex("whale_reactions_whale_user_idx").on(
+      t.whaleId,
+      t.userId,
+    ),
+    whaleReactionIdx: index("whale_reactions_whale_reaction_idx").on(
+      t.whaleId,
+      t.reaction,
+    ),
+  }),
+);
+
 export const pulseComments = pgTable(
   "pulse_comments",
   {

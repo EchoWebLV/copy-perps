@@ -15,6 +15,7 @@
 // no heat sort, no snap scroll, no tape.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import type { ReactNode } from "react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { useArenaLive } from "@/lib/arena/use-arena-live";
@@ -31,7 +32,7 @@ import { formatPriceUsd } from "@/components/whales/whale-money";
 import { whaleDisplayName } from "@/lib/whales/alias";
 import { classifyQuery, filterTraders, type SearchableTrader } from "@/lib/search/traders";
 import { botCopyCta, type BotCopyCta } from "./bot-tail-source";
-import { DesktopWhaleCard, SkeletonDesktopWhaleCard, SentimentRow, type TraderSentiment } from "./DesktopWhaleCard";
+import { DesktopWhaleCard, SkeletonDesktopWhaleCard, SentimentRow, EMPTY_SENTIMENT, type TraderSentiment, type WhaleVote } from "./DesktopWhaleCard";
 import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
 import {
@@ -120,7 +121,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
 
   // Sentiment: reaction counts aggregated per whale across their open positions.
   // Fetched lazily from /api/pulse/social (unauthenticated — public read).
-  const sentiment = useWhaleSentiment(whales);
+  const { sentiment, react: reactToWhale } = useWhaleSentiment(whales);
 
   const botNames = useMemo(() => Object.keys(bots), [bots]);
 
@@ -254,6 +255,9 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       sortKey={sortKey}
                       now={now}
                       sentiment={sentiment[entry.whale.payload.whaleId] ?? null}
+                      onReact={(reaction) =>
+                        reactToWhale(entry.whale.payload.whaleId, reaction)
+                      }
                       onTail={(source) => setTailSource(source)}
                       onCopy={(target) => setCopyTarget(target)}
                     />
@@ -302,6 +306,9 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       rank={idx + 1}
                       now={now}
                       sentiment={sentiment[entry.whale.payload.whaleId] ?? null}
+                      onReact={(reaction) =>
+                        reactToWhale(entry.whale.payload.whaleId, reaction)
+                      }
                       onTail={(source) => setTailSource(source)}
                       onCopy={(target) => setCopyTarget(target)}
                     />
@@ -345,6 +352,7 @@ function WhaleFeedCard({
   sortKey,
   now,
   sentiment,
+  onReact,
   onTail,
   onCopy,
 }: {
@@ -352,6 +360,7 @@ function WhaleFeedCard({
   sortKey: FeedSortKey;
   now: number;
   sentiment: TraderSentiment | null;
+  onReact?: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
   onCopy: (target: CopyModalTarget) => void;
 }) {
@@ -465,9 +474,10 @@ function WhaleFeedCard({
         </div>
       </div>
 
-      {sentiment && sentiment.total > 0 ? (
-        <SentimentRow sentiment={sentiment} />
-      ) : null}
+      <SentimentRow
+        sentiment={sentiment ?? EMPTY_SENTIMENT}
+        onReact={onReact}
+      />
 
       {position ? (
         <PositionPanel
@@ -1362,123 +1372,151 @@ function EmptySearch({ onClear }: { onClear: () => void }) {
   );
 }
 
-// ─────────────────────── sentiment aggregation ────────────────────────────
+// ─────────────────────── whale sentiment (votes) ──────────────────────────
 
-type PulseApiSocial = Record<
+const SENTIMENT_CHUNK = 150;
+
+type WhaleSentimentApi = Record<
   string,
-  { reactionCounts: { Bullish?: number; Bearish?: number; Tailing?: number } }
+  { bullish: number; bearish: number; myReaction: WhaleVote | null }
 >;
 
-const SENTIMENT_CHUNK_SIZE = 100;
+function toTraderSentiment(s: {
+  bullish: number;
+  bearish: number;
+  myReaction: WhaleVote | null;
+}): TraderSentiment {
+  return {
+    bullish: s.bullish,
+    bearish: s.bearish,
+    total: s.bullish + s.bearish,
+    myReaction: s.myReaction,
+  };
+}
 
-/** Fetches reaction counts for all whale open positions and aggregates them
- *  per whale. Refreshes once when the whale roster changes.
- *
- *  Fix 1: sentiment is bullish-vs-bearish only (Tailing excluded from
- *  percentage and total). Row hides when subtotal === 0.
- *  Fix 2: latch fetchedKeyRef only on success; stale-response guard drops
- *  results that arrived after the roster changed.
- *  Fix 3: position IDs are chunked into ≤100-id batches so the server-side
- *  100-id cap never silently truncates a large roster. */
-function useWhaleSentiment(
-  whales: WhaleTraderSignal[],
-): Record<string, TraderSentiment> {
-  // Build a stable "all position IDs" key to detect roster changes.
-  const positionIdsKey = useMemo(() => {
-    return whales
-      .flatMap((w) => w.payload.openPositions.map((pos) => pos.positionId))
-      .sort()
-      .join(",");
-  }, [whales]);
-
-  // Map positionId → whaleId for aggregation.
-  const positionToWhale = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const whale of whales) {
-      for (const pos of whale.payload.openPositions) {
-        map.set(pos.positionId, whale.payload.whaleId);
-      }
-    }
-    return map;
-  }, [whales]);
-
-  const fetchedKeyRef = useRef<string>("");
-  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>({});
+/** Persistent per-whale Bullish/Bearish sentiment. Reads counts + the user's
+ *  own vote from /api/whales/sentiment (keyed by whaleId, so it survives the
+ *  whale's positions opening/closing), and exposes react() to cast/toggle a
+ *  vote with an optimistic update reconciled against the server response. */
+function useWhaleSentiment(whales: WhaleTraderSignal[]): {
+  sentiment: Record<string, TraderSentiment>;
+  react: (whaleId: string, reaction: WhaleVote) => void;
+} {
+  const { authenticated, getAccessToken, login } = usePrivy();
+  const whaleIdsKey = useMemo(
+    () => [...new Set(whales.map((w) => w.payload.whaleId))].sort().join(","),
+    [whales],
+  );
+  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>(
+    {},
+  );
+  const sentimentRef = useRef(sentiment);
+  sentimentRef.current = sentiment;
+  const fetchedKeyRef = useRef("");
 
   useEffect(() => {
-    if (!positionIdsKey || fetchedKeyRef.current === positionIdsKey) return;
-
-    const capturedKey = positionIdsKey;
-    const positionIds = capturedKey.split(",").filter(Boolean);
-    if (positionIds.length === 0) return;
-
-    // Stale-guard: cancelled = true when the effect re-runs (positionIdsKey
-    // changed) before the fetch resolves.
+    if (!whaleIdsKey || fetchedKeyRef.current === whaleIdsKey) return;
+    const capturedKey = whaleIdsKey;
+    const ids = capturedKey.split(",").filter(Boolean);
+    if (ids.length === 0) return;
     let cancelled = false;
-
-    // Chunk into ≤100-id batches to stay within the server-side cap.
-    const chunks: string[][] = [];
-    for (let i = 0; i < positionIds.length; i += SENTIMENT_CHUNK_SIZE) {
-      chunks.push(positionIds.slice(i, i + SENTIMENT_CHUNK_SIZE));
-    }
-
-    void Promise.all(
-      chunks.map((chunk) => {
-        const encoded = chunk.map(encodeURIComponent).join(",");
-        return fetch(`/api/pulse/social?positionIds=${encoded}`, {
-          cache: "no-store",
-        })
-          .then((r) => (r.ok ? (r.json() as Promise<{ social?: PulseApiSocial } | null>) : null))
-          .catch(() => null);
-      }),
-    )
-      .then((responses) => {
-        // Stale-guard: drop if the effect was cleaned up while fetches were in flight.
-        if (cancelled) return;
-
-        // Merge all chunk payloads into one social map.
-        const merged: PulseApiSocial = {};
-        for (const data of responses) {
-          if (!data?.social) continue;
-          Object.assign(merged, data.social);
+    void (async () => {
+      const token = authenticated
+        ? await getAccessToken().catch(() => null)
+        : null;
+      const headers: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += SENTIMENT_CHUNK) {
+        chunks.push(ids.slice(i, i + SENTIMENT_CHUNK));
+      }
+      const responses = await Promise.all(
+        chunks.map((chunk) =>
+          fetch(
+            `/api/whales/sentiment?whaleIds=${chunk
+              .map(encodeURIComponent)
+              .join(",")}`,
+            { cache: "no-store", headers },
+          )
+            .then((r) =>
+              r.ok
+                ? (r.json() as Promise<{ sentiment?: WhaleSentimentApi } | null>)
+                : null,
+            )
+            .catch(() => null),
+        ),
+      );
+      if (cancelled) return;
+      const result: Record<string, TraderSentiment> = {};
+      for (const data of responses) {
+        if (!data?.sentiment) continue;
+        for (const [whaleId, s] of Object.entries(data.sentiment)) {
+          result[whaleId] = toTraderSentiment(s);
         }
-
-        // Aggregate bullish-vs-bearish per whale (Tailing excluded from math).
-        const agg = new Map<string, { bullish: number; total: number }>();
-        for (const [positionId, record] of Object.entries(merged)) {
-          const whaleId = positionToWhale.get(positionId);
-          if (!whaleId) continue;
-          const counts = record.reactionCounts;
-          const bullish = counts.Bullish ?? 0;
-          const bearish = counts.Bearish ?? 0;
-          // Fix 1: subtotal excludes Tailing — percentage and vote count are
-          // bullish-vs-bearish only.
-          const subtotal = bullish + bearish;
-          if (subtotal === 0) continue;
-          const existing = agg.get(whaleId) ?? { bullish: 0, total: 0 };
-          agg.set(whaleId, {
-            bullish: existing.bullish + bullish,
-            total: existing.total + subtotal,
-          });
-        }
-
-        const result: Record<string, TraderSentiment> = {};
-        for (const [whaleId, counts] of agg) {
-          result[whaleId] = counts;
-        }
-
-        // Latch the key only after a successful, non-cancelled commit.
-        fetchedKeyRef.current = capturedKey;
-        setSentiment(result);
-      })
-      .catch(() => {
-        // Sentiment is non-critical — silently ignore unexpected failures.
-      });
-
+      }
+      fetchedKeyRef.current = capturedKey;
+      setSentiment(result);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [positionIdsKey, positionToWhale]);
+  }, [whaleIdsKey, authenticated, getAccessToken]);
 
-  return sentiment;
+  const react = useCallback(
+    (whaleId: string, reaction: WhaleVote) => {
+      if (!authenticated) {
+        login();
+        return;
+      }
+      const cur = sentimentRef.current[whaleId] ?? EMPTY_SENTIMENT;
+      const next: WhaleVote | null =
+        cur.myReaction === reaction ? null : reaction;
+
+      // Optimistic update.
+      setSentiment((prev) => {
+        const c = prev[whaleId] ?? EMPTY_SENTIMENT;
+        let bullish = c.bullish;
+        let bearish = c.bearish;
+        if (c.myReaction === "Bullish") bullish -= 1;
+        else if (c.myReaction === "Bearish") bearish -= 1;
+        if (next === "Bullish") bullish += 1;
+        else if (next === "Bearish") bearish += 1;
+        return {
+          ...prev,
+          [whaleId]: {
+            bullish,
+            bearish,
+            total: bullish + bearish,
+            myReaction: next,
+          },
+        };
+      });
+
+      void (async () => {
+        try {
+          const token = await getAccessToken();
+          const r = await fetch("/api/whales/sentiment", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ whaleId, reaction: next }),
+          });
+          if (!r.ok) return;
+          const data = (await r.json()) as { sentiment?: WhaleSentimentApi };
+          const s = data.sentiment?.[whaleId];
+          if (s) {
+            setSentiment((prev) => ({ ...prev, [whaleId]: toTraderSentiment(s) }));
+          }
+        } catch {
+          // Optimistic state stays; the next roster fetch reconciles.
+        }
+      })();
+    },
+    [authenticated, getAccessToken, login],
+  );
+
+  return { sentiment, react };
 }

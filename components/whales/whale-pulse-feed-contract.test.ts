@@ -39,8 +39,6 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("authenticated");
     expect(componentSource).toContain("requirePulseAuth");
     expect(componentSource).toContain("TailModal");
-    expect(componentSource).toContain("recentReactors");
-    expect(componentSource).toContain("CommentAvatar");
     expect(componentSource).not.toContain("buildPulseSeedComments");
     expect(componentSource).not.toContain("buildPulseSocialStats");
     expect(componentSource).not.toContain("localComments");
@@ -77,8 +75,6 @@ describe("WhalePulseFeed route contract", () => {
       "grid auto-rows-max grid-cols-2 gap-3 xl:grid-cols-3",
     );
     expect(componentSource).not.toContain("min-h-screen w-full max-w-xl");
-    // One shared reaction button (mobile + desktop)
-    expect(componentSource).toContain("function PulseReactionButton(");
     expect(componentSource).not.toContain("DesktopPulseReactionButton");
     expect(componentSource).not.toContain('<ul className="divide-y"');
   });
@@ -100,27 +96,26 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain("formatSignedUsd");
   });
 
-  it("keeps the reaction chips on one wrapping row", () => {
+  it("has NO Bullish/Bearish voting on Live cards (moved to the whale cards)", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
-    expect(componentSource).toContain("flex flex-wrap items-center gap-2");
+    // Voting now lives on the stable whale trader cards, not the fast-moving
+    // Live tape. No reaction buttons or per-position reaction wiring here.
+    expect(componentSource).not.toContain("PulseReactionButton");
+    expect(componentSource).not.toContain("PULSE_REACTIONS.filter");
   });
 
-  it("keeps the reactions row and the Copy CTA spaced apart, pinned to the bottom", () => {
+  it("keeps a full-width Copy CTA on Live cards, pinned to the bottom", () => {
     const componentSource = readFileSync(
       join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
       "utf8",
     );
 
-    // Shared card: reactions + CTA in a justify-between row, pushed to the
-    // card bottom via mt-auto.
     expect(componentSource).toContain("mt-auto pt-6");
-    expect(componentSource).toContain(
-      "flex flex-wrap items-center justify-between gap-3",
-    );
+    expect(componentSource).toContain("inline-flex w-full items-center");
   });
 
   it("hides comments for now and keeps reaction icons visible on all viewports", () => {
@@ -169,22 +164,6 @@ describe("WhalePulseFeed route contract", () => {
     expect(componentSource).toContain(
       "mergePulsePositionSignals(current, data.positions, Date.now())",
     );
-  });
-
-  it("renders only bullish and bearish reaction chips on tape cards (Tailing hidden from display)", () => {
-    const componentSource = readFileSync(
-      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
-      "utf8",
-    );
-
-    // Tape renders a ratio bar for bullish-vs-bearish sentiment
-    expect(componentSource).toContain("bullishPct");
-    expect(componentSource).toContain("bullishCount");
-    expect(componentSource).toContain("bearishCount");
-    // Tailing is filtered out before rendering chips
-    expect(componentSource).toContain('r !== "Tailing"');
-    // Tailing is preserved in the data model (social counts, reactions POST)
-    expect(componentSource).toContain("Tailing: 0");
   });
 
   it("shows a floating new-signal pill when items arrive while user is scrolled down", () => {

@@ -13,7 +13,7 @@
 //   - no heat anywhere — `rank` comes from the unified feed's P&L ranking.
 // `now` is the feed's shared 1s ticker instead of a per-card interval.
 
-import { Layers, Zap } from "lucide-react";
+import { Flame, Layers, TrendingDown, Zap } from "lucide-react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { isSourceFresh } from "@/lib/whales/identity";
 import type { TailSource } from "@/components/tail/TailModal";
@@ -40,9 +40,13 @@ import {
   STREAK,
 } from "@/components/v2/ui";
 
+export type WhaleVote = "Bullish" | "Bearish";
+
 export interface TraderSentiment {
   bullish: number;
-  total: number;
+  bearish: number;
+  total: number; // bullish + bearish
+  myReaction: WhaleVote | null;
 }
 
 export function DesktopWhaleCard({
@@ -50,14 +54,17 @@ export function DesktopWhaleCard({
   rank,
   now,
   sentiment,
+  onReact,
   onTail,
   onCopy,
 }: {
   whale: WhaleTraderSignal;
   rank: number;
   now: number;
-  /** Aggregated reaction counts across the whale's open positions. */
+  /** Persistent whale-level Bullish/Bearish sentiment (counts + my vote). */
   sentiment?: TraderSentiment | null;
+  /** Cast/clear my vote on this whale. */
+  onReact?: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
   /** Standing auto-copy (Copy modal) — armed flat or live. */
   onCopy?: (target: {
@@ -158,9 +165,10 @@ export function DesktopWhaleCard({
         />
       </div>
 
-      {sentiment && sentiment.total > 0 ? (
-        <SentimentRow sentiment={sentiment} />
-      ) : null}
+      <SentimentRow
+        sentiment={sentiment ?? EMPTY_SENTIMENT}
+        onReact={onReact}
+      />
 
       <WhalePnlGraph
         points={p.stats.pnlCurve}
@@ -300,25 +308,90 @@ export function DesktopWhaleCard({
 }
 
 /** Bullish/bearish sentiment aggregate row — mirrors the mock `.tcsent`. */
-export function SentimentRow({ sentiment }: { sentiment: TraderSentiment }) {
-  const pct = sentiment.total > 0 ? Math.round((sentiment.bullish / sentiment.total) * 100) : 0;
-  const bullish = pct >= 50;
+export const EMPTY_SENTIMENT: TraderSentiment = {
+  bullish: 0,
+  bearish: 0,
+  total: 0,
+  myReaction: null,
+};
+
+/** Interactive whale-level sentiment: Bullish / Bearish vote chips + a
+ *  bullish-vs-bearish ratio bar. Voting lives here (on the stable trader
+ *  card) rather than the fast-changing Live tape. */
+export function SentimentRow({
+  sentiment,
+  onReact,
+}: {
+  sentiment: TraderSentiment;
+  onReact?: (reaction: WhaleVote) => void;
+}) {
+  const pct =
+    sentiment.total > 0
+      ? Math.round((sentiment.bullish / sentiment.total) * 100)
+      : 50;
   return (
-    <div
-      className="mt-2 flex items-center gap-1.5 text-[10px] font-bold tracking-[.04em]"
-      aria-label={`${pct}% bullish, ${sentiment.total} votes`}
-    >
-      <span style={{ color: bullish ? GREEN : RED }}>{pct}% bullish</span>
-      <span style={{ color: DIM }}>· {sentiment.total} votes</span>
+    <div className="mt-2 flex items-center gap-1.5">
+      <SentimentVote
+        label="Bullish"
+        count={sentiment.bullish}
+        active={sentiment.myReaction === "Bullish"}
+        onClick={onReact ? () => onReact("Bullish") : undefined}
+      />
+      <SentimentVote
+        label="Bearish"
+        count={sentiment.bearish}
+        active={sentiment.myReaction === "Bearish"}
+        onClick={onReact ? () => onReact("Bearish") : undefined}
+      />
       <div
         className="flex-1 overflow-hidden rounded-full"
-        style={{ height: 4, background: `${RED}33`, minWidth: 40 }}
+        style={{ height: 4, background: `${RED}33`, minWidth: 32 }}
+        aria-label={`${pct}% bullish, ${sentiment.total} votes`}
       >
         <div
-          style={{ width: `${pct}%`, height: "100%", background: GREEN, borderRadius: 9999 }}
+          style={{
+            width: `${pct}%`,
+            height: "100%",
+            background: GREEN,
+            borderRadius: 9999,
+          }}
         />
       </div>
     </div>
+  );
+}
+
+function SentimentVote({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: WhaleVote;
+  count: number;
+  active: boolean;
+  onClick?: () => void;
+}) {
+  const color = label === "Bullish" ? GREEN : RED;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest transition hover:opacity-90 active:scale-[0.97]"
+      style={{
+        background: active ? `${color}24` : PANEL_2,
+        color,
+        border: `1px solid ${active ? `${color}70` : `${color}45`}`,
+      }}
+    >
+      {label === "Bullish" ? (
+        <Flame size={11} strokeWidth={3} style={{ color }} />
+      ) : (
+        <TrendingDown size={11} strokeWidth={3} style={{ color }} />
+      )}
+      <span>{label}</span>
+      {count > 0 ? <span>{count}</span> : null}
+    </button>
   );
 }
 
