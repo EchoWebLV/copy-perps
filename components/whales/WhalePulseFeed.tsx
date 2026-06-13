@@ -635,8 +635,8 @@ function PulsePositionCard({
         className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-4 lg:p-6"
         style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
       >
-        {/* Identity row — tapping navigates to /feed */}
-        <Link href="/feed" className="flex items-center gap-3 no-underline" tabIndex={-1}>
+        {/* Identity row — tapping navigates to the trader on /feed */}
+        <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} className="flex items-center gap-3 no-underline" tabIndex={-1}>
           <WhaleFingerprintAvatar
             sourceAccount={p.sourceAccount}
             label={p.displayName}
@@ -782,7 +782,7 @@ function PulsePositionCard({
               style={{ color: DIM }}
             >
               Want every trade?{" "}
-              <Link href="/feed" style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
+              <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
                 View trader → Auto-copy
               </Link>
             </p>
@@ -870,7 +870,7 @@ function DesktopPulseCard({
       </div>
 
       {/* Identity row */}
-      <Link href="/feed" className="mt-4 flex items-center gap-3 no-underline" tabIndex={-1}>
+      <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} className="mt-4 flex items-center gap-3 no-underline" tabIndex={-1}>
         <WhaleFingerprintAvatar
           sourceAccount={p.sourceAccount}
           label={p.displayName}
@@ -1000,7 +1000,7 @@ function DesktopPulseCard({
             style={{ color: DIM }}
           >
             Want every trade?{" "}
-            <Link href="/feed" style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
+            <Link href={`/feed?q=${encodeURIComponent(p.displayName)}`} style={{ color: DIM, fontWeight: 800, textDecoration: "none" }}>
               View trader → Auto-copy
             </Link>
           </p>

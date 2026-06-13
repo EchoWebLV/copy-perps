@@ -216,4 +216,26 @@ describe("WhalePulseFeed route contract", () => {
     // NO standalone Auto-copy button on tape cards
     expect(componentSource).not.toContain('"Auto-copy"');
   });
+
+  it("View trader links carry the trader via ?q= (not a bare /feed)", () => {
+    const componentSource = readFileSync(
+      join(process.cwd(), "components/whales/WhalePulseFeed.tsx"),
+      "utf8",
+    );
+    // Every /feed link must carry the trader so the Traders page opens focused
+    // on them (where Auto-copy lives) — a bare href="/feed" is the bug.
+    expect(componentSource).not.toContain('href="/feed"');
+    expect(componentSource).toContain(
+      "/feed?q=${encodeURIComponent(p.displayName)}",
+    );
+  });
+
+  it("UnifiedFeed prefills its search from the ?q= param", () => {
+    const feedSource = readFileSync(
+      join(process.cwd(), "components/feed/UnifiedFeed.tsx"),
+      "utf8",
+    );
+    expect(feedSource).toContain('.get("q")');
+    expect(feedSource).toContain("setSearchQuery");
+  });
 });

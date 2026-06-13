@@ -110,6 +110,13 @@ export function UnifiedFeed({ initialWhales }: Props) {
   const [sortKey, setSortKey] = useState<FeedSortKey>("pnl1d");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Prefill the search from a `?q=` param so "View trader" links on the LIVE
+  // tape land here focused on that trader (their card shows; Auto-copy is on it).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearchQuery(q);
+  }, []);
+
   // Sentiment: reaction counts aggregated per whale across their open positions.
   // Fetched lazily from /api/pulse/social (unauthenticated — public read).
   const sentiment = useWhaleSentiment(whales);
