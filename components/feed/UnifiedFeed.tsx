@@ -826,6 +826,7 @@ function GridBotCard({
       name={name}
       bot={bot}
       now={now}
+      market={market}
       tailCta={
         <div className="flex gap-2">
           <button

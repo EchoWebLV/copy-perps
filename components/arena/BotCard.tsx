@@ -7,8 +7,11 @@
 // on the v2 tokens.
 
 import type { ReactNode } from "react";
-import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
+import type { ArenaBot, ArenaMarketState, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
+import { isStale } from "@/lib/arena/use-arena-live";
+import { botDirectionalBias, botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import { BullBearMeter } from "./BullBearMeter";
 import { AI, AI_BORDER, AI_DIM, AiBotBadge, DIM, FAINT, GREEN, RED, AI_TINT } from "@/components/v2/ui";
 
 /** $ price for the header/positions: 2dp ≥ $1, 4dp below (memecoin-safe). */
@@ -46,12 +49,16 @@ export function BotCard({
   name,
   bot,
   now,
+  market,
   onOpen,
   tailCta,
 }: {
   name: string;
   bot: ArenaBot | null;
   now: number;
+  /** Live oracle market — threads the mark price in so positions show live
+   *  PnL. Optional: callers without it (legacy) just render entry-only rows. */
+  market?: ArenaMarketState | null;
   onOpen?: () => void;
   /** Optional copy CTA rendered under the positions block — the /feed grid
    *  passes the Tail button; /arena keeps rendering without it. */
@@ -64,6 +71,15 @@ export function BotCard({
   const equity = bot ? bot.balanceUsd + openStake : null;
   const pnlColor =
     bot && bot.grossPnlUsd !== 0 ? (bot.grossPnlUsd > 0 ? GREEN : RED) : DIM;
+  const bias = bot ? botDirectionalBias(bot) : null;
+  // Live mark for PnL, gated on freshness so stale numbers render dimmed.
+  // Single-market (SOL-only) arena: the hook streams exactly one market feed,
+  // so every open position marks against it. A position's stored marketId byte
+  // can differ from the live market PDA's id across clusters (devnet's live
+  // market is id 1 while positions carry id 0) — same SOL price either way.
+  const mkt = market ?? null;
+  const marketStale = mkt !== null && now > 0 && isStale(mkt.lastPublishTsMs, now);
+  const livePrice = mkt?.lastPrice ?? null;
 
   return (
     <div
@@ -176,7 +192,19 @@ export function BotCard({
         <span>fees {bot ? fmtUsd(bot.feesUsd) : "—"}</span>
       </div>
 
-      {/* open positions */}
+      {/* bull/bear bias meter */}
+      <div className="mt-3">
+        {bias === null ? (
+          <span
+            className="skeleton-block inline-block h-4 w-full rounded-md"
+            aria-hidden
+          />
+        ) : (
+          <BullBearMeter bias={bias.bias} side={bias.side} />
+        )}
+      </div>
+
+      {/* open positions (live) */}
       <div className="mt-3 flex flex-col gap-1.5">
         {bot === null ? (
           <span
@@ -196,6 +224,8 @@ export function BotCard({
               key={`${pos.marketId}-${pos.side}-${pos.openedTsMs}`}
               pos={pos}
               now={now}
+              markPrice={livePrice}
+              stale={marketStale}
             />
           ))
         )}
@@ -217,9 +247,31 @@ export function BotCard({
   );
 }
 
-function PositionRow({ pos, now }: { pos: ArenaPosition; now: number }) {
+/** Signed percent, e.g. +3.4% / −1.2% / 0.0% (proper minus glyph). */
+function fmtSignedPct(v: number): string {
+  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
+  return `${sign}${Math.abs(v).toFixed(1)}%`;
+}
+
+function PositionRow({
+  pos,
+  now,
+  markPrice,
+  stale,
+}: {
+  pos: ArenaPosition;
+  now: number;
+  markPrice: number | null;
+  stale: boolean;
+}) {
   const long = pos.side === "long";
   const sideColor = long ? GREEN : RED;
+  const pnlPct = botPositionPnlPct(pos, markPrice);
+  const pnlColor =
+    pnlPct === null ? DIM : pnlPct > 0 ? GREEN : pnlPct < 0 ? RED : DIM;
+  // When the oracle mark is stale, keep showing the last numbers but dim them
+  // so we never present a frozen mark as fresh.
+  const liveStyle = stale ? { opacity: 0.45 } : undefined;
   return (
     <div
       className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold tabular-nums"
@@ -231,10 +283,15 @@ function PositionRow({ pos, now }: { pos: ArenaPosition; now: number }) {
       >
         {long ? "long" : "short"} ×{pos.leverage}
       </span>
-      <span style={{ color: DIM }}>
-        in {fmtArenaPrice(pos.entryPrice)} · liq {fmtArenaPrice(pos.liqPrice)}
+      <span style={{ color: pnlColor, ...liveStyle }}>
+        {pnlPct === null ? "—" : fmtSignedPct(pnlPct)}
       </span>
-      <span style={{ color: DIM }}>{fmtAge(pos.openedTsMs, now)}</span>
+      <span style={{ color: DIM, ...liveStyle }}>
+        {markPrice !== null
+          ? `@ ${fmtArenaPrice(markPrice)}`
+          : `in ${fmtArenaPrice(pos.entryPrice)}`}{" "}
+        · {fmtAge(pos.openedTsMs, now)}
+      </span>
     </div>
   );
 }

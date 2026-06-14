@@ -4,7 +4,7 @@
 // freshness formatting, and the stale-roster poll guard salvaged from the
 // old WhaleRoster.
 
-import type { ArenaBot, ArenaPosition } from "@/lib/arena/decode";
+import type { ArenaBot, ArenaPosition, ArenaSide } from "@/lib/arena/decode";
 import type { WhaleTraderSignal } from "@/lib/types";
 
 // ─────────────────────────── filters + sorts ──────────────────────────────
@@ -197,6 +197,55 @@ export function primaryBotPosition(bot: ArenaBot): ArenaPosition | null {
   return active.reduce((newest, p) =>
     p.openedTsMs > newest.openedTsMs ? p : newest,
   );
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+export interface BotBias {
+  /** Signed needle position in [-1, +1]: −1 = max bear, +1 = max bull, 0 = flat. */
+  bias: number;
+  /** Net direction the book leans, or null when flat / perfectly hedged. */
+  side: ArenaSide | null;
+  /** Conviction magnitude |bias| in [0, 1] — for labels/glow. */
+  intensity: number;
+}
+
+/** Live bull/bear bias for a bot, derived purely from its on-chain open
+ *  positions — the LLM's decision-time confidence is consumed at apply_decision
+ *  and never persisted on-chain, so directional exposure is the honest signal.
+ *  Direction = net signed notional across active slots; magnitude scales with
+ *  how leveraged the book is vs. the bot's own max leverage (params.leverage,
+ *  set from maxLeverage in llmBotToArenaBot), so a 40x degen long pegs the
+ *  needle while a 2x toe-in barely tilts it. Flat → centered, side-less. */
+export function botDirectionalBias(bot: ArenaBot): BotBias {
+  const flat: BotBias = { bias: 0, side: null, intensity: 0 };
+  const active = bot.positions.filter((p) => p.active);
+  if (active.length === 0) return flat;
+
+  let net = 0; // signed notional
+  let sumAbs = 0; // total notional
+  let weightedLev = 0; // stake-weighted leverage
+  for (const p of active) {
+    const dir = p.side === "long" ? 1 : -1;
+    net += dir * p.stakeUsd;
+    sumAbs += p.stakeUsd;
+    weightedLev += p.stakeUsd * p.leverage;
+  }
+  if (sumAbs <= 0) return flat;
+
+  const agreement = net / sumAbs; // [-1, 1]; ±1 = all one direction
+  if (Math.abs(agreement) < 1e-9) return flat; // perfectly hedged → neutral
+
+  const avgLev = weightedLev / sumAbs;
+  const maxLev = bot.params.leverage > 0 ? bot.params.leverage : avgLev || 1;
+  const levNorm = clamp(avgLev / maxLev, 0, 1); // 0..1 conviction from leverage
+  // Visible floor (0.45) so any open position tilts the needle, then scale up
+  // to a full peg with leverage.
+  const magnitude = Math.abs(agreement) * (0.45 + 0.55 * levNorm);
+  const bias = clamp(agreement >= 0 ? magnitude : -magnitude, -1, 1);
+  return { bias, side: agreement >= 0 ? "long" : "short", intensity: Math.abs(bias) };
 }
 
 // ───────────────────────────── formatting ─────────────────────────────────

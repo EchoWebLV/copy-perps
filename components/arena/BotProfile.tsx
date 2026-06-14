@@ -7,12 +7,14 @@
 // lightweight overlays).
 
 import { useEffect } from "react";
-import type { ArenaBot } from "@/lib/arena/decode";
+import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
 import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
-import { parseArenaEnv } from "@/lib/arena/use-arena-live";
+import { isStale, parseArenaEnv } from "@/lib/arena/use-arena-live";
+import { botDirectionalBias, botPositionPnlPct } from "@/components/feed/unified-feed-model";
 import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
 import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline, AI_TINT } from "@/components/v2/ui";
+import { BullBearMeter } from "./BullBearMeter";
 import { fmtArenaPrice } from "./BotCard";
 
 const TOKEN_COLORS = { GREEN, RED, DIM } as const;
@@ -37,11 +39,13 @@ export function BotProfile({
   name,
   bot,
   now,
+  market,
   onClose,
 }: {
   name: string;
   bot: ArenaBot | null;
   now: number;
+  market?: ArenaMarketState | null;
   onClose: () => void;
 }) {
   const persona = ARENA_PERSONAS[name];
@@ -53,6 +57,12 @@ export function BotProfile({
     bot === null
       ? null
       : bot.balanceUsd + openPositions.reduce((s, p) => s + p.stakeUsd, 0);
+  const bias = bot ? botDirectionalBias(bot) : null;
+  // Single-market SOL arena — every position marks against the one live feed
+  // (see BotCard for the marketId-byte caveat across clusters).
+  const mkt = market ?? null;
+  const marketStale = mkt !== null && now > 0 && isStale(mkt.lastPublishTsMs, now);
+  const livePrice = mkt?.lastPrice ?? null;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -149,6 +159,65 @@ export function BotProfile({
             value={bot ? fmtUsd(bot.equityHighUsd) : "—"}
           />
         </div>
+
+        {/* bull/bear bias */}
+        {bias && (
+          <div
+            className="mt-4 rounded-2xl border p-3"
+            style={{ borderColor: FAINT }}
+          >
+            <BullBearMeter bias={bias.bias} side={bias.side} size="profile" />
+          </div>
+        )}
+
+        {/* open positions · live */}
+        {openPositions.length > 0 && (
+          <div className="mt-5">
+            <div
+              className="text-[10px] font-black uppercase tracking-[0.24em]"
+              style={{ color: DIM }}
+            >
+              open positions · live
+            </div>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {openPositions.map((pos) => {
+                const markPrice = livePrice;
+                const pnlPct = botPositionPnlPct(pos, markPrice);
+                const long = pos.side === "long";
+                const sideColor = long ? GREEN : RED;
+                const pnlColor =
+                  pnlPct === null ? DIM : pnlPct > 0 ? GREEN : pnlPct < 0 ? RED : DIM;
+                const liveStyle = marketStale ? { opacity: 0.45 } : undefined;
+                const sign = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "");
+                return (
+                  <div
+                    key={`${pos.marketId}-${pos.side}-${pos.openedTsMs}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold tabular-nums"
+                    style={{ borderColor: FAINT }}
+                  >
+                    <span
+                      className="font-black uppercase tracking-widest"
+                      style={{ color: sideColor }}
+                    >
+                      {long ? "long" : "short"} ×{pos.leverage}
+                    </span>
+                    <span style={{ color: pnlColor, ...liveStyle }}>
+                      {pnlPct === null
+                        ? "—"
+                        : `${sign(pnlPct)}${Math.abs(pnlPct).toFixed(1)}%`}
+                    </span>
+                    <span style={{ color: DIM, ...liveStyle }}>
+                      {markPrice !== null
+                        ? `@ ${fmtArenaPrice(markPrice)}`
+                        : `in ${fmtArenaPrice(pos.entryPrice)}`}{" "}
+                      · liq {fmtArenaPrice(pos.liqPrice)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* decision tape */}
         <div className="mt-5">

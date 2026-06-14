@@ -108,6 +108,7 @@ export function ArenaRoster() {
                   name={name}
                   bot={bots[name]}
                   now={now}
+                  market={market}
                   onOpen={() => setSelected(name)}
                 />
               ))}
@@ -132,6 +133,7 @@ export function ArenaRoster() {
           name={selected}
           bot={bots[selected] ?? null}
           now={now}
+          market={market}
           onClose={() => setSelected(null)}
         />
       )}

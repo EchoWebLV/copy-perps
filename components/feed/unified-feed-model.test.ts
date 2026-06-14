@@ -7,6 +7,7 @@ import {
   FEED_SORT_OPTIONS,
   type FeedEntry,
   arenaMarketTicker,
+  botDirectionalBias,
   botEquityUsd,
   botPnlPct,
   botPositionPnlPct,
@@ -309,6 +310,66 @@ describe("bot math", () => {
   it("names the pinned devnet market and fails readable for unknown ids", () => {
     expect(arenaMarketTicker(0)).toBe("SOL");
     expect(arenaMarketTicker(7)).toBe("MKT7");
+  });
+});
+
+describe("bot directional bias", () => {
+  it("reads neutral when the bot holds no position", () => {
+    expect(botDirectionalBias(makeBot({ positions: [] }))).toEqual({
+      bias: 0,
+      side: null,
+      intensity: 0,
+    });
+  });
+
+  it("leans bull for a long and bear for a short, scaled by leverage", () => {
+    // makeBot default params.leverage = 100; a 10x position → levNorm 0.1,
+    // magnitude = 1 * (0.45 + 0.55 * 0.1) = 0.505.
+    const long = botDirectionalBias(
+      makeBot({ positions: [makePosition({ side: "long", leverage: 10 })] }),
+    );
+    const short = botDirectionalBias(
+      makeBot({ positions: [makePosition({ side: "short", leverage: 10 })] }),
+    );
+    expect(long.side).toBe("long");
+    expect(long.bias).toBeCloseTo(0.505);
+    expect(short.side).toBe("short");
+    expect(short.bias).toBeCloseTo(-0.505);
+  });
+
+  it("pegs the needle harder as leverage approaches the bot's max", () => {
+    const lowLev = botDirectionalBias(
+      makeBot({ positions: [makePosition({ leverage: 10 })] }),
+    );
+    const maxLev = botDirectionalBias(
+      makeBot({ positions: [makePosition({ leverage: 100 })] }),
+    );
+    expect(maxLev.bias).toBeGreaterThan(lowLev.bias);
+    expect(maxLev.bias).toBeCloseTo(1); // 1 * (0.45 + 0.55 * 1)
+  });
+
+  it("reads neutral when long and short notional cancel out", () => {
+    const hedged = makeBot({
+      positions: [
+        makePosition({ side: "long", stakeUsd: 50 }),
+        makePosition({ side: "short", stakeUsd: 50, openedTsMs: 2_000 }),
+      ],
+    });
+    expect(botDirectionalBias(hedged)).toEqual({
+      bias: 0,
+      side: null,
+      intensity: 0,
+    });
+  });
+
+  it("ignores inactive slots", () => {
+    const bot = makeBot({
+      positions: [
+        makePosition({ side: "short", active: false }),
+        makePosition({ side: "long", leverage: 10 }),
+      ],
+    });
+    expect(botDirectionalBias(bot).side).toBe("long");
   });
 });
 
