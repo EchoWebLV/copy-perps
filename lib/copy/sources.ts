@@ -7,8 +7,8 @@
 // RPC blipped would be a money bug).
 
 import { Connection, PublicKey } from "@solana/web3.js";
-import { decodeBot, type ArenaBot } from "@/lib/arena/decode";
-import { botPda } from "@/lib/arena/personas";
+import { decodeLlmBot, llmBotToArenaBot, type ArenaBot } from "@/lib/arena/decode";
+import { llmBotPda } from "@/lib/arena/llm/submit";
 import type { FlashPositionSummary } from "@/lib/flash/perps";
 import type { WhalePositionRecord, WhaleSource } from "@/lib/whales/types";
 import {
@@ -161,13 +161,17 @@ function arenaProgramId(): PublicKey {
 async function fetchArenaBotPositions(
   persona: string,
 ): Promise<SourcePosition[]> {
+  // Arena bots are LLM bots: they live at the `llmbot` PDA and decode as
+  // LlmBot, NOT the legacy strategy-bot `bot` PDA. Read that account and map
+  // onto ArenaBot so the shared mapper handles it unchanged. (Using botPda
+  // here was the bug that made every AI-bot copy fail with "account missing".)
   const info = await arenaErConnection().getAccountInfo(
-    botPda(persona, arenaProgramId()),
+    llmBotPda(arenaProgramId(), persona),
   );
   if (!info) throw new Error(`arena bot account missing: ${persona}`);
-  const bot = decodeBot(new Uint8Array(info.data));
-  if (!bot) throw new Error(`arena bot account undecodable: ${persona}`);
-  return arenaBotSourcePositions(persona, bot);
+  const llm = decodeLlmBot(new Uint8Array(info.data));
+  if (!llm) throw new Error(`arena bot account undecodable: ${persona}`);
+  return arenaBotSourcePositions(persona, llmBotToArenaBot(llm));
 }
 
 async function fetchFlashWalletPositions(
