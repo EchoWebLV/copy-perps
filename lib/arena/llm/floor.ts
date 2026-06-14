@@ -15,6 +15,11 @@ import {
   toConfidence100,
 } from "./schema";
 
+/** Minimum leverage on every OPEN. The model's choice is clamped UP to this
+ *  (and down to the bot's maxLeverage). Bots are meant to take real swings, not
+ *  toe in at 2x. Capped at maxLeverage so it can never exceed the bot's ceiling. */
+export const MIN_OPEN_LEVERAGE = 10;
+
 export interface LlmFloorParams {
   maxLeverage: number;
   minStopBps: number;
@@ -101,7 +106,11 @@ export function evaluateDecision(
   // the bot trades with a guaranteed-sane stop instead of being rejected.
   const stopBps = Math.min(Math.max(rawStop, params.minStopBps), params.maxStopBps);
 
-  const leverage = Math.min(decision.leverage, Math.max(1, params.maxLeverage));
+  // Clamp the model's leverage UP to MIN_OPEN_LEVERAGE and DOWN to maxLeverage.
+  // minLeverage never exceeds maxLeverage, so a low cap can't create a conflict.
+  const maxLeverage = Math.max(1, params.maxLeverage);
+  const minLeverage = Math.min(MIN_OPEN_LEVERAGE, maxLeverage);
+  const leverage = Math.min(Math.max(decision.leverage, minLeverage), maxLeverage);
   const stakeFracBps = Math.min(toBps(decision.stakeFracPct), params.maxStakeFracBps);
   const tpBps = toBps(decision.takeProfitPct);
 

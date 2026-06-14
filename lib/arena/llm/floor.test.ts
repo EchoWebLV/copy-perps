@@ -49,6 +49,12 @@ describe("evaluateDecision floor", () => {
     }
   });
 
+  it("clamps leverage UP to the 10x minimum on opens", () => {
+    const out = evaluateDecision(openDecision({ leverage: 3 }), params, flat, NOW);
+    expect(out.kind).toBe("send");
+    if (out.kind === "send") expect(out.args.leverage).toBe(10);
+  });
+
   it("encodes side short as 1", () => {
     const out = evaluateDecision(openDecision({ side: "short" }), params, flat, NOW);
     if (out.kind === "send") expect(out.args.side).toBe(1);
