@@ -141,7 +141,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
   },
   {
     persona: "vader-v1",
-    displayName: "Opus 4.8 ·degen",
+    displayName: "Aggressive Opus",
     avatarEmoji: "😈",
     provider: "anthropic",
     modelId: "claude-opus-4-8",

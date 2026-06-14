@@ -77,9 +77,9 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     image: "/bots/frog-gpt.png",
   },
   "vader-v1": {
-    display: "Opus 4.8",
+    display: "Aggressive Opus",
     emoji: "😈",
-    blurb: "Claude Opus 4.8 · degen",
+    blurb: "Claude Opus 4.8 · aggressive",
     image: "/bots/frog-degen.png",
   },
 };
