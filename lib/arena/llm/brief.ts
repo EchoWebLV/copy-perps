@@ -123,7 +123,7 @@ export function renderMarketBlock(brief: SharedBrief): string {
   }
   if (brief.sentiment) {
     lines.push(
-      `News/social sentiment: score ${brief.sentiment.score.toFixed(2)} — ${brief.sentiment.summary}` +
+      `Market sentiment: score ${brief.sentiment.score.toFixed(2)} — ${brief.sentiment.summary}` +
         (brief.sentiment.topics.length ? ` [${brief.sentiment.topics.join(", ")}]` : ""),
     );
   }

@@ -22,6 +22,7 @@ import { ORACLE_BOTS } from "../../lib/arena/llm/registry";
 import { decodeLlmBot } from "../../lib/arena/decode";
 import { getCandles } from "../../lib/data/candles";
 import { getMarketSentimentSnapshot } from "../../lib/data/market-sentiment";
+import { getNewsSentiment } from "../../lib/data/news-sentiment";
 
 const ER = process.env.ARENA_ER_ENDPOINT || "https://devnet.magicblock.app";
 const PROGRAM = new PublicKey(process.env.ARENA_PROGRAM_ID || "6YSSWe8Sj5Xcoc3gRKtWLnMAwxF7aeKHmxi4Kha5YywC");
@@ -59,6 +60,7 @@ async function freshBrief(): Promise<SharedBrief> {
       nowIso: () => new Date().toISOString(),
       candles: (asset) => getCandles(asset, "1h", 40),
       sentimentSnapshot: () => getMarketSentimentSnapshot(["BTC", "ETH", "SOL"]),
+      newsSentiment: () => getNewsSentiment(),
     });
     if (brief.markets.some((m) => m.price != null)) return brief;
   } catch (e) {

@@ -99,7 +99,7 @@ describe("buildSharedBrief", () => {
 describe("renderMarketBlock + arena fairness", () => {
   it("renders OI / long-short / indicators / sentiment", async () => {
     const block = renderMarketBlock(await buildSharedBrief(sources));
-    for (const token of ["RSI14", "OI", "long/short", "funding", "News/social sentiment", "2026-06-13"]) {
+    for (const token of ["RSI14", "OI", "long/short", "funding", "Market sentiment", "2026-06-13"]) {
       expect(block).toContain(token);
     }
   });
