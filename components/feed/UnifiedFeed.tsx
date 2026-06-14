@@ -301,6 +301,10 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       market={market}
                       lastUpdateMs={lastUpdateMs}
                       now={now}
+                      sentiment={botSentiment[`bot:${entry.name}`] ?? null}
+                      onReact={(reaction) =>
+                        reactToBot(`bot:${entry.name}`, reaction)
+                      }
                       onTail={(source) => setTailSource(source)}
                       onCopy={(target) => setCopyTarget(target)}
                     />
@@ -598,6 +602,8 @@ function BotFeedCard({
   market,
   lastUpdateMs,
   now,
+  sentiment,
+  onReact,
   onTail,
   onCopy,
 }: {
@@ -606,6 +612,8 @@ function BotFeedCard({
   market: ArenaMarketState | null;
   lastUpdateMs: number;
   now: number;
+  sentiment: TraderSentiment | null;
+  onReact: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
   onCopy: (target: CopyModalTarget) => void;
 }) {
@@ -703,6 +711,9 @@ function BotFeedCard({
           </div>
         </div>
       </div>
+
+      {/* community bull/bear vote — same widget as the whale cards */}
+      <SentimentRow sentiment={sentiment ?? EMPTY_SENTIMENT} onReact={onReact} />
 
       {position ? (
         <PositionPanel
