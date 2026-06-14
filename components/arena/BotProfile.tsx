@@ -83,8 +83,8 @@ export function BotProfile({
               style={{
                 width: 48,
                 height: 48,
-                boxShadow: `0 0 0 2px ${AI}`,
-                background: AI_TINT,
+                boxShadow: persona?.image ? "none" : `0 0 0 2px ${AI}`,
+                background: persona?.image ? "transparent" : AI_TINT,
               }}
               aria-hidden
             >

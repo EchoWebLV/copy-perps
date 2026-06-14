@@ -90,8 +90,8 @@ export function BotCard({
             style={{
               width: 40,
               height: 40,
-              boxShadow: `0 0 0 2px ${AI}`,
-              background: AI_TINT,
+              boxShadow: persona?.image ? "none" : `0 0 0 2px ${AI}`,
+              background: persona?.image ? "transparent" : AI_TINT,
             }}
             aria-hidden
           >

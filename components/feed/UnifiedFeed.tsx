@@ -642,8 +642,8 @@ function BotFeedCard({
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[20px] leading-none"
             style={{
-              background: AI_TINT,
-              boxShadow: `0 0 0 2px ${AI}`,
+              background: persona?.image ? "transparent" : AI_TINT,
+              boxShadow: persona?.image ? "none" : `0 0 0 2px ${AI}`,
             }}
             aria-hidden
           >
