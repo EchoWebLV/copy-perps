@@ -154,9 +154,9 @@ function Hero() {
               fontStretch: "condensed",
             }}
           >
-            Copy the whales.
+            Copy whales
             <br />
-            <span style={{ color: ACCENT }}>Copy the AI.</span>
+            <span style={{ color: ACCENT }}>and agents.</span>
           </h1>
 
           <p
