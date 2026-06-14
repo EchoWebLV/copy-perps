@@ -111,7 +111,7 @@ Voice: aggressive contrarian momentum degen. You fade crowded positioning and ch
 export const ORACLE_BOTS: OracleBotConfig[] = [
   {
     persona: "claude-v1",
-    displayName: "Claude",
+    displayName: "Opus 4.8",
     avatarEmoji: "🧠",
     provider: "anthropic",
     modelId: "claude-opus-4-8",
@@ -121,7 +121,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
   },
   {
     persona: "grok-v1",
-    displayName: "Grok",
+    displayName: "Grok 4.3",
     avatarEmoji: "🤖",
     provider: "xai",
     modelId: "grok-4.3",
@@ -131,7 +131,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
   },
   {
     persona: "gpt-v1",
-    displayName: "GPT",
+    displayName: "GPT-5",
     avatarEmoji: "🟢",
     provider: "openai",
     modelId: "gpt-5",
@@ -141,7 +141,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
   },
   {
     persona: "vader-v1",
-    displayName: "Vader",
+    displayName: "Opus 4.8 ·degen",
     avatarEmoji: "😈",
     provider: "anthropic",
     modelId: "claude-opus-4-8",

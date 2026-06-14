@@ -95,7 +95,11 @@ export function BotCard({
             }}
             aria-hidden
           >
-            {persona?.emoji ?? "🤖"}
+            {persona?.image ? (
+              <img src={persona.image} alt="" className="h-full w-full rounded-xl object-cover" />
+            ) : (
+              persona?.emoji ?? "🤖"
+            )}
           </span>
           <div className="min-w-0">
             <div className="truncate text-[15px] font-black uppercase tracking-wide">

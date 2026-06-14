@@ -16,6 +16,9 @@ export interface ArenaPersona {
   display: string;
   emoji: string;
   blurb: string;
+  /** Optional avatar image (public/ path). When set, the UI shows it instead
+   *  of the emoji — the LLM bots use the gwak frog avatars. */
+  image?: string;
 }
 
 /** Display metadata keyed by on-chain persona name.
@@ -54,25 +57,30 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     blurb: "trades every wiggle, 50x",
   },
   // LLM oracle bots — off-chain brain, on-chain decisions via apply_decision.
+  // Named by the actual model; gwak frog avatars (public/bots/frog-*.png).
   "claude-v1": {
-    display: "Claude",
+    display: "Opus 4.8",
     emoji: "🧠",
-    blurb: "LLM oracle · Opus 4.8",
+    blurb: "Claude Opus 4.8 · cautious",
+    image: "/bots/frog-claude.png",
   },
   "grok-v1": {
-    display: "Grok",
+    display: "Grok 4.3",
     emoji: "🤖",
-    blurb: "LLM oracle · Grok 4.3",
+    blurb: "xAI Grok 4.3 · bold",
+    image: "/bots/frog-grok.png",
   },
   "gpt-v1": {
-    display: "GPT",
+    display: "GPT-5",
     emoji: "🟢",
-    blurb: "LLM oracle · GPT-5 · risk-managed",
+    blurb: "OpenAI GPT-5 · disciplined",
+    image: "/bots/frog-gpt.png",
   },
   "vader-v1": {
-    display: "Vader",
+    display: "Opus 4.8",
     emoji: "😈",
-    blurb: "LLM oracle · degen contrarian",
+    blurb: "Claude Opus 4.8 · degen",
+    image: "/bots/frog-degen.png",
   },
 };
 

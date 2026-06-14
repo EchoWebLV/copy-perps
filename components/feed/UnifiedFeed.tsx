@@ -647,7 +647,11 @@ function BotFeedCard({
             }}
             aria-hidden
           >
-            {persona?.emoji ?? "🤖"}
+            {persona?.image ? (
+              <img src={persona.image} alt="" className="h-full w-full rounded-xl object-cover" />
+            ) : (
+              persona?.emoji ?? "🤖"
+            )}
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
