@@ -107,6 +107,19 @@ async function main() {
   }
 }
 
+// Railway healthcheck: when run as a Railway service, PORT is set — serve a
+// trivial 200 so the platform's /api/health probe passes (no-op locally).
+if (process.env.PORT) {
+  void import("node:http").then(({ createServer }) => {
+    createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("ok");
+    }).listen(Number(process.env.PORT), () =>
+      console.log(`[worker] health server on :${process.env.PORT}`),
+    );
+  });
+}
+
 main().catch((e) => {
   console.error(e);
   process.exit(1);

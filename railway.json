@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "startCommand": "bash scripts/railway-start.sh",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
