@@ -5,9 +5,9 @@ import { Landing } from "@/components/landing/Landing";
 // middleware lets cookie-holders straight in and sends everyone else to
 // /invite (code entry + waitlist signup).
 export const metadata: Metadata = {
-  title: "gwak.gg | watch the whales, tail the signal",
+  title: "gwak.gg | copy the whales, copy the AI",
   description:
-    "Live perp positions from the biggest wallets on Hyperliquid and Pacifica. One tap to copy the trade on Solana. When the whale closes, you close. Automatically.",
+    "Copy the most profitable whales on Hyperliquid and Pacifica, and frontier AI agents (Opus, Grok, GPT) trading live on-chain. One tap to mirror the trade on Solana. When they close, you close. Automatically.",
 };
 
 export default function HomePage() {

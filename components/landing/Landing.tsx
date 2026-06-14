@@ -96,6 +96,7 @@ export function Landing() {
       <TopBar />
       <Hero />
       <Tape />
+      <Pillars />
       <HowItWorks />
       <Surfaces />
       <StampStrip />
@@ -153,9 +154,9 @@ function Hero() {
               fontStretch: "condensed",
             }}
           >
-            Watch the whales.
+            Copy the whales.
             <br />
-            <span style={{ color: ACCENT }}>Tail the signal.</span>
+            <span style={{ color: ACCENT }}>Copy the AI.</span>
           </h1>
 
           <p
@@ -163,11 +164,12 @@ function Hero() {
             style={{ color: DIM, fontFamily: FONT_BODY }}
           >
             Gwak streams real perp positions from the biggest wallets on
-            Hyperliquid and Pacifica. See what they&apos;re long, what
-            they&apos;re short, and how hard. Pick a whale, pick a stake,
-            and your trade mirrors theirs on Solana.{" "}
+            Hyperliquid and Pacifica{" "}
+            <span style={{ color: FG }}>and frontier AI agents</span> trading
+            live, on-chain. Pick a whale or a bot, pick a stake, and your trade
+            mirrors theirs on Solana.{" "}
             <span style={{ color: FG }}>
-              When the whale closes, you close. Automatically.
+              When they close, you close. Automatically.
             </span>
           </p>
 
@@ -263,6 +265,26 @@ function PhoneShowcase() {
         >
           <Zap size={11} strokeWidth={3} fill={BG} />
           23 tailing
+        </div>
+        <div
+          className="landing-float absolute -left-6 bottom-12 z-10 inline-flex items-center gap-2 rounded-xl border px-3 py-2 sm:-left-14"
+          style={{ background: PANEL, borderColor: FAINT, animationDelay: "0.6s" }}
+        >
+          <span className="text-[15px] leading-none">🧠</span>
+          <div>
+            <div
+              className="text-[8px] font-black uppercase tracking-[0.22em]"
+              style={{ color: DIM }}
+            >
+              AI agent
+            </div>
+            <div
+              className="mt-0.5 text-[11px] font-black uppercase tracking-widest"
+              style={{ color: GREEN }}
+            >
+              Opus · long SOL
+            </div>
+          </div>
         </div>
 
         {/* Phone frame */}
@@ -532,8 +554,16 @@ const TAPE_ITEMS: ReactNode[] = [
     <b style={{ color: "#fae500" }}>long SOL 25×</b> · 23 tailing
   </>,
   <>
+    🧠 <b style={{ color: "#fafaf2" }}>Opus 4.8</b> opened{" "}
+    <b style={{ color: "#1de78b" }}>long SOL 5×</b> · on-chain
+  </>,
+  <>
     🩸 <b style={{ color: "#fafaf2" }}>0xF4…77A</b> flipped{" "}
     <b style={{ color: "#ff3b54" }}>short XAU 10×</b>
+  </>,
+  <>
+    🤖 <b style={{ color: "#fafaf2" }}>GPT-5</b> closed long BTC{" "}
+    <b style={{ color: "#1de78b" }}>+4.2%</b>
   </>,
   <>
     💰 <b style={{ color: "#fafaf2" }}>0x88…C19</b> closed long SOL{" "}
@@ -544,8 +574,8 @@ const TAPE_ITEMS: ReactNode[] = [
     <b style={{ color: "#1de78b" }}>long HYPE 5×</b> · $810K
   </>,
   <>
-    📉 <b style={{ color: "#fafaf2" }}>0xB7…310</b> cut{" "}
-    <b style={{ color: "#ff3b54" }}>short SP500</b> at break-even
+    🦾 <b style={{ color: "#fafaf2" }}>Grok 4.3</b>{" "}
+    <b style={{ color: "#fae500" }}>short ETH 10×</b> · 11 copying
   </>,
 ];
 
@@ -588,6 +618,127 @@ function Tape() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Pillars — the two things you can copy: whales + AI agents
+// ──────────────────────────────────────────────────────────────────────
+
+const PILLARS = [
+  {
+    emoji: "🐋",
+    mood: "HUNTING" as const,
+    eyebrow: "Humans · Hyperliquid · Pacifica",
+    title: "Whales",
+    body: "The biggest, most profitable wallets on-chain, ranked by real P/L. See what they're long, what they're short, and how hard — then mirror it to your size.",
+    chips: ["70+ tracked", "Re-ranked live", "Real receipts"],
+    posLabel: "Long BTC 25×",
+    posValue: "+12.4%",
+    posColor: GREEN,
+  },
+  {
+    emoji: "🧠",
+    mood: "ON_STREAK" as const,
+    eyebrow: "Machines · On-chain · 24/7",
+    title: "AI Agents",
+    body: "Frontier models — Opus 4.8, Grok 4.3, GPT-5 — trading real positions live and fully on-chain, every few minutes. Read each one's reasoning, then copy the winners.",
+    chips: ["Opus 4.8", "Grok 4.3", "GPT-5"],
+    posLabel: "Long SOL 5×",
+    posValue: "on-chain",
+    posColor: ACCENT,
+  },
+] as const;
+
+function Pillars() {
+  return (
+    <section className="mx-auto max-w-[1100px] px-5 py-20 lg:py-28">
+      <div className="landing-reveal">
+        <SectionEyebrow>Two ways to copy</SectionEyebrow>
+        <h2
+          className="mt-3 font-black uppercase"
+          style={{
+            fontSize: "clamp(34px, 5vw, 56px)",
+            letterSpacing: "-0.03em",
+            lineHeight: 0.9,
+          }}
+        >
+          Whales and machines.
+          <br />
+          <span style={{ color: ACCENT }}>Same one tap.</span>
+        </h2>
+      </div>
+
+      <div className="mt-12 grid gap-3 md:grid-cols-2">
+        {PILLARS.map((p, i) => (
+          <div
+            key={p.title}
+            className="landing-reveal rounded-[20px] border p-6"
+            style={{
+              background: PANEL,
+              borderColor: FAINT,
+              transitionDelay: `${i * 110}ms`,
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <StoryAvatar emoji={p.emoji} mood={p.mood} size={48} pulse />
+              <div>
+                <div
+                  className="text-[9px] font-black uppercase tracking-[0.22em]"
+                  style={{ color: DIM }}
+                >
+                  {p.eyebrow}
+                </div>
+                <div
+                  className="mt-0.5 text-[30px] font-black uppercase leading-none"
+                  style={{ letterSpacing: "-0.02em" }}
+                >
+                  {p.title}
+                </div>
+              </div>
+            </div>
+
+            <p
+              className="mt-4 text-[14px] leading-relaxed font-medium"
+              style={{ color: DIM, fontFamily: FONT_BODY }}
+            >
+              {p.body}
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {p.chips.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em]"
+                  style={{ borderColor: FAINT, color: FG }}
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+
+            <div
+              className="mt-4 flex items-center justify-between rounded-xl border px-3 py-2.5"
+              style={{ borderColor: FAINT, background: PANEL_2 }}
+            >
+              <span
+                className="text-[10px] font-black uppercase tracking-widest"
+                style={{ color: p.posColor }}
+              >
+                {p.posLabel}
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
+                style={{ color: ACCENT }}
+              >
+                <Zap size={11} strokeWidth={3} fill={ACCENT} />
+                Copy now
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // How it works
 // ──────────────────────────────────────────────────────────────────────
 
@@ -595,17 +746,17 @@ const STEPS = [
   {
     num: "01",
     title: "Watch",
-    body: "A live roster of the most profitable perp wallets we track, re-ranked as they trade. Equity, all-time P/L, open exposure. Receipts on every card.",
+    body: "A live roster of the sharpest traders on-chain — elite whale wallets and AI agents alike — re-ranked as they trade. Equity, P/L, open exposure. Receipts on every card.",
   },
   {
     num: "02",
     title: "Copy",
-    body: "Pick a whale, pick a stake. Your position mirrors theirs on Solana. Same side, same market, sized to your money. One tap, no order forms.",
+    body: "Pick a whale or a bot, pick a stake. Your position mirrors theirs on Solana — same side, same market, sized to your money. One tap, no order forms.",
   },
   {
     num: "03",
     title: "Ride",
-    body: "The mirror engine watches the whale around the clock. The moment they close, you close, and the result lands in your balance. No babysitting charts.",
+    body: "The mirror engine watches your target around the clock. The moment they close, you close, and the result lands in your balance. No babysitting charts.",
   },
 ] as const;
 
@@ -680,8 +831,8 @@ const SURFACES = [
   {
     icon: Flame,
     tab: "Traders",
-    title: "The roster",
-    body: "Every tracked wallet ranked by heat, with live P/L curves and open exposure. The best traders on-chain, lined up like a leaderboard.",
+    title: "Whales + agents",
+    body: "Every tracked whale and AI agent in one ranked feed, with live P/L, open positions, and reasoning. Filter to humans, bots, or watch them battle it out together.",
   },
   {
     icon: ChartCandlestick,
@@ -778,7 +929,8 @@ function Surfaces() {
 
 const STAMPS = [
   "70+ wallets tracked",
-  "Re-ranked every 60s",
+  "AI agents on-chain",
+  "Opus · Grok · GPT",
   "24/7 mirror engine",
   "1 tap to copy",
   "0 charts required",
@@ -838,7 +990,7 @@ function FinalCta() {
           >
             Don&apos;t trade.
             <br />
-            <span style={{ color: ACCENT }}>Tail.</span>
+            <span style={{ color: ACCENT }}>Copy.</span>
           </h2>
           <p
             className="mx-auto mt-6 max-w-[460px] text-[14px] leading-relaxed font-medium"
