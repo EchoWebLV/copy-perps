@@ -1671,6 +1671,68 @@
           "type": "u8"
         }
       ]
+    },
+    {
+      "name": "update_llm_params",
+      "docs": [
+        "Admin-gated live update of an LlmBot's safety-floor params (bet size,",
+        "leverage cap, stop band, cadence, kill-switch, starting-balance is NOT",
+        "touched here). Same domain validation as init_llm_bot so the floor can",
+        "never be moved into a nonsensical state. Runs on the ER (the LlmBot is",
+        "delegated there); only config.admin may call it, so the operator can",
+        "never raise its own limits — the floor stays governance-controlled."
+      ],
+      "discriminator": [
+        136,
+        207,
+        18,
+        26,
+        233,
+        178,
+        156,
+        105
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "llm_bot",
+          "writable": true
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "LlmParams"
+            }
+          }
+        }
+      ]
     }
   ],
   "accounts": [
