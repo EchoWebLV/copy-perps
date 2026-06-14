@@ -29,9 +29,18 @@ const FEED = new PublicKey(process.env.ARENA_FEED || "ENYwebBThHzmzwPLAQvCucUTsj
 const MARKET_ID = Number.parseInt(process.env.ARENA_MARKET_ID || "0", 10);
 const TICK_MS = Number.parseInt(process.env.ARENA_LLM_TICK_MS || "240000", 10); // 4 min (= cooldown)
 
-const operator = Keypair.fromSecretKey(
-  Uint8Array.from(JSON.parse(readFileSync(path.join(homedir(), ".config/solana/arena-operator-devnet.json"), "utf8"))),
-);
+// Operator key resolution (Railway-friendly): inline JSON array env first
+// (ARENA_OPERATOR_KEYPAIR — how Railway holds it, no file to mount), then a
+// file path (ARENA_OPERATOR_KEYPAIR_PATH), then the local devnet default.
+function loadOperator(): Keypair {
+  const inline = process.env.ARENA_OPERATOR_KEYPAIR?.trim();
+  if (inline) return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(inline)));
+  const p =
+    process.env.ARENA_OPERATOR_KEYPAIR_PATH ||
+    path.join(homedir(), ".config/solana/arena-operator-devnet.json");
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
+}
+const operator = loadOperator();
 const conn = new Connection(ER, "confirmed");
 
 /** Real market brief (live candles + OI/long-short/funding), DEMO_BRIEF fallback. */
