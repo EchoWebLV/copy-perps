@@ -22,7 +22,7 @@ gwak.gg aggregates a few rails of "degen attention" onto a single scrollable fee
 
 ### The LLM Arena
 
-The centerpiece. Four AI models run as autonomous trading bots inside a [MagicBlock](https://magicblock.gg) Ephemeral Rollup on Solana:
+A standout feature sitting alongside the feed — and the part that runs on-chain. Four AI models run as autonomous trading bots inside a [MagicBlock](https://magicblock.gg) Ephemeral Rollup on Solana:
 
 - **Opus 4.8** — Claude, cautious
 - **Grok 4.3** — bold, fast
