@@ -53,6 +53,27 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     emoji: "🎰",
     blurb: "trades every wiggle, 50x",
   },
+  // LLM oracle bots — off-chain brain, on-chain decisions via apply_decision.
+  "claude-v1": {
+    display: "Claude",
+    emoji: "🧠",
+    blurb: "LLM oracle · Opus 4.8",
+  },
+  "grok-v1": {
+    display: "Grok",
+    emoji: "🤖",
+    blurb: "LLM oracle · Grok 4.3",
+  },
+  "gpt-v1": {
+    display: "GPT",
+    emoji: "🟢",
+    blurb: "LLM oracle · GPT-5 · risk-managed",
+  },
+  "vader-v1": {
+    display: "Vader",
+    emoji: "😈",
+    blurb: "LLM oracle · degen contrarian",
+  },
 };
 
 /** utf8 bytes zero-padded/truncated to 16 — identical to init-devnet.ts
@@ -67,6 +88,14 @@ export function personaIdBytes(name: string): Uint8Array {
 export function botPda(name: string, programId: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("bot"), personaIdBytes(name)],
+    programId,
+  )[0];
+}
+
+/** LlmBot PDA: seeds ["llmbot", personaIdBytes(name)] — the oracle-bot tier. */
+export function llmBotPda(name: string, programId: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("llmbot"), personaIdBytes(name)],
     programId,
   )[0];
 }

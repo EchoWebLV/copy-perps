@@ -26,6 +26,11 @@ export const TAPE_ENTRY_SIZE = 32;
 export const PARAMS_SIZE = 16;
 export const BOT_STRUCT_SIZE = 2328; // account data = 8 + this
 export const MARKET_STATE_STRUCT_SIZE = 3608; // account data = 8 + this
+// LLM oracle-bot tier (state.rs LlmBot/LlmPosition/LlmParams, locked by
+// llm_bot_layout_locked). account data = 8 + LLM_BOT_STRUCT_SIZE.
+export const LLM_POSITION_SIZE = 72;
+export const LLM_PARAMS_SIZE = 24;
+export const LLM_BOT_STRUCT_SIZE = 2496;
 
 // Struct-relative byte offsets, transcribed from the state.rs layout tables.
 const OFF = {
@@ -90,6 +95,55 @@ const OFF = {
     pathLen: 0x28, // u64, Σ|Δprice| in 1e8 price units
     updates: 0x30, // u32 (+4 pad → 56)
   },
+  llmBot: {
+    operator: 0x00, // Pubkey [u8;32]
+    balanceMicro: 0x20, // u64
+    grossPnlMicro: 0x28, // i64
+    feesMicro: 0x30, // u64
+    fundingPaidMicro: 0x38, // u64
+    equityHighMicro: 0x40, // u64
+    dayStartEquityMicro: 0x48, // u64
+    seq: 0x50, // u64
+    dayStartTs: 0x58, // i64 unix secs
+    lastDecisionTs: 0x60, // i64 unix secs
+    positions: 0x68, // [LlmPosition; 4] — 288 B
+    tape: 0x188, // [TapeEntry; 64] — 2048 B
+    params: 0x988, // LlmParams — 24 B
+    personaId: 0x9a0, // [u8; 16]
+    trades: 0x9b0, // u32
+    wins: 0x9b4, // u32
+    tradesToday: 0x9b8, // u16
+    tapeHead: 0x9ba, // u16
+    halted: 0x9bc, // u8 0/1
+    bump: 0x9bd, // u8 (+2 pad → 2496)
+  },
+  llmPosition: {
+    entryPrice: 0x00, // u64, 1e8-scaled
+    stakeMicro: 0x08, // u64
+    stopPrice: 0x10, // u64, 1e8-scaled
+    tpPrice: 0x18, // u64, 1e8-scaled (0 = none)
+    liqPrice: 0x20, // u64, 1e8-scaled
+    openedTs: 0x28, // i64 unix secs
+    lastFundingTs: 0x30, // i64 unix secs
+    ticksHeld: 0x38, // u32
+    leverage: 0x3c, // u16
+    active: 0x3e, // u8 0/1
+    marketId: 0x3f, // u8
+    side: 0x40, // u8 0=long 1=short (+7 pad → 72)
+  },
+  llmParams: {
+    maxHoldTicks: 0x00, // u32
+    decisionCooldownSecs: 0x04, // u32
+    maxLeverage: 0x08, // u16
+    minStopBps: 0x0a, // u16
+    maxStopBps: 0x0c, // u16
+    maxStakeFracBps: 0x0e, // u16
+    maxTradesPerDay: 0x10, // u16
+    dailyLossLimitBps: 0x12, // u16
+    fundingBpsPerHour: 0x14, // u16
+    confidenceFloor: 0x16, // u8 0..100
+    riskSizing: 0x17, // u8 0/1 (→ 24, zero padding)
+  },
 } as const;
 
 // ───────────────────────────── public types ───────────────────────────────
@@ -141,6 +195,56 @@ export interface ArenaBot {
   trades: number;
   wins: number;
   tapeHead: number; // NEXT tape write slot (paper.rs)
+  bump: number;
+}
+
+export interface ArenaLlmPosition {
+  active: boolean;
+  marketId: number;
+  side: ArenaSide;
+  entryPrice: number; // USD
+  stakeUsd: number;
+  stopPrice: number; // USD
+  tpPrice: number; // USD (0 = none)
+  liqPrice: number; // USD
+  leverage: number;
+  openedTsMs: number;
+  ticksHeld: number;
+}
+
+export interface ArenaLlmParams {
+  maxHoldTicks: number;
+  decisionCooldownSecs: number;
+  maxLeverage: number;
+  minStopBps: number;
+  maxStopBps: number;
+  maxStakeFracBps: number;
+  maxTradesPerDay: number;
+  dailyLossLimitBps: number;
+  fundingBpsPerHour: number;
+  confidenceFloor: number; // 0..100
+  riskSizing: boolean;
+}
+
+export interface ArenaLlmBot {
+  balanceUsd: number;
+  grossPnlUsd: number; // signed
+  feesUsd: number;
+  fundingPaidUsd: number;
+  equityHighUsd: number;
+  dayStartEquityUsd: number;
+  seq: number;
+  dayStartTsMs: number;
+  lastDecisionTsMs: number;
+  positions: ArenaLlmPosition[]; // all 4 slots — filter on .active
+  tape: ArenaTapeEntry[]; // shares the Bot TapeEntry layout
+  params: ArenaLlmParams;
+  personaName: string;
+  trades: number;
+  wins: number;
+  tradesToday: number;
+  halted: boolean;
+  tapeHead: number;
   bump: number;
 }
 
@@ -310,6 +414,125 @@ export function decodeBot(data: Uint8Array): ArenaBot | null {
     wins: dv.getUint32(o.wins, true),
     tapeHead: dv.getUint16(o.tapeHead, true),
     bump: dv.getUint8(o.bump),
+  };
+}
+
+function readLlmPosition(dv: DataView, base: number): ArenaLlmPosition {
+  const o = OFF.llmPosition;
+  return {
+    active: dv.getUint8(base + o.active) === 1,
+    marketId: dv.getUint8(base + o.marketId),
+    side: dv.getUint8(base + o.side) === 1 ? "short" : "long",
+    entryPrice: price(dv, base + o.entryPrice),
+    stakeUsd: usd(dv, base + o.stakeMicro),
+    stopPrice: price(dv, base + o.stopPrice),
+    tpPrice: price(dv, base + o.tpPrice),
+    liqPrice: price(dv, base + o.liqPrice),
+    leverage: dv.getUint16(base + o.leverage, true),
+    openedTsMs: secsToMs(dv, base + o.openedTs),
+    ticksHeld: dv.getUint32(base + o.ticksHeld, true),
+  };
+}
+
+function readLlmParams(dv: DataView, base: number): ArenaLlmParams {
+  const o = OFF.llmParams;
+  return {
+    maxHoldTicks: dv.getUint32(base + o.maxHoldTicks, true),
+    decisionCooldownSecs: dv.getUint32(base + o.decisionCooldownSecs, true),
+    maxLeverage: dv.getUint16(base + o.maxLeverage, true),
+    minStopBps: dv.getUint16(base + o.minStopBps, true),
+    maxStopBps: dv.getUint16(base + o.maxStopBps, true),
+    maxStakeFracBps: dv.getUint16(base + o.maxStakeFracBps, true),
+    maxTradesPerDay: dv.getUint16(base + o.maxTradesPerDay, true),
+    dailyLossLimitBps: dv.getUint16(base + o.dailyLossLimitBps, true),
+    fundingBpsPerHour: dv.getUint16(base + o.fundingBpsPerHour, true),
+    confidenceFloor: dv.getUint8(base + o.confidenceFloor),
+    riskSizing: dv.getUint8(base + o.riskSizing) === 1,
+  };
+}
+
+/** Decode an LlmBot account (raw account data incl. discriminator).
+ *  Returns null if the buffer is too short — fail-closed, never partial. */
+export function decodeLlmBot(data: Uint8Array): ArenaLlmBot | null {
+  const dv = structView(data, LLM_BOT_STRUCT_SIZE);
+  if (!dv) return null;
+  const o = OFF.llmBot;
+
+  const positions: ArenaLlmPosition[] = [];
+  for (let i = 0; i < MAX_POSITIONS; i++) {
+    positions.push(readLlmPosition(dv, o.positions + i * LLM_POSITION_SIZE));
+  }
+  const tape: ArenaTapeEntry[] = [];
+  for (let i = 0; i < TAPE_LEN; i++) {
+    tape.push(readTapeEntry(dv, o.tape + i * TAPE_ENTRY_SIZE));
+  }
+
+  const start = data.byteOffset + ACCOUNT_DISC + o.personaId;
+  const personaBytes = new Uint8Array(data.buffer, start, 16);
+  let end = personaBytes.indexOf(0);
+  if (end === -1) end = 16;
+
+  return {
+    balanceUsd: usd(dv, o.balanceMicro),
+    grossPnlUsd: usdSigned(dv, o.grossPnlMicro),
+    feesUsd: usd(dv, o.feesMicro),
+    fundingPaidUsd: usd(dv, o.fundingPaidMicro),
+    equityHighUsd: usd(dv, o.equityHighMicro),
+    dayStartEquityUsd: usd(dv, o.dayStartEquityMicro),
+    seq: u64(dv, o.seq),
+    dayStartTsMs: secsToMs(dv, o.dayStartTs),
+    lastDecisionTsMs: secsToMs(dv, o.lastDecisionTs),
+    positions,
+    tape,
+    params: readLlmParams(dv, o.params),
+    personaName: new TextDecoder().decode(personaBytes.subarray(0, end)),
+    trades: dv.getUint32(o.trades, true),
+    wins: dv.getUint32(o.wins, true),
+    tradesToday: dv.getUint16(o.tradesToday, true),
+    halted: dv.getUint8(o.halted) === 1,
+    tapeHead: dv.getUint16(o.tapeHead, true),
+    bump: dv.getUint8(o.bump),
+  };
+}
+
+/** Map an LlmBot onto the ArenaBot shape so the existing roster/feed cards
+ *  render it unchanged. The LLM tier carries the same balance/pnl/positions/
+ *  tape; per-position stop/tp are dropped and params are stubbed (the cards
+ *  read display metadata from ARENA_PERSONAS, not on-chain params). */
+export function llmBotToArenaBot(b: ArenaLlmBot): ArenaBot {
+  return {
+    balanceUsd: b.balanceUsd,
+    grossPnlUsd: b.grossPnlUsd,
+    feesUsd: b.feesUsd,
+    equityHighUsd: b.equityHighUsd,
+    seq: b.seq,
+    positions: b.positions.map((p) => ({
+      active: p.active,
+      marketId: p.marketId,
+      side: p.side,
+      entryPrice: p.entryPrice,
+      stakeUsd: p.stakeUsd,
+      leverage: p.leverage,
+      openedTsMs: p.openedTsMs,
+      ticksHeld: p.ticksHeld,
+      liqPrice: p.liqPrice,
+    })),
+    tape: b.tape,
+    params: {
+      maxHoldTicks: b.params.maxHoldTicks,
+      breakoutBps: 0,
+      activityMultBps: 0,
+      stakeFracBps: b.params.maxStakeFracBps,
+      leverage: b.params.maxLeverage,
+      exitFavorableBps: 0,
+      readSpan: 1,
+      trendFilter: false,
+    },
+    personaName: b.personaName,
+    trades: b.trades,
+    wins: b.wins,
+    tapeHead: b.tapeHead,
+    bump: b.bump,
   };
 }
 

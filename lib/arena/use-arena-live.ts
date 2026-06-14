@@ -15,11 +15,13 @@ import { Buffer } from "buffer";
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   decodeBot,
+  decodeLlmBot,
   decodeMarketState,
+  llmBotToArenaBot,
   type ArenaBot,
   type ArenaMarketState,
 } from "./decode";
-import { botPda } from "./personas";
+import { botPda, llmBotPda } from "./personas";
 
 /** No ws delivery within this window of mount → assume the ER ws path is
  *  dead-on-arrival (router forwarding gotcha) and start polling. */
@@ -48,6 +50,9 @@ export interface ArenaEnvConfig {
   programId: PublicKey;
   endpoint: string;
   botNames: string[];
+  /** Oracle (LLM) bots — read from the `llmbot` PDA + decoded as LlmBot, then
+   *  mapped onto the ArenaBot shape so the same cards render them. */
+  llmBotNames: string[];
   /** u8 market id (the market PDA seed byte). Market 0 = the original devnet
    *  market wedged by the 2026-06-12 undelegation incident (PINS.md); its
    *  live successor runs as market 1. */
@@ -58,6 +63,7 @@ export interface RawArenaEnv {
   programId?: string;
   endpoint?: string;
   bots?: string;
+  llmBots?: string;
   marketId?: string;
 }
 
@@ -71,6 +77,7 @@ export function parseArenaEnv(
     programId: process.env.NEXT_PUBLIC_ARENA_PROGRAM_ID,
     endpoint: process.env.NEXT_PUBLIC_ARENA_ER_ENDPOINT,
     bots: process.env.NEXT_PUBLIC_ARENA_BOTS,
+    llmBots: process.env.NEXT_PUBLIC_ARENA_LLM_BOTS,
     marketId: process.env.NEXT_PUBLIC_ARENA_MARKET_ID,
   },
 ): ArenaEnvConfig | null {
@@ -82,10 +89,18 @@ export function parseArenaEnv(
   } catch {
     return null; // fail-closed: a bad id behaves like unconfigured
   }
-  const botNames = (raw.bots ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const splitNames = (v?: string) =>
+    (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const configuredBots = splitNames(raw.bots);
+  const llmBotNames = splitNames(raw.llmBots);
+  // Default to the deterministic roster ONLY when nothing at all is configured;
+  // an LLM-only deployment (llmBots set, bots empty) must NOT resurrect them.
+  const botNames =
+    configuredBots.length > 0
+      ? configuredBots
+      : llmBotNames.length > 0
+        ? []
+        : [...DEFAULT_BOT_NAMES];
   // Market id must be a valid PDA seed byte; anything unparseable falls back
   // to 0 (same fail-closed spirit as the defaults above — the page renders,
   // pointed at the canonical market).
@@ -97,7 +112,8 @@ export function parseArenaEnv(
   return {
     programId,
     endpoint: raw.endpoint?.trim() || DEFAULT_ER_ENDPOINT,
-    botNames: botNames.length > 0 ? botNames : [...DEFAULT_BOT_NAMES],
+    botNames,
+    llmBotNames,
     marketId,
   };
 }
@@ -131,15 +147,27 @@ export function patchArena(
   botNames: string[],
   accountIndex: number,
   data: Uint8Array | null,
+  llmBotNames: string[] = [],
 ): ArenaLive {
   if (accountIndex === 0) {
     return { ...state, market: data ? decodeMarketState(data) : null };
   }
-  const name = botNames[accountIndex - 1];
+  // Account order: [market, ...botNames (Bot), ...llmBotNames (LlmBot)].
+  const detIdx = accountIndex - 1;
+  if (detIdx >= 0 && detIdx < botNames.length) {
+    const name = botNames[detIdx];
+    if (name === undefined) return state;
+    return {
+      ...state,
+      bots: { ...state.bots, [name]: data ? decodeBot(data) : null },
+    };
+  }
+  const name = llmBotNames[detIdx - botNames.length];
   if (name === undefined) return state;
+  const llm = data ? decodeLlmBot(data) : null;
   return {
     ...state,
-    bots: { ...state.bots, [name]: data ? decodeBot(data) : null },
+    bots: { ...state.bots, [name]: llm ? llmBotToArenaBot(llm) : null },
   };
 }
 
@@ -168,7 +196,9 @@ export function useArenaLive(): ArenaLive {
       // Pre-key the roster so cards can render placeholders with zero
       // layout shift between loading/ws/poll.
       bots: env
-        ? Object.fromEntries(env.botNames.map((n) => [n, null]))
+        ? Object.fromEntries(
+            [...env.botNames, ...env.llmBotNames].map((n) => [n, null]),
+          )
         : {},
       market: null,
       mode: "loading",
@@ -184,6 +214,7 @@ export function useArenaLive(): ArenaLive {
     const accounts = [
       marketPda(env.programId, env.marketId),
       ...env.botNames.map((n) => botPda(n, env.programId)),
+      ...env.llmBotNames.map((n) => llmBotPda(n, env.programId)),
     ];
 
     // Everything below is guarded by `mounted`: no setState after unmount.
@@ -203,7 +234,7 @@ export function useArenaLive(): ArenaLive {
         setState((s) => ({
           ...infos.reduce(
             (acc, info, i) =>
-              patchArena(acc, env.botNames, i, info ? info.data : null),
+              patchArena(acc, env.botNames, i, info ? info.data : null, env.llmBotNames),
             s,
           ),
           lastUpdateMs: Date.now(),
@@ -253,7 +284,7 @@ export function useArenaLive(): ArenaLive {
               stopPollTimer();
             }
             setState((s) => ({
-              ...patchArena(s, env.botNames, index, info.data),
+              ...patchArena(s, env.botNames, index, info.data, env.llmBotNames),
               mode: "ws",
               lastUpdateMs: Date.now(),
             }));

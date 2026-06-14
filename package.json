@@ -18,6 +18,9 @@
     "arena:crank": "tsx scripts/arena/crank-worker.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.84",
+    "@ai-sdk/openai": "^3.0.71",
+    "@ai-sdk/xai": "^3.0.95",
     "@coral-xyz/anchor": "^0.32.1",
     "@neondatabase/serverless": "^1.1.0",
     "@noble/ed25519": "^3.1.0",
@@ -28,6 +31,7 @@
     "@solana/web3.js": "^1.98.4",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "ai": "^6.0.204",
     "botid": "^1.5.11",
     "bs58": "^6.0.0",
     "drizzle-orm": "^0.45.2",
