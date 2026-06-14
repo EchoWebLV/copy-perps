@@ -7,8 +7,9 @@
 // can still carry data after the REST seed — loading-with-data is renderable,
 // only the transport indicator stays a skeleton.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isStale, parseArenaEnv, useArenaLive } from "@/lib/arena/use-arena-live";
+import { useSentiment } from "@/components/feed/use-sentiment";
 import { isDevnetEndpoint } from "@/lib/arena/solscan";
 import {
   AiBotBadge,
@@ -33,6 +34,13 @@ export function ArenaRoster() {
   const now = useNowTick();
   const botNames = Object.keys(bots);
   const [selected, setSelected] = useState<string | null>(null);
+
+  // Community Bullish/Bearish vote per bot — same widget + backend as whales.
+  const botSentimentIds = useMemo(
+    () => botNames.map((name) => `bot:${name}`),
+    [botNames],
+  );
+  const { sentiment, react } = useSentiment(botSentimentIds);
 
   const oracleTsMs = market?.lastPublishTsMs ?? 0;
   const oracleStale = now > 0 && market !== null && isStale(oracleTsMs, now);
@@ -109,6 +117,8 @@ export function ArenaRoster() {
                   bot={bots[name]}
                   now={now}
                   market={market}
+                  sentiment={sentiment[`bot:${name}`] ?? null}
+                  onReact={(reaction) => react(`bot:${name}`, reaction)}
                   onOpen={() => setSelected(name)}
                 />
               ))}
@@ -134,6 +144,8 @@ export function ArenaRoster() {
           bot={bots[selected] ?? null}
           now={now}
           market={market}
+          sentiment={sentiment[`bot:${selected}`] ?? null}
+          onReact={(reaction) => react(`bot:${selected}`, reaction)}
           onClose={() => setSelected(null)}
         />
       )}

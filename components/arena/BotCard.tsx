@@ -10,8 +10,13 @@ import type { ReactNode } from "react";
 import type { ArenaBot, ArenaMarketState, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { isStale } from "@/lib/arena/use-arena-live";
-import { botDirectionalBias, botPositionPnlPct } from "@/components/feed/unified-feed-model";
-import { BullBearMeter } from "./BullBearMeter";
+import { botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import {
+  SentimentRow,
+  EMPTY_SENTIMENT,
+  type TraderSentiment,
+  type WhaleVote,
+} from "@/components/feed/DesktopWhaleCard";
 import { AI, AI_BORDER, AI_DIM, AiBotBadge, DIM, FAINT, GREEN, RED, AI_TINT } from "@/components/v2/ui";
 
 /** $ price for the header/positions: 2dp ≥ $1, 4dp below (memecoin-safe). */
@@ -50,6 +55,8 @@ export function BotCard({
   bot,
   now,
   market,
+  sentiment,
+  onReact,
   onOpen,
   tailCta,
 }: {
@@ -59,6 +66,10 @@ export function BotCard({
   /** Live oracle market — threads the mark price in so positions show live
    *  PnL. Optional: callers without it (legacy) just render entry-only rows. */
   market?: ArenaMarketState | null;
+  /** Community Bullish/Bearish vote — same widget + backend as the whale
+   *  cards, keyed per bot. Omit to hide the row. */
+  sentiment?: TraderSentiment | null;
+  onReact?: (reaction: WhaleVote) => void;
   onOpen?: () => void;
   /** Optional copy CTA rendered under the positions block — the /feed grid
    *  passes the Tail button; /arena keeps rendering without it. */
@@ -71,7 +82,6 @@ export function BotCard({
   const equity = bot ? bot.balanceUsd + openStake : null;
   const pnlColor =
     bot && bot.grossPnlUsd !== 0 ? (bot.grossPnlUsd > 0 ? GREEN : RED) : DIM;
-  const bias = bot ? botDirectionalBias(bot) : null;
   // Live mark for PnL, gated on freshness so stale numbers render dimmed.
   // Single-market (SOL-only) arena: the hook streams exactly one market feed,
   // so every open position marks against it. A position's stored marketId byte
@@ -192,17 +202,20 @@ export function BotCard({
         <span>fees {bot ? fmtUsd(bot.feesUsd) : "—"}</span>
       </div>
 
-      {/* bull/bear bias meter */}
-      <div className="mt-3">
-        {bias === null ? (
-          <span
-            className="skeleton-block inline-block h-4 w-full rounded-md"
-            aria-hidden
+      {/* community bull/bear vote — same widget as the whale cards. Stop
+          propagation so a vote tap never doubles as the card's onOpen. */}
+      {onReact && (
+        <div
+          className="mt-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <SentimentRow
+            sentiment={sentiment ?? EMPTY_SENTIMENT}
+            onReact={onReact}
           />
-        ) : (
-          <BullBearMeter bias={bias.bias} side={bias.side} />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* open positions (live) */}
       <div className="mt-3 flex flex-col gap-1.5">

@@ -11,10 +11,15 @@ import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
 import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
 import { isStale, parseArenaEnv } from "@/lib/arena/use-arena-live";
-import { botDirectionalBias, botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import { botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import {
+  SentimentRow,
+  EMPTY_SENTIMENT,
+  type TraderSentiment,
+  type WhaleVote,
+} from "@/components/feed/DesktopWhaleCard";
 import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
 import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline, AI_TINT } from "@/components/v2/ui";
-import { BullBearMeter } from "./BullBearMeter";
 import { fmtArenaPrice } from "./BotCard";
 
 const TOKEN_COLORS = { GREEN, RED, DIM } as const;
@@ -40,12 +45,16 @@ export function BotProfile({
   bot,
   now,
   market,
+  sentiment,
+  onReact,
   onClose,
 }: {
   name: string;
   bot: ArenaBot | null;
   now: number;
   market?: ArenaMarketState | null;
+  sentiment?: TraderSentiment | null;
+  onReact?: (reaction: WhaleVote) => void;
   onClose: () => void;
 }) {
   const persona = ARENA_PERSONAS[name];
@@ -57,7 +66,6 @@ export function BotProfile({
     bot === null
       ? null
       : bot.balanceUsd + openPositions.reduce((s, p) => s + p.stakeUsd, 0);
-  const bias = bot ? botDirectionalBias(bot) : null;
   // Single-market SOL arena — every position marks against the one live feed
   // (see BotCard for the marketId-byte caveat across clusters).
   const mkt = market ?? null;
@@ -160,13 +168,22 @@ export function BotProfile({
           />
         </div>
 
-        {/* bull/bear bias */}
-        {bias && (
+        {/* community bull/bear vote — same widget as the whale cards */}
+        {onReact && (
           <div
             className="mt-4 rounded-2xl border p-3"
             style={{ borderColor: FAINT }}
           >
-            <BullBearMeter bias={bias.bias} side={bias.side} size="profile" />
+            <div
+              className="text-[10px] font-black uppercase tracking-[0.24em]"
+              style={{ color: DIM }}
+            >
+              community sentiment
+            </div>
+            <SentimentRow
+              sentiment={sentiment ?? EMPTY_SENTIMENT}
+              onReact={onReact}
+            />
           </div>
         )}
 

@@ -15,7 +15,6 @@
 // no heat sort, no snap scroll, no tape.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
 import type { ReactNode } from "react";
 import type { WhaleTraderSignal } from "@/lib/types";
 import { useArenaLive } from "@/lib/arena/use-arena-live";
@@ -33,6 +32,7 @@ import { whaleDisplayName } from "@/lib/whales/alias";
 import { classifyQuery, filterTraders, type SearchableTrader } from "@/lib/search/traders";
 import { botCopyCta, type BotCopyCta } from "./bot-tail-source";
 import { DesktopWhaleCard, SkeletonDesktopWhaleCard, SentimentRow, EMPTY_SENTIMENT, type TraderSentiment, type WhaleVote } from "./DesktopWhaleCard";
+import { useSentiment } from "./use-sentiment";
 import { Sparkline } from "./Sparkline";
 import { useMiniCandles } from "./use-mini-candles";
 import {
@@ -148,6 +148,14 @@ export function UnifiedFeed({ initialWhales }: Props) {
   const { sentiment, react: reactToWhale } = useWhaleSentiment(whales);
 
   const botNames = useMemo(() => Object.keys(bots), [bots]);
+
+  // Same community Bullish/Bearish vote as the whale cards, keyed per bot.
+  const botSentimentIds = useMemo(
+    () => botNames.map((name) => `bot:${name}`),
+    [botNames],
+  );
+  const { sentiment: botSentiment, react: reactToBot } =
+    useSentiment(botSentimentIds);
 
   // Coarse minute tick for ranking: freshness buckets only move on hour
   // scales, and re-sorting every second would shuffle cards mid-scroll.
@@ -344,6 +352,10 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       market={market}
                       lastUpdateMs={lastUpdateMs}
                       now={now}
+                      sentiment={botSentiment[`bot:${entry.name}`] ?? null}
+                      onReact={(reaction) =>
+                        reactToBot(`bot:${entry.name}`, reaction)
+                      }
                       onTail={(source) => setTailSource(source)}
                       onCopy={(target) => setCopyTarget(target)}
                     />
@@ -799,6 +811,8 @@ function GridBotCard({
   market,
   lastUpdateMs,
   now,
+  sentiment,
+  onReact,
   onTail,
   onCopy,
 }: {
@@ -807,6 +821,8 @@ function GridBotCard({
   market: ArenaMarketState | null;
   lastUpdateMs: number;
   now: number;
+  sentiment: TraderSentiment | null;
+  onReact: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
   onCopy: (target: CopyModalTarget) => void;
 }) {
@@ -827,6 +843,8 @@ function GridBotCard({
       bot={bot}
       now={now}
       market={market}
+      sentiment={sentiment}
+      onReact={onReact}
       tailCta={
         <div className="flex gap-2">
           <button
@@ -1422,149 +1440,18 @@ function EmptySearch({ onClear }: { onClear: () => void }) {
 
 // ─────────────────────── whale sentiment (votes) ──────────────────────────
 
-const SENTIMENT_CHUNK = 150;
-
-type WhaleSentimentApi = Record<
-  string,
-  { bullish: number; bearish: number; myReaction: WhaleVote | null }
->;
-
-function toTraderSentiment(s: {
-  bullish: number;
-  bearish: number;
-  myReaction: WhaleVote | null;
-}): TraderSentiment {
-  return {
-    bullish: s.bullish,
-    bearish: s.bearish,
-    total: s.bullish + s.bearish,
-    myReaction: s.myReaction,
-  };
-}
-
-/** Persistent per-whale Bullish/Bearish sentiment. Reads counts + the user's
- *  own vote from /api/whales/sentiment (keyed by whaleId, so it survives the
- *  whale's positions opening/closing), and exposes react() to cast/toggle a
- *  vote with an optimistic update reconciled against the server response. */
+/** Per-whale Bullish/Bearish sentiment — a thin wrapper over the id-generic
+ *  useSentiment() hook, keyed by whaleId so a vote survives the whale's
+ *  positions opening/closing. (Arena bots use useSentiment directly, keyed by
+ *  `bot:<persona>`.) */
 function useWhaleSentiment(whales: WhaleTraderSignal[]): {
   sentiment: Record<string, TraderSentiment>;
-  react: (whaleId: string, reaction: WhaleVote) => void;
+  react: (id: string, reaction: WhaleVote) => void;
 } {
-  const { authenticated, getAccessToken, login } = usePrivy();
-  const whaleIdsKey = useMemo(
-    () => [...new Set(whales.map((w) => w.payload.whaleId))].sort().join(","),
+  const ids = useMemo(
+    () => whales.map((w) => w.payload.whaleId),
     [whales],
   );
-  const [sentiment, setSentiment] = useState<Record<string, TraderSentiment>>(
-    {},
-  );
-  const sentimentRef = useRef(sentiment);
-  sentimentRef.current = sentiment;
-  const fetchedKeyRef = useRef("");
-
-  useEffect(() => {
-    if (!whaleIdsKey || fetchedKeyRef.current === whaleIdsKey) return;
-    const capturedKey = whaleIdsKey;
-    const ids = capturedKey.split(",").filter(Boolean);
-    if (ids.length === 0) return;
-    let cancelled = false;
-    void (async () => {
-      const token = authenticated
-        ? await getAccessToken().catch(() => null)
-        : null;
-      const headers: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-      const chunks: string[][] = [];
-      for (let i = 0; i < ids.length; i += SENTIMENT_CHUNK) {
-        chunks.push(ids.slice(i, i + SENTIMENT_CHUNK));
-      }
-      const responses = await Promise.all(
-        chunks.map((chunk) =>
-          fetch(
-            `/api/whales/sentiment?whaleIds=${chunk
-              .map(encodeURIComponent)
-              .join(",")}`,
-            { cache: "no-store", headers },
-          )
-            .then((r) =>
-              r.ok
-                ? (r.json() as Promise<{ sentiment?: WhaleSentimentApi } | null>)
-                : null,
-            )
-            .catch(() => null),
-        ),
-      );
-      if (cancelled) return;
-      const result: Record<string, TraderSentiment> = {};
-      for (const data of responses) {
-        if (!data?.sentiment) continue;
-        for (const [whaleId, s] of Object.entries(data.sentiment)) {
-          result[whaleId] = toTraderSentiment(s);
-        }
-      }
-      fetchedKeyRef.current = capturedKey;
-      setSentiment(result);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [whaleIdsKey, authenticated, getAccessToken]);
-
-  const react = useCallback(
-    (whaleId: string, reaction: WhaleVote) => {
-      if (!authenticated) {
-        login();
-        return;
-      }
-      const cur = sentimentRef.current[whaleId] ?? EMPTY_SENTIMENT;
-      const next: WhaleVote | null =
-        cur.myReaction === reaction ? null : reaction;
-
-      // Optimistic update.
-      setSentiment((prev) => {
-        const c = prev[whaleId] ?? EMPTY_SENTIMENT;
-        let bullish = c.bullish;
-        let bearish = c.bearish;
-        if (c.myReaction === "Bullish") bullish -= 1;
-        else if (c.myReaction === "Bearish") bearish -= 1;
-        if (next === "Bullish") bullish += 1;
-        else if (next === "Bearish") bearish += 1;
-        return {
-          ...prev,
-          [whaleId]: {
-            bullish,
-            bearish,
-            total: bullish + bearish,
-            myReaction: next,
-          },
-        };
-      });
-
-      void (async () => {
-        try {
-          const token = await getAccessToken();
-          const r = await fetch("/api/whales/sentiment", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ whaleId, reaction: next }),
-          });
-          if (!r.ok) return;
-          const data = (await r.json()) as { sentiment?: WhaleSentimentApi };
-          const s = data.sentiment?.[whaleId];
-          if (s) {
-            setSentiment((prev) => ({ ...prev, [whaleId]: toTraderSentiment(s) }));
-          }
-        } catch {
-          // Optimistic state stays; the next roster fetch reconciles.
-        }
-      })();
-    },
-    [authenticated, getAccessToken, login],
-  );
-
-  return { sentiment, react };
+  return useSentiment(ids);
 }
+
