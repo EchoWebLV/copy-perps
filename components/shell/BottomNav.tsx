@@ -39,12 +39,14 @@ export function BottomNav() {
       {/* Global mobile notification bell — fixed top-right, all routes.
           The inline style ensures we sit below the notch/status-bar on
           devices with a top safe-area inset (Dynamic Island, older notch). */}
-      <div
-        className="fixed right-3 z-40 lg:hidden"
-        style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
-      >
-        <NotificationBell />
-      </div>
+      {process.env.NEXT_PUBLIC_SHOW_NOTIFICATIONS === "true" && (
+        <div
+          className="fixed right-3 z-40 lg:hidden"
+          style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
+        >
+          <NotificationBell />
+        </div>
+      )}
 
     <nav
       className="fixed bottom-0 left-0 right-0 z-30 border-t-2 lg:hidden"

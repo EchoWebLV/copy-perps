@@ -57,9 +57,11 @@ export function DesktopNav() {
       {/* Notification bell pinned to the bottom of the desktop sidebar —
           reachable from all primary surfaces (Trade, Portfolio, Wallet, etc.)
           since DesktopNav is rendered inside every AppShell. */}
-      <div className="mt-auto">
-        <NotificationBell />
-      </div>
+      {process.env.NEXT_PUBLIC_SHOW_NOTIFICATIONS === "true" && (
+        <div className="mt-auto">
+          <NotificationBell />
+        </div>
+      )}
     </nav>
   );
 }
