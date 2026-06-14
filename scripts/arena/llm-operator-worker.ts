@@ -29,6 +29,15 @@ const FEED = new PublicKey(process.env.ARENA_FEED || "ENYwebBThHzmzwPLAQvCucUTsj
 const MARKET_ID = Number.parseInt(process.env.ARENA_MARKET_ID || "0", 10);
 const TICK_MS = Number.parseInt(process.env.ARENA_LLM_TICK_MS || "240000", 10); // 4 min (= cooldown)
 
+// Active roster: ARENA_LLM_BOTS (comma list of personas) gates which bots this
+// worker drives — set it to turn a bot on/off without a code change. Unset = all.
+const ACTIVE = (() => {
+  const raw = process.env.ARENA_LLM_BOTS?.trim();
+  if (!raw) return ORACLE_BOTS;
+  const allow = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+  return ORACLE_BOTS.filter((b) => allow.has(b.persona));
+})();
+
 // Operator key resolution (Railway-friendly): inline JSON array env first
 // (ARENA_OPERATOR_KEYPAIR — how Railway holds it, no file to mount), then a
 // file path (ARENA_OPERATOR_KEYPAIR_PATH), then the local devnet default.
@@ -88,7 +97,7 @@ async function tick() {
   const brief = await freshBrief();
   const sol = brief.markets.find((m) => m.asset === "SOL")?.price;
   console.log(`\n[${ts}] tick — SOL $${sol ?? "n/a"}`);
-  for (const bot of ORACLE_BOTS) {
+  for (const bot of ACTIVE) {
     try {
       const res = await runBotDecision({ persona: bot.persona, marketId: MARKET_ID }, depsFor(bot, brief));
       console.log(`  ${bot.displayName}: ${res.status}${res.status === "sent" ? ` → ${res.signature?.slice(0, 8)}…` : ""}`);
@@ -100,7 +109,7 @@ async function tick() {
 
 async function main() {
   console.log(`LLM operator loop — ER ${ER}, every ${TICK_MS / 1000}s, operator ${operator.publicKey.toBase58()}`);
-  console.log(`bots: ${ORACLE_BOTS.map((b) => `${b.persona}(${b.provider})`).join(", ")}`);
+  console.log(`bots: ${ACTIVE.map((b) => `${b.persona}(${b.provider})`).join(", ")}`);
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, TICK_MS));
