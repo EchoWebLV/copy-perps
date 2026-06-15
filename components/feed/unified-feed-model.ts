@@ -50,12 +50,17 @@ export function whaleSortValue(
   }
 }
 
-/** Equity the same way the arena page counts it: cash + open stake. */
-export function botEquityUsd(bot: ArenaBot): number {
+/** Live mark-to-market account value: free balance + locked margin +
+ *  unrealized P&L on open positions. With no live mark (markPrice omitted) it
+ *  degrades to the cash + open-stake value the arena page counted before. */
+export function botEquityUsd(
+  bot: ArenaBot,
+  markPrice: number | null = null,
+): number {
   const openStake = bot.positions
     .filter((p) => p.active)
     .reduce((sum, p) => sum + p.stakeUsd, 0);
-  return bot.balanceUsd + openStake;
+  return bot.balanceUsd + openStake + botUnrealizedPnlUsd(bot, markPrice);
 }
 
 /** Bots have no windowed P&L on chain — gross P&L stands in for every
@@ -197,6 +202,32 @@ export function primaryBotPosition(bot: ArenaBot): ArenaPosition | null {
   return active.reduce((newest, p) =>
     p.openedTsMs > newest.openedTsMs ? p : newest,
   );
+}
+
+/** Unrealized P&L (USD) summed across the bot's active positions, marked to
+ *  the live oracle price. 0 when there's no live mark or no open position. */
+export function botUnrealizedPnlUsd(
+  bot: ArenaBot,
+  markPrice: number | null,
+): number {
+  if (markPrice === null) return 0;
+  return bot.positions.reduce((sum, p) => {
+    if (!p.active) return sum;
+    const pct = botPositionPnlPct(p, markPrice);
+    return pct === null ? sum : sum + (pct / 100) * p.stakeUsd;
+  }, 0);
+}
+
+/** Whole-bot P&L in USD vs the fixed start bankroll, INCLUDING unrealized.
+ *  Defined as botEquityUsd − ARENA_START_BALANCE_USD so it always reconciles
+ *  with the equity figure shown on the card (start + total P/L = equity). */
+export function botTotalPnlUsd(bot: ArenaBot, markPrice: number | null): number {
+  return botEquityUsd(bot, markPrice) - ARENA_START_BALANCE_USD;
+}
+
+/** botTotalPnlUsd as a percent of the start bankroll (mark-to-market). */
+export function botTotalPnlPct(bot: ArenaBot, markPrice: number | null): number {
+  return (botTotalPnlUsd(bot, markPrice) / ARENA_START_BALANCE_USD) * 100;
 }
 
 // ───────────────────────────── formatting ─────────────────────────────────

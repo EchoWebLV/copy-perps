@@ -11,6 +11,9 @@ import {
   botPnlPct,
   botPositionPnlPct,
   botSortValue,
+  botTotalPnlPct,
+  botTotalPnlUsd,
+  botUnrealizedPnlUsd,
   formatCompactSignedUsd,
   formatFeedAge,
   formatSignedPct,
@@ -279,6 +282,36 @@ describe("bot math", () => {
     expect(ARENA_START_BALANCE_USD).toBe(1_000);
     expect(botPnlPct(makeBot({ grossPnlUsd: 125 }))).toBeCloseTo(12.5);
     expect(botPnlPct(makeBot({ grossPnlUsd: -50 }))).toBeCloseTo(-5);
+  });
+
+  it("folds unrealized P&L into live equity + whole-bot P&L (mark-to-market)", () => {
+    // Opus's real shape: cash + a 10x long sitting in profit.
+    const bot = makeBot({
+      balanceUsd: 744.62,
+      grossPnlUsd: -4.58,
+      positions: [
+        makePosition({ side: "long", entryPrice: 67.94, stakeUsd: 248.7, leverage: 10 }),
+      ],
+    });
+    const mark = 75.15;
+    // +10.6% underlying × 10x × $248.70 ≈ +$264 unrealized
+    expect(botUnrealizedPnlUsd(bot, mark)).toBeCloseTo(263.9, 0);
+    // equity = cash + margin + unrealized (the "1,257" the card now shows)
+    expect(botEquityUsd(bot, mark)).toBeCloseTo(744.62 + 248.7 + 263.9, 0);
+    // whole P/L reconciles exactly: start + total P/L === equity
+    expect(ARENA_START_BALANCE_USD + botTotalPnlUsd(bot, mark)).toBeCloseTo(
+      botEquityUsd(bot, mark),
+      6,
+    );
+    expect(botTotalPnlUsd(bot, mark)).toBeGreaterThan(250); // up big, not −$4.58
+    expect(botTotalPnlPct(bot, mark)).toBeCloseTo(botTotalPnlUsd(bot, mark) / 10, 6);
+  });
+
+  it("degrades to cash + open stake when there's no live mark", () => {
+    const bot = makeBot({ balanceUsd: 744.62, positions: [makePosition({ stakeUsd: 248.7 })] });
+    expect(botUnrealizedPnlUsd(bot, null)).toBe(0);
+    expect(botEquityUsd(bot, null)).toBeCloseTo(744.62 + 248.7, 6);
+    expect(botEquityUsd(bot)).toBeCloseTo(744.62 + 248.7, 6); // default arg = old behavior
   });
 
   it("computes leveraged position P&L off the live mark for both sides", () => {

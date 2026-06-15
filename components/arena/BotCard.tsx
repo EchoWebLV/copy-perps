@@ -10,7 +10,11 @@ import type { ReactNode } from "react";
 import type { ArenaBot, ArenaMarketState, ArenaPosition } from "@/lib/arena/decode";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { isStale } from "@/lib/arena/use-arena-live";
-import { botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import {
+  botPositionPnlPct,
+  botEquityUsd,
+  botTotalPnlUsd,
+} from "@/components/feed/unified-feed-model";
 import {
   SentimentRow,
   EMPTY_SENTIMENT,
@@ -78,10 +82,6 @@ export function BotCard({
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
   const openPositions = bot?.positions.filter((p) => p.active) ?? [];
-  const openStake = openPositions.reduce((sum, p) => sum + p.stakeUsd, 0);
-  const equity = bot ? bot.balanceUsd + openStake : null;
-  const pnlColor =
-    bot && bot.grossPnlUsd !== 0 ? (bot.grossPnlUsd > 0 ? GREEN : RED) : DIM;
   // Live mark for PnL, gated on freshness so stale numbers render dimmed.
   // Single-market (SOL-only) arena: the hook streams exactly one market feed,
   // so every open position marks against it. A position's stored marketId byte
@@ -90,6 +90,12 @@ export function BotCard({
   const mkt = market ?? null;
   const marketStale = mkt !== null && now > 0 && isStale(mkt.lastPublishTsMs, now);
   const livePrice = mkt?.lastPrice ?? null;
+  // Mark-to-market: equity AND the headline P/L both fold in unrealized P&L on
+  // the open position(s), so the card shows the bot's true live standing — not
+  // just realized trades. (Stale/absent mark → unrealized 0 → balance+margin.)
+  const equity = bot ? botEquityUsd(bot, livePrice) : null;
+  const totalPnl = bot ? botTotalPnlUsd(bot, livePrice) : 0;
+  const pnlColor = bot && totalPnl !== 0 ? (totalPnl > 0 ? GREEN : RED) : DIM;
 
   return (
     <div
@@ -149,7 +155,7 @@ export function BotCard({
             className="text-[9px] font-black uppercase tracking-[0.2em]"
             style={{ color: DIM }}
           >
-            equity (incl. open stake)
+            equity (live)
           </div>
           {equity === null ? (
             <span
@@ -167,7 +173,7 @@ export function BotCard({
             className="text-[9px] font-black uppercase tracking-[0.2em]"
             style={{ color: DIM }}
           >
-            gross p/l
+            total p/l
           </div>
           {bot === null ? (
             <span
@@ -179,7 +185,7 @@ export function BotCard({
               className="text-[17px] font-black leading-tight tabular-nums"
               style={{ color: pnlColor }}
             >
-              {fmtSignedUsd(bot.grossPnlUsd)}
+              {fmtSignedUsd(totalPnl)}
             </div>
           )}
         </div>
@@ -300,9 +306,16 @@ function PositionRow({
         {pnlPct === null ? "—" : fmtSignedPct(pnlPct)}
       </span>
       <span style={{ color: DIM, ...liveStyle }}>
-        {markPrice !== null
-          ? `@ ${fmtArenaPrice(markPrice)}`
-          : `in ${fmtArenaPrice(pos.entryPrice)}`}{" "}
+        {markPrice !== null ? (
+          <>
+            {fmtArenaPrice(pos.entryPrice)} →{" "}
+            <span key={markPrice} className="mark-flash">
+              {fmtArenaPrice(markPrice)}
+            </span>
+          </>
+        ) : (
+          `in ${fmtArenaPrice(pos.entryPrice)}`
+        )}{" "}
         · {fmtAge(pos.openedTsMs, now)}
       </span>
     </div>

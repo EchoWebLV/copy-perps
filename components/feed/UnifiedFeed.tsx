@@ -63,8 +63,9 @@ import {
   type FeedEntry,
   type FeedSortKey,
   arenaMarketTicker,
-  botPnlPct,
+  botEquityUsd,
   botPositionPnlPct,
+  botTotalPnlPct,
   formatCompactSignedUsd,
   formatCompactUsd,
   formatFeedAge,
@@ -629,8 +630,6 @@ function BotFeedCard({
 
   const wins = bot.wins;
   const losses = Math.max(0, bot.trades - bot.wins);
-  const pnlPct = botPnlPct(bot);
-  const pnlColor = pnlPct > 0 ? GREEN : pnlPct < 0 ? RED : DIM;
 
   const position = primaryBotPosition(bot);
   const markPrice =
@@ -638,6 +637,9 @@ function BotFeedCard({
       ? market.lastPrice
       : null;
   const positionPnl = position ? botPositionPnlPct(position, markPrice) : null;
+  // Corner % is mark-to-market: it includes unrealized P&L on the open position.
+  const pnlPct = botTotalPnlPct(bot, markPrice);
+  const pnlColor = pnlPct > 0 ? GREEN : pnlPct < 0 ? RED : DIM;
   const positionFresh =
     position !== null && now > 0 && now - position.openedTsMs < FRESH_POSITION_MS;
   const moreCount = position
@@ -648,9 +650,6 @@ function BotFeedCard({
     position !== null && market !== null && market.marketId === position.marketId
       ? ringClosesChronological(market)
       : null;
-  const openStakeUsd = bot.positions
-    .filter((p) => p.active)
-    .reduce((s, p) => s + p.stakeUsd, 0);
 
   return (
     <article
@@ -686,7 +685,7 @@ function BotFeedCard({
               style={{ color: DIM }}
             >
               <span>
-                Equity {formatCompactUsd(bot.balanceUsd + openStakeUsd)}
+                Equity {formatCompactUsd(botEquityUsd(bot, markPrice))}
               </span>
               <span className="flex items-center gap-1">
                 <WinLossSquare value={wins} color={GREEN} label="wins" />

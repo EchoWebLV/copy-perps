@@ -11,7 +11,11 @@ import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
 import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
 import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
 import { isStale, parseArenaEnv } from "@/lib/arena/use-arena-live";
-import { botPositionPnlPct } from "@/components/feed/unified-feed-model";
+import {
+  botPositionPnlPct,
+  botEquityUsd,
+  botTotalPnlUsd,
+} from "@/components/feed/unified-feed-model";
 import {
   SentimentRow,
   EMPTY_SENTIMENT,
@@ -29,6 +33,11 @@ function fmtUsd(v: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function fmtSignedUsd(v: number): string {
+  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
+  return `${sign}${fmtUsd(Math.abs(v))}`;
 }
 
 function fmtWhen(tsMs: number, now: number): string {
@@ -62,15 +71,14 @@ export function BotProfile({
   const pda = env ? botPda(name, env.programId).toBase58() : null;
   const tape = bot ? tapeNewestFirst(bot) : [];
   const openPositions = bot?.positions.filter((p) => p.active) ?? [];
-  const equity =
-    bot === null
-      ? null
-      : bot.balanceUsd + openPositions.reduce((s, p) => s + p.stakeUsd, 0);
   // Single-market SOL arena — every position marks against the one live feed
   // (see BotCard for the marketId-byte caveat across clusters).
   const mkt = market ?? null;
   const marketStale = mkt !== null && now > 0 && isStale(mkt.lastPublishTsMs, now);
   const livePrice = mkt?.lastPrice ?? null;
+  // Mark-to-market equity + whole P/L (incl. unrealized on open positions).
+  const equity = bot === null ? null : botEquityUsd(bot, livePrice);
+  const totalPnl = bot === null ? 0 : botTotalPnlUsd(bot, livePrice);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -142,11 +150,11 @@ export function BotProfile({
         >
           <Stat label="equity" value={equity === null ? "—" : fmtUsd(equity)} />
           <Stat
-            label="gross p/l"
-            value={bot ? fmtUsd(bot.grossPnlUsd) : "—"}
+            label="total p/l"
+            value={bot ? fmtSignedUsd(totalPnl) : "—"}
             color={
-              bot && bot.grossPnlUsd !== 0
-                ? bot.grossPnlUsd > 0
+              bot && totalPnl !== 0
+                ? totalPnl > 0
                   ? GREEN
                   : RED
                 : undefined
@@ -224,9 +232,16 @@ export function BotProfile({
                         : `${sign(pnlPct)}${Math.abs(pnlPct).toFixed(1)}%`}
                     </span>
                     <span style={{ color: DIM, ...liveStyle }}>
-                      {markPrice !== null
-                        ? `@ ${fmtArenaPrice(markPrice)}`
-                        : `in ${fmtArenaPrice(pos.entryPrice)}`}{" "}
+                      {markPrice !== null ? (
+                        <>
+                          {fmtArenaPrice(pos.entryPrice)} →{" "}
+                          <span key={markPrice} className="mark-flash">
+                            {fmtArenaPrice(markPrice)}
+                          </span>
+                        </>
+                      ) : (
+                        `in ${fmtArenaPrice(pos.entryPrice)}`
+                      )}{" "}
                       · liq {fmtArenaPrice(pos.liqPrice)}
                     </span>
                   </div>
