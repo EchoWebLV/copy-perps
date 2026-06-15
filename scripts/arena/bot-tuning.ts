@@ -44,31 +44,19 @@ export interface BotTuning {
   maxHoldTicks: number;
 }
 
+// EVERY bot runs the IDENTICAL settings — the arena is a controlled experiment
+// where the MODEL is the only variable (same prompt, same risk, same data).
+// Edit SHARED once and it applies to all bots. Keep in sync with DEFAULT_FLOOR
+// in lib/arena/llm/registry.ts.
+const SHARED: BotTuning = {
+  maxLeverage: 15, maxStakeBps: 1500, confidenceFloor: 40, cooldownSecs: 180,
+  maxTradesPerDay: 10, dailyLossBps: 1500, riskSizing: 0,
+  minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
+};
+
 export const TUNING: Record<string, BotTuning> = {
-  // Opus 4.8 (cautious Claude) — calmed to cut fee bleed: ~15% stake (was 35%),
-  // pickier (conf 40), fewer trades. 15x keeps swings visible above the 10x floor.
-  "claude-v1": {
-    maxLeverage: 15, maxStakeBps: 1500, confidenceFloor: 40, cooldownSecs: 180,
-    maxTradesPerDay: 10, dailyLossBps: 1500, riskSizing: 0,
-    minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
-  },
-  // Grok 4.3 (bold) — calmed: 20% stake (was 50% — the worst fee offender),
-  // pickier (conf 40), fewer trades, 18x (was 25x).
-  "grok-v1": {
-    maxLeverage: 18, maxStakeBps: 2000, confidenceFloor: 40, cooldownSecs: 180,
-    maxTradesPerDay: 10, dailyLossBps: 1500, riskSizing: 0,
-    minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
-  },
-  // GPT-5 (disciplined) — already risk-sized/low-fee; just a touch pickier + fewer trades.
-  "gpt-v1": {
-    maxLeverage: 12, maxStakeBps: 400, confidenceFloor: 50, cooldownSecs: 150,
-    maxTradesPerDay: 8, dailyLossBps: 1000, riskSizing: 1,
-    minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
-  },
-  // Aggressive Opus (degen Claude) — the wild one.
-  "vader-v1": {
-    maxLeverage: 40, maxStakeBps: 7500, confidenceFloor: 45, cooldownSecs: 120,
-    maxTradesPerDay: 20, dailyLossBps: 3000, riskSizing: 0,
-    minStopBps: 50, maxStopBps: 500, fundingBpsPerHour: 2, maxHoldTicks: 43200,
-  },
+  "claude-v1": SHARED, // Opus 4.8
+  "grok-v1": SHARED, // Grok 4.3
+  "gpt-v1": SHARED, // GPT-5
+  "vader-v1": SHARED, // Aggressive Opus (currently off in the worker roster)
 };

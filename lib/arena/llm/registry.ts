@@ -26,58 +26,21 @@ export interface ArenaLlmParamsConfig {
   riskSizing: number; // 0 | 1
 }
 
-// Shared floor for the launch roster. ~24h max-hold backstop at the ~2s crank
-// cadence (43200 ticks); 4-min decision cooldown; ≤15x; stop 0.5%–3%; ≤20% of
-// equity per trade; ≤8 trades/day; 15% daily-loss kill switch; ~2 bps/hr funding
-// proxy (calibrate vs observed SOL funding in the plan); confidence floor 55.
+// THE shared floor for EVERY bot. The arena is a controlled experiment: same
+// prompt, same risk limits, same market data for all bots — the only variable
+// is the model. Keep these byte-identical to scripts/arena/bot-tuning.ts (the
+// live values pushed on-chain via `npm run arena:tune`).
 export const DEFAULT_FLOOR: ArenaLlmParamsConfig = {
   maxHoldTicks: 43_200,
-  decisionCooldownSecs: 240,
+  decisionCooldownSecs: 180,
   maxLeverage: 15,
   minStopBps: 50,
   maxStopBps: 300,
-  maxStakeFracBps: 2_000,
-  maxTradesPerDay: 8,
+  maxStakeFracBps: 1_500,
+  maxTradesPerDay: 10,
   dailyLossLimitBps: 1_500,
   fundingBpsPerHour: 2,
-  confidenceFloor: 55,
-  riskSizing: 0,
-};
-
-// Disciplined floor (gpt-v1): risk-based sizing ON — `maxStakeFracBps` is now a
-// RISK BUDGET (200 = 1-2% of equity at risk per trade; the program computes the
-// stake from stop distance so worst-case loss is fixed regardless of leverage).
-// Lower leverage, higher conviction bar, fewer trades, tighter daily loss. The
-// research's "discipline beats intelligence" thesis, encoded.
-export const DISCIPLINED_FLOOR: ArenaLlmParamsConfig = {
-  maxHoldTicks: 43_200,
-  decisionCooldownSecs: 240,
-  maxLeverage: 8,
-  minStopBps: 50,
-  maxStopBps: 300,
-  maxStakeFracBps: 200, // = 2% risk budget when riskSizing=1
-  maxTradesPerDay: 5,
-  dailyLossLimitBps: 1_000,
-  fundingBpsPerHour: 2,
-  confidenceFloor: 65,
-  riskSizing: 1,
-};
-
-// Degen floor (vader-v1): the reckless foil — high leverage, big stake, loose
-// stops, low conviction bar, over-trades. The on-chain floor still bounds it
-// (mandatory stop, kill-switch), but it's built to be volatile = content. The
-// arena's natural experiment: disciplined vs degen on the same live market.
-export const DEGEN_FLOOR: ArenaLlmParamsConfig = {
-  maxHoldTicks: 43_200,
-  decisionCooldownSecs: 240,
-  maxLeverage: 25,
-  minStopBps: 50,
-  maxStopBps: 500,
-  maxStakeFracBps: 4_000,
-  maxTradesPerDay: 15,
-  dailyLossLimitBps: 3_000,
-  fundingBpsPerHour: 2,
-  confidenceFloor: 45,
+  confidenceFloor: 40,
   riskSizing: 0,
 };
 
@@ -92,21 +55,13 @@ export interface OracleBotConfig {
   params: ArenaLlmParamsConfig;
 }
 
-const CLAUDE_SYSTEM = `You are Claude, an AI-driven paper-trading bot in a live on-chain perps arena. You trade SOL/BTC/ETH with leverage; your decisions are recorded on-chain and an immutable program enforces the rules and scores your PnL — you cannot exceed the limits, so trade only what you can justify.
+// ONE shared prompt for every bot. The arena is a controlled experiment: the
+// model is the only variable, so the prompt, risk limits, and market data are
+// identical across all bots. No per-persona voice — each model trades on its
+// own read of the same tape.
+const SHARED_SYSTEM = `You are an AI-driven paper-trading bot in a live on-chain perps arena. You trade SOL/BTC/ETH with leverage; your decisions are recorded on-chain and an immutable program enforces the risk limits and scores your PnL — you cannot exceed the limits.
 
-Voice: measured but ACTIVE — you're here to trade, not spectate. You take a position whenever there's a plausible edge (a level holding, a trend, a squeeze, momentum building) — you don't wait for the perfect setup. You only HOLD when the tape is genuinely directionless. Lean toward taking the trade. Reasoning is one plain-English sentence citing a real level/regime/signal (no "bps"/"z-score"/"sigma"). Always set a stop you believe in.`;
-
-const GROK_SYSTEM = `You are Grok, an AI-driven paper-trading bot in a live on-chain perps arena. You trade SOL/BTC/ETH with leverage; decisions are recorded on-chain and an immutable program enforces the rules and scores your PnL.
-
-Voice: bold, fast, opinionated. You HUNT for trades and take setups decisively, even on modest signals — you'd rather be in a position with a stop than sit on the sidelines. Sitting flat is the exception, not the default. Reasoning is one punchy plain-English sentence citing a real level or signal (no jargon). Respect your stop, but lean hard toward action.`;
-
-const GPT_SYSTEM = `You are GPT, an AI-driven paper-trading bot in a live on-chain perps arena. You trade SOL/BTC/ETH; decisions are recorded on-chain and an immutable program enforces the rules and scores your PnL.
-
-Voice: methodical, risk-first — but active. Your position size is risk-managed FOR you (a fixed small fraction of equity per trade), so you can take trades readily: whenever there's a plausible edge you act — pick (a) direction, (b) a stop you genuinely believe in, (c) honest confidence. You only HOLD when there's truly no signal at all. Reasoning is one precise plain-English sentence citing a real level, regime, or signal (no jargon).`;
-
-const VADER_SYSTEM = `You are Vader, an AI-driven paper-trading bot in a live on-chain perps arena. You trade SOL/BTC/ETH with HIGH leverage; decisions are recorded on-chain and an immutable program enforces the rules and scores your PnL.
-
-Voice: aggressive contrarian momentum degen. You fade crowded positioning and chase clean breakouts hard, with conviction and size — you'd rather be loudly wrong than quietly right. You still set a stop (the program demands it), but you swing for the fences. Reasoning is one punchy, cocky plain-English sentence citing the level or crowd signal you're attacking (no jargon).`;
+Every bot in this arena runs on the IDENTICAL prompt, risk limits, and market data — the only difference is the model making the decision, so trade purely on your own read of the tape. Take a position when you see a plausible edge (a level holding, a trend, momentum building, a squeeze) and HOLD only when the tape is genuinely directionless. Always set a stop you believe in. Your reasoning is exactly one plain-English sentence citing a real level, regime, or signal — no jargon (no "bps", "z-score", "sigma").`;
 
 export const ORACLE_BOTS: OracleBotConfig[] = [
   {
@@ -116,7 +71,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
     provider: "anthropic",
     modelId: "claude-opus-4-8",
     operatorEnv: "ARENA_LLM_OPERATOR_CLAUDE",
-    systemBlock: CLAUDE_SYSTEM,
+    systemBlock: SHARED_SYSTEM,
     params: DEFAULT_FLOOR,
   },
   {
@@ -126,7 +81,7 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
     provider: "xai",
     modelId: "grok-4.3",
     operatorEnv: "ARENA_LLM_OPERATOR_GROK",
-    systemBlock: GROK_SYSTEM,
+    systemBlock: SHARED_SYSTEM,
     params: DEFAULT_FLOOR,
   },
   {
@@ -136,8 +91,8 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
     provider: "openai",
     modelId: "gpt-5",
     operatorEnv: "ARENA_LLM_OPERATOR_GPT",
-    systemBlock: GPT_SYSTEM,
-    params: DISCIPLINED_FLOOR,
+    systemBlock: SHARED_SYSTEM,
+    params: DEFAULT_FLOOR,
   },
   {
     persona: "vader-v1",
@@ -146,8 +101,8 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
     provider: "anthropic",
     modelId: "claude-opus-4-8",
     operatorEnv: "ARENA_LLM_OPERATOR_VADER",
-    systemBlock: VADER_SYSTEM,
-    params: DEGEN_FLOOR,
+    systemBlock: SHARED_SYSTEM,
+    params: DEFAULT_FLOOR,
   },
 ];
 

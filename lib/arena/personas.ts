@@ -61,25 +61,25 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
   "claude-v1": {
     display: "Opus 4.8",
     emoji: "🧠",
-    blurb: "Claude Opus 4.8 · cautious",
+    blurb: "Anthropic · Claude Opus 4.8",
     image: "/bots/frog-claude.png",
   },
   "grok-v1": {
     display: "Grok 4.3",
     emoji: "🤖",
-    blurb: "xAI Grok 4.3 · bold",
+    blurb: "xAI · Grok 4.3",
     image: "/bots/frog-grok.png",
   },
   "gpt-v1": {
     display: "GPT-5",
     emoji: "🟢",
-    blurb: "OpenAI GPT-5 · disciplined",
+    blurb: "OpenAI · GPT-5",
     image: "/bots/frog-gpt.png",
   },
   "vader-v1": {
     display: "Aggressive Opus",
     emoji: "😈",
-    blurb: "Claude Opus 4.8 · aggressive",
+    blurb: "Anthropic · Claude Opus 4.8",
     image: "/bots/frog-degen.png",
   },
 };
