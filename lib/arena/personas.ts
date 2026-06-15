@@ -76,12 +76,6 @@ export const ARENA_PERSONAS: Record<string, ArenaPersona> = {
     blurb: "OpenAI · GPT-5",
     image: "/bots/frog-gpt.png",
   },
-  "vader-v1": {
-    display: "Aggressive Opus",
-    emoji: "😈",
-    blurb: "Anthropic · Claude Opus 4.8",
-    image: "/bots/frog-degen.png",
-  },
 };
 
 /** utf8 bytes zero-padded/truncated to 16 — identical to init-devnet.ts

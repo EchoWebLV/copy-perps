@@ -58,5 +58,4 @@ export const TUNING: Record<string, BotTuning> = {
   "claude-v1": SHARED, // Opus 4.8
   "grok-v1": SHARED, // Grok 4.3
   "gpt-v1": SHARED, // GPT-5
-  "vader-v1": SHARED, // Aggressive Opus (currently off in the worker roster)
 };

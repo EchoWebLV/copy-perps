@@ -94,16 +94,6 @@ export const ORACLE_BOTS: OracleBotConfig[] = [
     systemBlock: SHARED_SYSTEM,
     params: DEFAULT_FLOOR,
   },
-  {
-    persona: "vader-v1",
-    displayName: "Aggressive Opus",
-    avatarEmoji: "😈",
-    provider: "anthropic",
-    modelId: "claude-opus-4-8",
-    operatorEnv: "ARENA_LLM_OPERATOR_VADER",
-    systemBlock: SHARED_SYSTEM,
-    params: DEFAULT_FLOOR,
-  },
 ];
 
 export function getOracleBot(persona: string): OracleBotConfig | undefined {

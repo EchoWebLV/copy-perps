@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FLOOR, ORACLE_BOTS } from "./registry";
 
 describe("oracle-bot registry", () => {
-  it("ships the four model bots", () => {
+  it("ships the three model bots", () => {
     expect(ORACLE_BOTS.map((b) => b.persona).sort()).toEqual([
       "claude-v1",
       "gpt-v1",
       "grok-v1",
-      "vader-v1",
     ]);
   });
 
