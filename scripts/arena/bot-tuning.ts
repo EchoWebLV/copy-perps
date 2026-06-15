@@ -45,22 +45,24 @@ export interface BotTuning {
 }
 
 export const TUNING: Record<string, BotTuning> = {
-  // Opus 4.8 (cautious Claude) — loosened so it trades more in chop.
+  // Opus 4.8 (cautious Claude) — calmed to cut fee bleed: ~15% stake (was 35%),
+  // pickier (conf 40), fewer trades. 15x keeps swings visible above the 10x floor.
   "claude-v1": {
-    maxLeverage: 20, maxStakeBps: 3500, confidenceFloor: 25, cooldownSecs: 60,
-    maxTradesPerDay: 20, dailyLossBps: 1500, riskSizing: 0,
+    maxLeverage: 15, maxStakeBps: 1500, confidenceFloor: 40, cooldownSecs: 180,
+    maxTradesPerDay: 10, dailyLossBps: 1500, riskSizing: 0,
     minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
   },
-  // Grok 4.3 (bold) — loosened so it trades more in chop.
+  // Grok 4.3 (bold) — calmed: 20% stake (was 50% — the worst fee offender),
+  // pickier (conf 40), fewer trades, 18x (was 25x).
   "grok-v1": {
-    maxLeverage: 25, maxStakeBps: 5000, confidenceFloor: 25, cooldownSecs: 60,
-    maxTradesPerDay: 20, dailyLossBps: 1500, riskSizing: 0,
+    maxLeverage: 18, maxStakeBps: 2000, confidenceFloor: 40, cooldownSecs: 180,
+    maxTradesPerDay: 10, dailyLossBps: 1500, riskSizing: 0,
     minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
   },
-  // GPT-5 (disciplined) — kept picky on purpose; risk-sized stake.
+  // GPT-5 (disciplined) — already risk-sized/low-fee; just a touch pickier + fewer trades.
   "gpt-v1": {
-    maxLeverage: 12, maxStakeBps: 400, confidenceFloor: 45, cooldownSecs: 90,
-    maxTradesPerDay: 10, dailyLossBps: 1000, riskSizing: 1,
+    maxLeverage: 12, maxStakeBps: 400, confidenceFloor: 50, cooldownSecs: 150,
+    maxTradesPerDay: 8, dailyLossBps: 1000, riskSizing: 1,
     minStopBps: 50, maxStopBps: 300, fundingBpsPerHour: 2, maxHoldTicks: 43200,
   },
   // Aggressive Opus (degen Claude) — the wild one.
