@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
     planFlashV2Open: vi.fn(),
     FlashV2PositionConflictError,
     getMarketBySymbol: vi.fn(),
+    hasOpenTailOnMarket: vi.fn(),
   };
 });
 
@@ -23,6 +24,7 @@ vi.mock("@/lib/flash-v2/self-trade", () => ({
   planFlashV2Open: mocks.planFlashV2Open,
   FlashV2PositionConflictError: mocks.FlashV2PositionConflictError,
 }));
+vi.mock("@/lib/bets/copy-guard", () => ({ hasOpenTailOnMarket: mocks.hasOpenTailOnMarket }));
 // Pacifica-branch deps: only getMarketBySymbol is exercised (returns null → 409),
 // proving the flag-off path enters the Pacifica branch without reaching execution.
 vi.mock("@/lib/pacifica/markets", () => ({
@@ -63,6 +65,7 @@ describe("POST /api/trade/perp", () => {
     mocks.verifyPrivyRequest.mockResolvedValue({ userId: "privy-user" });
     mocks.ensureUser.mockResolvedValue({ id: "user-1", solanaPubkey: OWNER });
     mocks.getFlashV2Venue.mockReturnValue(null);
+    mocks.hasOpenTailOnMarket.mockResolvedValue(false);
   });
 
   function body(extra: object = {}) {
@@ -114,5 +117,20 @@ describe("POST /api/trade/perp", () => {
     const res = await POST(post(body({ leverage: 250 })));
     expect(res.status).toBe(400);
     expect(mocks.planFlashV2Open).not.toHaveBeenCalled();
+  });
+
+  it("flag-on: blocks a self-directed open on a market with a DB-tracked tail (no netting)", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.hasOpenTailOnMarket.mockResolvedValue(true);
+    const res = await POST(post(body()));
+    expect(res.status).toBe(409);
+    expect(mocks.hasOpenTailOnMarket).toHaveBeenCalledWith("user-1", "SOL", "flash-v2");
+    expect(mocks.planFlashV2Open).not.toHaveBeenCalled();
+  });
+
+  it("flag-off: does NOT consult the flash-v2 tail guard (Pacifica path unchanged)", async () => {
+    mocks.getMarketBySymbol.mockResolvedValue(null); // 409 inside Pacifica branch
+    await POST(post(body()));
+    expect(mocks.hasOpenTailOnMarket).not.toHaveBeenCalled();
   });
 });

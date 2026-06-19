@@ -19,6 +19,7 @@ import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
 import { FlashV2PositionConflictError, planFlashV2Open } from "@/lib/flash-v2/self-trade";
+import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -87,7 +88,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (body.stakeUsdc < MIN_USDC || body.stakeUsdc > MAX_USDC) {
+  if (
+    !Number.isFinite(body.stakeUsdc) ||
+    body.stakeUsdc < MIN_USDC ||
+    body.stakeUsdc > MAX_USDC
+  ) {
     return NextResponse.json(
       { error: `stake must be between $${MIN_USDC} and $${MAX_USDC}` },
       { status: 400 },
@@ -111,6 +116,20 @@ export async function POST(request: Request) {
     const u = await ensureUser(claims.userId, body.walletAddress);
     if (!u.solanaPubkey) {
       return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+    }
+    // A self-directed open and a copy/whale/bot tail both execute on the same
+    // Flash v2 account, which nets by (account, symbol): a second position on a
+    // market that already has a DB-tracked tail would merge into it, and a later
+    // close would misattribute PnL. planFlashV2Open re-checks on-chain, but that
+    // read can lag a just-opened tail; this DB guard closes the (user, market)
+    // tail direction. The residual self-vs-self concurrent race needs a real
+    // reservation, which belongs with the client-ER-signing slice (this route is
+    // not yet wired to a live open caller).
+    if (await hasOpenTailOnMarket(u.id, market, "flash-v2")) {
+      return NextResponse.json(
+        { error: `you already have an open ${market} tail - close it first` },
+        { status: 409 },
+      );
     }
     try {
       const plan = await planFlashV2Open({
