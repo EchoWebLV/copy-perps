@@ -114,7 +114,8 @@ describe("POST /api/trade/perp", () => {
 
   it("flag-on: rejects out-of-range leverage before any venue work", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
-    const res = await POST(post(body({ leverage: 250 })));
+    // 250x is now allowed (degen); the cap is 500x.
+    const res = await POST(post(body({ leverage: 501 })));
     expect(res.status).toBe(400);
     expect(mocks.planFlashV2Open).not.toHaveBeenCalled();
   });

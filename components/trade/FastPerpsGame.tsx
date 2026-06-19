@@ -413,9 +413,9 @@ export function FastPerpsGame() {
   const readyToTrade = Boolean(ready && authenticated && wallet && !busy);
   const tradeAllowed = notional >= FLASH_MIN_NOTIONAL_USD;
   const leverageOptions = useMemo(
-    // Flag-on caps at the v2 standard ladder (≤100x); the route rejects >100x.
-    () => flashLeverageOptionsForMarket(market, flashV2 ? "standard" : tradeMode),
-    [market, tradeMode, flashV2],
+    // v2 supports degen up to 500x (confirmed live), same ladder as v1.
+    () => flashLeverageOptionsForMarket(market, tradeMode),
+    [market, tradeMode],
   );
   const instantTradingEnabled =
     hasServerSideSolanaWallet(user, wallet?.address) ||
@@ -1359,34 +1359,30 @@ export function FastPerpsGame() {
                     {leverage}x
                   </div>
                 </div>
-                {/* Degen leverage (>100x) isn't supported on the v2 route; hide
-                    the mode toggle flag-on and stay on the standard ladder. */}
-                {!flashV2 && (
-                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                    {(["standard", "degen"] as const).map((nextMode) => {
-                      const active = tradeMode === nextMode;
-                      return (
-                        <button
-                          key={nextMode}
-                          type="button"
-                          onClick={() => {
-                            setTradeMode(nextMode);
-                            setLeverage(maxLeverageForSelection(market, nextMode));
-                            setError(null);
-                          }}
-                          className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                          style={{
-                            background: active ? FG : PANEL_2,
-                            color: active ? BG : FG,
-                            border: `1px solid ${active ? FG : FAINT}`,
-                          }}
-                        >
-                          {nextMode}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {(["standard", "degen"] as const).map((nextMode) => {
+                    const active = tradeMode === nextMode;
+                    return (
+                      <button
+                        key={nextMode}
+                        type="button"
+                        onClick={() => {
+                          setTradeMode(nextMode);
+                          setLeverage(maxLeverageForSelection(market, nextMode));
+                          setError(null);
+                        }}
+                        className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                        style={{
+                          background: active ? FG : PANEL_2,
+                          color: active ? BG : FG,
+                          border: `1px solid ${active ? FG : FAINT}`,
+                        }}
+                      >
+                        {nextMode}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                   {leverageOptions.map((nextLeverage) => {
                     const active = leverage === nextLeverage;
