@@ -19,7 +19,8 @@ function getMasterKey(): Buffer {
 }
 
 // Encrypts the 32-byte Ed25519 seed. Encoding: base64(iv || ciphertext || tag).
-function encryptSeed(seed: Uint8Array): string {
+// Exported so the Flash v2 session-key store reuses one audited cipher.
+export function encryptSeed(seed: Uint8Array): string {
   if (seed.length !== 32) throw new Error("seed must be 32 bytes");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getMasterKey(), iv);
@@ -28,7 +29,7 @@ function encryptSeed(seed: Uint8Array): string {
   return Buffer.concat([iv, ct, tag]).toString("base64");
 }
 
-function decryptSeed(enc: string): Uint8Array {
+export function decryptSeed(enc: string): Uint8Array {
   const buf = Buffer.from(enc, "base64");
   const iv = buf.subarray(0, 12);
   const tag = buf.subarray(buf.length - 16);

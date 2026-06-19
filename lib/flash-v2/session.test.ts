@@ -7,6 +7,7 @@ import {
   validateSessionConfig,
   buildCreateSessionTx,
   buildRevokeSessionTx,
+  isSessionRowActive,
 } from "./session";
 import { KEYSP_PROGRAM_ID } from "./constants";
 import { FlashV2Error } from "./errors";
@@ -44,6 +45,13 @@ describe("session derivation + validation", () => {
     expect(isSessionExpired(100, 100)).toBe(true);
     expect(isSessionExpiringSoon(100, 80, 30)).toBe(true); // 20s left <= 30
     expect(isSessionExpiringSoon(100, 50, 30)).toBe(false); // 50s left > 30
+  });
+
+  it("isSessionRowActive requires bound + unexpired", () => {
+    const now = 1_000_000;
+    expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now + 1000) }, now)).toBe(true);
+    expect(isSessionRowActive({ boundAt: null, validUntil: new Date(now + 1000) }, now)).toBe(false);
+    expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now - 1) }, now)).toBe(false);
   });
 
   it("validateSessionConfig accepts a matching token, rejects a mismatch", () => {

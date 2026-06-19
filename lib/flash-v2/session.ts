@@ -59,6 +59,18 @@ export function isSessionExpiringSoon(
 }
 
 /**
+ * Pure: a stored session row is usable iff it is bound (its createSessionV2 tx
+ * confirmed) and not yet expired. Kept here (db-free) so it is unit-testable;
+ * the db wrappers in session-store.ts apply it.
+ */
+export function isSessionRowActive(
+  row: { boundAt: Date | null; validUntil: Date },
+  nowMs: number,
+): boolean {
+  return row.boundAt !== null && row.validUntil.getTime() > nowMs;
+}
+
+/**
  * Reject a malformed or mismatched session BEFORE building a trade. The Flash
  * API silently falls back to owner-signing on a bad session and fails later
  * on-chain with no API error (session notes §8.1), so callers must validate.

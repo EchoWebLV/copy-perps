@@ -120,6 +120,27 @@ export const agentWallets = pgTable("agent_wallets", {
   boundAt: timestamp("bound_at", { withTimezone: true }),
 });
 
+// Flash v2 MagicBlock session keys. The server generates a short-lived session
+// signer, holds its encrypted seed, and signs Flash trades with it (no popup).
+// Mirrors agentWallets, plus the on-chain SessionTokenV2 PDA + hard expiry.
+export const sessionKeys = pgTable("session_keys", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // The user's main Privy Solana wallet pubkey (the session's authority).
+  mainPubkey: text("main_pubkey").notNull(),
+  // Ephemeral session signer pubkey passed to Flash as `signer`.
+  sessionPubkey: text("session_pubkey").notNull().unique(),
+  // Encrypted Ed25519 seed (AES-256-GCM, AGENT_WALLET_ENCRYPTION_KEY).
+  sessionSecretEnc: text("session_secret_enc").notNull(),
+  // The SessionTokenV2 PDA address, passed to Flash as `sessionToken`.
+  sessionTokenPda: text("session_token_pda").notNull(),
+  // Absolute on-chain expiry (valid_until). The program rejects trades past it.
+  validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  // Nullable: bound_at = null marks a created-but-not-yet-confirmed session.
+  boundAt: timestamp("bound_at", { withTimezone: true }),
+});
+
 export const portfolioSnapshots = pgTable("portfolio_snapshots", {
   userId: uuid("user_id")
     .primaryKey()
