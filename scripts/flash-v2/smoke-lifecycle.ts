@@ -64,6 +64,12 @@ async function main() {
   const positions = await venue.getPositions(owner);
   console.log(`positions: ${JSON.stringify(positions)}`);
   const pos = positions[0];
+  if (!pos) {
+    console.warn(
+      "WARNING: no positions returned after open — CLOSE LEG SKIPPED. " +
+        "Verify the /owner/{owner} positionMetrics shape against the live API.",
+    );
+  }
   if (pos) {
     const close = await venue.closePosition({
       owner,

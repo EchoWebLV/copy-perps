@@ -3,29 +3,65 @@ import { getPrices, getPositions, getBasketPubkey } from "./query";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function mockFetch(body: unknown, status = 200) {
-  vi.stubGlobal("fetch", vi.fn(async () => ({ status, json: async () => body })));
+/** Route the mock by URL so getPositions (which also reads /prices) sees the
+ *  right body per endpoint. Bodies use the REAL documented Flash v2 shapes. */
+function mockRoutes(routes: Record<string, unknown>) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const key = Object.keys(routes).find((k) => url.includes(k));
+      return { status: 200, json: async () => (key ? routes[key] : null) };
+    }),
+  );
 }
 
 describe("query", () => {
-  it("maps the prices payload to a symbol→number record", async () => {
-    mockFetch([{ symbol: "SOL", price: "150.5" }, { symbol: "BTC", price: "60000" }]);
+  it("maps the /prices record (priceUi) to a symbol→number map", async () => {
+    mockRoutes({ "/prices": { SOL: { priceUi: 150.5 }, BTC: { priceUi: 60000 } } });
     const marks = await getPrices();
     expect(marks.SOL).toBe(150.5);
     expect(marks.BTC).toBe(60000);
   });
-  it("reads positions from the owner snapshot", async () => {
-    mockFetch({ basketPubkey: "Bskt111", positions: [{ symbol: "SOL", side: "long" }] });
+
+  it("maps positionMetrics from the owner snapshot, mark from /prices", async () => {
+    mockRoutes({
+      "/owner/": {
+        basketPubkey: "Bskt111",
+        positionMetrics: {
+          "SOL-long": {
+            marketSymbol: "SOL",
+            sideUi: "long",
+            sizeUsdUi: 250,
+            collateralUsdUi: 50,
+            entryPriceUi: 140,
+            liquidationPriceUi: 90,
+            leverageUi: 5,
+          },
+        },
+      },
+      "/prices": { SOL: { priceUi: 150 } },
+    });
     const pos = await getPositions("owner1");
     expect(pos).toHaveLength(1);
     expect(pos[0]!.symbol).toBe("SOL");
+    expect(pos[0]!.side).toBe("long");
+    expect(pos[0]!.sizeUsd).toBe(250);
+    expect(pos[0]!.markPrice).toBe(150);
+    expect(pos[0]!.positionKey).toBe("SOL-long");
   });
+
+  it("returns [] positions when the snapshot has no positionMetrics", async () => {
+    mockRoutes({ "/owner/": { basketPubkey: "Bskt111" } });
+    expect(await getPositions("owner1")).toEqual([]);
+  });
+
   it("returns null basketPubkey for an un-onboarded owner", async () => {
-    mockFetch({ basketPubkey: null });
+    mockRoutes({ "/owner/": { basketPubkey: null } });
     expect(await getBasketPubkey("owner1")).toBeNull();
   });
+
   it("returns the basketPubkey for an onboarded owner", async () => {
-    mockFetch({ basketPubkey: "Bskt111" });
+    mockRoutes({ "/owner/": { basketPubkey: "Bskt111" } });
     expect(await getBasketPubkey("owner1")).toBe("Bskt111");
   });
 });
