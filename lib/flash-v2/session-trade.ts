@@ -65,12 +65,20 @@ export async function executeSessionOpen(args: {
   });
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
-  // Resolve the ER outcome: a definite on-chain failure throws (the route then
-  // reports "no funds were spent" and inserts no confirmed bet), closing the
-  // ghost-row gap. "pending" stays optimistic so a slow-but-valid open is never
-  // rejected — only a confirmed FAILURE is acted on.
-  if ((await confirm(signature)) === "failed") {
-    throw new FlashV2TxFailedError(signature, "open");
+  // Resolve the ER outcome (submitErTx is fire-and-forget). A definite on-chain
+  // FAILURE throws so the route reports "no funds were spent" and records no
+  // confirmed bet. On "pending" (neither confirmed nor failed within the budget)
+  // we don't guess: we re-read on-chain positions as ground truth. If the market
+  // isn't there, the open didn't land, so we throw rather than record a confirmed
+  // ghost bet — the inverse of the conflict precheck above, keeping the rail
+  // self-healing on both edges.
+  const outcome = await confirm(signature);
+  if (outcome === "failed") throw new FlashV2TxFailedError(signature, "open");
+  if (outcome === "pending") {
+    const after = await args.venue.getPositions(args.owner);
+    if (!after.some((p) => p.symbol === args.market)) {
+      throw new FlashV2TxFailedError(signature, "open");
+    }
   }
   return { signature, quote };
 }
@@ -107,14 +115,26 @@ export async function executeSessionClose(args: {
   });
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
-  // A failed close throws so the bet stays `confirmed` (retryable) instead of
-  // being recorded closed against a position that's still open.
-  if ((await confirm(signature)) === "failed") {
-    throw new FlashV2TxFailedError(signature, "close");
+  // Resolve the ER outcome. A definite FAILURE throws so the bet stays
+  // `confirmed` (retryable) instead of recorded closed against a live position.
+  // On "pending" we re-read on-chain ground truth: if the (symbol, side) is STILL
+  // present the close did not land — throw rather than record false proceeds and
+  // orphan a still-open position with no recovery path. If it's gone, it landed.
+  const outcome = await confirm(signature);
+  if (outcome === "failed") throw new FlashV2TxFailedError(signature, "close");
+  if (outcome === "pending") {
+    const after = await args.venue.getPositions(args.owner);
+    if (after.some((p) => p.symbol === args.market && p.side === args.side)) {
+      throw new FlashV2TxFailedError(signature, "close");
+    }
   }
   // Guard a partial/late indexer read (entryPrice/markPrice default to 0 in the
   // normalizer) so markPnlUsd never divides by zero and writes NaN/Infinity to
   // proceeds_usdc. null ⇒ "PnL unknown", same sentinel the Pacifica close uses.
+  // feesUsd/borrowUsd are forwarded when the venue exposes them; the current
+  // owner snapshot omits both, so they stay undefined (gross mark PnL, kept
+  // consistent with the live portfolio number) until the venue surfaces a
+  // realized-fee read — see lib/flash-v2/query.ts.
   const estPnlUsd =
     pos.entryPrice > 0 && pos.markPrice > 0
       ? markPnlUsd({
@@ -122,6 +142,8 @@ export async function executeSessionClose(args: {
           entryPrice: pos.entryPrice,
           markPrice: pos.markPrice,
           sizeUsd: pos.sizeUsd,
+          feesUsd: pos.feesUsd,
+          borrowUsd: pos.borrowUsd,
         })
       : null;
   return { found: true, signature, estPnlUsd };

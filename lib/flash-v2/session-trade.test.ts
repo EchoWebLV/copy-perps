@@ -6,6 +6,7 @@ import { FlashV2TxFailedError } from "./errors";
 // Default confirm injected so tests never hit the ER RPC.
 const confirmOk = async () => "confirmed" as const;
 const confirmFail = async () => "failed" as const;
+const confirmPending = async () => "pending" as const;
 
 const fakeTx = { id: "tx" } as never;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,6 +99,47 @@ describe("executeSessionOpen", () => {
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
     expect(submit).toHaveBeenCalledOnce(); // it did submit, then the ER reported failure
   });
+
+  it("on a pending open, records only after the position is seen on-chain", async () => {
+    const submit = vi.fn(async () => "SIG");
+    const getPositions = vi
+      .fn()
+      .mockResolvedValueOnce([]) // conflict precheck: clear
+      .mockResolvedValueOnce([
+        { symbol: "SOL", side: "long", sizeUsd: 50, entryPrice: 100, markPrice: 100 },
+      ]); // post-submit ground truth: it landed
+    const out = await executeSessionOpen({
+      venue: venue({ getPositions }),
+      session,
+      owner: "O",
+      market: "SOL",
+      side: "long",
+      stakeUsdc: 25,
+      leverage: 5,
+      deps: { sign: vi.fn((t) => t), submit, confirm: confirmPending },
+    });
+    expect(out).toEqual({ signature: "SIG", quote: { feeUsdUi: 1 } });
+    expect(getPositions).toHaveBeenCalledTimes(2);
+  });
+
+  it("on a pending open whose position never appears, throws (no ghost confirmed bet)", async () => {
+    const getPositions = vi
+      .fn()
+      .mockResolvedValueOnce([]) // precheck clear
+      .mockResolvedValueOnce([]); // post-submit: still nothing ⇒ it never landed
+    await expect(
+      executeSessionOpen({
+        venue: venue({ getPositions }),
+        session,
+        owner: "O",
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 25,
+        leverage: 5,
+        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "SIG"), confirm: confirmPending },
+      }),
+    ).rejects.toBeInstanceOf(FlashV2TxFailedError);
+  });
 });
 
 describe("executeSessionClose", () => {
@@ -181,5 +223,75 @@ describe("executeSessionClose", () => {
         deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmFail },
       }),
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
+  });
+
+  it("on a pending close whose position is gone, records it (the close landed)", async () => {
+    const getPositions = vi
+      .fn()
+      .mockResolvedValueOnce([
+        { symbol: "SOL", side: "long", sizeUsd: 100, entryPrice: 100, markPrice: 90 },
+      ]) // find the live position to close
+      .mockResolvedValueOnce([]); // post-submit ground truth: gone ⇒ it closed
+    const out = await executeSessionClose({
+      venue: venue({ getPositions }),
+      session,
+      owner: "O",
+      market: "SOL",
+      side: "long",
+      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
+    });
+    expect(out).toMatchObject({ found: true, signature: "CSIG" });
+    expect(getPositions).toHaveBeenCalledTimes(2);
+  });
+
+  it("on a pending close whose position is still open, throws (bet stays closeable, no orphan)", async () => {
+    const stillOpen = {
+      symbol: "SOL",
+      side: "long",
+      sizeUsd: 100,
+      entryPrice: 100,
+      markPrice: 90,
+    };
+    const getPositions = vi
+      .fn()
+      .mockResolvedValueOnce([stillOpen]) // find it
+      .mockResolvedValueOnce([stillOpen]); // post-submit: still there ⇒ close didn't land
+    await expect(
+      executeSessionClose({
+        venue: venue({ getPositions }),
+        session,
+        owner: "O",
+        market: "SOL",
+        side: "long",
+        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
+      }),
+    ).rejects.toBeInstanceOf(FlashV2TxFailedError);
+  });
+
+  it("deducts venue-provided fees + borrow from the close PnL estimate", async () => {
+    const v = venue({
+      getPositions: vi.fn(async () => [
+        {
+          symbol: "SOL",
+          side: "long",
+          sizeUsd: 100,
+          entryPrice: 100,
+          markPrice: 110,
+          feesUsd: 2,
+          borrowUsd: 1,
+        },
+      ]),
+    });
+    const out = await executeSessionClose({
+      venue: v,
+      session,
+      owner: "O",
+      market: "SOL",
+      side: "long",
+      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
+    });
+    if (!out.found) throw new Error("unreachable");
+    // long +10% of $100 = +10 gross, minus $2 fees minus $1 borrow = $7 net.
+    expect(out.estPnlUsd).toBeCloseTo(7);
   });
 });

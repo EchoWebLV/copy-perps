@@ -37,6 +37,14 @@ export interface VenuePosition {
   markPrice: number;
   liquidationPrice: number;
   leverage: number;
+  /**
+   * Realized close/borrow costs, when the venue exposes them. The owner snapshot
+   * currently omits both, so they're undefined and mark-price PnL stays gross
+   * (consistent with the live portfolio figure). Forwarded to markPnlUsd so net
+   * PnL deducts them automatically once the venue surfaces a realized-fee read.
+   */
+  feesUsd?: number;
+  borrowUsd?: number;
 }
 
 export interface VenueBalance {
