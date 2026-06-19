@@ -352,6 +352,17 @@ export function FastPerpsGame() {
     () => flashMarketConfigForSymbol(market),
     [market],
   );
+  // Flag-on (v2): the position's own markPriceUsd comes from the v2 venue's price
+  // feed (Pyth Lazer), the same feed that set its entry. The v1 liveFlashMarks is
+  // a DIFFERENT feed — using it would compute PnL off a mismatched price (a ~9%
+  // gap at 20x = a bogus ±180%). So flag-on we pass no live mark and let
+  // computeFlashLivePositionView fall back to the venue mark.
+  const liveMarkFor = (symbol: Market): number | undefined =>
+    flashV2
+      ? undefined
+      : isFlashScalpMarket(symbol)
+        ? liveFlashMarks[symbol]?.priceUsd
+        : undefined;
   const positionViewsByKey = useMemo(() => {
     const views = new Map<string, FlashLivePositionView>();
     for (const position of positions) {
@@ -359,21 +370,18 @@ export function FastPerpsGame() {
         position.positionPubkey,
         computeFlashLivePositionView({
           position,
-          liveMarkUsd: isFlashScalpMarket(position.symbol)
-            ? liveFlashMarks[position.symbol]?.priceUsd
-            : undefined,
+          liveMarkUsd: liveMarkFor(position.symbol),
         }),
       );
     }
     return views;
-  }, [liveFlashMarks, positions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveFlashMarks, positions, flashV2]);
   const selectedPositionView = selectedPosition
     ? positionViewsByKey.get(selectedPosition.positionPubkey) ??
       computeFlashLivePositionView({
         position: selectedPosition,
-        liveMarkUsd: isFlashScalpMarket(selectedPosition.symbol)
-          ? liveFlashMarks[selectedPosition.symbol]?.priceUsd
-          : undefined,
+        liveMarkUsd: liveMarkFor(selectedPosition.symbol),
       })
     : null;
   const graphValue = selectedPositionView ? selectedPositionView.valueUsd : 0;
