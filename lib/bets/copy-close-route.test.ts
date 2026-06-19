@@ -116,6 +116,20 @@ describe("POST /api/bet/copy/close", () => {
     expect(mocks.updateWhere).not.toHaveBeenCalled();
   });
 
+  it("flag-on (flash-v2 bet already closed): 409 double-close guard, never calls the venue", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.selectLimit.mockResolvedValue([
+      { id: "bet-1", status: "closed", amountUsdc: 25, feeUsdc: 0, meta: { venue: "flash-v2", leaderMarket: "SOL", leaderSide: "long" } },
+    ]);
+    const res = await POST(post({ betId: "bet-1", walletAddress: OWNER }));
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("closed"),
+    });
+    expect(mocks.closeCopyFlashV2).not.toHaveBeenCalled();
+    expect(mocks.updateWhere).not.toHaveBeenCalled();
+  });
+
   it("flag-on (pacifica bet): peek finds no flash-v2 venue, falls through to Pacifica", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
     mocks.selectLimit.mockResolvedValue([

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeSessionClose, executeSessionOpen } from "./session-trade";
+import { FlashV2PositionConflictError } from "./self-trade";
 
 const fakeTx = { id: "tx" } as never;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,6 +49,32 @@ describe("executeSessionOpen", () => {
     );
     expect(sign).toHaveBeenCalledWith(fakeTx, session.keypair.secretKey);
     expect(submit).toHaveBeenCalledOnce();
+  });
+
+  it("throws a conflict (and never opens/submits) when a same-market position already exists on-chain", async () => {
+    const sign = vi.fn((tx) => tx);
+    const submit = vi.fn(async () => "SIG");
+    // An on-chain SOL position with no matching bet row (orphan/self-directed):
+    // the DB-only tail guard can't see it, but this on-chain precheck must.
+    const v = venue({
+      getPositions: vi.fn(async () => [
+        { symbol: "SOL", side: "short", sizeUsd: 50, entryPrice: 100, markPrice: 100 },
+      ]),
+    });
+    await expect(
+      executeSessionOpen({
+        venue: v,
+        session,
+        owner: "O",
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 25,
+        leverage: 5,
+        deps: { sign, submit },
+      }),
+    ).rejects.toBeInstanceOf(FlashV2PositionConflictError);
+    expect(v.openPosition).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
   });
 });
 

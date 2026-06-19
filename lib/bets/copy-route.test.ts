@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   hasOpenTailOnMarket: vi.fn(),
   getFlashV2Venue: vi.fn(),
   openCopyFlashV2: vi.fn(),
+  reserveTailOnMarket: vi.fn(),
+  releaseTailReservation: vi.fn(),
   getPositions: vi.fn(),
   getMarketBySymbol: vi.fn(),
   clampLeverageForNotional: vi.fn(),
@@ -15,6 +17,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/privy/server", () => ({ verifyPrivyRequest: mocks.verifyPrivyRequest }));
 vi.mock("@/lib/users/ensure", () => ({ ensureUser: mocks.ensureUser }));
 vi.mock("@/lib/bets/copy-guard", () => ({ hasOpenTailOnMarket: mocks.hasOpenTailOnMarket }));
+vi.mock("@/lib/bets/tail-reservation", () => ({
+  reserveTailOnMarket: mocks.reserveTailOnMarket,
+  releaseTailReservation: mocks.releaseTailReservation,
+}));
 vi.mock("@/lib/flash-v2/resolve", () => ({ getFlashV2Venue: mocks.getFlashV2Venue }));
 vi.mock("@/lib/bets/copy-flash-v2", () => ({ openCopyFlashV2: mocks.openCopyFlashV2 }));
 vi.mock("@/lib/pacifica/client", () => ({ getPositions: mocks.getPositions }));
@@ -44,6 +50,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { POST } from "../../app/api/bet/copy/route";
+import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
 
 const OWNER = "AW3jPeBDkyRWB3mSV6QmbWyBZqyeVNhCHWCuefMrdQGr";
 
@@ -73,6 +80,8 @@ describe("POST /api/bet/copy", () => {
     mocks.verifyPrivyRequest.mockResolvedValue({ userId: "privy-user" });
     mocks.ensureUser.mockResolvedValue({ id: "user-1", solanaPubkey: OWNER });
     mocks.hasOpenTailOnMarket.mockResolvedValue(false);
+    mocks.reserveTailOnMarket.mockResolvedValue(true);
+    mocks.releaseTailReservation.mockResolvedValue(undefined);
     // Leader still holds the matching long (bid) position.
     mocks.getPositions.mockResolvedValue([{ symbol: "SOL", side: "bid", entry_price: "100" }]);
     mocks.getFlashV2Venue.mockReturnValue(null);
@@ -141,5 +150,25 @@ describe("POST /api/bet/copy", () => {
     const res = await POST(post(body()));
     expect(res.status).toBe(409);
     expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+  });
+
+  it("flag-on: a busy reservation (concurrent tap) is rejected with 409 before opening", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.reserveTailOnMarket.mockResolvedValue(false);
+    const res = await POST(post(body()));
+    expect(res.status).toBe(409);
+    expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+  });
+
+  it("flag-on: an on-chain position conflict maps to 409 and releases the reservation", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.openCopyFlashV2.mockRejectedValue(new FlashV2PositionConflictError("SOL"));
+    const res = await POST(post(body()));
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("SOL"),
+    });
+    expect(mocks.insertReturning).not.toHaveBeenCalled();
+    expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "SOL");
   });
 });

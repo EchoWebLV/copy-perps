@@ -19,8 +19,13 @@ import {
   planPacificaDepositTopUp,
 } from "@/lib/bets/funding";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
+import {
+  reserveTailOnMarket,
+  releaseTailReservation,
+} from "@/lib/bets/tail-reservation";
 import { marketDataErrorResponse } from "@/lib/bets/route-errors";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
 import { openCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
 export const runtime = "nodejs";
@@ -78,6 +83,14 @@ function fundingErrorResponse(err: unknown): NextResponse | null {
 function feeUsdcFromFill(fill: { fee?: unknown }): number | null {
   const fee = Number(fill.fee);
   return Number.isFinite(fee) ? fee : null;
+}
+
+async function releaseReservationBestEffort(userId: string, market: string) {
+  try {
+    await releaseTailReservation(userId, market);
+  } catch (err) {
+    console.error("[bet/copy] reservation release failed:", err);
+  }
 }
 
 export async function POST(request: Request) {
@@ -161,6 +174,17 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    // Atomic lock held across the async open so two concurrent same-(user,
+    // market) taps can't both pass the DB-read guard above and net into one
+    // on-chain position (closing one would then close both, misattributing PnL).
+    const reserved = await reserveTailOnMarket(user.id, body.market);
+    if (!reserved) {
+      return NextResponse.json(
+        { error: `you already have an open ${body.market} tail — close it first` },
+        { status: 409 },
+      );
+    }
+
     let result;
     try {
       result = await openCopyFlashV2({
@@ -173,6 +197,12 @@ export async function POST(request: Request) {
         leverage: body.leverage,
       });
     } catch (err) {
+      await releaseReservationBestEffort(user.id, body.market);
+      // An on-chain position already exists on this market (an orphan with no
+      // bet row, or a self-directed position) — surface a clean conflict.
+      if (err instanceof FlashV2PositionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
       console.error("[bet/copy] flash-v2 open failed:", err);
       return NextResponse.json(
         { error: "Trade could not open. No funds were spent." },
@@ -180,35 +210,49 @@ export async function POST(request: Request) {
       );
     }
     if (result.kind === "enable-session") {
+      await releaseReservationBestEffort(user.id, body.market);
       return NextResponse.json({ phase: "enable-session" });
     }
     if (result.kind === "onboard") {
+      await releaseReservationBestEffort(user.id, body.market);
       return NextResponse.json({ phase: "onboard", steps: result.steps });
     }
     const feeUsdc =
       result.quote.feeUsdUi != null && Number.isFinite(result.quote.feeUsdUi)
         ? result.quote.feeUsdUi
         : null;
-    const [bet] = await db
-      .insert(bets)
-      .values({
-        userId: user.id,
-        type: "copy",
-        signalId: body.signalId ?? null,
-        amountUsdc: body.stakeUsdc,
-        feeUsdc,
-        status: "confirmed",
-        meta: {
-          venue: "flash-v2",
-          leaderAddress: body.leaderAddress,
-          leaderMarket: body.market,
-          leaderSide: body.side,
-          leverage: body.leverage,
-          leaderEntryPriceAtTap: Number(leaderPos.entry_price),
-          openTxSig: result.signature,
-        },
-      })
-      .returning();
+    let bet: typeof bets.$inferSelect;
+    try {
+      [bet] = await db
+        .insert(bets)
+        .values({
+          userId: user.id,
+          type: "copy",
+          signalId: body.signalId ?? null,
+          amountUsdc: body.stakeUsdc,
+          feeUsdc,
+          status: "confirmed",
+          meta: {
+            venue: "flash-v2",
+            leaderAddress: body.leaderAddress,
+            leaderMarket: body.market,
+            leaderSide: body.side,
+            leverage: body.leverage,
+            leaderEntryPriceAtTap: Number(leaderPos.entry_price),
+            openTxSig: result.signature,
+          },
+        })
+        .returning();
+      if (!bet) throw new Error("flash-v2 copy bet insert returned no row");
+    } catch (err) {
+      await releaseReservationBestEffort(user.id, body.market);
+      console.error("[bet/copy] flash-v2 ledger insert failed:", err);
+      return NextResponse.json(
+        { error: "Could not record copy bet" },
+        { status: 502 },
+      );
+    }
+    await releaseReservationBestEffort(user.id, body.market);
     return NextResponse.json({
       phase: "open",
       betId: bet.id,

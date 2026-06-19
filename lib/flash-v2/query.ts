@@ -60,8 +60,10 @@ function toSide(sideUi: string | undefined): Side {
 /**
  * Map the snapshot's `positionMetrics` (a Record keyed by position, NOT an
  * array) to VenuePosition[]. The snapshot carries no mark price, so we enrich
- * it from /prices (falling back to entry if a symbol is missing). The record
- * key becomes positionKey.
+ * it from /prices. A missing symbol yields markPrice 0 (NOT entryPrice) so the
+ * downstream PnL guards (`markPrice > 0`) treat it as "price unknown" rather
+ * than computing a false break-even (entry == mark ⇒ 0% PnL). The record key
+ * becomes positionKey.
  */
 export async function getPositions(owner: string): Promise<VenuePosition[]> {
   const snap = await getOwnerSnapshot(owner);
@@ -78,7 +80,7 @@ export async function getPositions(owner: string): Promise<VenuePosition[]> {
       sizeUsd: Number(m.sizeUsdUi ?? 0),
       collateralUsd: Number(m.collateralUsdUi ?? 0),
       entryPrice,
-      markPrice: marks[symbol] ?? entryPrice,
+      markPrice: marks[symbol] ?? 0,
       liquidationPrice: Number(m.liquidationPriceUi ?? 0),
       leverage: Number(m.leverageUi ?? 0),
     };

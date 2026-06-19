@@ -5,6 +5,7 @@
 // (never touch the validator's blockhash, notes §5) and submit to the ER. Shared
 // by the copy rail (session-signed one-tap) and the mirror-close sweep (Task 7).
 import { markPnlUsd } from "./pnl";
+import { FlashV2PositionConflictError } from "./self-trade";
 import {
   signTradeWithSession as defaultSign,
   submitErTx as defaultSubmit,
@@ -28,7 +29,7 @@ function sessionRef(s: SessionKeyRecord): SessionRef {
  * signature + the open quote. No wallet popup: the session key signs server-side.
  */
 export async function executeSessionOpen(args: {
-  venue: Pick<FlashV2Venue, "openPosition">;
+  venue: Pick<FlashV2Venue, "openPosition" | "getPositions">;
   session: SessionKeyRecord;
   owner: string;
   market: string;
@@ -39,6 +40,16 @@ export async function executeSessionOpen(args: {
 }): Promise<{ signature: string; quote: Quote }> {
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
+  // On-chain duplicate guard (mirrors planFlashV2Open on the self-trade rail).
+  // The venue nets by (account, symbol), so opening a second position on a
+  // market that already has one — including an orphan with no bet row or a
+  // self-directed position — would merge them; a later close would then close
+  // the whole and misattribute PnL. The DB-only hasOpenTailOnMarket guard can't
+  // see those, so we re-check on-chain here. Symbol-only (any side) by design.
+  const existing = await args.venue.getPositions(args.owner);
+  if (existing.some((p) => p.symbol === args.market)) {
+    throw new FlashV2PositionConflictError(args.market);
+  }
   const { unsigned, quote } = await args.venue.openPosition({
     owner: args.owner,
     symbol: args.market,

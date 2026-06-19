@@ -31,7 +31,7 @@ export type CopyOpenFlashV2Result =
  * both hold, the session signs the open server-side — no popup.
  */
 export async function openCopyFlashV2(args: {
-  venue: Pick<FlashV2Venue, "ensureOnboarded" | "openPosition">;
+  venue: Pick<FlashV2Venue, "ensureOnboarded" | "openPosition" | "getPositions">;
   userId: string;
   owner: string;
   market: string;

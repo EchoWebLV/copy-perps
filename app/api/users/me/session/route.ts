@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { Keypair } from "@solana/web3.js";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
-import { FEATURE_FLASH_V2, DEFAULT_SESSION_TTL_SECONDS } from "@/lib/flash-v2/constants";
+import {
+  FEATURE_FLASH_V2,
+  DEFAULT_SESSION_TTL_SECONDS,
+  MAX_SESSION_TTL_SECONDS,
+} from "@/lib/flash-v2/constants";
 import { getConnection } from "@/lib/flash-v2/rpc";
 import { buildCreateSessionTx, SessionAlreadyBoundError } from "@/lib/flash-v2/session";
 import {
@@ -40,7 +44,15 @@ export async function POST(request: Request) {
   const owner = user.solanaPubkey;
   const { publicKeyB58, seed } = generateSessionKeypair();
   const sessionSigner = Keypair.fromSeed(seed);
-  const validUntilSec = Math.floor(Date.now() / 1000) + DEFAULT_SESSION_TTL_SECONDS;
+  // Clamp to the program's hard ceiling (now + 7d) as defense-in-depth. Today
+  // the TTL is a fixed server constant with no client input, but a code-enforced
+  // cap keeps a future configurable TTL from being rejected on-chain
+  // (ValidityTooLong) instead of relying solely on the absent input path.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const validUntilSec = Math.min(
+    nowSec + DEFAULT_SESSION_TTL_SECONDS,
+    nowSec + MAX_SESSION_TTL_SECONDS,
+  );
   const validUntil = new Date(validUntilSec * 1000);
 
   const { tx, sessionToken } = await buildCreateSessionTx({

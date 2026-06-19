@@ -48,6 +48,10 @@ const RPC =
 
 const STAKE_CHIPS = [1, 5, 10, 20] as const;
 const MIN_USDC = 1;
+// The Flash v2 whale/copy routes enforce a $5 floor; the v1 /api/flash/perp path
+// allows $1. When the client flag routes a whale tail to the v2 rail we raise the
+// UI minimum to match, so a default $1 tap can't be rejected with a 400.
+const FLASH_V2_MIN_USDC = 5;
 const MAX_USDC = 1000;
 const TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000;
 
@@ -310,7 +314,7 @@ export function TailModal({ open, onClose, source }: Props) {
   useEffect(() => {
     if (!open) return;
     setNow(Date.now());
-    setStake(1);
+    setStake(isFlashV2Client() && source?.kind === "whale" ? FLASH_V2_MIN_USDC : 1);
     setCustom("");
     setSubmitting(false);
     setStatus(null);
@@ -395,8 +399,11 @@ export function TailModal({ open, onClose, source }: Props) {
     [notional],
   );
 
+  // v2 whale tails hit the $5-floor rail; everything else keeps the $1 floor.
+  const minStake =
+    isFlashV2Client() && source?.kind === "whale" ? FLASH_V2_MIN_USDC : MIN_USDC;
   const stakeValid =
-    effectiveStake >= MIN_USDC && effectiveStake <= MAX_USDC;
+    effectiveStake >= minStake && effectiveStake <= MAX_USDC;
   const hasCopyableSource =
     source?.kind !== "whale" || executableWhalePositions.length > 0;
   const preflightBlocked = preflight.canOpen === false;
@@ -431,7 +438,7 @@ export function TailModal({ open, onClose, source }: Props) {
   const submit = useCallback(async () => {
     if (!source || !wallet || submitting) return;
     if (!stakeValid) {
-      setError(`Stake must be between $${MIN_USDC} and $${MAX_USDC}`);
+      setError(`Stake must be between $${minStake} and $${MAX_USDC}`);
       return;
     }
     setError(null);
@@ -1061,7 +1068,7 @@ export function TailModal({ open, onClose, source }: Props) {
                 Stake (USDC)
               </div>
               <div className="grid grid-cols-4 gap-2 mb-2">
-                {STAKE_CHIPS.map((s) => {
+                {STAKE_CHIPS.filter((s) => s >= minStake).map((s) => {
                   const active = !custom && stake === s;
                   return (
                     <button

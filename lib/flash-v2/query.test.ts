@@ -50,6 +50,26 @@ describe("query", () => {
     expect(pos[0]!.positionKey).toBe("SOL-long");
   });
 
+  it("missing /prices symbol ⇒ markPrice 0 (not entryPrice), so PnL guards treat it as unknown", async () => {
+    mockRoutes({
+      "/owner/": {
+        basketPubkey: "Bskt111",
+        positionMetrics: {
+          "SOL-long": {
+            marketSymbol: "SOL",
+            sideUi: "long",
+            sizeUsdUi: 250,
+            entryPriceUi: 140,
+          },
+        },
+      },
+      "/prices": { BTC: { priceUi: 60000 } }, // SOL absent on purpose
+    });
+    const pos = await getPositions("owner1");
+    expect(pos[0]!.entryPrice).toBe(140);
+    expect(pos[0]!.markPrice).toBe(0);
+  });
+
   it("returns [] positions when the snapshot has no positionMetrics", async () => {
     mockRoutes({ "/owner/": { basketPubkey: "Bskt111" } });
     expect(await getPositions("owner1")).toEqual([]);

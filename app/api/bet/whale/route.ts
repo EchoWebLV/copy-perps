@@ -31,6 +31,7 @@ import { getAgentWallet } from "@/lib/wallets/agent";
 import { isSourceFresh } from "@/lib/whales/identity";
 import { getWhaleLivePositionById } from "@/lib/whales/live-cache";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
 import { openCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
 export const runtime = "nodejs";
@@ -513,6 +514,11 @@ export async function POST(request: Request) {
       });
     } catch (err) {
       await releaseReservationBestEffort(user.id, position.market);
+      // An on-chain position already exists on this market (an orphan with no
+      // bet row, or a self-directed position) — surface a clean conflict.
+      if (err instanceof FlashV2PositionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
       console.error("[bet/whale] flash-v2 open failed:", err);
       return NextResponse.json(
         { error: "Trade could not open. No funds were spent." },

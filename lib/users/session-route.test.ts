@@ -26,6 +26,7 @@ vi.mock("@/lib/users/ensure", () => ({ ensureUser: mocks.ensureUser }));
 vi.mock("@/lib/flash-v2/constants", () => ({
   FEATURE_FLASH_V2: true,
   DEFAULT_SESSION_TTL_SECONDS: 43200,
+  MAX_SESSION_TTL_SECONDS: 7 * 24 * 60 * 60,
 }));
 vi.mock("@/lib/flash-v2/rpc", () => ({ getConnection: mocks.getConnection }));
 vi.mock("@/lib/flash-v2/session", () => ({
