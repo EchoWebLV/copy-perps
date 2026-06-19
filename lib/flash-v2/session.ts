@@ -5,10 +5,19 @@
 // server then signs trade txs with the session keypair (no per-order popup) and
 // submits them to the Ephemeral Rollup. Surface authority:
 // docs/superpowers/flash-v2-session-surface-notes.md.
-import { PublicKey } from "@solana/web3.js";
+import {
+  PublicKey,
+  Transaction,
+  Keypair,
+  Connection,
+  SystemProgram,
+} from "@solana/web3.js";
+import { BN } from "@coral-xyz/anchor";
+import { SessionTokenManager } from "@magicblock-labs/gum-sdk";
 import {
   KEYSP_PROGRAM_ID,
   SESSION_TOKEN_V2_SEED,
+  SESSION_TOPUP_LAMPORTS,
   resolveProgramId,
   FLASH_V2_CLUSTER,
 } from "./constants";
@@ -69,4 +78,80 @@ export function validateSessionConfig(a: {
   if (a.sessionToken !== derived) {
     throw new FlashV2Error("session token does not match owner+signer derivation", "unknown");
   }
+}
+
+/** Anchor needs a Wallet to build; for a server-built tx we never sign with it
+ *  (the user's Privy wallet signs authority+feePayer later), so signing is a
+ *  no-op identity. */
+function buildOnlyWallet(publicKey: PublicKey) {
+  return {
+    publicKey,
+    signTransaction: async <T>(t: T) => t,
+    signAllTransactions: async <T>(t: T[]) => t,
+  };
+}
+
+const TARGET_PROGRAM = () => new PublicKey(resolveProgramId(FLASH_V2_CLUSTER));
+
+/**
+ * Build the on-chain createSessionV2 tx (base chain). The server generates the
+ * session keypair and partial-signs as the session signer here; the user's
+ * wallet signs the authority + feePayer slots afterward. Returns the legacy
+ * Transaction and the derived SessionTokenV2 PDA (base58).
+ */
+export async function buildCreateSessionTx(p: {
+  authority: string;
+  sessionSigner: Keypair;
+  validUntilSec: number;
+  connection: Connection;
+}): Promise<{ tx: Transaction; sessionToken: string }> {
+  const authority = new PublicKey(p.authority);
+  const sessionTokenPda = deriveSessionTokenV2(
+    p.authority,
+    p.sessionSigner.publicKey.toBase58(),
+  );
+  const manager = new SessionTokenManager(buildOnlyWallet(authority) as never, p.connection);
+  const tx: Transaction = await manager.program.methods
+    .createSessionV2(true, new BN(p.validUntilSec), new BN(SESSION_TOPUP_LAMPORTS))
+    .accountsPartial({
+      sessionToken: sessionTokenPda,
+      sessionSigner: p.sessionSigner.publicKey,
+      feePayer: authority,
+      authority,
+      targetProgram: TARGET_PROGRAM(),
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+  tx.feePayer = authority;
+  tx.recentBlockhash = (await p.connection.getLatestBlockhash("confirmed")).blockhash;
+  // Ephemeral session key co-signs its own creation (session_signer is a signer).
+  tx.partialSign(p.sessionSigner);
+  return { tx, sessionToken: sessionTokenPda.toBase58() };
+}
+
+/**
+ * Build the revokeSessionV2 tx (base chain). Refund (close) goes to feePayer =
+ * authority; while the session is still active the program requires `authority`
+ * to sign, so the user's wallet signs this. Refresh = revoke + re-create.
+ */
+export async function buildRevokeSessionTx(p: {
+  authority: string;
+  sessionSigner: string;
+  connection: Connection;
+}): Promise<Transaction> {
+  const authority = new PublicKey(p.authority);
+  const sessionTokenPda = deriveSessionTokenV2(p.authority, p.sessionSigner);
+  const manager = new SessionTokenManager(buildOnlyWallet(authority) as never, p.connection);
+  const tx: Transaction = await manager.program.methods
+    .revokeSessionV2()
+    .accountsPartial({
+      sessionToken: sessionTokenPda,
+      feePayer: authority,
+      authority,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+  tx.feePayer = authority;
+  tx.recentBlockhash = (await p.connection.getLatestBlockhash("confirmed")).blockhash;
+  return tx;
 }

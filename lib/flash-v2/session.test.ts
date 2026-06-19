@@ -1,12 +1,25 @@
-import { describe, expect, it } from "vitest";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { describe, expect, it, vi } from "vitest";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import {
   deriveSessionTokenV2,
   isSessionExpired,
   isSessionExpiringSoon,
   validateSessionConfig,
+  buildCreateSessionTx,
+  buildRevokeSessionTx,
 } from "./session";
+import { KEYSP_PROGRAM_ID } from "./constants";
 import { FlashV2Error } from "./errors";
+
+/** A connection that never hits the network: only getLatestBlockhash is used. */
+function offlineConn(): Connection {
+  const conn = new Connection("http://127.0.0.1:8899");
+  vi.spyOn(conn, "getLatestBlockhash").mockResolvedValue({
+    blockhash: Keypair.generate().publicKey.toBase58(),
+    lastValidBlockHeight: 1,
+  } as never);
+  return conn;
+}
 
 describe("session derivation + validation", () => {
   const authority = Keypair.generate().publicKey.toBase58();
@@ -51,5 +64,38 @@ describe("session derivation + validation", () => {
     expect(() =>
       validateSessionConfig({ owner: authority, signer: "not-base58!!", sessionToken: "x" }),
     ).toThrow(FlashV2Error);
+  });
+});
+
+describe("session creation/revoke tx", () => {
+  it("buildCreateSessionTx emits a Keysp createSessionV2 ix with the derived PDA + signers", async () => {
+    const authority = Keypair.generate().publicKey.toBase58();
+    const sessionSigner = Keypair.generate();
+    const { tx, sessionToken } = await buildCreateSessionTx({
+      authority,
+      sessionSigner,
+      validUntilSec: 1_900_000_000,
+      connection: offlineConn(),
+    });
+    expect(sessionToken).toBe(
+      deriveSessionTokenV2(authority, sessionSigner.publicKey.toBase58()).toBase58(),
+    );
+    const ix = tx.instructions.find((i) => i.programId.toBase58() === KEYSP_PROGRAM_ID);
+    expect(ix).toBeDefined();
+    const keys = ix!.keys;
+    expect(keys.some((k) => k.pubkey.toBase58() === sessionToken)).toBe(true);
+    expect(keys.some((k) => k.pubkey.equals(sessionSigner.publicKey) && k.isSigner)).toBe(true);
+    expect(keys.some((k) => k.pubkey.toBase58() === authority && k.isSigner)).toBe(true);
+    expect(tx.feePayer?.toBase58()).toBe(authority);
+    // The session signer co-signed; the user wallet's signature is still pending.
+    expect(tx.signatures.some((s) => s.publicKey.equals(sessionSigner.publicKey) && s.signature)).toBe(true);
+  });
+
+  it("buildRevokeSessionTx targets Keysp revokeSessionV2", async () => {
+    const authority = Keypair.generate().publicKey.toBase58();
+    const sessionSigner = Keypair.generate().publicKey.toBase58();
+    const tx = await buildRevokeSessionTx({ authority, sessionSigner, connection: offlineConn() });
+    expect(tx.instructions.some((i) => i.programId.toBase58() === KEYSP_PROGRAM_ID)).toBe(true);
+    expect(tx.feePayer?.toBase58()).toBe(authority);
   });
 });
