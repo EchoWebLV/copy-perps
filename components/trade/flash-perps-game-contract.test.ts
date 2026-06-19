@@ -46,7 +46,9 @@ describe("Flash fast perps game contract", () => {
     const page = source();
 
     expect(page).toContain('fetch("/api/flash/perp"');
-    expect(page).toContain('fetch("/api/flash/perp/positions"');
+    // The positions poll URL is flag-gated (v2 vs v1); the v1 endpoint stays the
+    // flag-off default — see fastperps-v2-contract.test.ts for the full ternary.
+    expect(page).toContain('"/api/flash/perp/positions"');
     expect(page).toContain("signAndSendFlashTransaction");
     expect(page).toContain("transactionB64");
   });

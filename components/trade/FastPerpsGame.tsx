@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePrivy, useSessionSigners, type User } from "@privy-io/react-auth";
-import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import {
+  useSignAndSendTransaction,
+  useSignTransaction,
+} from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
 import {
@@ -42,6 +45,13 @@ import {
   formatTailSigningError,
   sendDepositWithSponsorFallback,
 } from "@/components/tail/deposit-signing";
+import { isFlashV2Client } from "@/lib/flash-v2/client-flag";
+import { signAndSubmitErTx } from "@/components/trade/er-submit";
+import {
+  buildSelfV2CloseBody,
+  buildSelfV2OpenBody,
+  synthFlashV2Position,
+} from "@/components/trade/self-v2-open";
 import {
   ACCENT,
   BG,
@@ -75,6 +85,7 @@ const PRIVY_INSTANT_TRADING_CONFIGURED = Boolean(PRIVY_INSTANT_SIGNER_ID);
 
 const FLASH_SCALP_MARKETS = ["BTC", "ETH", "SOL"] as const satisfies readonly FlashMarketSymbol[];
 const STAKES = [1, 5, 10, 50] as const;
+const FLASH_V2_MIN_USDC = 5; // the v2 self-directed open route floors stake at $5.
 const TP_PRESETS = [50, 100, 200] as const; // % ROI on collateral
 const SL_PRESETS = [-25, -50, -75] as const;
 const STANDARD_LEVERAGES = [20, 50, 100] as const;
@@ -293,12 +304,18 @@ export function FastPerpsGame() {
   const { addSessionSigners } = useSessionSigners();
   const wallet = useEmbeddedSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
+  // Sign-only path for user-signed Flash v2 ER trades (flag-on only); v1 keeps
+  // using the sign-and-send path above.
+  const { signTransaction } = useSignTransaction();
   const liveFlashMarks = useFlashLiveMarks();
+  // Flag-on (NEXT_PUBLIC_FEATURE_FLASH_V2): the Trade tab executes on the v2 ER
+  // rail. Flag-off (default) every path below is byte-for-byte the v1 behavior.
+  const flashV2 = isFlashV2Client();
 
   const [market, setMarket] = useState<Market>("SOL");
   const [side, setSide] = useState<TradeSide>("long");
   const [tradeMode, setTradeMode] = useState<TradeMode>("standard");
-  const [stake, setStake] = useState(1);
+  const [stake, setStake] = useState(flashV2 ? FLASH_V2_MIN_USDC : 1);
   const [leverage, setLeverage] = useState(20);
   const [customStake, setCustomStake] = useState("");
   const [positions, setPositions] = useState<FlashPosition[]>([]);
@@ -389,8 +406,9 @@ export function FastPerpsGame() {
   const readyToTrade = Boolean(ready && authenticated && wallet && !busy);
   const tradeAllowed = notional >= FLASH_MIN_NOTIONAL_USD;
   const leverageOptions = useMemo(
-    () => flashLeverageOptionsForMarket(market, tradeMode),
-    [market, tradeMode],
+    // Flag-on caps at the v2 standard ladder (≤100x); the route rejects >100x.
+    () => flashLeverageOptionsForMarket(market, flashV2 ? "standard" : tradeMode),
+    [market, tradeMode, flashV2],
   );
   const instantTradingEnabled =
     hasServerSideSolanaWallet(user, wallet?.address) ||
@@ -452,14 +470,18 @@ export function FastPerpsGame() {
     }
     const token = await getAccessToken();
     if (!token) return;
-    const resp = await fetch("/api/flash/perp/positions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+    const resp = await fetch(
+      // Flag-on reads the v2 venue positions; flag-off keeps the v1 endpoint.
+      flashV2 ? "/api/trade/perp/positions" : "/api/flash/perp/positions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ walletAddress: wallet.address }),
       },
-      body: JSON.stringify({ walletAddress: wallet.address }),
-    });
+    );
     if (!resp.ok) return;
     const body = (await resp.json()) as { positions?: FlashPosition[] };
     const merged = mergeFlashEntryCostCache(
@@ -475,7 +497,7 @@ export function FastPerpsGame() {
       saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
     }
     setPositions(merged);
-  }, [authenticated, getAccessToken, wallet?.address]);
+  }, [authenticated, getAccessToken, wallet?.address, flashV2]);
 
   useEffect(() => {
     void loadPositions();
@@ -591,7 +613,163 @@ export function FastPerpsGame() {
     return body as FlashCloseResponse;
   }, [getAccessToken, market, side, wallet?.address]);
 
+  // Flag-on self-directed OPEN: thin v2 body → unsigned ER tx → user signs
+  // (sign-only) → broadcast to the ER → optimistic synth position, reconciled by
+  // the next positions poll. No bet row, no instant session-signer path.
+  const openLiveV2 = useCallback(async () => {
+    if (!readyToTrade || selectedPosition) return;
+    if (!tradeAllowed) {
+      setError(FLASH_MIN_NOTIONAL_TEXT);
+      return;
+    }
+    if (!wallet?.address) {
+      setError("Connect a wallet first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setStatus("Preparing trade...");
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("not authed");
+      const resp = await fetch("/api/trade/perp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(
+          buildSelfV2OpenBody({
+            market,
+            side,
+            stakeUsdc: effectiveStake,
+            leverage,
+            walletAddress: wallet.address,
+          }),
+        ),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
+      setStatus("Signing transaction...");
+      await signAndSubmitErTx({
+        txBytes: b64ToBytes(body.transactionB64),
+        sign: async (bytes) => {
+          if (!wallet) throw new Error("Wallet not ready");
+          const { signedTransaction } = await signTransaction({
+            transaction: bytes,
+            wallet,
+          });
+          return signedTransaction;
+        },
+      });
+      upsertPosition(
+        synthFlashV2Position({
+          market,
+          side,
+          stakeUsdc: effectiveStake,
+          leverage,
+          quote: body.quote,
+          nowMs: Date.now(),
+        }) as FlashPosition,
+      );
+      setStatus("Opened");
+      await loadPositions();
+    } catch (err) {
+      console.error("[trade v2] open failed:", err);
+      setError(formatTailSigningError(err).slice(0, 220));
+      setStatus(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    effectiveStake,
+    getAccessToken,
+    leverage,
+    loadPositions,
+    market,
+    readyToTrade,
+    selectedPosition,
+    side,
+    signTransaction,
+    tradeAllowed,
+    upsertPosition,
+    wallet,
+  ]);
+
+  // Flag-on self-directed CLOSE: v2 close plan (unsigned ER tx) → user signs →
+  // broadcast → optimistic remove, reconciled by the positions poll.
+  const closeLiveV2 = useCallback(async () => {
+    if (!readyToTrade || !selectedPosition) return;
+    if (!wallet?.address) {
+      setError("Connect a wallet first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setStatus("Preparing close...");
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("not authed");
+      const resp = await fetch("/api/trade/perp/close", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(
+          buildSelfV2CloseBody({
+            market: selectedPosition.symbol,
+            side: selectedPosition.side,
+            walletAddress: wallet.address,
+          }),
+        ),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
+      // The v2 rail returns an unsigned ER close tx; a Pacifica fall-through (no
+      // v2 position) would carry no transactionB64, in which case we only prune.
+      if (body.phase === "close" && typeof body.transactionB64 === "string") {
+        setStatus("Signing close...");
+        await signAndSubmitErTx({
+          txBytes: b64ToBytes(body.transactionB64),
+          sign: async (bytes) => {
+            if (!wallet) throw new Error("Wallet not ready");
+            const { signedTransaction } = await signTransaction({
+              transaction: bytes,
+              wallet,
+            });
+            return signedTransaction;
+          },
+        });
+      }
+      forgetFlashEntryCost(entryCostCacheRef.current, selectedPosition);
+      saveFlashEntryCostCache(wallet?.address, entryCostCacheRef.current);
+      setPositions((current) =>
+        current.filter((p) => p.positionPubkey !== selectedPosition.positionPubkey),
+      );
+      setStatus("Closed");
+      await loadPositions();
+    } catch (err) {
+      console.error("[trade v2] close failed:", err);
+      setError(formatTailSigningError(err).slice(0, 220));
+      setStatus(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    getAccessToken,
+    loadPositions,
+    readyToTrade,
+    selectedPosition,
+    signTransaction,
+    wallet,
+  ]);
+
   const openLive = useCallback(async () => {
+    if (isFlashV2Client()) {
+      await openLiveV2();
+      return;
+    }
     if (!readyToTrade || selectedPosition) return;
     if (!tradeAllowed) {
       setError(FLASH_MIN_NOTIONAL_TEXT);
@@ -629,6 +807,7 @@ export function FastPerpsGame() {
   }, [
     loadPositions,
     ensureInstantTrading,
+    openLiveV2,
     readyToTrade,
     requestOpen,
     selectedPosition,
@@ -638,6 +817,10 @@ export function FastPerpsGame() {
   ]);
 
   const closeLive = useCallback(async () => {
+    if (isFlashV2Client()) {
+      await closeLiveV2();
+      return;
+    }
     if (!readyToTrade || !selectedPosition) return;
     setBusy(true);
     setError(null);
@@ -679,6 +862,7 @@ export function FastPerpsGame() {
   }, [
     loadPositions,
     ensureInstantTrading,
+    closeLiveV2,
     readyToTrade,
     requestClose,
     selectedPosition,
@@ -1046,28 +1230,32 @@ export function FastPerpsGame() {
             )}
           </div>
 
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
-            {([false, true] as const).map((next) => {
-              const isActive = autopilotMode === next;
-              return (
-                <button
-                  key={String(next)}
-                  type="button"
-                  onClick={() => setAutopilotMode(next)}
-                  className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                  style={{
-                    background: isActive ? FG : PANEL_2,
-                    color: isActive ? BG : FG,
-                    border: `1px solid ${isActive ? FG : FAINT}`,
-                  }}
-                >
-                  {next ? "Autopilot" : "Manual"}
-                </button>
-              );
-            })}
-          </div>
+          {/* Autopilot runs on the v1 server loop; hide it flag-on so a v2
+              manual session can't merge with v1 autopilot positions. */}
+          {!flashV2 && (
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              {([false, true] as const).map((next) => {
+                const isActive = autopilotMode === next;
+                return (
+                  <button
+                    key={String(next)}
+                    type="button"
+                    onClick={() => setAutopilotMode(next)}
+                    className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                    style={{
+                      background: isActive ? FG : PANEL_2,
+                      color: isActive ? BG : FG,
+                      border: `1px solid ${isActive ? FG : FAINT}`,
+                    }}
+                  >
+                    {next ? "Autopilot" : "Manual"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-          {autopilotMode ? (
+          {!flashV2 && autopilotMode ? (
             <AutopilotPanel />
           ) : (
             <>
@@ -1092,7 +1280,10 @@ export function FastPerpsGame() {
                   Stake
                 </div>
                 <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                  {STAKES.map((nextStake) => {
+                  {STAKES.filter(
+                    // The v2 open route floors stake at $5; hide the $1 chip.
+                    (nextStake) => !flashV2 || nextStake >= FLASH_V2_MIN_USDC,
+                  ).map((nextStake) => {
                     const active = !customStake && stake === nextStake;
                     return (
                       <button
@@ -1137,30 +1328,34 @@ export function FastPerpsGame() {
                     {leverage}x
                   </div>
                 </div>
-                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {(["standard", "degen"] as const).map((nextMode) => {
-                    const active = tradeMode === nextMode;
-                    return (
-                      <button
-                        key={nextMode}
-                        type="button"
-                        onClick={() => {
-                          setTradeMode(nextMode);
-                          setLeverage(maxLeverageForSelection(market, nextMode));
-                          setError(null);
-                        }}
-                        className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
-                        style={{
-                          background: active ? FG : PANEL_2,
-                          color: active ? BG : FG,
-                          border: `1px solid ${active ? FG : FAINT}`,
-                        }}
-                      >
-                        {nextMode}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Degen leverage (>100x) isn't supported on the v2 route; hide
+                    the mode toggle flag-on and stay on the standard ladder. */}
+                {!flashV2 && (
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    {(["standard", "degen"] as const).map((nextMode) => {
+                      const active = tradeMode === nextMode;
+                      return (
+                        <button
+                          key={nextMode}
+                          type="button"
+                          onClick={() => {
+                            setTradeMode(nextMode);
+                            setLeverage(maxLeverageForSelection(market, nextMode));
+                            setError(null);
+                          }}
+                          className="rounded-lg px-2 py-2 text-[11px] font-black uppercase tracking-widest transition active:scale-[0.97]"
+                          style={{
+                            background: active ? FG : PANEL_2,
+                            color: active ? BG : FG,
+                            border: `1px solid ${active ? FG : FAINT}`,
+                          }}
+                        >
+                          {nextMode}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                   {leverageOptions.map((nextLeverage) => {
                     const active = leverage === nextLeverage;
@@ -1267,12 +1462,15 @@ export function FastPerpsGame() {
                 </div>
               </div>
 
-              <TriggerChips
-                triggers={selectedTriggers}
-                disabled={busy}
-                onPlace={(kind, roiPct) => void requestTrigger(kind, roiPct)}
-                onCancel={(kind) => void cancelTrigger(kind)}
-              />
+              {/* TP/SL triggers have no v2 rail yet; hide them flag-on. */}
+              {!flashV2 && (
+                <TriggerChips
+                  triggers={selectedTriggers}
+                  disabled={busy}
+                  onPlace={(kind, roiPct) => void requestTrigger(kind, roiPct)}
+                  onCancel={(kind) => void cancelTrigger(kind)}
+                />
+              )}
             </>
           )}
 
