@@ -6,11 +6,25 @@
 // submit can't resolve the ER / address-lookup tables (same reason CloseButton
 // and WithdrawButton sign-only + broadcast themselves). Trades go to the ER,
 // never the base layer.
-import { Connection, SendTransactionError } from "@solana/web3.js";
+//
+// The builder bakes a STALE blockhash (verified: invalid on the ER the instant
+// the tx is built), so we refresh recentBlockhash from the ER right before
+// signing. The self-directed open/close is single-sig (owner only, no server
+// partial-sig, no address-lookup tables), so replacing the blockhash invalidates
+// nothing — and it's the only blockhash the ER will accept.
+import {
+  Connection,
+  SendTransactionError,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { flashV2ErRpc } from "@/lib/flash-v2/client-er";
 
-/** Minimal submit surface so tests can inject a fake connection. */
+/** Minimal connection surface so tests can inject a fake. */
 export interface ErSubmitConnection {
+  getLatestBlockhash: () => Promise<{
+    blockhash: string;
+    lastValidBlockHeight?: number;
+  }>;
   sendRawTransaction: (
     tx: Uint8Array,
     opts: { skipPreflight: boolean; maxRetries: number },
@@ -26,11 +40,17 @@ export async function signAndSubmitErTx(args: {
   makeConnection?: (rpc: string) => ErSubmitConnection;
   erRpc?: string;
 }): Promise<string> {
-  const signedTransaction = await args.sign(args.txBytes);
   const rpc = args.erRpc ?? flashV2ErRpc();
   const conn: ErSubmitConnection = args.makeConnection
     ? args.makeConnection(rpc)
     : new Connection(rpc, "processed");
+
+  // Refresh the (stale) builder blockhash with a current ER blockhash, then sign.
+  const tx = VersionedTransaction.deserialize(args.txBytes);
+  const { blockhash } = await conn.getLatestBlockhash();
+  tx.message.recentBlockhash = blockhash;
+
+  const signedTransaction = await args.sign(tx.serialize());
   try {
     return await conn.sendRawTransaction(signedTransaction, {
       skipPreflight: true,

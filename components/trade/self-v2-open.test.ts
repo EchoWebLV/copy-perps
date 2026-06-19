@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  Keypair,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import {
   buildSelfV2OpenBody,
   buildSelfV2CloseBody,
   synthFlashV2Position,
 } from "./self-v2-open";
 import { signAndSubmitErTx } from "./er-submit";
+
+// A real serialized (unsigned) v0 tx with a placeholder blockhash, so the helper
+// can deserialize it and refresh the blockhash.
+function makeTxBytes(): Uint8Array {
+  const msg = new TransactionMessage({
+    payerKey: Keypair.generate().publicKey,
+    recentBlockhash: PublicKey.default.toBase58(),
+    instructions: [],
+  }).compileToV0Message();
+  return new VersionedTransaction(msg).serialize();
+}
 
 describe("buildSelfV2OpenBody / buildSelfV2CloseBody", () => {
   it("builds the thin v2 open body (no mode/instant)", () => {
@@ -69,22 +86,34 @@ describe("synthFlashV2Position", () => {
 });
 
 describe("signAndSubmitErTx", () => {
-  it("signs (sign-only) then broadcasts raw to the ER with skipPreflight", async () => {
+  // A valid 32-byte base58 string (a blockhash is encoded like a pubkey).
+  const FRESH = Keypair.generate().publicKey.toBase58();
+
+  it("refreshes the blockhash from the ER, signs, then broadcasts with skipPreflight", async () => {
     const signed = new Uint8Array([7, 7]);
-    const sign = vi.fn(async () => signed);
+    // Capture the bytes handed to the signer to confirm the blockhash was swapped.
+    let signedMsgBlockhash = "";
+    const sign = vi.fn(async (bytes: Uint8Array) => {
+      signedMsgBlockhash = VersionedTransaction.deserialize(bytes).message
+        .recentBlockhash;
+      return signed;
+    });
     const sendRawTransaction = vi.fn(async () => "ERSIG");
-    const makeConnection = vi.fn(() => ({ sendRawTransaction }));
+    const getLatestBlockhash = vi.fn(async () => ({ blockhash: FRESH }));
+    const makeConnection = vi.fn(() => ({ getLatestBlockhash, sendRawTransaction }));
 
     const sig = await signAndSubmitErTx({
-      txBytes: new Uint8Array([1]),
+      txBytes: makeTxBytes(),
       sign,
       makeConnection,
       erRpc: "https://er.example",
     });
 
     expect(sig).toBe("ERSIG");
-    expect(sign).toHaveBeenCalledWith(new Uint8Array([1]));
     expect(makeConnection).toHaveBeenCalledWith("https://er.example");
+    expect(getLatestBlockhash).toHaveBeenCalled();
+    // The tx the user signs carries the FRESH ER blockhash, not the builder's.
+    expect(signedMsgBlockhash).toBe(FRESH);
     expect(sendRawTransaction).toHaveBeenCalledWith(signed, {
       skipPreflight: true,
       maxRetries: 3,
@@ -95,11 +124,14 @@ describe("signAndSubmitErTx", () => {
     const sendRawTransaction = vi.fn();
     await expect(
       signAndSubmitErTx({
-        txBytes: new Uint8Array([1]),
+        txBytes: makeTxBytes(),
         sign: async () => {
           throw new Error("Wallet not ready");
         },
-        makeConnection: () => ({ sendRawTransaction }),
+        makeConnection: () => ({
+          getLatestBlockhash: async () => ({ blockhash: FRESH }),
+          sendRawTransaction,
+        }),
       }),
     ).rejects.toThrow("Wallet not ready");
     expect(sendRawTransaction).not.toHaveBeenCalled();
