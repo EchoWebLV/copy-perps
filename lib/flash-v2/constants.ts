@@ -17,6 +17,17 @@ export const FLASH_V2_CLUSTER: FlashCluster =
 /** Gate: while false, nothing in this module is used by routes. */
 export const FEATURE_FLASH_V2 = process.env.FEATURE_FLASH_V2 === "true";
 
+/** MagicBlock session-keys program (Keysp); same id on mainnet + devnet. */
+export const KEYSP_PROGRAM_ID = "KeyspM2ssCJbqUhQ4k7sveSiY4WjnYsrXkC8oDbwde5";
+/** SessionTokenV2 PDA seed prefix — the "_v2" is load-bearing (session notes §3). */
+export const SESSION_TOKEN_V2_SEED = "session_token_v2";
+/** The program hard-rejects valid_until beyond now + 7d (ValidityTooLong). */
+export const MAX_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+/** Default session lifetime — short on purpose (the server custodies the secret). */
+export const DEFAULT_SESSION_TTL_SECONDS = 12 * 60 * 60;
+/** One-time rent top-up funding the session token (refunded on revoke). */
+export const SESSION_TOPUP_LAMPORTS = Math.round(0.01 * 1e9);
+
 export function resolveProgramId(cluster: FlashCluster): string {
   return cluster === "mainnet"
     ? "FTv2RxXarPfNta45HTTMVaGvjzsGg27FXJ3hEKWBhrzV"

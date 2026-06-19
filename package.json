@@ -24,6 +24,7 @@
     "@ai-sdk/openai": "^3.0.71",
     "@ai-sdk/xai": "^3.0.95",
     "@coral-xyz/anchor": "^0.32.1",
+    "@magicblock-labs/gum-sdk": "^3.0.10",
     "@neondatabase/serverless": "^1.1.0",
     "@noble/ed25519": "^3.1.0",
     "@privy-io/react-auth": "^3.23.1",
