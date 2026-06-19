@@ -9,7 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessionKeys } from "@/lib/db/schema";
 import { encryptSeed, decryptSeed, generateAgentKeypair } from "@/lib/wallets/agent";
-import { isSessionRowActive } from "./session";
+import { isSessionRowActive, assertSessionReplaceable } from "./session";
 
 export interface SessionKeyRecord {
   userId: string;
@@ -27,8 +27,9 @@ export function generateSessionKeypair(): { publicKeyB58: string; seed: Uint8Arr
 
 /**
  * Insert a generated-but-not-yet-confirmed session (bound_at = null). One
- * session per user — a re-enable overwrites any prior row (the old on-chain
- * session should be revoked first by the caller).
+ * session per user. Refuses to overwrite a still-BOUND row (that would orphan
+ * the old on-chain session): throws SessionAlreadyBoundError carrying the prior
+ * session so the caller revokes it first. An unbound/stale row is replaced.
  */
 export async function createPendingSessionKey(p: {
   userId: string;
@@ -38,6 +39,16 @@ export async function createPendingSessionKey(p: {
   seed: Uint8Array;
   validUntil: Date;
 }): Promise<void> {
+  const [existing] = await db
+    .select({
+      boundAt: sessionKeys.boundAt,
+      sessionPubkey: sessionKeys.sessionPubkey,
+      sessionTokenPda: sessionKeys.sessionTokenPda,
+    })
+    .from(sessionKeys)
+    .where(eq(sessionKeys.userId, p.userId))
+    .limit(1);
+  assertSessionReplaceable(existing);
   const values = {
     userId: p.userId,
     mainPubkey: p.mainPubkey,

@@ -10,6 +10,8 @@ import {
   isSessionRowActive,
   signTradeWithSession,
   submitErTx,
+  assertSessionReplaceable,
+  SessionAlreadyBoundError,
 } from "./session";
 import * as rpc from "./rpc";
 import { KEYSP_PROGRAM_ID } from "./constants";
@@ -57,6 +59,22 @@ describe("session derivation + validation", () => {
     expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now - 1) }, now)).toBe(false);
   });
 
+  it("assertSessionReplaceable throws on a bound row, allows unbound/none", () => {
+    expect(() => assertSessionReplaceable(undefined)).not.toThrow();
+    expect(() =>
+      assertSessionReplaceable({ boundAt: null, sessionPubkey: "p", sessionTokenPda: "t" }),
+    ).not.toThrow();
+    let err: unknown;
+    try {
+      assertSessionReplaceable({ boundAt: new Date(0), sessionPubkey: "PRIOR", sessionTokenPda: "TOKEN" });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(SessionAlreadyBoundError);
+    expect((err as SessionAlreadyBoundError).priorSessionPubkey).toBe("PRIOR");
+    expect((err as SessionAlreadyBoundError).priorSessionTokenPda).toBe("TOKEN");
+  });
+
   it("validateSessionConfig accepts a matching token, rejects a mismatch", () => {
     const token = deriveSessionTokenV2(authority, signer).toBase58();
     expect(() =>
@@ -93,10 +111,18 @@ describe("session creation/revoke tx", () => {
     );
     const ix = tx.instructions.find((i) => i.programId.toBase58() === KEYSP_PROGRAM_ID);
     expect(ix).toBeDefined();
+    // IDL account order: session_token, session_signer, fee_payer, authority,
+    // target_program, system_program. fee_payer + authority alias the same
+    // wallet, so pin each slot positionally (a .some() can't tell them apart).
     const keys = ix!.keys;
-    expect(keys.some((k) => k.pubkey.toBase58() === sessionToken)).toBe(true);
-    expect(keys.some((k) => k.pubkey.equals(sessionSigner.publicKey) && k.isSigner)).toBe(true);
-    expect(keys.some((k) => k.pubkey.toBase58() === authority && k.isSigner)).toBe(true);
+    expect(keys[0]!.pubkey.toBase58()).toBe(sessionToken);
+    expect(keys[1]!.pubkey.equals(sessionSigner.publicKey)).toBe(true);
+    expect(keys[1]!.isSigner).toBe(true);
+    expect(keys[2]!.pubkey.toBase58()).toBe(authority); // fee_payer: writable signer
+    expect(keys[2]!.isSigner && keys[2]!.isWritable).toBe(true);
+    expect(keys[3]!.pubkey.toBase58()).toBe(authority); // authority: signer, not writable
+    expect(keys[3]!.isSigner).toBe(true);
+    expect(keys[3]!.isWritable).toBe(false);
     expect(tx.feePayer?.toBase58()).toBe(authority);
     // The session signer co-signed; the user wallet's signature is still pending.
     expect(tx.signatures.some((s) => s.publicKey.equals(sessionSigner.publicKey) && s.signature)).toBe(true);

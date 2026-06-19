@@ -3,6 +3,7 @@ export type FlashErrorCode =
   | "onboarding_required"
   | "settling"
   | "session_expired"
+  | "session_already_bound"
   | "unknown";
 
 export class FlashV2Error extends Error {

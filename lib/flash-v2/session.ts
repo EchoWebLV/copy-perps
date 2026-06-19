@@ -72,6 +72,32 @@ export function isSessionRowActive(
   return row.boundAt !== null && row.validUntil.getTime() > nowMs;
 }
 
+/** Thrown when creating a session would clobber a still-bound one. Carries the
+ *  prior session so the caller can build a revoke tx for it first. */
+export class SessionAlreadyBoundError extends FlashV2Error {
+  constructor(
+    readonly priorSessionPubkey: string,
+    readonly priorSessionTokenPda: string,
+  ) {
+    super("a bound session already exists — revoke it before creating a new one", "session_already_bound");
+    this.name = "SessionAlreadyBoundError";
+  }
+}
+
+/**
+ * Guard before persisting a new session: refuse to replace a still-BOUND row.
+ * Overwriting it would orphan the old on-chain session (lost secret, locked
+ * rent, a dangling Flash-scoped signer with no revoke path). An unbound
+ * (created-but-unconfirmed) row is safe to overwrite. Pure / db-free.
+ */
+export function assertSessionReplaceable(
+  existing: { boundAt: Date | null; sessionPubkey: string; sessionTokenPda: string } | undefined,
+): void {
+  if (existing && existing.boundAt !== null) {
+    throw new SessionAlreadyBoundError(existing.sessionPubkey, existing.sessionTokenPda);
+  }
+}
+
 /**
  * Reject a malformed or mismatched session BEFORE building a trade. The Flash
  * API silently falls back to owner-signing on a bad session and fails later
