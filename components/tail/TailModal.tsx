@@ -37,6 +37,9 @@ import {
   PacificaCreditWaitTimeoutError,
   retryTailRequestWithCreditWait,
 } from "./tail-settling-retry";
+import { isFlashV2Client } from "@/lib/flash-v2/client-flag";
+import { enableFlashV2Session } from "./session-enable";
+import { buildWhaleV2Body, flashV2WhaleOpenToOpenResponse } from "./whale-v2-open";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -445,6 +448,115 @@ export function TailModal({ open, onClose, source }: Props) {
       }
       if (source.kind === "whale" && preflightBlocked) {
         throw new Error(preflight.error ?? "This copy is not available.");
+      }
+
+      // Flash v2 client repoint (Option A): when the flag is on, the WHALE source
+      // opens via the session-signed /api/bet/whale rail. bot + self-directed +
+      // flag-off all fall through to the Flash v1 /api/flash/perp path below.
+      if (isFlashV2Client() && source.kind === "whale") {
+        const whale = {
+          whaleId: source.whaleId,
+          sourceAccount: source.sourceAccount,
+          displayName: source.displayName,
+        };
+        const confirmBase = async (signature: string) => {
+          await new Connection(RPC, "confirmed").confirmTransaction(
+            signature,
+            "confirmed",
+          );
+        };
+        const signBaseTx = async (transactionB64: string, statusText: string) => {
+          setStatus(statusText);
+          const { signature } = await sendDepositWithSponsorFallback({
+            transaction: b64ToBytes(transactionB64),
+            wallet,
+            signAndSendTransaction,
+            preferSponsored: false,
+          });
+          const bs58 = (await import("bs58")).default;
+          await confirmBase(
+            typeof signature === "string" ? signature : bs58.encode(signature),
+          );
+        };
+        const requestWhaleV2 = async (pos: WhaleTailPosition) => {
+          const resp = await fetch("/api/bet/whale", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(
+              buildWhaleV2Body({
+                whale,
+                position: pos,
+                stakeUsdc: effectiveStake,
+                leverage: copyLeverage ?? pos.leverage,
+                walletAddress: wallet.address,
+                autoCloseOnSourceClose: autoCloseOnSource,
+              }),
+            ),
+          });
+          const json = (await resp.json().catch(() => ({}))) as {
+            phase?: string;
+            error?: string;
+            steps?: { name: string; transactionB64: string }[];
+            betId?: string;
+            txSig?: string;
+            source?: Parameters<typeof flashV2WhaleOpenToOpenResponse>[0]["source"];
+          };
+          if (!resp.ok) throw new Error(json.error ?? `HTTP ${resp.status}`);
+          return json;
+        };
+        const openWhaleV2 = async (
+          pos: WhaleTailPosition,
+          index: number,
+          total: number,
+        ): Promise<OpenResponse> => {
+          setStatus(
+            total > 1
+              ? `Copying ${index}/${total}: ${pos.asset} ${pos.side.toUpperCase()}…`
+              : `Copying ${pos.asset} ${pos.side.toUpperCase()}…`,
+          );
+          let resp = await requestWhaleV2(pos);
+          if (resp.phase === "enable-session") {
+            // Silent inline enable (no separate consent screen, per the UX choice).
+            setStatus("Enabling auto-copy…");
+            await enableFlashV2Session({
+              getAccessToken: async () => token,
+              wallet,
+              signAndSendTransaction,
+              confirm: confirmBase,
+            });
+            resp = await requestWhaleV2(pos);
+          }
+          if (resp.phase === "onboard" && Array.isArray(resp.steps)) {
+            for (const step of resp.steps) {
+              await signBaseTx(step.transactionB64, "Setting up your Flash account…");
+            }
+            resp = await requestWhaleV2(pos);
+          }
+          if (resp.phase === "enable-session") {
+            throw new Error("Could not enable auto-copy. Try again.");
+          }
+          if (resp.phase !== "open" || !resp.betId || !resp.txSig || !resp.source) {
+            throw new Error(
+              "Could not open — make sure you've deposited USDC into your Flash account.",
+            );
+          }
+          setStatus("Opened on Flash v2");
+          return flashV2WhaleOpenToOpenResponse({
+            betId: resp.betId,
+            txSig: resp.txSig,
+            source: resp.source,
+          });
+        };
+        const v2Opens: OpenResponse[] = [];
+        for (const [idx, pos] of positionsToCopy.entries()) {
+          v2Opens.push(await openWhaleV2(pos, idx + 1, positionsToCopy.length));
+        }
+        setSuccess({ opens: v2Opens });
+        setStatus(null);
+        return;
       }
 
       const requestTail = async (copyPosition?: WhaleTailPosition) => {
