@@ -20,7 +20,10 @@ export function flashV2PositionKey(symbol: string, side: Side): string {
 
 /** The serializable subset of FastPerpsGame's FlashPosition this rail produces.
  *  Structurally assignable to that client interface (triggers/openTime omitted —
- *  the venue snapshot has neither; the strip treats them as absent). */
+ *  the venue snapshot has neither; the strip treats them as absent). openTime is
+ *  deliberately omitted (not 0): the entry-cost cache's compatibleOpenTime treats
+ *  a finite 0 as a real, far-in-the-past timestamp and would reject the merge,
+ *  dropping the optimistic open fee; an absent openTime short-circuits it. */
 export interface FlashV2SelfPosition {
   symbol: string;
   side: Side;
@@ -35,7 +38,6 @@ export interface FlashV2SelfPosition {
   liquidationPriceUsd?: number;
   pnlUsd?: number;
   isProfitable?: boolean;
-  openTime: number;
 }
 
 export function venuePositionToFlashShape(p: VenuePosition): FlashV2SelfPosition {
@@ -64,7 +66,7 @@ export function venuePositionToFlashShape(p: VenuePosition): FlashV2SelfPosition
     liquidationPriceUsd: p.liquidationPrice > 0 ? p.liquidationPrice : undefined,
     pnlUsd,
     isProfitable: pnlUsd != null ? pnlUsd >= 0 : undefined,
-    // The owner snapshot carries no open timestamp; 0 ⇒ "unknown" to the strip.
-    openTime: 0,
+    // openTime intentionally omitted — see the interface note (a finite 0 would
+    // defeat the entry-cost merge that carries the optimistic open fee).
   };
 }

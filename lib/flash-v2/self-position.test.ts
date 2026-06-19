@@ -42,11 +42,12 @@ describe("venuePositionToFlashShape", () => {
       collateralSymbol: "USDC",
       leverage: 5,
       liquidationPriceUsd: 80,
-      openTime: 0,
     });
     // long +10% of $100 size = +$10.
     expect(out.pnlUsd).toBeCloseTo(10);
     expect(out.isProfitable).toBe(true);
+    // openTime is omitted (not 0) so the entry-cost merge isn't rejected.
+    expect("openTime" in out).toBe(false);
   });
 
   it("reports a losing short as not profitable", () => {

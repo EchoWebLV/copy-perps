@@ -198,7 +198,10 @@ describe("Flash fast perps game contract", () => {
 
     expect(page).not.toContain("seedFlashEntryCostCache");
     expect(page).not.toContain("const seeded = mergeFlashEntryCostCache");
-    expect(page).toContain("setPositions(merged)");
+    // Positions come from the merged/reconciled list (flag-on appends preserved
+    // synths into `next`); never a seeded fallback.
+    expect(page).toContain("const merged = mergeFlashEntryCostCache(");
+    expect(page).toContain("setPositions(next)");
   });
 
   it("wires opt-in TP/SL trigger orders with instant auto-sign", () => {

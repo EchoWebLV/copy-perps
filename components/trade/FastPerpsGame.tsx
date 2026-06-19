@@ -93,6 +93,10 @@ const DEGEN_LEVERAGES = [125, 250, 500] as const;
 const FLASH_MIN_NOTIONAL_USD = 10;
 const FLASH_MIN_NOTIONAL_TEXT = "Flash minimum position is $10 notional";
 const FLASH_POSITION_RECONCILE_MS = 10_000;
+// Flag-on (v2) only: how long an optimistic synth position survives venue polls
+// that don't yet show it. The ER indexer lags the just-submitted open by a few
+// seconds; past this window a still-missing synth is assumed failed and dropped.
+const OPTIMISTIC_SYNTH_GRACE_MS = 30_000;
 const MAX_GRAPH_POINTS = 120;
 const GRAPH_SAMPLE_MS = 80;
 const GRAPH_SMOOTHING = 0.6; // snappy: tip tracks each Flash mark, no jitter
@@ -331,6 +335,9 @@ export function FastPerpsGame() {
   // Manual view. Set by the mount probe below.
   const [autopilotSessionActive, setAutopilotSessionActive] = useState(false);
   const entryCostCacheRef = useRef<FlashEntryCostCache>(new Map());
+  // Mirrors `positions` so loadPositions can preserve a recent optimistic synth
+  // (flag-on) without a stale closure or re-creating the callback per render.
+  const positionsRef = useRef<FlashPosition[]>([]);
 
   const effectiveStake = useMemo(() => {
     const parsed = Number(customStake);
@@ -463,6 +470,10 @@ export function FastPerpsGame() {
     entryCostCacheRef.current = loadFlashEntryCostCache(wallet?.address);
   }, [wallet?.address]);
 
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
+
   const loadPositions = useCallback(async () => {
     if (!authenticated || !wallet?.address) {
       setPositions([]);
@@ -488,15 +499,35 @@ export function FastPerpsGame() {
       entryCostCacheRef.current,
       body.positions ?? [],
     );
-    // Only prune when we have a real position list. A transient empty fetch
+    // Flag-on: the ER indexer lags a just-submitted open by a few seconds, so a
+    // blind replace would wipe the optimistic synth position before the venue
+    // reflects it. Carry forward a recent synth (recent openTime — only synths
+    // carry one; mapped venue rows omit it) that the fetch doesn't yet show,
+    // until the venue surfaces it (matched by the shared flashv2:market:side key)
+    // or it ages out. Flag-off is unchanged.
+    let next = merged;
+    if (flashV2) {
+      const fetchedKeys = new Set(merged.map((p) => p.positionPubkey));
+      const now = Date.now();
+      const pendingSynths = positionsRef.current.filter(
+        (p) =>
+          !fetchedKeys.has(p.positionPubkey) &&
+          typeof p.openTime === "number" &&
+          now - p.openTime < OPTIMISTIC_SYNTH_GRACE_MS,
+      );
+      if (pendingSynths.length > 0) next = [...merged, ...pendingSynths];
+    }
+    // Only prune when we have a real position list, and prune against the final
+    // displayed list (including any preserved synth) so its cached open fee isn't
+    // garbage-collected before the venue surfaces it. A transient empty fetch
     // must not garbage-collect the cached requested leverage — that cache is
     // what recovers a 500x open from its fee-reduced effective leverage. Real
     // closes self-clean via forgetFlashEntryCost in closeLive.
-    if (merged.length > 0) {
-      pruneFlashEntryCostCache(entryCostCacheRef.current, merged);
+    if (next.length > 0) {
+      pruneFlashEntryCostCache(entryCostCacheRef.current, next);
       saveFlashEntryCostCache(wallet.address, entryCostCacheRef.current);
     }
-    setPositions(merged);
+    setPositions(next);
   }, [authenticated, getAccessToken, wallet?.address, flashV2]);
 
   useEffect(() => {

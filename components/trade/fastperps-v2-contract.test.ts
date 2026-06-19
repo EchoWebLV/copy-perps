@@ -51,6 +51,15 @@ describe("FastPerpsGame flag-on (v2) self-directed repoint", () => {
     );
   });
 
+  it("preserves a recent optimistic synth across the indexer-lagged poll (flag-on)", () => {
+    expect(source).toContain("OPTIMISTIC_SYNTH_GRACE_MS");
+    expect(source).toContain("const pendingSynths = positionsRef.current.filter(");
+    // Pruned against the final list (merged + preserved) so the synth's cached
+    // open fee survives, and the v1 path keeps the plain merged replace.
+    expect(source).toContain("pruneFlashEntryCostCache(entryCostCacheRef.current, next)");
+    expect(source).toContain("setPositions(next)");
+  });
+
   it("clamps stake floor and hides unsupported affordances under the flag", () => {
     expect(source).toContain("useState(flashV2 ? FLASH_V2_MIN_USDC : 1)");
     expect(source).toContain("const FLASH_V2_MIN_USDC = 5");
