@@ -19,22 +19,29 @@ function getMasterKey(): Buffer {
 }
 
 // Encrypts the 32-byte Ed25519 seed. Encoding: base64(iv || ciphertext || tag).
-// Exported so the Flash v2 session-key store reuses one audited cipher.
-export function encryptSeed(seed: Uint8Array): string {
+// Exported so the Flash v2 session-key store reuses one audited cipher. The
+// optional `aad` is a domain tag bound into the GCM auth tag: a ciphertext
+// produced with one domain (e.g. "flash-v2-session") will not authenticate when
+// decrypted under another (or under no domain, as agent-wallet seeds use), so
+// the two custody domains can't be substituted under the shared master key.
+// Agent-wallet seeds pass no aad (backward-compatible with existing rows).
+export function encryptSeed(seed: Uint8Array, aad?: string): string {
   if (seed.length !== 32) throw new Error("seed must be 32 bytes");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getMasterKey(), iv);
+  if (aad !== undefined) cipher.setAAD(Buffer.from(aad, "utf8"));
   const ct = Buffer.concat([cipher.update(seed), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, ct, tag]).toString("base64");
 }
 
-export function decryptSeed(enc: string): Uint8Array {
+export function decryptSeed(enc: string, aad?: string): Uint8Array {
   const buf = Buffer.from(enc, "base64");
   const iv = buf.subarray(0, 12);
   const tag = buf.subarray(buf.length - 16);
   const ct = buf.subarray(12, buf.length - 16);
   const decipher = createDecipheriv("aes-256-gcm", getMasterKey(), iv);
+  if (aad !== undefined) decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(tag);
   const out = Buffer.concat([decipher.update(ct), decipher.final()]);
   return new Uint8Array(out);

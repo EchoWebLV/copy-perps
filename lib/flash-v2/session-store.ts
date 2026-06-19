@@ -16,6 +16,16 @@ import {
   type SessionStatusState,
 } from "./session";
 
+/**
+ * AAD domain tag binding a session ciphertext to the session-key custody domain.
+ * Agent-wallet seeds are encrypted with no AAD, so a session seed and an agent
+ * seed can't be substituted for each other under the shared AES-256-GCM master
+ * key (the GCM auth tag covers the AAD). No prod session rows predate this tag
+ * (the flag is off and the table is unmigrated), so no backfill is needed; any
+ * pre-existing dev/devnet session row must be re-enabled once.
+ */
+const SESSION_SEED_AAD = "flash-v2-session";
+
 export interface SessionKeyRecord {
   userId: string;
   mainPubkey: string;
@@ -59,7 +69,7 @@ export async function createPendingSessionKey(p: {
     userId: p.userId,
     mainPubkey: p.mainPubkey,
     sessionPubkey: p.sessionPubkey,
-    sessionSecretEnc: encryptSeed(p.seed),
+    sessionSecretEnc: encryptSeed(p.seed, SESSION_SEED_AAD),
     sessionTokenPda: p.sessionTokenPda,
     validUntil: p.validUntil,
     boundAt: null,
@@ -94,7 +104,7 @@ export async function getActiveSessionKey(userId: string): Promise<SessionKeyRec
     sessionPubkey: row.sessionPubkey,
     sessionTokenPda: row.sessionTokenPda,
     validUntil: row.validUntil,
-    keypair: Keypair.fromSeed(decryptSeed(row.sessionSecretEnc)),
+    keypair: Keypair.fromSeed(decryptSeed(row.sessionSecretEnc, SESSION_SEED_AAD)),
   };
 }
 
