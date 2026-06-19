@@ -32,6 +32,7 @@ interface BetMeta {
   leaderSide: "long" | "short";
   leverage: number;
   botId?: string;
+  autoCloseOnSourceClose?: boolean;
 }
 
 function decryptSeed(enc: string): Uint8Array {
@@ -342,19 +343,14 @@ async function closeBotFollowers(
   }
 
   for (const [botId, followers] of byBot.entries()) {
-    // Check whether the bot still has an open paper position.
-    let openPos;
+    // Fetch every paper position the bot has on record (any status).
+    let rows: { status: string }[];
     try {
-      [openPos] = await db
-        .select()
+      rows = await db
+        .select({ status: paperPositions.status })
         .from(paperPositions)
-        .where(
-          and(
-            eq(paperPositions.botId, botId),
-            eq(paperPositions.status, "open"),
-          ),
-        )
-        .limit(1);
+        .where(eq(paperPositions.botId, botId))
+        .limit(50);
     } catch (err) {
       for (const f of followers) {
         result.errors.push({
@@ -365,11 +361,17 @@ async function closeBotFollowers(
       continue;
     }
 
-    if (openPos) continue; // Bot still in position — nothing to do.
+    // Positive-signal-only: a bot we don't track in paper_positions (e.g. the
+    // on-chain ER arena bots, keyed `arena:<persona>`) has NO rows here. Treat
+    // that as "unknown", NOT "flat", so we never auto-close a tail we can't
+    // confirm has actually exited. Auto-close fires only on a real flat signal.
+    if (rows.length === 0) continue;
+    if (rows.some((r) => r.status === "open")) continue; // still in position
 
-    // Bot is flat → close each follower's real Pacifica position.
+    // Bot is positively flat → close each follower that opted into auto-close.
     for (const row of followers) {
       const meta = row.meta as BetMeta;
+      if (meta.autoCloseOnSourceClose === false) continue;
       await closeFollowerBet(row, meta, result);
     }
   }
