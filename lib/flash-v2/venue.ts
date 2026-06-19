@@ -1,9 +1,18 @@
 import { postBuilder as defaultPostBuilder } from "./builder";
 import { buildOnboardingSteps } from "./onboard";
 import { getPositions, getPrices, getMarkets, getBasketPubkey } from "./query";
+import { validateSessionConfig } from "./session";
 import type { OnboardStep, Quote, Side, OrderType, UnsignedTx } from "./types";
 
 type PostBuilder = typeof defaultPostBuilder;
+
+/** Optional session for server-driven (no-popup) trades. When present the venue
+ *  validates it against owner+signer and passes it to Flash so the returned tx
+ *  is built for the session key to sign. */
+export interface SessionRef {
+  signer: string;
+  sessionToken: string;
+}
 
 export interface OpenArgs {
   owner: string;
@@ -14,12 +23,14 @@ export interface OpenArgs {
   orderType: OrderType;
   takeProfit?: number;
   stopLoss?: number;
+  session?: SessionRef;
 }
 export interface CloseArgs {
   owner: string;
   symbol: string;
   side: Side;
   closeUsd: number;
+  session?: SessionRef;
 }
 
 /**
@@ -30,6 +41,19 @@ export interface CloseArgs {
  * Spellings are documented but not byte-confirmed — re-verify against
  * openapi.v2.json / the devnet smoke before trusting them in the UI.
  */
+/** Validate (no silent fallback) then attach signer+sessionToken to a trade
+ *  body. Omitted session ⇒ owner-signed tx, body untouched. */
+function applySession(
+  body: Record<string, unknown>,
+  owner: string,
+  session: SessionRef | undefined,
+): void {
+  if (!session) return;
+  validateSessionConfig({ owner, signer: session.signer, sessionToken: session.sessionToken });
+  body.signer = session.signer;
+  body.sessionToken = session.sessionToken;
+}
+
 function rawToQuote(raw: Record<string, unknown>): Quote {
   const num = (v: unknown): number | undefined =>
     v === undefined || v === null ? undefined : Number(v);
@@ -74,18 +98,21 @@ export function flashV2Venue(deps: { postBuilder?: PostBuilder } = {}) {
       };
       if (args.takeProfit != null) body.takeProfit = args.takeProfit;
       if (args.stopLoss != null) body.stopLoss = args.stopLoss;
+      applySession(body, args.owner, args.session);
       const { tx, raw } = await post("/transaction-builder/open-position", body);
       return { unsigned: { tx, layer: "er" }, quote: rawToQuote(raw) };
     },
 
     async closePosition(args: CloseArgs): Promise<{ unsigned: UnsignedTx }> {
-      const { tx } = await post("/transaction-builder/close-position", {
+      const body: Record<string, unknown> = {
         owner: args.owner,
         marketSymbol: args.symbol,
         side: args.side === "long" ? "LONG" : "SHORT",
         inputUsdUi: args.closeUsd,
         withdrawTokenSymbol: "USDC",
-      });
+      };
+      applySession(body, args.owner, args.session);
+      const { tx } = await post("/transaction-builder/close-position", body);
       return { unsigned: { tx, layer: "er" } };
     },
 

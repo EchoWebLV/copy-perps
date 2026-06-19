@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { Keypair } from "@solana/web3.js";
 import { flashV2Venue } from "./venue";
+import { deriveSessionTokenV2 } from "./session";
 
 describe("flashV2Venue", () => {
   it("openPosition builds an ER-layer unsigned tx with mapped params", async () => {
@@ -60,5 +62,43 @@ describe("flashV2Venue", () => {
       inputUsdUi: 10,
       withdrawTokenSymbol: "USDC",
     });
+  });
+
+  it("openPosition with a valid session adds signer+sessionToken to the body", async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const signer = Keypair.generate().publicKey.toBase58();
+    const sessionToken = deriveSessionTokenV2(owner, signer).toBase58();
+    const postBuilder = vi.fn(async () => ({ tx: {} as never, raw: {} }));
+    const venue = flashV2Venue({ postBuilder: postBuilder as never });
+    await venue.openPosition({
+      owner,
+      symbol: "SOL",
+      collateralUsd: 25,
+      leverage: 5,
+      side: "long",
+      orderType: "market",
+      session: { signer, sessionToken },
+    });
+    expect(postBuilder).toHaveBeenCalledWith(
+      "/transaction-builder/open-position",
+      expect.objectContaining({ owner, signer, sessionToken }),
+    );
+  });
+
+  it("rejects a session whose token does not match owner+signer (no request sent)", async () => {
+    const owner = Keypair.generate().publicKey.toBase58();
+    const signer = Keypair.generate().publicKey.toBase58();
+    const postBuilder = vi.fn(async () => ({ tx: {} as never, raw: {} }));
+    const venue = flashV2Venue({ postBuilder: postBuilder as never });
+    await expect(
+      venue.closePosition({
+        owner,
+        symbol: "SOL",
+        side: "long",
+        closeUsd: 10,
+        session: { signer, sessionToken: "11111111111111111111111111111111" },
+      }),
+    ).rejects.toThrow();
+    expect(postBuilder).not.toHaveBeenCalled();
   });
 });
