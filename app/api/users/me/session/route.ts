@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import { Keypair } from "@solana/web3.js";
+import { verifyPrivyRequest } from "@/lib/privy/server";
+import { ensureUser } from "@/lib/users/ensure";
+import { FEATURE_FLASH_V2, DEFAULT_SESSION_TTL_SECONDS } from "@/lib/flash-v2/constants";
+import { getConnection } from "@/lib/flash-v2/rpc";
+import { buildCreateSessionTx, SessionAlreadyBoundError } from "@/lib/flash-v2/session";
+import {
+  generateSessionKeypair,
+  createPendingSessionKey,
+} from "@/lib/flash-v2/session-store";
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
+export const dynamic = "force-dynamic";
+
+interface Body {
+  walletAddress?: string;
+}
+
+/**
+ * Build a Flash v2 session-enable tx. The server generates the session signer,
+ * persists it (pending, encrypted), and returns the createSessionV2 tx for the
+ * user's wallet to sign (base layer). The client signs + submits, then POSTs
+ * /session/confirm to flip it bound. Flash v2 only — 404 when the flag is off.
+ */
+export async function POST(request: Request) {
+  if (!FEATURE_FLASH_V2) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const claims = await verifyPrivyRequest(request);
+  if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const body = (await request.json().catch(() => null)) as Body | null;
+  const user = await ensureUser(claims.userId, body?.walletAddress ?? null);
+  if (!user.solanaPubkey) {
+    return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+  }
+
+  const owner = user.solanaPubkey;
+  const { publicKeyB58, seed } = generateSessionKeypair();
+  const sessionSigner = Keypair.fromSeed(seed);
+  const validUntilSec = Math.floor(Date.now() / 1000) + DEFAULT_SESSION_TTL_SECONDS;
+  const validUntil = new Date(validUntilSec * 1000);
+
+  const { tx, sessionToken } = await buildCreateSessionTx({
+    authority: owner,
+    sessionSigner,
+    validUntilSec,
+    connection: getConnection("base"),
+  });
+
+  try {
+    await createPendingSessionKey({
+      userId: user.id,
+      mainPubkey: owner,
+      sessionPubkey: publicKeyB58,
+      sessionTokenPda: sessionToken,
+      seed,
+      validUntil,
+    });
+  } catch (err) {
+    if (err instanceof SessionAlreadyBoundError) {
+      return NextResponse.json(
+        {
+          error: "a session is already active — revoke it before enabling a new one",
+          priorSessionPubkey: err.priorSessionPubkey,
+          priorSessionToken: err.priorSessionTokenPda,
+        },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
+
+  return NextResponse.json({
+    createSessionTransaction: tx
+      .serialize({ requireAllSignatures: false })
+      .toString("base64"),
+    sessionPubkey: publicKeyB58,
+    sessionToken,
+    validUntil: validUntil.toISOString(),
+  });
+}
