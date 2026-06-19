@@ -4,6 +4,30 @@ Produced by a read-only mapping sweep (4 cluster readers + synthesis), 2026-06-1
 synthesized map (per-route table + lib inventory) is the source for the Phase 3 plan
 ([plans/2026-06-19-flash-v2-migration-phase-3.md](plans/2026-06-19-flash-v2-migration-phase-3.md)).
 
+## ⚠️ CORRECTION (2026-06-19, after Phase 3 backend landed)
+
+**The mapping sweep below was wrong about the LIVE CLIENT.** It mapped the server routes but did
+not verify which rails the UI actually calls. Verified after the fact:
+
+- The live copy / whale / self-directed-perp UI (`components/tail/TailModal.tsx`,
+  `components/trade/FastPerpsGame.tsx`) opens through **`/api/flash/perp` (Flash v1)**, creating
+  `bet.type='flash-tail'`. The product had already moved opens off Pacifica onto Flash v1.
+- **`/api/bet/copy` + `/api/bet/whale` OPEN paths have no live client.** `CopyRow` only calls
+  `/api/bet/copy/close` (to wind down legacy Pacifica `type='copy'` positions). So the table row
+  "copy = `/api/bet/copy`, Pacifica, active" describes a **dormant** rail.
+
+Consequence: Phase 3 Tasks 4–7 correctly rewired `/api/bet/copy`, `/api/bet/whale`,
+`/api/trade/perp`, and the mirror-close sweep to flash-v2 behind the flag — but **flipping
+`FEATURE_FLASH_V2` does not change live trades**, because the UI never hits those open routes.
+
+**Chosen direction (user, 2026-06-19): OPTION A — repoint the client to the v2 rails.** The UI
+will call `/api/bet/copy` / `/api/bet/whale` / `/api/trade/perp` when the flag is on (else stays on
+`/api/flash/perp` Flash v1, unchanged). Requires a client-visible flag
+(`NEXT_PUBLIC_FEATURE_FLASH_V2`, kept in sync with the server `FEATURE_FLASH_V2`) and rewriting the
+TailModal open orchestration for the v2 response shapes (enable-session / onboard-steps /
+server-signed open). FastPerpsGame self-directed needs client-side ER signing (sign-only + submit to
+the ER RPC) and lands after the copy/whale repoint.
+
 ## Current execution architecture (verified)
 
 **Pacifica is the active execution venue for every money path:**
