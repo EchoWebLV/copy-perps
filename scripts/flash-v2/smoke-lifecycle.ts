@@ -1,17 +1,19 @@
 // scripts/flash-v2/smoke-lifecycle.ts
 //
-// Manual devnet smoke for the Flash v2 venue foundation. Drives:
+// Manual MAINNET soak for the Flash v2 venue lifecycle. Drives:
 //   onboard (basket/ledger/delegate) -> deposit -> open -> close
 // signing each returned unsigned tx with a local keypair and submitting to the
-// correct layer (base vs ER). Run:
+// correct layer (base vs ER).
 //
-//   FLASH_V2_CLUSTER=devnet \
-//   FLASH_V2_USDC_MINT=<devnet-usdc-mint> \
-//   FLASH_V2_KEYPAIR=~/.config/solana/flash-v2-devnet.json \
+// MAINNET-ONLY in practice: the flashapi.trade/v2 builder always returns mainnet
+// txs, so the trade legs can only be validated on mainnet. Use a THROWAWAY
+// keypair funded with ~$6 USDC + ~0.05 SOL (it deposits $5 and opens small):
+//
+//   FLASH_V2_CLUSTER=mainnet \
+//   FLASH_V2_KEYPAIR=/path/to/throwaway-mainnet.json \
 //   npx tsx --env-file=.env.local scripts/flash-v2/smoke-lifecycle.ts
 //
-// Do NOT run against mainnet. Record the resulting signatures in
-// docs/superpowers/flash-v2-surface-notes.md when executed.
+// Record the resulting signatures in docs/superpowers/flash-v2-surface-notes.md.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
