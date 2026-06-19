@@ -4,6 +4,8 @@ import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { planFlashV2Close } from "@/lib/flash-v2/self-trade";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -45,6 +47,28 @@ export async function POST(request: Request) {
   const user = await ensureUser(claims.userId, body.walletAddress);
   if (!user.solanaPubkey) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+  }
+
+  // Flash v2 self-directed close. Routes by live position presence so a position
+  // opened on Pacifica (flag off) still closes on Pacifica after the flag flips:
+  // when the wallet has no matching Flash v2 position we fall through below.
+  const flashV2 = getFlashV2Venue();
+  if (flashV2) {
+    try {
+      const result = await planFlashV2Close({
+        venue: flashV2,
+        owner: user.solanaPubkey,
+        market,
+        side: body.side,
+      });
+      if (result.found) return NextResponse.json(result.plan);
+    } catch (err) {
+      console.error("[trade/perp/close] flash-v2 close failed:", err);
+      return NextResponse.json(
+        { error: "Could not check live position. Try again." },
+        { status: 502 },
+      );
+    }
   }
 
   const agent = await getAgentWallet(user.id);

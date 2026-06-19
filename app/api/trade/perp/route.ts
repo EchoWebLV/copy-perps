@@ -17,6 +17,8 @@ import { lotSizedAmountFromNotional } from "@/lib/pacifica/sizing";
 import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { FlashV2PositionConflictError, planFlashV2Open } from "@/lib/flash-v2/self-trade";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,6 +26,7 @@ export const dynamic = "force-dynamic";
 
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
+const MAX_FLASH_V2_LEVERAGE = 100;
 
 interface Body {
   market?: string;
@@ -89,6 +92,46 @@ export async function POST(request: Request) {
       { error: `stake must be between $${MIN_USDC} and $${MAX_USDC}` },
       { status: 400 },
     );
+  }
+
+  // Flash v2 self-directed open (user-signed, no session). When the flag is off
+  // this branch is skipped and the Pacifica path below runs byte-for-byte.
+  const flashV2 = getFlashV2Venue();
+  if (flashV2) {
+    if (
+      !Number.isFinite(body.leverage) ||
+      body.leverage < 1 ||
+      body.leverage > MAX_FLASH_V2_LEVERAGE
+    ) {
+      return NextResponse.json(
+        { error: `leverage must be between 1x and ${MAX_FLASH_V2_LEVERAGE}x` },
+        { status: 400 },
+      );
+    }
+    const u = await ensureUser(claims.userId, body.walletAddress);
+    if (!u.solanaPubkey) {
+      return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+    }
+    try {
+      const plan = await planFlashV2Open({
+        venue: flashV2,
+        owner: u.solanaPubkey,
+        market,
+        side: body.side,
+        stakeUsdc: body.stakeUsdc,
+        leverage: body.leverage,
+      });
+      return NextResponse.json(plan);
+    } catch (err) {
+      if (err instanceof FlashV2PositionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
+      console.error("[trade/perp] flash-v2 open failed:", err);
+      return NextResponse.json(
+        { error: "Trade could not open. No funds were spent." },
+        { status: 502 },
+      );
+    }
   }
 
   let marketInfo;
