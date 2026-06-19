@@ -32,7 +32,8 @@ describe("flashV2Venue", () => {
       owner: "owner1",
       inputTokenSymbol: "USDC",
       outputTokenSymbol: "SOL",
-      inputAmountUi: 25,
+      // String (builder rejects a JSON number); leverage stays a number.
+      inputAmountUi: "25",
       leverage: 5,
       tradeType: "LONG",
       orderType: "MARKET",
@@ -59,7 +60,7 @@ describe("flashV2Venue", () => {
       owner: "owner1",
       marketSymbol: "SOL",
       side: "LONG",
-      inputUsdUi: 10,
+      inputUsdUi: "10",
       withdrawTokenSymbol: "USDC",
     });
   });

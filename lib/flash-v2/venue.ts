@@ -91,7 +91,10 @@ export function flashV2Venue(deps: { postBuilder?: PostBuilder } = {}) {
         owner: args.owner,
         inputTokenSymbol: "USDC",
         outputTokenSymbol: args.symbol,
-        inputAmountUi: args.collateralUsd,
+        // The builder deserializes inputAmountUi as a STRING (leverage stays an
+        // f64 number); a JSON number here is rejected ("expected a string") and
+        // every open fails. Matches the deposit-direct `amount` stringification.
+        inputAmountUi: String(args.collateralUsd),
         leverage: args.leverage,
         tradeType: args.side === "long" ? "LONG" : "SHORT",
         orderType: args.orderType.toUpperCase(),
@@ -108,7 +111,8 @@ export function flashV2Venue(deps: { postBuilder?: PostBuilder } = {}) {
         owner: args.owner,
         marketSymbol: args.symbol,
         side: args.side === "long" ? "LONG" : "SHORT",
-        inputUsdUi: args.closeUsd,
+        // String, same as open's inputAmountUi — a number is rejected.
+        inputUsdUi: String(args.closeUsd),
         withdrawTokenSymbol: "USDC",
       };
       applySession(body, args.owner, args.session);
