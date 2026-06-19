@@ -1227,3 +1227,25 @@ Expected: empty output (Phase 1 adds, never edits Pacifica).
 - **Placeholder scan:** none — every code step is complete and runnable.
 - **Type consistency:** `UnsignedTx { tx, layer }`, `OnboardStep { name, unsigned }`, `flashV2Venue` method names, and `postBuilder` signature are consistent across Tasks 2, 5, 10, 11, 12.
 - **Known soft spots (by design, flagged in Task 0):** Flash v2 response field names (`transactionBase64`, `basketPubkey`, prices/positions shapes) and error strings are doc-sourced; Task 0 confirms them against `examples-v2` and the smoke (Task 12) validates end-to-end before Phase 2 builds on them.
+
+## Task 0 corrections (applied during execution, 2026-06-19)
+
+Confirmed against `flash-trade/examples-v2` typed client (`packages/flash-v2`):
+`transactionBase64` ✅ and `basketPubkey` ✅ are correct as written. Apply these
+deltas where noted (the implementer for those tasks uses the corrected form):
+
+1. **Task 6 (query.ts):** positions + basket come from **one** snapshot endpoint
+   `GET /owner/{owner}` (full URL `https://flashapi.trade/v2/owner/{owner}`), NOT
+   `/positions/owner/{wallet}`. `getBasketPubkey(owner)` reads `snapshot.basketPubkey`;
+   `getPositions(owner)` reads `snapshot.positions ?? []`. `getPrices` (`/prices`) and
+   `getMarkets` (`/raw/markets`) are unchanged. Update the query test's mocked paths/shape
+   accordingly (the `getBasketPubkey` cases already pass; the positions case reads
+   `{ positions: [...] }`).
+2. **Task 11 (venue.ts) + Task 12 (smoke):** `closePosition` addresses a position by
+   `{owner, marketSymbol, side, inputUsdUi, withdrawTokenSymbol}` (typed-client form), NOT
+   `positionKey`. `CloseArgs` becomes `{ owner, symbol, side, closeUsd }`; the smoke calls
+   `closePosition({ owner, symbol: pos.symbol, side: pos.side, closeUsd: pos.sizeUsd })`.
+   The docs disagree (they show `positionKey`); the typed client wins, and the devnet smoke
+   (Task 12) is the final validation. Update the venue close test body accordingly.
+3. **Error channel:** trading endpoints may return HTTP 200 with `err` — already covered by
+   `normalizeFlashError` (Task 3) and `postBuilder` (Task 5). No change.
