@@ -153,18 +153,32 @@ scope here (flag separately), do not refactor live Pacifica paths in this phase.
 6. **Server custody** — the server holds the session secret; scope + short expiry are the only
    guardrails. Keep TTL short (hours, not the 7-day max).
 
-## 9. Open / devnet-gated (the smoke must resolve, do not block lib build)
+## 9. Devnet validation (2026-06-19) + remaining mainnet-gated items
 
-1. `systemProgram` explicitness — Flash's `.accountsPartial` relies on Anchor 0.30 auto-resolution;
-   if our Anchor version errors, pass `systemProgram: SystemProgram.programId` explicitly. Inspect
-   the built ix account list (expect 6).
-2. **Flash v2 ER RPC URL** — read from Flash's `/v2` network config rather than hardcoding; log it
-   before the first trade. (`lib/flash-v2/constants.ts` `resolveErRpc` already centralizes this.)
-3. `SessionTokenManager` server-build wallet shape — confirm a stub wallet (identity
-   `signTransaction`) builds the create/revoke ix without a real signature; assert
-   `manager.program.programId === KeyspM2ss…`.
-4. Chosen TTL `< now + 7d`; confirm a real devnet `createSessionV2` then `manager.get(pda)` reads
-   it back; confirm a session-signed open lands on the ER.
+**Validated on-chain (devnet, wallet `AW3jPeBDkyRWB3mSV6QmbWyBZqyeVNhCHWCuefMrdQGr`):**
+
+- ✅ **`createSessionV2` round-trip.** Built via `buildCreateSessionTx`, authority-signed, landed with
+  `skipPreflight: false` (so it passed simulation AND execution). The session token was created,
+  owned by Keysp (`KeyspM2ss…`, 144 bytes), then `revokeSessionV2` closed it with rent refunded.
+  Sigs: create `Dprhz155uQx72K6DP19qRo4brArbDFcbgUd3LnwLUxcKxnCZjDx7…`, revoke
+  `4exRKsfrzCifPBFxCMkuNoykDssKkEVq1ZQQfMdkiSpw9oPJpCKZ1goT…`. This confirms the account set, arg
+  order (`true, validUntil, lamports`), PDA seeds, the session co-signing, AND `systemProgram`
+  auto-resolution — all correct. The review's "invisible session" risk is **closed**.
+- ✅ PDA derivation matches `deriveSessionTokenV2` for the live token.
+
+**Confirmed: the REST builder (`flashapi.trade/v2`) is MAINNET-ONLY.** With `FLASH_V2_CLUSTER=devnet`,
+`ensureOnboarded` still returned onboarding txs targeting the **mainnet** Flash program `FTv2Rx…`,
+not devnet `FMTgs…`. There is no devnet REST builder, so onboarding/deposit/open/close can only be
+validated on **mainnet** (a tiny soak). `resolveProgramId('devnet')` only affects the session
+`target_program` scope (set locally); it does not change what the REST builder produces.
+
+**Still needs a mainnet soak (REST-builder-dependent legs):**
+1. onboarding (init-basket/ledger/delegate) landing on base.
+2. `deposit-direct` crediting + the balance accounting formula.
+3. a session-signed open/close landing on the **ER** (`submitErTx`), incl. the ER RPC URL
+   (`resolveErRpc`) and `er`-layer blockhash/ALT handling.
+4. the `/owner/{owner}` positionMetrics + close-by-symbol+side shapes (Phase 1 surface notes §3
+   unconfirmed items).
 
 **Source legend:** on-chain program `magicblock-labs/session-keys` `gpl_session/src/lib.rs`
 (master); published IDL `@magicblock-labs/gum-sdk@3.0.10` (`lib/idl/gpl_session.json`); Flash

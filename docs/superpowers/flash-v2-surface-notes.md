@@ -2,6 +2,12 @@
 
 REST base: `https://flashapi.trade/v2` (public, no API key).
 
+> **MAINNET-ONLY (confirmed devnet 2026-06-19).** The builder ignores `FLASH_V2_CLUSTER` and always
+> returns **mainnet** txs (program `FTv2Rx…`), even when asked on devnet. There is no devnet REST
+> builder, so onboarding/deposit/open/close/withdraw can only be validated with a small **mainnet
+> soak**. The session-key legs (Keysp `createSessionV2`/revoke) ARE devnet-validatable and were
+> confirmed on-chain — see flash-v2-session-surface-notes.md §9.
+
 Sources cross-checked:
 - Typed client `flash-trade/examples-v2` → `packages/flash-v2/src/{client,types,lifecycle}.ts` (raw.githubusercontent.com, `main`)
 - `flash-trade/examples-v2` → `GOTCHAS.md`, `README.md`
