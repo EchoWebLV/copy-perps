@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   openBets: [] as Array<Record<string, unknown>>,
   patchMonitorStatus: vi.fn(),
   realizedPnlForOrder: vi.fn(),
+  getActiveSessionKey: vi.fn(),
+  executeSessionClose: vi.fn(),
   updates: [] as Array<Record<string, unknown>>,
 }));
 
@@ -39,12 +41,20 @@ vi.mock("@/lib/ops/monitor-store", () => ({
   patchMonitorStatus: mocks.patchMonitorStatus,
 }));
 
+vi.mock("@/lib/flash-v2/session-store", () => ({
+  getActiveSessionKey: mocks.getActiveSessionKey,
+}));
+
+vi.mock("@/lib/flash-v2/session-trade", () => ({
+  executeSessionClose: mocks.executeSessionClose,
+}));
+
 vi.mock("@/lib/db", () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         innerJoin: vi.fn(() => ({
-          innerJoin: vi.fn(() => ({
+          leftJoin: vi.fn(() => ({
             where: vi.fn(async () => mocks.openBets),
           })),
         })),
@@ -144,6 +154,8 @@ describe("runMirrorCloseSweep whale source closes", () => {
     mocks.closeCopyOrder.mockResolvedValue({ order_id: "close-order-1" });
     mocks.patchMonitorStatus.mockResolvedValue({});
     mocks.realizedPnlForOrder.mockResolvedValue(2);
+    mocks.getActiveSessionKey.mockResolvedValue(null);
+    mocks.executeSessionClose.mockResolvedValue({ found: false });
   });
 
   it("closes a Pacifica whale follower when the source position is closed", async () => {
@@ -401,5 +413,73 @@ describe("runMirrorCloseSweep whale source closes", () => {
       source: "hyperliquid",
       closeReason: "source_closed",
     });
+  });
+
+  it("closes a flash-v2 whale follower via the session key when the source closed", async () => {
+    mocks.openBets = [
+      {
+        ...openWhaleBet({ ...whaleMeta, venue: "flash-v2" } as WhaleCopyMeta),
+        agentPubkey: null,
+        agentSecretEnc: null, // flash-v2 follower has no Pacifica agent
+      },
+    ];
+    mocks.getActiveSessionKey.mockResolvedValue({
+      sessionPubkey: "S",
+      sessionTokenPda: "T",
+      keypair: { secretKey: new Uint8Array(64) },
+    });
+    mocks.executeSessionClose.mockResolvedValue({
+      found: true,
+      signature: "FSIG",
+      estPnlUsd: 3,
+    });
+    mocks.getPositions.mockImplementation(async () => []); // source closed
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesAttempted).toBe(1);
+    expect(result.closesSucceeded).toBe(1);
+    // Session close, not the Pacifica close path.
+    expect(mocks.executeSessionClose).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: "user-main-1", market: "BTC", side: "long" }),
+    );
+    expect(mocks.closeCopyOrder).not.toHaveBeenCalled();
+    expect(mocks.updates).toHaveLength(1);
+    expect(mocks.updates[0]).toMatchObject({
+      status: "closed",
+      closeTxHash: "flashv2:FSIG",
+      proceedsUsdc: 12.75, // stake 10 + estPnl 3 - openFee 0.25
+    });
+    expect(mocks.updates[0]?.meta).toMatchObject({
+      venue: "flash-v2",
+      closeReason: "source_closed",
+      leaderClosedAt: expect.any(String),
+    });
+  });
+
+  it("skips a flash-v2 follower (never user-signs) when the session is inactive", async () => {
+    mocks.openBets = [
+      {
+        ...openWhaleBet({ ...whaleMeta, venue: "flash-v2" } as WhaleCopyMeta),
+        agentPubkey: null,
+        agentSecretEnc: null,
+      },
+    ];
+    mocks.getActiveSessionKey.mockResolvedValue(null); // expired / not enabled
+    mocks.getPositions.mockImplementation(async () => []); // source closed
+
+    const result = await runMirrorCloseSweep();
+
+    // Skipped: not counted as an attempt, surfaced as an error, bet left open.
+    expect(result.closesAttempted).toBe(0);
+    expect(result.closesSucceeded).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({
+      betId: "bet-1",
+      message: expect.stringContaining("session inactive"),
+    });
+    expect(mocks.executeSessionClose).not.toHaveBeenCalled();
+    expect(mocks.closeCopyOrder).not.toHaveBeenCalled();
+    expect(mocks.updates).toHaveLength(0);
   });
 });

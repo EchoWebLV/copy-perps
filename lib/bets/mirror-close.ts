@@ -8,6 +8,10 @@ import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
+import { copyMetaVenue } from "@/lib/bets/copy-meta";
+import { getActiveSessionKey } from "@/lib/flash-v2/session-store";
+import { executeSessionClose } from "@/lib/flash-v2/session-trade";
+import { flashV2Venue } from "@/lib/flash-v2/venue";
 import { patchMonitorStatus } from "@/lib/ops/monitor-store";
 import { makeWhalePositionId } from "@/lib/whales/identity";
 import { getWhaleLivePositionsForAccount } from "@/lib/whales/live-cache";
@@ -64,8 +68,9 @@ type OpenBetRow = {
   feeUsdc: number | null;
   meta: unknown;
   userMainPubkey: string | null;
-  agentPubkey: string;
-  agentSecretEnc: string;
+  // Null for flash-v2 followers (no Pacifica agent wallet) — closed via session.
+  agentPubkey: string | null;
+  agentSecretEnc: string | null;
 };
 
 type AutoCloseReason = Extract<
@@ -97,17 +102,96 @@ type CloseFollowerBetOptions = {
   alreadyFlatCloseReason?: AutoCloseReason;
 };
 
-/** Shared close logic: look up the user's live position on Pacifica and submit
- *  a reduce-only close order. Updates the bet row on success — recording
- *  realized PnL and stamping leaderClosedAt. */
+/**
+ * Server-driven flash-v2 close for an auto-close follower. Uses the user's bound
+ * session key (NEVER user-signing in a background sweep): when the session is
+ * expired/absent we log + skip so the bet stays open for a manual close. Routes
+ * by position presence — a missing position is treated as already-flat.
+ */
+async function closeFollowerBetFlashV2(
+  row: OpenBetRow,
+  meta: BetMeta,
+  result: MirrorResult,
+  options: CloseFollowerBetOptions,
+): Promise<void> {
+  const session = await getActiveSessionKey(row.userId);
+  if (!session) {
+    // Do NOT fall back to user-signing in a background sweep. Surface it so the
+    // user can re-enable auto-copy; the bet stays confirmed for a manual close.
+    result.errors.push({
+      betId: row.betId,
+      message: "flash-v2 session inactive — auto-close skipped",
+    });
+    return;
+  }
+  result.closesAttempted++;
+  try {
+    const openFeeUsdc =
+      row.feeUsdc != null && Number.isFinite(row.feeUsdc) ? row.feeUsdc : 0;
+    const closeResult = await executeSessionClose({
+      venue: flashV2Venue(),
+      session,
+      owner: row.userMainPubkey!,
+      market: meta.leaderMarket,
+      side: meta.leaderSide,
+    });
+    if (!closeResult.found) {
+      // Position already gone (manual close or liquidation beat us). Proceeds
+      // unknown — leave proceedsUsdc null.
+      await db
+        .update(bets)
+        .set({
+          status: "closed",
+          closedAt: new Date(),
+          meta: withLeaderClosedAt(
+            row.meta,
+            options.alreadyFlatCloseReason ?? options.closeReason,
+          ),
+        })
+        .where(and(eq(bets.id, row.betId), eq(bets.status, "confirmed")));
+      result.closesSucceeded++;
+      return;
+    }
+    await db
+      .update(bets)
+      .set({
+        status: "closed",
+        closedAt: new Date(),
+        closeTxHash: `flashv2:${closeResult.signature}`,
+        meta: withLeaderClosedAt(row.meta, options.closeReason),
+        proceedsUsdc: row.amountUsdc + closeResult.estPnlUsd - openFeeUsdc,
+      })
+      .where(and(eq(bets.id, row.betId), eq(bets.status, "confirmed")));
+    result.closesSucceeded++;
+  } catch (err) {
+    result.errors.push({ betId: row.betId, message: String(err) });
+  }
+}
+
+/** Shared close logic: routes flash-v2 followers to the session-signed close,
+ *  else looks up the user's live position on Pacifica and submits a reduce-only
+ *  close order. Updates the bet row on success — recording realized PnL and
+ *  stamping leaderClosedAt. */
 async function closeFollowerBet(
   row: OpenBetRow,
   meta: BetMeta,
   result: MirrorResult,
   options: CloseFollowerBetOptions = {},
 ): Promise<void> {
+  if (copyMetaVenue(row.meta) === "flash-v2") {
+    await closeFollowerBetFlashV2(row, meta, result, options);
+    return;
+  }
   result.closesAttempted++;
   try {
+    if (!row.agentSecretEnc || !row.agentPubkey) {
+      // A Pacifica follower with no agent wallet can't be closed server-side.
+      result.errors.push({
+        betId: row.betId,
+        message: "missing agent wallet for pacifica close",
+      });
+      return;
+    }
     const seed = decryptSeed(row.agentSecretEnc);
     const kp = Keypair.fromSeed(seed);
     const agent: AgentWalletRecord = {
@@ -459,7 +543,9 @@ export async function runMirrorCloseSweep(
     })
     .from(bets)
     .innerJoin(users, eq(users.id, bets.userId))
-    .innerJoin(agentWallets, eq(agentWallets.userId, bets.userId))
+    // leftJoin (not inner): flash-v2 followers have no agent wallet but must
+    // still be swept and closed via their session key.
+    .leftJoin(agentWallets, eq(agentWallets.userId, bets.userId))
     .where(
       and(
         eq(bets.type, "copy"),
