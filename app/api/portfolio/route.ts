@@ -11,6 +11,7 @@ import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/per
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
 import { markPnlUsd } from "@/lib/flash-v2/pnl";
+import { copyMetaVenue } from "@/lib/bets/copy-meta";
 import type { VenuePosition } from "@/lib/flash-v2/types";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
@@ -158,13 +159,16 @@ function flashRowFromPosition(
   };
 }
 
-// Read-only display row for a Flash v2 position (Phase 3 Task 1). No bet row
-// yet (the trade routes that persist bets land in later tasks), so these render
-// as wallet-sourced. PnL is mark-price (lib/flash-v2/pnl.ts), matching the
-// "ignore indexer PnL" decision.
+// Attribution for a Flash v2 venue position. A confirmed flash-v2 `copy` bet on
+// the same market:side turns the row into a tail (betId + leader info, staked at
+// the user's amount); otherwise it renders as a self-directed wallet position
+// (Task 4). Mirrors the flash-v1 flashTailByKey pattern so a position is never
+// double-counted (once as a phantom Pacifica copy row + once as a wallet row).
+// PnL is mark-price (lib/flash-v2/pnl.ts), matching the "ignore indexer PnL" decision.
 function flashV2RowFromPosition(
   p: VenuePosition,
   pricedAt: string,
+  copyBet?: { id: string; stakeUsdc: number; meta: CopyRowMeta } | null,
 ): PortfolioSnapshotPayload["copyRows"][number] {
   const pnlUsd =
     p.entryPrice > 0 && p.markPrice > 0
@@ -175,25 +179,34 @@ function flashV2RowFromPosition(
           sizeUsd: p.sizeUsd,
         })
       : null;
+  // % is over the user's staked capital for a tail (matching the Pacifica copy
+  // rows), else over position collateral for a wallet position.
+  const pctBasis = copyBet ? copyBet.stakeUsdc : p.collateralUsd;
   const unrealizedPnlPct =
-    pnlUsd != null && p.collateralUsd > 0 ? (pnlUsd / p.collateralUsd) * 100 : null;
+    pnlUsd != null && pctBasis > 0 ? (pnlUsd / pctBasis) * 100 : null;
   return {
-    betId: null,
+    betId: copyBet?.id ?? null,
     venue: "flash-v2" satisfies CopyVenue,
-    sourceKind: "wallet" satisfies CopySourceKind,
+    sourceKind: (copyBet ? "tail" : "wallet") satisfies CopySourceKind,
     market: p.symbol,
     side: p.side,
-    leverage: Number.isFinite(p.leverage) && p.leverage > 0 ? p.leverage : null,
-    stakeUsdc: p.collateralUsd > 0 ? p.collateralUsd : null,
+    leverage:
+      copyBet?.meta.leverage ??
+      (Number.isFinite(p.leverage) && p.leverage > 0 ? p.leverage : null),
+    stakeUsdc: copyBet
+      ? copyBet.stakeUsdc
+      : p.collateralUsd > 0
+        ? p.collateralUsd
+        : null,
     openFeeUsd: null,
-    leaderAddress: null,
+    leaderAddress: copyBet?.meta.leaderAddress ?? null,
     leaderUsername: null,
     whaleId: null,
     whaleName: null,
     autoCloseOnSourceClose: false,
     closeReason: null,
-    botId: null,
-    botName: null,
+    botId: copyBet?.meta.botId ?? null,
+    botName: copyBet?.meta.botId ?? null,
     liveStatus: "open" satisfies CopyLiveStatus,
     entryPrice: p.entryPrice > 0 ? p.entryPrice : null,
     markPrice: p.markPrice > 0 ? p.markPrice : null,
@@ -207,7 +220,7 @@ function flashV2RowFromPosition(
     unrealizedPnlPct,
     openedAt: null,
     positionUpdatedAt: pricedAt,
-    leaderClosedAt: null,
+    leaderClosedAt: copyBet?.meta.leaderClosedAt ?? null,
   };
 }
 
@@ -270,8 +283,17 @@ export async function GET(request: Request) {
     legacyBets.map((bet) => enrichBet(bet, user.solanaPubkey)),
   );
 
-  // --- Pacifica copy bets ---
+  // --- copy bets, split by execution venue ---
+  // Pacifica copy bets look up their live position on Pacifica below; flash-v2
+  // copy bets are attributed to the venue position (flashV2CopyByKey) so they
+  // never become a phantom Pacifica not_found row.
   const copyBets = userBets.filter((b) => b.type === "copy");
+  const pacificaCopyBets = copyBets.filter(
+    (b) => copyMetaVenue(b.meta) === "pacifica",
+  );
+  const flashV2CopyBets = copyBets.filter(
+    (b) => copyMetaVenue(b.meta) === "flash-v2",
+  );
   let userPositions: PacificaPosition[] | null = null;
   let flashPositions: FlashPositionSummary[] = [];
   let flashV2Positions: VenuePosition[] = [];
@@ -364,7 +386,7 @@ export async function GET(request: Request) {
   }
   const copyRows = (
     await Promise.all(
-      copyBets
+      pacificaCopyBets
         .filter((b) => b.status === "confirmed")
         .map(async (b) => {
           const whaleMeta = parseWhaleCopyMeta(b.meta);
@@ -524,7 +546,30 @@ export async function GET(request: Request) {
   // appear nowhere (excluded from legacy enrichment, copyBets, and the
   // confirmed-only flashTailByKey attribution above).
   const closedFlashTailRows = closedFlashTailCopyRows(userBets);
-  const flashV2Rows = flashV2Positions.map((p) => flashV2RowFromPosition(p, pricedAt));
+  // Newest confirmed flash-v2 copy bet per market:side (flashV2CopyBets is
+  // newest-first; first-wins keeps the live one — one position per
+  // owner+market+side). A bet whose position died externally drops out (no
+  // matching venue position) until the mirror-close/reconcile sweep marks it.
+  const flashV2CopyByKey = new Map<
+    string,
+    { id: string; stakeUsdc: number; meta: CopyRowMeta }
+  >();
+  for (const b of flashV2CopyBets) {
+    if (b.status !== "confirmed") continue;
+    const meta = parseCopyRowMeta(b.meta);
+    if (!meta) continue;
+    const key = positionKey(meta.leaderMarket, meta.leaderSide);
+    if (!flashV2CopyByKey.has(key)) {
+      flashV2CopyByKey.set(key, { id: b.id, stakeUsdc: b.amountUsdc, meta });
+    }
+  }
+  const flashV2Rows = flashV2Positions.map((p) =>
+    flashV2RowFromPosition(
+      p,
+      pricedAt,
+      flashV2CopyByKey.get(positionKey(p.symbol, p.side)) ?? null,
+    ),
+  );
   const liveCopyRows = [
     ...copyRows,
     ...walletRows,

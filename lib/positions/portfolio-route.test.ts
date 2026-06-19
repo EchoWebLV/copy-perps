@@ -568,6 +568,75 @@ describe("GET /api/portfolio", () => {
     expect(body.snapshot.staleReason ?? "").toContain("Flash v2 positions delayed");
   });
 
+  it("attributes a confirmed flash-v2 copy bet to its venue position as a single tail row", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T14:15:00.000Z"));
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      { id: "user-1", privyId: "privy-user", solanaPubkey: "wallet-1" },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([
+      {
+        id: "copy-v2",
+        userId: "user-1",
+        type: "copy",
+        amountUsdc: 25,
+        feeUsdc: 0.1,
+        status: "confirmed",
+        meta: {
+          venue: "flash-v2",
+          leaderAddress: "LEADER",
+          leaderMarket: "SOL",
+          leaderSide: "long",
+          leverage: 5,
+          openTxSig: "SIG",
+        },
+        createdAt: new Date("2026-05-28T14:10:00.000Z"),
+      },
+    ]);
+    // Pacifica has no matching position — a naive copy-row lookup would emit a
+    // phantom not_found row here. flashV2 has the live position.
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.getFlashV2Venue.mockReturnValue({
+      getPositions: vi.fn().mockResolvedValue([
+        {
+          positionKey: "SOL-long",
+          symbol: "SOL",
+          side: "long",
+          sizeUsd: 250,
+          collateralUsd: 50,
+          entryPrice: 140,
+          markPrice: 150,
+          liquidationPrice: 90,
+          leverage: 5,
+        },
+      ]),
+    });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    // Exactly one row: the attributed tail (no phantom not_found + wallet pair).
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: "copy-v2",
+      venue: "flash-v2",
+      sourceKind: "tail",
+      market: "SOL",
+      side: "long",
+      leverage: 5,
+      stakeUsdc: 25,
+      leaderAddress: "LEADER",
+      liveStatus: "open",
+      entryPrice: 140,
+      markPrice: 150,
+      notionalUsd: 250,
+    });
+    // % is over the user's stake (25), not position collateral (50).
+    expect(body.copyRows[0].pnlUsd).toBeCloseTo(17.857143);
+    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(71.428571);
+  });
+
   it("includes uncredited Pacifica deposits as pending portfolio funds", async () => {
     mocks.selectUserLimit.mockResolvedValueOnce([
       {

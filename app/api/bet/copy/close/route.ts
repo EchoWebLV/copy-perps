@@ -8,6 +8,9 @@ import { getAgentWallet } from "@/lib/wallets/agent";
 import { closeCopyOrder } from "@/lib/pacifica/orders";
 import { getPositions } from "@/lib/pacifica/client";
 import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { copyMetaVenue } from "@/lib/bets/copy-meta";
+import { closeCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -27,6 +30,76 @@ export async function POST(request: Request) {
 
   const user = await ensureUser(claims.userId, body.walletAddress ?? null);
   if (!user.solanaPubkey) return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+
+  // Flash v2 copy bets close via the session key (no agent wallet). Peek the
+  // bet's persisted venue so a Pacifica bet still closes on Pacifica after the
+  // flag flips. Gated on the flag: when it's off this block is skipped entirely
+  // and the Pacifica path below runs byte-for-byte (no extra query).
+  const flashV2 = getFlashV2Venue();
+  if (flashV2) {
+    const [peek] = await db
+      .select({
+        id: bets.id,
+        status: bets.status,
+        amountUsdc: bets.amountUsdc,
+        feeUsdc: bets.feeUsdc,
+        meta: bets.meta,
+      })
+      .from(bets)
+      .where(and(eq(bets.id, body.betId), eq(bets.userId, user.id)))
+      .limit(1);
+    if (peek && copyMetaVenue(peek.meta) === "flash-v2") {
+      if (peek.status !== "confirmed") {
+        return NextResponse.json(
+          { error: `cannot close bet with status ${peek.status}` },
+          { status: 409 },
+        );
+      }
+      const meta = peek.meta as { leaderMarket: string; leaderSide: "long" | "short" };
+      let result;
+      try {
+        result = await closeCopyFlashV2({
+          venue: flashV2,
+          userId: user.id,
+          owner: user.solanaPubkey,
+          market: meta.leaderMarket,
+          side: meta.leaderSide,
+        });
+      } catch (err) {
+        console.error("[bet/copy/close] flash-v2 close failed:", err);
+        return NextResponse.json(
+          { error: "Position could not close. Try again." },
+          { status: 502 },
+        );
+      }
+      if (result.kind === "no-session") {
+        return NextResponse.json(
+          { error: "Re-enable auto-copy to close this position." },
+          { status: 409 },
+        );
+      }
+      if (result.kind === "not-found") {
+        await db
+          .update(bets)
+          .set({ status: "closed", closedAt: new Date() })
+          .where(eq(bets.id, peek.id));
+        return NextResponse.json({ ok: true, alreadyClosed: true });
+      }
+      const openFeeUsdc =
+        peek.feeUsdc != null && Number.isFinite(peek.feeUsdc) ? peek.feeUsdc : 0;
+      const proceedsUsdc = peek.amountUsdc + result.estPnlUsd - openFeeUsdc;
+      await db
+        .update(bets)
+        .set({
+          status: "closed",
+          closedAt: new Date(),
+          closeTxHash: `flashv2:${result.signature}`,
+          proceedsUsdc,
+        })
+        .where(eq(bets.id, peek.id));
+      return NextResponse.json({ ok: true, txSig: result.signature, proceedsUsdc });
+    }
+  }
 
   const agent = await getAgentWallet(user.id);
   if (!agent) {

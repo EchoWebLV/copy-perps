@@ -20,6 +20,8 @@ import {
 } from "@/lib/bets/funding";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
 import { marketDataErrorResponse } from "@/lib/bets/route-errors";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { openCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -27,6 +29,7 @@ export const dynamic = "force-dynamic";
 
 const MIN_USDC = 5;
 const MAX_USDC = 1000;
+const MAX_FLASH_V2_LEVERAGE = 100;
 
 interface Body {
   leaderAddress?: string;
@@ -106,10 +109,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
-  // One open tail per market: Pacifica nets positions by (account, symbol),
-  // so a second tail on the same market would merge into one position —
-  // closing one would close the other and misattribute its PnL.
-  if (await hasOpenTailOnMarket(user.id, body.market)) {
+  // Execution venue: Flash v2 when the flag is on, else Pacifica. The flag-off
+  // path below is the unchanged Pacifica flow.
+  const flashV2 = getFlashV2Venue();
+  const copyVenue = flashV2 ? "flash-v2" : "pacifica";
+
+  // One open tail per market+venue: each venue nets positions by (account,
+  // symbol), so a second tail on the same market+venue would merge into one
+  // position — closing one would close the other and misattribute its PnL.
+  if (await hasOpenTailOnMarket(user.id, body.market, copyVenue)) {
     return NextResponse.json(
       { error: `you already have an open ${body.market} tail — close it first` },
       { status: 409 },
@@ -137,6 +145,77 @@ export async function POST(request: Request) {
       { error: "leader no longer has this position open" },
       { status: 409 },
     );
+  }
+
+  // Flash v2 copy: session-signed (one-tap), no agent wallet. The whole Pacifica
+  // path below (sizing, agent onboarding, agent fill) is skipped when the flag
+  // is on. Requires a bound session (else `enable-session`) + onboarded basket.
+  if (flashV2) {
+    if (
+      !Number.isFinite(body.leverage) ||
+      body.leverage < 1 ||
+      body.leverage > MAX_FLASH_V2_LEVERAGE
+    ) {
+      return NextResponse.json(
+        { error: `leverage must be between 1x and ${MAX_FLASH_V2_LEVERAGE}x` },
+        { status: 400 },
+      );
+    }
+    let result;
+    try {
+      result = await openCopyFlashV2({
+        venue: flashV2,
+        userId: user.id,
+        owner: user.solanaPubkey,
+        market: body.market,
+        side: body.side,
+        stakeUsdc: body.stakeUsdc,
+        leverage: body.leverage,
+      });
+    } catch (err) {
+      console.error("[bet/copy] flash-v2 open failed:", err);
+      return NextResponse.json(
+        { error: "Trade could not open. No funds were spent." },
+        { status: 502 },
+      );
+    }
+    if (result.kind === "enable-session") {
+      return NextResponse.json({ phase: "enable-session" });
+    }
+    if (result.kind === "onboard") {
+      return NextResponse.json({ phase: "onboard", steps: result.steps });
+    }
+    const feeUsdc =
+      result.quote.feeUsdUi != null && Number.isFinite(result.quote.feeUsdUi)
+        ? result.quote.feeUsdUi
+        : null;
+    const [bet] = await db
+      .insert(bets)
+      .values({
+        userId: user.id,
+        type: "copy",
+        signalId: body.signalId ?? null,
+        amountUsdc: body.stakeUsdc,
+        feeUsdc,
+        status: "confirmed",
+        meta: {
+          venue: "flash-v2",
+          leaderAddress: body.leaderAddress,
+          leaderMarket: body.market,
+          leaderSide: body.side,
+          leverage: body.leverage,
+          leaderEntryPriceAtTap: Number(leaderPos.entry_price),
+          openTxSig: result.signature,
+        },
+      })
+      .returning();
+    return NextResponse.json({
+      phase: "open",
+      betId: bet.id,
+      txSig: result.signature,
+      market: body.market,
+      side: body.side,
+    });
   }
 
   // Compute the user's notional + amount given their stake and leader's lev.
