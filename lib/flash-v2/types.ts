@@ -12,10 +12,17 @@ export interface UnsignedTx {
   layer: RpcLayer;
 }
 
+/**
+ * Normalized open-position quote. The live /transaction-builder/open-position
+ * response uses `newEntryPrice` / `newLiquidationPrice` / `entryFee`; venue.ts
+ * `rawToQuote` maps those onto these consumer-facing names. Do not read the raw
+ * response directly.
+ */
 export interface Quote {
   entryPriceUi?: number;
   liquidationPriceUi?: number;
   feeUsdUi?: number;
+  youPayUsdUi?: number | null;
   /** Documented API typo — kept verbatim, do not rename. */
   youRecieveUsdUi?: number | null;
 }

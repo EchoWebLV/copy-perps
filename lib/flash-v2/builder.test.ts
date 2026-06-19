@@ -2,14 +2,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VersionedTransaction } from "@solana/web3.js";
 import { postBuilder } from "./builder";
-import { FlashV2Error } from "./errors";
+import {
+  FlashV2Error,
+  FlashOnboardingRequiredError,
+  FlashWithdrawSettlingError,
+} from "./errors";
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** Simulate a real Response: object bodies serialize to JSON, string bodies are
+ *  returned verbatim (the 400/500 plain-text error channels). */
 function mockFetch(status: number, body: unknown) {
+  const text = typeof body === "string" ? body : JSON.stringify(body);
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ status, json: async () => body })),
+    vi.fn(async () => ({ status, text: async () => text })),
   );
 }
 
@@ -32,5 +39,17 @@ describe("postBuilder", () => {
     await expect(postBuilder("/transaction-builder/init-basket", {})).rejects.toThrow(
       /no transaction/i,
     );
+  });
+  it("classifies a 400 plain-text body as onboarding-required", async () => {
+    mockFetch(400, "basket account not initialized");
+    await expect(
+      postBuilder("/transaction-builder/open-position", {}),
+    ).rejects.toBeInstanceOf(FlashOnboardingRequiredError);
+  });
+  it("classifies a 500 plain-text 0xbc4 body as withdraw-settling", async () => {
+    mockFetch(500, "Program failed to complete: custom program error: 0xbc4");
+    await expect(
+      postBuilder("/transaction-builder/execute-withdrawal", {}),
+    ).rejects.toBeInstanceOf(FlashWithdrawSettlingError);
   });
 });

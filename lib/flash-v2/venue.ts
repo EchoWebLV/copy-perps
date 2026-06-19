@@ -22,6 +22,26 @@ export interface CloseArgs {
   closeUsd: number;
 }
 
+/**
+ * Map the raw /transaction-builder/open-position response onto the normalized
+ * Quote. The live response keys are `newEntryPrice` / `newLiquidationPrice` /
+ * `entryFee` (NOT the snapshot's *Ui names) plus the `youRecieveUsdUi` typo,
+ * kept verbatim. A blind `raw as Quote` cast would silently read undefined.
+ * Spellings are documented but not byte-confirmed — re-verify against
+ * openapi.v2.json / the devnet smoke before trusting them in the UI.
+ */
+function rawToQuote(raw: Record<string, unknown>): Quote {
+  const num = (v: unknown): number | undefined =>
+    v === undefined || v === null ? undefined : Number(v);
+  return {
+    entryPriceUi: num(raw.newEntryPrice),
+    liquidationPriceUi: num(raw.newLiquidationPrice),
+    feeUsdUi: num(raw.entryFee),
+    youPayUsdUi: num(raw.youPayUsdUi) ?? null,
+    youRecieveUsdUi: num(raw.youRecieveUsdUi) ?? null,
+  };
+}
+
 /** User-signed Flash v2 venue (Phase 1). Session-key/server-driven copy = Phase 2. */
 export function flashV2Venue(deps: { postBuilder?: PostBuilder } = {}) {
   const post = deps.postBuilder ?? defaultPostBuilder;
@@ -55,7 +75,7 @@ export function flashV2Venue(deps: { postBuilder?: PostBuilder } = {}) {
       if (args.takeProfit != null) body.takeProfit = args.takeProfit;
       if (args.stopLoss != null) body.stopLoss = args.stopLoss;
       const { tx, raw } = await post("/transaction-builder/open-position", body);
-      return { unsigned: { tx, layer: "er" }, quote: raw as Quote };
+      return { unsigned: { tx, layer: "er" }, quote: rawToQuote(raw) };
     },
 
     async closePosition(args: CloseArgs): Promise<{ unsigned: UnsignedTx }> {
