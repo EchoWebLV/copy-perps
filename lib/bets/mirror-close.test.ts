@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<Record<string, unknown>>,
   // Rows the paper_positions lookup returns for a bot (status filter applied in JS).
   paperRows: [] as Array<{ status: string }>,
+  // On-chain arena flat signal for arena:<persona> bots.
+  getBotPositionSignal: vi.fn(),
 }));
 
 vi.mock("@/lib/pacifica/client", () => ({
@@ -50,6 +52,13 @@ vi.mock("@/lib/flash-v2/session-store", () => ({
 vi.mock("@/lib/flash-v2/session-trade", () => ({
   executeSessionClose: mocks.executeSessionClose,
 }));
+
+// Keep personaFromBotId real (routes arena vs paper-bot); stub the chain read.
+vi.mock("@/lib/arena/bot-position", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/lib/arena/bot-position")>();
+  return { ...actual, getBotPositionSignal: mocks.getBotPositionSignal };
+});
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -586,6 +595,7 @@ describe("runMirrorCloseSweep bot source closes (positive-signal only)", () => {
     mocks.openBets = [];
     mocks.updates = [];
     mocks.paperRows = [];
+    mocks.getBotPositionSignal.mockResolvedValue("unknown");
     mocks.getActiveSessionKey.mockResolvedValue({
       sessionPubkey: "S",
       keypair: { secretKey: new Uint8Array([1]) },
@@ -597,28 +607,29 @@ describe("runMirrorCloseSweep bot source closes (positive-signal only)", () => {
     });
   });
 
-  it("does NOT close an untracked (arena) bot tail — no paper rows means 'unknown', not 'flat'", async () => {
+  it("does NOT close an arena bot tail when the on-chain signal is 'unknown'", async () => {
     mocks.openBets = [openBotBet()];
-    mocks.paperRows = []; // arena bots aren't tracked in paper_positions
+    mocks.getBotPositionSignal.mockResolvedValue("unknown");
     const result = await runMirrorCloseSweep();
     expect(result.closesAttempted).toBe(0);
     expect(mocks.executeSessionClose).not.toHaveBeenCalled();
     expect(mocks.updates).toHaveLength(0);
   });
 
-  it("does NOT close while the bot still holds a paper position", async () => {
+  it("does NOT close while the arena bot still holds a position ('active')", async () => {
     mocks.openBets = [openBotBet()];
-    mocks.paperRows = [{ status: "open" }];
+    mocks.getBotPositionSignal.mockResolvedValue("active");
     const result = await runMirrorCloseSweep();
     expect(result.closesAttempted).toBe(0);
     expect(mocks.executeSessionClose).not.toHaveBeenCalled();
   });
 
-  it("closes via the session when the bot is positively flat (all rows closed)", async () => {
+  it("closes via the session when the arena bot is positively flat", async () => {
     mocks.openBets = [openBotBet()];
-    mocks.paperRows = [{ status: "closed" }];
+    mocks.getBotPositionSignal.mockResolvedValue("flat");
     const result = await runMirrorCloseSweep();
     expect(result.closesSucceeded).toBe(1);
+    expect(mocks.getBotPositionSignal).toHaveBeenCalledWith("arena:claude");
     expect(mocks.executeSessionClose).toHaveBeenCalledWith(
       expect.objectContaining({ market: "SOL", side: "long" }),
     );
@@ -630,9 +641,17 @@ describe("runMirrorCloseSweep bot source closes (positive-signal only)", () => {
 
   it("honors autoCloseOnSourceClose:false — leaves a flat bot's tail open for manual close", async () => {
     mocks.openBets = [openBotBet({ autoCloseOnSourceClose: false })];
-    mocks.paperRows = [{ status: "closed" }];
+    mocks.getBotPositionSignal.mockResolvedValue("flat");
     const result = await runMirrorCloseSweep();
     expect(result.closesAttempted).toBe(0);
     expect(mocks.executeSessionClose).not.toHaveBeenCalled();
+  });
+
+  it("paper-bot id (non-arena) still uses the paper_positions signal, not the chain", async () => {
+    mocks.openBets = [openBotBet({ botId: "paper-7" })];
+    mocks.paperRows = [{ status: "closed" }]; // positively flat
+    const result = await runMirrorCloseSweep();
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.getBotPositionSignal).not.toHaveBeenCalled();
   });
 });

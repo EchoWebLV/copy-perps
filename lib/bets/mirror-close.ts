@@ -9,6 +9,7 @@ import { realizedPnlForOrder } from "@/lib/bets/copy-pnl";
 import { shouldAutoCloseWhaleCopy } from "@/lib/bets/source-close";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { copyMetaVenue } from "@/lib/bets/copy-meta";
+import { getBotPositionSignal, personaFromBotId } from "@/lib/arena/bot-position";
 import { getActiveSessionKey } from "@/lib/flash-v2/session-store";
 import { executeSessionClose } from "@/lib/flash-v2/session-trade";
 import { flashV2Venue } from "@/lib/flash-v2/venue";
@@ -326,8 +327,13 @@ async function closeLeaderFollowers(
   }
 }
 
-/** Bot-keyed close path: groups by meta.botId, checks whether the bot's paper
- *  position is still open, and closes any follower bet where the bot has exited. */
+/** Bot-keyed close path: groups by meta.botId, checks whether the bot has
+ *  exited its position, and closes any follower bet that opted into auto-close.
+ *  Source of the flat signal depends on the bot kind:
+ *   - `arena:<persona>` → the on-chain LlmBot position (getBotPositionSignal).
+ *   - any other id      → the paper_positions table (paper-bot experiment).
+ *  Positive-signal-only on BOTH paths: we close only on a definite "flat", never
+ *  on "unknown" (missing data, RPC error, decode/fetch failure). */
 async function closeBotFollowers(
   openBets: OpenBetRow[],
   result: MirrorResult,
@@ -343,30 +349,32 @@ async function closeBotFollowers(
   }
 
   for (const [botId, followers] of byBot.entries()) {
-    // Fetch every paper position the bot has on record (any status).
-    let rows: { status: string }[];
-    try {
-      rows = await db
-        .select({ status: paperPositions.status })
-        .from(paperPositions)
-        .where(eq(paperPositions.botId, botId))
-        .limit(50);
-    } catch (err) {
-      for (const f of followers) {
-        result.errors.push({
-          betId: f.betId,
-          message: `bot paper-position fetch: ${err}`,
-        });
+    if (personaFromBotId(botId)) {
+      // On-chain LLM arena bot: read its real position. getBotPositionSignal is
+      // total (never throws) — "active"/"unknown" both keep the tail open.
+      if ((await getBotPositionSignal(botId)) !== "flat") continue;
+    } else {
+      // Paper-bot experiment: positive-signal via paper_positions. A bot with
+      // NO rows here is "unknown", NOT "flat", so we never close blind.
+      let rows: { status: string }[];
+      try {
+        rows = await db
+          .select({ status: paperPositions.status })
+          .from(paperPositions)
+          .where(eq(paperPositions.botId, botId))
+          .limit(50);
+      } catch (err) {
+        for (const f of followers) {
+          result.errors.push({
+            betId: f.betId,
+            message: `bot paper-position fetch: ${err}`,
+          });
+        }
+        continue;
       }
-      continue;
+      if (rows.length === 0) continue;
+      if (rows.some((r) => r.status === "open")) continue; // still in position
     }
-
-    // Positive-signal-only: a bot we don't track in paper_positions (e.g. the
-    // on-chain ER arena bots, keyed `arena:<persona>`) has NO rows here. Treat
-    // that as "unknown", NOT "flat", so we never auto-close a tail we can't
-    // confirm has actually exited. Auto-close fires only on a real flat signal.
-    if (rows.length === 0) continue;
-    if (rows.some((r) => r.status === "open")) continue; // still in position
 
     // Bot is positively flat → close each follower that opted into auto-close.
     for (const row of followers) {
