@@ -66,7 +66,7 @@ export async function executeSessionClose(args: {
   market: string;
   side: Side;
   deps?: SessionExecDeps;
-}): Promise<{ found: true; signature: string; estPnlUsd: number } | { found: false }> {
+}): Promise<{ found: true; signature: string; estPnlUsd: number | null } | { found: false }> {
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
   const positions = await args.venue.getPositions(args.owner);
@@ -84,11 +84,17 @@ export async function executeSessionClose(args: {
   });
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
-  const estPnlUsd = markPnlUsd({
-    side: pos.side,
-    entryPrice: pos.entryPrice,
-    markPrice: pos.markPrice,
-    sizeUsd: pos.sizeUsd,
-  });
+  // Guard a partial/late indexer read (entryPrice/markPrice default to 0 in the
+  // normalizer) so markPnlUsd never divides by zero and writes NaN/Infinity to
+  // proceeds_usdc. null ⇒ "PnL unknown", same sentinel the Pacifica close uses.
+  const estPnlUsd =
+    pos.entryPrice > 0 && pos.markPrice > 0
+      ? markPnlUsd({
+          side: pos.side,
+          entryPrice: pos.entryPrice,
+          markPrice: pos.markPrice,
+          sizeUsd: pos.sizeUsd,
+        })
+      : null;
   return { found: true, signature, estPnlUsd };
 }

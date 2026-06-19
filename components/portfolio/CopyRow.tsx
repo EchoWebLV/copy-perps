@@ -161,10 +161,11 @@ export function CopyRow({ row, onClosed }: Props) {
   const handleClose = useCallback(async () => {
     if (busy) return;
     if (!row.betId && row.sourceKind !== "wallet") return;
-    // flash-v2 positions are read-only display until Phase 3 Task 4 wires their
-    // close path; routing them through the Pacifica close here would 409 or
-    // close the wrong same-market Pacifica position.
-    if (row.venue === "flash-v2") return;
+    // flash-v2 TAILS (betId set) close server-side via the session key with no
+    // client signing — they fall through to /api/bet/copy/close below. flash-v2
+    // SELF-DIRECTED wallet positions return an unsigned ER tx that this handler
+    // doesn't yet sign, so suppress only those.
+    if (row.venue === "flash-v2" && row.sourceKind === "wallet") return;
     setBusy(true);
     setStatus("Closing...");
     try {
@@ -326,7 +327,9 @@ export function CopyRow({ row, onClosed }: Props) {
             {subtitleParts.join(" · ")}
           </div>
         </div>
-        {!isClosed && (row.betId || row.sourceKind === "wallet") && row.venue !== "flash-v2" && (
+        {!isClosed &&
+          (row.betId || row.sourceKind === "wallet") &&
+          !(row.venue === "flash-v2" && row.sourceKind === "wallet") && (
           <button
             type="button"
             disabled={busy}

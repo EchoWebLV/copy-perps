@@ -69,7 +69,7 @@ export async function openCopyFlashV2(args: {
 export type CopyCloseFlashV2Result =
   | { kind: "no-session" }
   | { kind: "not-found" }
-  | { kind: "closed"; signature: string; estPnlUsd: number };
+  | { kind: "closed"; signature: string; estPnlUsd: number | null };
 
 /**
  * Close a Flash v2 copy via the session key. `no-session` ⇒ the session expired

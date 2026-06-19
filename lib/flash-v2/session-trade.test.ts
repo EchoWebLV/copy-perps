@@ -82,6 +82,23 @@ describe("executeSessionClose", () => {
     );
   });
 
+  it("found with an unpopulated entry/mark price: estPnlUsd is null, never NaN", async () => {
+    const v = venue({
+      getPositions: vi.fn(async () => [
+        { symbol: "SOL", side: "long", sizeUsd: 100, entryPrice: 0, markPrice: 0 },
+      ]),
+    });
+    const out = await executeSessionClose({
+      venue: v,
+      session,
+      owner: "O",
+      market: "SOL",
+      side: "long",
+      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S") },
+    });
+    expect(out).toMatchObject({ found: true, signature: "S", estPnlUsd: null });
+  });
+
   it("not found: returns { found:false } and never signs or submits", async () => {
     const sign = vi.fn();
     const submit = vi.fn();

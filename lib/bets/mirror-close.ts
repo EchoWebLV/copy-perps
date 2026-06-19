@@ -114,7 +114,20 @@ async function closeFollowerBetFlashV2(
   result: MirrorResult,
   options: CloseFollowerBetOptions,
 ): Promise<void> {
-  const session = await getActiveSessionKey(row.userId);
+  // getActiveSessionKey decrypts the session seed — a corrupt/tampered seed or a
+  // transient DB read can throw. Wrap it so one bad follower becomes a per-bet
+  // error, not an unhandled rejection that aborts the whole sweep (the Pacifica
+  // branch decrypts inside its own try for the same reason).
+  let session;
+  try {
+    session = await getActiveSessionKey(row.userId);
+  } catch (err) {
+    result.errors.push({
+      betId: row.betId,
+      message: `flash-v2 session load failed: ${err}`,
+    });
+    return;
+  }
   if (!session) {
     // Do NOT fall back to user-signing in a background sweep. Surface it so the
     // user can re-enable auto-copy; the bet stays confirmed for a manual close.
@@ -152,6 +165,12 @@ async function closeFollowerBetFlashV2(
       result.closesSucceeded++;
       return;
     }
+    // estPnlUsd null ⇒ indexer hasn't populated entry/mark price; leave proceeds
+    // unset rather than persisting NaN into proceeds_usdc.
+    const proceedsUsdc =
+      closeResult.estPnlUsd == null
+        ? null
+        : row.amountUsdc + closeResult.estPnlUsd - openFeeUsdc;
     await db
       .update(bets)
       .set({
@@ -159,7 +178,7 @@ async function closeFollowerBetFlashV2(
         closedAt: new Date(),
         closeTxHash: `flashv2:${closeResult.signature}`,
         meta: withLeaderClosedAt(row.meta, options.closeReason),
-        proceedsUsdc: row.amountUsdc + closeResult.estPnlUsd - openFeeUsdc,
+        ...(proceedsUsdc != null ? { proceedsUsdc } : {}),
       })
       .where(and(eq(bets.id, row.betId), eq(bets.status, "confirmed")));
     result.closesSucceeded++;
@@ -182,16 +201,12 @@ async function closeFollowerBet(
     await closeFollowerBetFlashV2(row, meta, result, options);
     return;
   }
+  // A Pacifica follower with no agent wallet was silently dropped by the old
+  // innerJoin (now leftJoin, to admit flash-v2 followers). Preserve that exactly
+  // — no attempt, no error — so the flag-off sweep is byte-for-byte unchanged.
+  if (!row.agentSecretEnc || !row.agentPubkey) return;
   result.closesAttempted++;
   try {
-    if (!row.agentSecretEnc || !row.agentPubkey) {
-      // A Pacifica follower with no agent wallet can't be closed server-side.
-      result.errors.push({
-        betId: row.betId,
-        message: "missing agent wallet for pacifica close",
-      });
-      return;
-    }
     const seed = decryptSeed(row.agentSecretEnc);
     const kp = Keypair.fromSeed(seed);
     const agent: AgentWalletRecord = {

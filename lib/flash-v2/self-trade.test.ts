@@ -85,6 +85,18 @@ describe("planFlashV2Close", () => {
     );
   });
 
+  it("found with an unpopulated entry/mark price: estPnlUsd is null, never NaN", async () => {
+    const v = venue({
+      getPositions: vi.fn(async () => [
+        { symbol: "SOL", side: "long", sizeUsd: 100, entryPrice: 0, markPrice: 0 },
+      ]),
+    });
+    const result = await planFlashV2Close({ venue: v, owner: "OWNER", market: "SOL", side: "long" });
+    expect(result.found).toBe(true);
+    if (!result.found) throw new Error("unreachable");
+    expect(result.plan.estPnlUsd).toBeNull();
+  });
+
   it("not found: returns { found: false } and never builds a close", async () => {
     const v = venue({ getPositions: vi.fn(async () => [{ symbol: "BTC", side: "long" }]) });
     const result = await planFlashV2Close({ venue: v, owner: "OWNER", market: "SOL", side: "long" });

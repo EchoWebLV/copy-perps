@@ -64,7 +64,8 @@ export interface FlashV2ClosePlan {
   phase: "close";
   transactionB64: string;
   layer: RpcLayer;
-  estPnlUsd: number;
+  // null when the indexer hasn't populated entry/mark price (avoid NaN PnL).
+  estPnlUsd: number | null;
   market: string;
   side: Side;
 }
@@ -95,12 +96,16 @@ export async function planFlashV2Close(args: {
     side: args.side,
     closeUsd: pos.sizeUsd,
   });
-  const estPnlUsd = markPnlUsd({
-    side: pos.side,
-    entryPrice: pos.entryPrice,
-    markPrice: pos.markPrice,
-    sizeUsd: pos.sizeUsd,
-  });
+  // null when entry/mark price aren't populated (avoid NaN from a 0 entry).
+  const estPnlUsd =
+    pos.entryPrice > 0 && pos.markPrice > 0
+      ? markPnlUsd({
+          side: pos.side,
+          entryPrice: pos.entryPrice,
+          markPrice: pos.markPrice,
+          sizeUsd: pos.sizeUsd,
+        })
+      : null;
   return {
     found: true,
     plan: {

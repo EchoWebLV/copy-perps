@@ -87,14 +87,20 @@ export async function POST(request: Request) {
       }
       const openFeeUsdc =
         peek.feeUsdc != null && Number.isFinite(peek.feeUsdc) ? peek.feeUsdc : 0;
-      const proceedsUsdc = peek.amountUsdc + result.estPnlUsd - openFeeUsdc;
+      // estPnlUsd is null when the indexer hasn't populated entry/mark price —
+      // leave proceeds unset (unknown) rather than writing a NaN, mirroring the
+      // Pacifica realized==null path below.
+      const proceedsUsdc =
+        result.estPnlUsd == null
+          ? null
+          : peek.amountUsdc + result.estPnlUsd - openFeeUsdc;
       await db
         .update(bets)
         .set({
           status: "closed",
           closedAt: new Date(),
           closeTxHash: `flashv2:${result.signature}`,
-          proceedsUsdc,
+          ...(proceedsUsdc != null ? { proceedsUsdc } : {}),
         })
         .where(eq(bets.id, peek.id));
       return NextResponse.json({ ok: true, txSig: result.signature, proceedsUsdc });

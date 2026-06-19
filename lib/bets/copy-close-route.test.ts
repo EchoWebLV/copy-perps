@@ -76,6 +76,24 @@ describe("POST /api/bet/copy/close", () => {
     expect(mocks.getAgentWallet).not.toHaveBeenCalled();
   });
 
+  it("flag-on (flash-v2 bet, unknown PnL): closes with proceedsUsdc null (no NaN)", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.selectLimit.mockResolvedValue([
+      {
+        id: "bet-1",
+        status: "confirmed",
+        amountUsdc: 25,
+        feeUsdc: 0.1,
+        meta: { venue: "flash-v2", leaderMarket: "SOL", leaderSide: "long" },
+      },
+    ]);
+    mocks.closeCopyFlashV2.mockResolvedValue({ kind: "closed", signature: "CSIG", estPnlUsd: null });
+    const res = await POST(post({ betId: "bet-1", walletAddress: OWNER }));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ok: true, txSig: "CSIG", proceedsUsdc: null });
+    expect(mocks.updateWhere).toHaveBeenCalledTimes(1);
+  });
+
   it("flag-on (flash-v2 bet, position gone): marks closed as alreadyClosed", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
     mocks.selectLimit.mockResolvedValue([

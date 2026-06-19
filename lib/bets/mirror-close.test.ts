@@ -457,6 +457,78 @@ describe("runMirrorCloseSweep whale source closes", () => {
     });
   });
 
+  it("isolates a thrown getActiveSessionKey (corrupt seed) as a per-bet error, sweep continues", async () => {
+    mocks.openBets = [
+      {
+        ...openWhaleBet({ ...whaleMeta, venue: "flash-v2" } as WhaleCopyMeta),
+        agentPubkey: null,
+        agentSecretEnc: null,
+      },
+    ];
+    mocks.getActiveSessionKey.mockRejectedValue(new Error("auth-tag mismatch"));
+    mocks.getPositions.mockImplementation(async () => []); // source closed
+
+    const result = await runMirrorCloseSweep();
+
+    // Per-bet error, NOT an unhandled rejection that aborts the sweep.
+    expect(result.closesAttempted).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toContain("session load failed");
+    expect(mocks.executeSessionClose).not.toHaveBeenCalled();
+    expect(mocks.patchMonitorStatus).toHaveBeenCalled(); // sweep completed
+  });
+
+  it("flash-v2 close with unknown PnL leaves proceedsUsdc unset (no NaN persisted)", async () => {
+    mocks.openBets = [
+      {
+        ...openWhaleBet({ ...whaleMeta, venue: "flash-v2" } as WhaleCopyMeta),
+        agentPubkey: null,
+        agentSecretEnc: null,
+      },
+    ];
+    mocks.getActiveSessionKey.mockResolvedValue({
+      sessionPubkey: "S",
+      sessionTokenPda: "T",
+      keypair: { secretKey: new Uint8Array(64) },
+    });
+    mocks.executeSessionClose.mockResolvedValue({
+      found: true,
+      signature: "FSIG",
+      estPnlUsd: null,
+    });
+    mocks.getPositions.mockImplementation(async () => []); // source closed
+
+    const result = await runMirrorCloseSweep();
+
+    expect(result.closesSucceeded).toBe(1);
+    expect(mocks.updates).toHaveLength(1);
+    expect(mocks.updates[0]).toMatchObject({ status: "closed", closeTxHash: "flashv2:FSIG" });
+    expect(mocks.updates[0]).not.toHaveProperty("proceedsUsdc");
+  });
+
+  it("silently skips a Pacifica follower with no agent wallet (flag-off fidelity)", async () => {
+    mocks.openBets = [
+      {
+        betId: "bet-noagent",
+        userId: "user-1",
+        amountUsdc: 10,
+        feeUsdc: 0.25,
+        meta: { leaderAddress: "leader-x", leaderMarket: "BTC", leaderSide: "long", leverage: 10 },
+        userMainPubkey: "user-main-1",
+        agentPubkey: null,
+        agentSecretEnc: null,
+      },
+    ];
+    mocks.getPositions.mockImplementation(async () => []); // leader closed
+
+    const result = await runMirrorCloseSweep();
+
+    // Old innerJoin dropped such rows silently — preserve that: no attempt, no error.
+    expect(result.closesAttempted).toBe(0);
+    expect(result.errors).toHaveLength(0);
+    expect(mocks.updates).toHaveLength(0);
+  });
+
   it("skips a flash-v2 follower (never user-signs) when the session is inactive", async () => {
     mocks.openBets = [
       {
