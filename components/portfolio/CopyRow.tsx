@@ -161,6 +161,10 @@ export function CopyRow({ row, onClosed }: Props) {
   const handleClose = useCallback(async () => {
     if (busy) return;
     if (!row.betId && row.sourceKind !== "wallet") return;
+    // flash-v2 positions are read-only display until Phase 3 Task 4 wires their
+    // close path; routing them through the Pacifica close here would 409 or
+    // close the wrong same-market Pacifica position.
+    if (row.venue === "flash-v2") return;
     setBusy(true);
     setStatus("Closing...");
     try {
@@ -322,7 +326,7 @@ export function CopyRow({ row, onClosed }: Props) {
             {subtitleParts.join(" · ")}
           </div>
         </div>
-        {!isClosed && (row.betId || row.sourceKind === "wallet") && (
+        {!isClosed && (row.betId || row.sourceKind === "wallet") && row.venue !== "flash-v2" && (
           <button
             type="button"
             disabled={busy}

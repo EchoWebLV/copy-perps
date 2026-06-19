@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => {
     getUsdcBalance: vi.fn(),
     getJupUsdBalance: vi.fn(),
     getSolBalance: vi.fn(),
+    getFlashV2Venue: vi.fn(),
   };
 });
 
@@ -77,6 +78,9 @@ vi.mock("@/lib/solana/balance", () => ({
   getUsdcBalance: mocks.getUsdcBalance,
   getJupUsdBalance: mocks.getJupUsdBalance,
   getSolBalance: mocks.getSolBalance,
+}));
+vi.mock("@/lib/flash-v2/resolve", () => ({
+  getFlashV2Venue: mocks.getFlashV2Venue,
 }));
 
 import { GET } from "../../app/api/portfolio/route";
@@ -123,6 +127,8 @@ describe("GET /api/portfolio", () => {
     mocks.getUsdcBalance.mockResolvedValue(0);
     mocks.getJupUsdBalance.mockResolvedValue(0);
     mocks.getSolBalance.mockResolvedValue(0);
+    // Flag-off by default so the existing assertions exercise the Pacifica path.
+    mocks.getFlashV2Venue.mockReturnValue(null);
     mocks.savePortfolioSnapshotForUser.mockImplementation(
       async ({ payload, status, staleReason }) => ({
         payload,
@@ -491,6 +497,75 @@ describe("GET /api/portfolio", () => {
         updatedAt: "2026-05-25T17:58:42.548Z",
       },
     });
+  });
+
+  it("emits flash-v2 positions as read-only copy rows when the flag is on", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T14:15:00.000Z"));
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      { id: "user-1", privyId: "privy-user", solanaPubkey: "wallet-1" },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([]);
+    const flashV2GetPositions = vi.fn().mockResolvedValue([
+      {
+        positionKey: "SOL-long",
+        symbol: "SOL",
+        side: "long",
+        sizeUsd: 250,
+        collateralUsd: 50,
+        entryPrice: 140,
+        markPrice: 150,
+        liquidationPrice: 90,
+        leverage: 5,
+      },
+    ]);
+    mocks.getFlashV2Venue.mockReturnValue({ getPositions: flashV2GetPositions });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(flashV2GetPositions).toHaveBeenCalledWith("wallet-1");
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: null,
+      venue: "flash-v2",
+      sourceKind: "wallet",
+      market: "SOL",
+      side: "long",
+      leverage: 5,
+      stakeUsdc: 50,
+      liveStatus: "open",
+      entryPrice: 140,
+      markPrice: 150,
+      pricedAt: "2026-05-28T14:15:00.000Z",
+      liquidationPrice: 90,
+      marginUsd: 50,
+      marginMode: "isolated",
+      notionalUsd: 250,
+    });
+    // markPnlUsd(long): (150-140)/140 * 250 = 17.857143; pct = /50*100.
+    expect(body.copyRows[0].pnlUsd).toBeCloseTo(17.857143);
+    expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(35.714286);
+  });
+
+  it("isolates a flash-v2 read failure without breaking the Pacifica portfolio", async () => {
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      { id: "user-1", privyId: "privy-user", solanaPubkey: "wallet-1" },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([]);
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.getFlashV2Venue.mockReturnValue({
+      getPositions: vi.fn().mockRejectedValue(new Error("flash-v2 down")),
+    });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.copyRows).toEqual([]);
+    expect(body.snapshot.staleReason ?? "").toContain("Flash v2 positions delayed");
   });
 
   it("includes uncredited Pacifica deposits as pending portfolio funds", async () => {
