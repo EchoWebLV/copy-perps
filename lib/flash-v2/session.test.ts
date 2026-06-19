@@ -59,14 +59,30 @@ describe("session derivation + validation", () => {
     expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now - 1) }, now)).toBe(false);
   });
 
-  it("assertSessionReplaceable throws on a bound row, allows unbound/none", () => {
-    expect(() => assertSessionReplaceable(undefined)).not.toThrow();
+  it("assertSessionReplaceable throws only on a live bound row; allows none/unbound/expired", () => {
+    const now = 1_000_000;
+    expect(() => assertSessionReplaceable(undefined, now)).not.toThrow();
+    // unbound (created-but-unconfirmed) is replaceable
     expect(() =>
-      assertSessionReplaceable({ boundAt: null, sessionPubkey: "p", sessionTokenPda: "t" }),
+      assertSessionReplaceable(
+        { boundAt: null, validUntil: new Date(now + 1000), sessionPubkey: "p", sessionTokenPda: "t" },
+        now,
+      ),
     ).not.toThrow();
+    // expired bound row is replaceable (can no longer sign on-chain)
+    expect(() =>
+      assertSessionReplaceable(
+        { boundAt: new Date(0), validUntil: new Date(now - 1), sessionPubkey: "p", sessionTokenPda: "t" },
+        now,
+      ),
+    ).not.toThrow();
+    // live bound row (unexpired) throws
     let err: unknown;
     try {
-      assertSessionReplaceable({ boundAt: new Date(0), sessionPubkey: "PRIOR", sessionTokenPda: "TOKEN" });
+      assertSessionReplaceable(
+        { boundAt: new Date(0), validUntil: new Date(now + 10_000), sessionPubkey: "PRIOR", sessionTokenPda: "TOKEN" },
+        now,
+      );
     } catch (e) {
       err = e;
     }

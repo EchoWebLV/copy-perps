@@ -85,15 +85,25 @@ export class SessionAlreadyBoundError extends FlashV2Error {
 }
 
 /**
- * Guard before persisting a new session: refuse to replace a still-BOUND row.
- * Overwriting it would orphan the old on-chain session (lost secret, locked
- * rent, a dangling Flash-scoped signer with no revoke path). An unbound
- * (created-but-unconfirmed) row is safe to overwrite. Pure / db-free.
+ * Guard before persisting a new session: refuse to replace a still-USABLE
+ * (bound AND unexpired) row. Overwriting that would orphan a live on-chain
+ * session (lost secret, locked rent, a dangling Flash-scoped signer with no
+ * revoke path). An unbound (created-but-unconfirmed) row OR an expired bound row
+ * is safe to overwrite — an expired session can no longer sign (TTL enforced
+ * on-chain), so re-enabling over it is fine (its rent stays locked until the
+ * user revokes from the session toggle). Pure / db-free.
  */
 export function assertSessionReplaceable(
-  existing: { boundAt: Date | null; sessionPubkey: string; sessionTokenPda: string } | undefined,
+  existing:
+    | { boundAt: Date | null; validUntil: Date; sessionPubkey: string; sessionTokenPda: string }
+    | undefined,
+  nowMs: number,
 ): void {
-  if (existing && existing.boundAt !== null) {
+  if (
+    existing &&
+    existing.boundAt !== null &&
+    existing.validUntil.getTime() > nowMs
+  ) {
     throw new SessionAlreadyBoundError(existing.sessionPubkey, existing.sessionTokenPda);
   }
 }

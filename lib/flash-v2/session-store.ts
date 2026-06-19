@@ -42,13 +42,14 @@ export async function createPendingSessionKey(p: {
   const [existing] = await db
     .select({
       boundAt: sessionKeys.boundAt,
+      validUntil: sessionKeys.validUntil,
       sessionPubkey: sessionKeys.sessionPubkey,
       sessionTokenPda: sessionKeys.sessionTokenPda,
     })
     .from(sessionKeys)
     .where(eq(sessionKeys.userId, p.userId))
     .limit(1);
-  assertSessionReplaceable(existing);
+  assertSessionReplaceable(existing, Date.now());
   const values = {
     userId: p.userId,
     mainPubkey: p.mainPubkey,
