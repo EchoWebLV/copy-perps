@@ -6,18 +6,21 @@
 // by the copy rail (session-signed one-tap) and the mirror-close sweep (Task 7).
 import { markPnlUsd } from "./pnl";
 import { FlashV2PositionConflictError } from "./self-trade";
+import { FlashV2TxFailedError } from "./errors";
 import {
   signTradeWithSession as defaultSign,
   submitErTx as defaultSubmit,
+  confirmErTx as defaultConfirm,
 } from "./session";
 import type { SessionKeyRecord } from "./session-store";
 import type { Quote, Side } from "./types";
 import type { FlashV2Venue, SessionRef } from "./venue";
 
-/** Injection seam: tests swap sign/submit; production uses the ER defaults. */
+/** Injection seam: tests swap sign/submit/confirm; production uses the ER defaults. */
 export interface SessionExecDeps {
   sign?: typeof defaultSign;
   submit?: typeof defaultSubmit;
+  confirm?: typeof defaultConfirm;
 }
 
 function sessionRef(s: SessionKeyRecord): SessionRef {
@@ -40,6 +43,7 @@ export async function executeSessionOpen(args: {
 }): Promise<{ signature: string; quote: Quote }> {
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
+  const confirm = args.deps?.confirm ?? defaultConfirm;
   // On-chain duplicate guard (mirrors planFlashV2Open on the self-trade rail).
   // The venue nets by (account, symbol), so opening a second position on a
   // market that already has one — including an orphan with no bet row or a
@@ -61,6 +65,13 @@ export async function executeSessionOpen(args: {
   });
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
+  // Resolve the ER outcome: a definite on-chain failure throws (the route then
+  // reports "no funds were spent" and inserts no confirmed bet), closing the
+  // ghost-row gap. "pending" stays optimistic so a slow-but-valid open is never
+  // rejected — only a confirmed FAILURE is acted on.
+  if ((await confirm(signature)) === "failed") {
+    throw new FlashV2TxFailedError(signature, "open");
+  }
   return { signature, quote };
 }
 
@@ -80,6 +91,7 @@ export async function executeSessionClose(args: {
 }): Promise<{ found: true; signature: string; estPnlUsd: number | null } | { found: false }> {
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
+  const confirm = args.deps?.confirm ?? defaultConfirm;
   const positions = await args.venue.getPositions(args.owner);
   const pos = positions.find(
     (p) => p.symbol === args.market && p.side === args.side,
@@ -95,6 +107,11 @@ export async function executeSessionClose(args: {
   });
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
+  // A failed close throws so the bet stays `confirmed` (retryable) instead of
+  // being recorded closed against a position that's still open.
+  if ((await confirm(signature)) === "failed") {
+    throw new FlashV2TxFailedError(signature, "close");
+  }
   // Guard a partial/late indexer read (entryPrice/markPrice default to 0 in the
   // normalizer) so markPnlUsd never divides by zero and writes NaN/Infinity to
   // proceeds_usdc. null ⇒ "PnL unknown", same sentinel the Pacifica close uses.

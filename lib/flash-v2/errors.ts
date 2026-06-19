@@ -4,6 +4,7 @@ export type FlashErrorCode =
   | "settling"
   | "session_expired"
   | "session_already_bound"
+  | "tx_failed"
   | "unknown";
 
 export class FlashV2Error extends Error {
@@ -20,6 +21,22 @@ export class FlashWithdrawSettlingError extends FlashV2Error {
 }
 export class FlashSessionExpiredError extends FlashV2Error {
   constructor(message: string) { super(message, "session_expired"); }
+}
+
+/**
+ * A session-signed ER trade tx confirmed with an on-chain error (the Solana tx
+ * reverted, so no state changed and no funds moved). Thrown by executeSession*
+ * so the open route returns "no funds were spent" and never inserts a confirmed
+ * bet — closing the ghost-row gap where a failed open lingered as confirmed.
+ */
+export class FlashV2TxFailedError extends FlashV2Error {
+  constructor(
+    readonly signature: string,
+    readonly phase: "open" | "close",
+  ) {
+    super(`flash v2 ${phase} transaction failed on-chain (${signature})`, "tx_failed");
+    this.name = "FlashV2TxFailedError";
+  }
 }
 
 /**

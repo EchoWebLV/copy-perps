@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeSessionClose, executeSessionOpen } from "./session-trade";
 import { FlashV2PositionConflictError } from "./self-trade";
+import { FlashV2TxFailedError } from "./errors";
+
+// Default confirm injected so tests never hit the ER RPC.
+const confirmOk = async () => "confirmed" as const;
+const confirmFail = async () => "failed" as const;
 
 const fakeTx = { id: "tx" } as never;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,7 +38,7 @@ describe("executeSessionOpen", () => {
       side: "long",
       stakeUsdc: 25,
       leverage: 5,
-      deps: { sign, submit },
+      deps: { sign, submit, confirm: confirmOk },
     });
     expect(out).toEqual({ signature: "SIG", quote: { feeUsdUi: 1 } });
     expect(v.openPosition).toHaveBeenCalledWith(
@@ -70,11 +75,28 @@ describe("executeSessionOpen", () => {
         side: "long",
         stakeUsdc: 25,
         leverage: 5,
-        deps: { sign, submit },
+        deps: { sign, submit, confirm: confirmOk },
       }),
     ).rejects.toBeInstanceOf(FlashV2PositionConflictError);
     expect(v.openPosition).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("throws FlashV2TxFailedError when the ER open confirms with an error (no ghost confirmed bet)", async () => {
+    const submit = vi.fn(async () => "SIG");
+    await expect(
+      executeSessionOpen({
+        venue: venue(),
+        session,
+        owner: "O",
+        market: "SOL",
+        side: "long",
+        stakeUsdc: 25,
+        leverage: 5,
+        deps: { sign: vi.fn((t) => t), submit, confirm: confirmFail },
+      }),
+    ).rejects.toBeInstanceOf(FlashV2TxFailedError);
+    expect(submit).toHaveBeenCalledOnce(); // it did submit, then the ER reported failure
   });
 });
 
@@ -93,7 +115,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign, submit },
+      deps: { sign, submit, confirm: confirmOk },
     });
     expect(out).toMatchObject({ found: true, signature: "CSIG" });
     if (!out.found) throw new Error("unreachable");
@@ -121,7 +143,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S") },
+      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
     });
     expect(out).toMatchObject({ found: true, signature: "S", estPnlUsd: null });
   });
@@ -136,10 +158,28 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign, submit },
+      deps: { sign, submit, confirm: confirmOk },
     });
     expect(out).toEqual({ found: false });
     expect(v.closePosition).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("throws FlashV2TxFailedError when the ER close confirms with an error (bet stays open/retryable)", async () => {
+    const v = venue({
+      getPositions: vi.fn(async () => [
+        { symbol: "SOL", side: "long", sizeUsd: 100, entryPrice: 100, markPrice: 90 },
+      ]),
+    });
+    await expect(
+      executeSessionClose({
+        venue: v,
+        session,
+        owner: "O",
+        market: "SOL",
+        side: "long",
+        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmFail },
+      }),
+    ).rejects.toBeInstanceOf(FlashV2TxFailedError);
   });
 });

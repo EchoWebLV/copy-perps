@@ -11,6 +11,7 @@ import {
   classifySessionStatus,
   signTradeWithSession,
   submitErTx,
+  confirmErTx,
   assertSessionReplaceable,
   SessionAlreadyBoundError,
 } from "./session";
@@ -190,5 +191,28 @@ describe("session trade signing + ER submit", () => {
     expect(spy).toHaveBeenCalledWith("er");
     expect(sendRawTransaction).toHaveBeenCalledWith(expect.any(Uint8Array), { skipPreflight: true });
     spy.mockRestore();
+  });
+
+  it("confirmErTx reports 'failed' the instant the ER returns an error", async () => {
+    const getStatuses = vi.fn(async () => ({ value: [{ err: { InstructionError: [0, "x"] } }] }));
+    const out = await confirmErTx("SIG", { getStatuses, tries: 3, delayMs: 0 });
+    expect(out).toBe("failed");
+    expect(getStatuses).toHaveBeenCalledTimes(1); // short-circuits on the error
+  });
+
+  it("confirmErTx reports 'confirmed' once the status reaches confirmed/finalized", async () => {
+    const getStatuses = vi
+      .fn()
+      .mockResolvedValueOnce({ value: [null] }) // not seen yet
+      .mockResolvedValueOnce({ value: [{ err: null, confirmationStatus: "confirmed" }] });
+    const out = await confirmErTx("SIG", { getStatuses, tries: 4, sleep: async () => {} });
+    expect(out).toBe("confirmed");
+  });
+
+  it("confirmErTx stays 'pending' (optimistic) when the budget elapses with no result", async () => {
+    const getStatuses = vi.fn(async () => ({ value: [null] }));
+    const out = await confirmErTx("SIG", { getStatuses, tries: 3, sleep: async () => {} });
+    expect(out).toBe("pending");
+    expect(getStatuses).toHaveBeenCalledTimes(3);
   });
 });

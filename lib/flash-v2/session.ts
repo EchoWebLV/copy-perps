@@ -241,3 +241,51 @@ export function signTradeWithSession(
 export async function submitErTx(tx: VersionedTransaction): Promise<string> {
   return getConnection("er").sendRawTransaction(tx.serialize(), { skipPreflight: true });
 }
+
+export type ErTxOutcome = "confirmed" | "failed" | "pending";
+
+interface ErStatusValue {
+  err: unknown;
+  confirmationStatus?: string | null;
+}
+
+/**
+ * Poll the ER for a submitted trade's outcome. `submitErTx` returns on
+ * submission only (skipPreflight, no confirmation), so a failed trade would
+ * otherwise be marked confirmed. This resolves the on-chain result:
+ *  - "failed"    → the tx confirmed with an error (reverted; no funds moved).
+ *  - "confirmed" → the tx confirmed cleanly.
+ *  - "pending"   → still unknown after the budget; the caller stays optimistic
+ *    (so a slow-but-valid trade is never rejected — we only ever act on a
+ *    DEFINITE failure). Status fetch + sleep are injectable for tests.
+ */
+export async function confirmErTx(
+  signature: string,
+  opts: {
+    tries?: number;
+    delayMs?: number;
+    getStatuses?: (sigs: string[]) => Promise<{ value: Array<ErStatusValue | null> }>;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<ErTxOutcome> {
+  const tries = opts.tries ?? 6;
+  const delayMs = opts.delayMs ?? 400;
+  const getStatuses =
+    opts.getStatuses ??
+    ((sigs: string[]) => getConnection("er").getSignatureStatuses(sigs));
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+
+  for (let i = 0; i < tries; i++) {
+    const { value } = await getStatuses([signature]);
+    const st = value[0];
+    if (st?.err) return "failed";
+    if (
+      st &&
+      (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")
+    ) {
+      return "confirmed";
+    }
+    if (i < tries - 1) await sleep(delayMs);
+  }
+  return "pending";
+}
