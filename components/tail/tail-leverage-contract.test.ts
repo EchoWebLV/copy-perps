@@ -32,10 +32,13 @@ describe("TailModal single whale leverage control", () => {
     );
     expect(source).toContain("leverage: flashLeverage");
     expect(source).toContain("mode: flashTradeModeForLeverage");
-    // The flash-v2 whale rail is additive and gated behind the client flag; the
-    // Flash v1 /api/flash/perp path above stays the default when the flag is off.
-    expect(source).toContain('isFlashV2Client() && source.kind === "whale"');
+    // The flash-v2 whale + bot rails are additive and gated behind the client
+    // flag; the Flash v1 /api/flash/perp path above stays the default flag-off.
+    expect(source).toContain(
+      'isFlashV2Client() && (source.kind === "whale" || source.kind === "bot")',
+    );
     expect(source).toContain('fetch("/api/bet/whale"');
+    expect(source).toContain('fetch("/api/bet/bot"');
   });
 
   it("keeps the copied leverage as default while using Flash max as the slider ceiling", () => {

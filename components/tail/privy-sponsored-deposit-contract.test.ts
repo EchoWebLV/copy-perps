@@ -16,7 +16,7 @@ describe("TailModal deposit send", () => {
     // The default reset keeps the $1 ladder for v1/flag-off and bot/self-directed
     // tails; only a flag-on whale tail (which hits the $5-floor v2 rail) raises it.
     expect(source).toContain(
-      'setStake(isFlashV2Client() && source?.kind === "whale" ? FLASH_V2_MIN_USDC : 1)',
+      "setStake(isFlashV2Client() ? FLASH_V2_MIN_USDC : 1)",
     );
     expect(source).toContain("const FLASH_V2_MIN_USDC = 5");
   });

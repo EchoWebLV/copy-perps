@@ -40,6 +40,7 @@ import {
 import { isFlashV2Client } from "@/lib/flash-v2/client-flag";
 import { enableFlashV2Session } from "./session-enable";
 import { buildWhaleV2Body, flashV2WhaleOpenToOpenResponse } from "./whale-v2-open";
+import { buildBotV2Body, flashV2BotOpenToOpenResponse } from "./bot-v2-open";
 
 export type { TailSource, WhaleTailPosition } from "./tail-types";
 
@@ -314,7 +315,7 @@ export function TailModal({ open, onClose, source }: Props) {
   useEffect(() => {
     if (!open) return;
     setNow(Date.now());
-    setStake(isFlashV2Client() && source?.kind === "whale" ? FLASH_V2_MIN_USDC : 1);
+    setStake(isFlashV2Client() ? FLASH_V2_MIN_USDC : 1);
     setCustom("");
     setSubmitting(false);
     setStatus(null);
@@ -399,9 +400,8 @@ export function TailModal({ open, onClose, source }: Props) {
     [notional],
   );
 
-  // v2 whale tails hit the $5-floor rail; everything else keeps the $1 floor.
-  const minStake =
-    isFlashV2Client() && source?.kind === "whale" ? FLASH_V2_MIN_USDC : MIN_USDC;
+  // Flag-on, both whale and bot tails hit the $5-floor v2 rail; v1 keeps $1.
+  const minStake = isFlashV2Client() ? FLASH_V2_MIN_USDC : MIN_USDC;
   const stakeValid =
     effectiveStake >= minStake && effectiveStake <= MAX_USDC;
   const hasCopyableSource =
@@ -460,12 +460,7 @@ export function TailModal({ open, onClose, source }: Props) {
       // Flash v2 client repoint (Option A): when the flag is on, the WHALE source
       // opens via the session-signed /api/bet/whale rail. bot + self-directed +
       // flag-off all fall through to the Flash v1 /api/flash/perp path below.
-      if (isFlashV2Client() && source.kind === "whale") {
-        const whale = {
-          whaleId: source.whaleId,
-          sourceAccount: source.sourceAccount,
-          displayName: source.displayName,
-        };
+      if (isFlashV2Client() && (source.kind === "whale" || source.kind === "bot")) {
         const confirmBase = async (signature: string) => {
           await new Connection(RPC, "confirmed").confirmTransaction(
             signature,
@@ -484,6 +479,87 @@ export function TailModal({ open, onClose, source }: Props) {
           await confirmBase(
             typeof signature === "string" ? signature : bs58.encode(signature),
           );
+        };
+
+        // Bot (LLM arena) source → a single session-signed open on /api/bet/bot.
+        // Same enable-session → onboard → open phase loop as whale, one position.
+        if (source.kind === "bot") {
+          const requestBotV2 = async () => {
+            const r = await fetch("/api/bet/bot", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(
+                buildBotV2Body({
+                  bot: source,
+                  stakeUsdc: effectiveStake,
+                  leverage: copyLeverage ?? source.leverage,
+                  walletAddress: wallet.address,
+                  autoCloseOnSourceClose: autoCloseOnSource,
+                }),
+              ),
+            });
+            const json = (await r.json().catch(() => ({}))) as {
+              phase?: string;
+              error?: string;
+              steps?: { name: string; transactionB64: string }[];
+              betId?: string;
+              txSig?: string;
+            };
+            if (!r.ok) throw new Error(json.error ?? `HTTP ${r.status}`);
+            return json;
+          };
+          setStatus(`Copying ${source.botName}…`);
+          let resp = await requestBotV2();
+          if (resp.phase === "enable-session") {
+            setStatus("Enabling auto-copy…");
+            await enableFlashV2Session({
+              getAccessToken: async () => token,
+              wallet,
+              signAndSendTransaction,
+              confirm: confirmBase,
+            });
+            resp = await requestBotV2();
+          }
+          if (resp.phase === "onboard" && Array.isArray(resp.steps)) {
+            for (const step of resp.steps) {
+              await signBaseTx(step.transactionB64, "Setting up your Flash account…");
+            }
+            resp = await requestBotV2();
+          }
+          if (resp.phase === "enable-session") {
+            throw new Error("Could not enable auto-copy. Try again.");
+          }
+          if (resp.phase !== "open" || !resp.betId || !resp.txSig) {
+            throw new Error(
+              "Could not open — make sure you've deposited USDC into your Flash account.",
+            );
+          }
+          setStatus("Opened on Flash v2");
+          setSuccess({
+            opens: [
+              flashV2BotOpenToOpenResponse({
+                betId: resp.betId,
+                txSig: resp.txSig,
+                source: {
+                  botName: source.botName,
+                  asset: source.asset,
+                  side: source.side,
+                  leverage: copyLeverage ?? source.leverage,
+                },
+              }),
+            ],
+          });
+          setStatus(null);
+          return;
+        }
+
+        const whale = {
+          whaleId: source.whaleId,
+          sourceAccount: source.sourceAccount,
+          displayName: source.displayName,
         };
         const requestWhaleV2 = async (pos: WhaleTailPosition) => {
           const resp = await fetch("/api/bet/whale", {
