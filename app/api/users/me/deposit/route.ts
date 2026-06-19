@@ -11,6 +11,9 @@ import {
   ensureGasWalletReady,
   GasWalletExhaustedError,
 } from "@/lib/wallets/gas";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { planFlashV2Deposit } from "@/lib/flash-v2/deposit-flow";
+import { FLASH_V2_USDC_MINT } from "@/lib/flash-v2/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -36,6 +39,20 @@ export async function POST(request: Request) {
   const user = await ensureUser(claims.userId, body.walletAddress ?? null);
   if (!user.solanaPubkey) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
+  }
+
+  // Flash v2 funding (flag-gated): onboard the basket first if needed, then
+  // deposit. Base-layer + user-signed, so no Gas Wallet. Pacifica path below is
+  // untouched when the flag is off.
+  const flashV2 = getFlashV2Venue();
+  if (flashV2) {
+    const plan = await planFlashV2Deposit({
+      venue: flashV2,
+      owner: user.solanaPubkey,
+      amountUsdc: body.amountUsdc,
+      tokenMint: FLASH_V2_USDC_MINT,
+    });
+    return NextResponse.json(plan);
   }
 
   try {
