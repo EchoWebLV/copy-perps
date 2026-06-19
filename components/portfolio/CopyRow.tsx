@@ -14,7 +14,7 @@ const RPC =
 
 export interface CopyRowData {
   betId: string | null;
-  venue?: "pacifica" | "flash";
+  venue?: "pacifica" | "flash" | "flash-v2";
   sourceKind?: "tail" | "wallet";
   market: string;
   side: "long" | "short";

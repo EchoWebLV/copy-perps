@@ -2,7 +2,7 @@ export type PortfolioCopyRowStatus = "open" | "not_found" | "unknown" | "closed"
 
 export interface PortfolioCopyRowRefreshShape {
   betId: string | null;
-  venue?: "pacifica" | "flash";
+  venue?: "pacifica" | "flash" | "flash-v2";
   market: string;
   side: "long" | "short";
   liveStatus: PortfolioCopyRowStatus;

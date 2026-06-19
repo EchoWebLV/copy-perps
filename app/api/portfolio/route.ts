@@ -9,6 +9,9 @@ import { findUncreditedPacificaDeposits } from "@/lib/pacifica/deposit-reconcile
 import { getMark, getMarksSnapshot } from "@/lib/data/marks";
 import { getFlashPerpsService, type FlashPositionSummary } from "@/lib/flash/perps";
 import { flashStakeUsdFromPosition } from "@/lib/flash/position-value";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { markPnlUsd } from "@/lib/flash-v2/pnl";
+import type { VenuePosition } from "@/lib/flash-v2/types";
 import type { PacificaPosition } from "@/lib/pacifica/types";
 import { parseWhaleCopyMeta } from "@/lib/bets/whale-meta";
 import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
@@ -43,7 +46,7 @@ type CopyRowMeta = {
 
 type CopyLiveStatus = "open" | "not_found" | "unknown";
 type CopySourceKind = "tail" | "wallet";
-type CopyVenue = "pacifica" | "flash";
+type CopyVenue = "pacifica" | "flash" | "flash-v2";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,6 +158,59 @@ function flashRowFromPosition(
   };
 }
 
+// Read-only display row for a Flash v2 position (Phase 3 Task 1). No bet row
+// yet (the trade routes that persist bets land in later tasks), so these render
+// as wallet-sourced. PnL is mark-price (lib/flash-v2/pnl.ts), matching the
+// "ignore indexer PnL" decision.
+function flashV2RowFromPosition(
+  p: VenuePosition,
+  pricedAt: string,
+): PortfolioSnapshotPayload["copyRows"][number] {
+  const pnlUsd =
+    p.entryPrice > 0 && p.markPrice > 0
+      ? markPnlUsd({
+          side: p.side,
+          entryPrice: p.entryPrice,
+          markPrice: p.markPrice,
+          sizeUsd: p.sizeUsd,
+        })
+      : null;
+  const unrealizedPnlPct =
+    pnlUsd != null && p.collateralUsd > 0 ? (pnlUsd / p.collateralUsd) * 100 : null;
+  return {
+    betId: null,
+    venue: "flash-v2" satisfies CopyVenue,
+    sourceKind: "wallet" satisfies CopySourceKind,
+    market: p.symbol,
+    side: p.side,
+    leverage: Number.isFinite(p.leverage) && p.leverage > 0 ? p.leverage : null,
+    stakeUsdc: p.collateralUsd > 0 ? p.collateralUsd : null,
+    openFeeUsd: null,
+    leaderAddress: null,
+    leaderUsername: null,
+    whaleId: null,
+    whaleName: null,
+    autoCloseOnSourceClose: false,
+    closeReason: null,
+    botId: null,
+    botName: null,
+    liveStatus: "open" satisfies CopyLiveStatus,
+    entryPrice: p.entryPrice > 0 ? p.entryPrice : null,
+    markPrice: p.markPrice > 0 ? p.markPrice : null,
+    pricedAt: p.markPrice > 0 ? pricedAt : null,
+    liquidationPrice: p.liquidationPrice > 0 ? p.liquidationPrice : null,
+    amountBase: null,
+    marginUsd: p.collateralUsd > 0 ? p.collateralUsd : null,
+    marginMode: "isolated" as const,
+    notionalUsd: p.sizeUsd > 0 ? p.sizeUsd : null,
+    pnlUsd,
+    unrealizedPnlPct,
+    openedAt: null,
+    positionUpdatedAt: pricedAt,
+    leaderClosedAt: null,
+  };
+}
+
 async function markForSymbol(
   symbol: string,
   marks: Map<string, number> | null,
@@ -218,6 +274,7 @@ export async function GET(request: Request) {
   const copyBets = userBets.filter((b) => b.type === "copy");
   let userPositions: PacificaPosition[] | null = null;
   let flashPositions: FlashPositionSummary[] = [];
+  let flashV2Positions: VenuePosition[] = [];
   let positionsUnavailable = false;
   const liveErrors: string[] = [];
   let marks: Map<string, number> | null = null;
@@ -249,6 +306,17 @@ export async function GET(request: Request) {
     } catch (err) {
       liveErrors.push("Flash positions delayed");
       console.warn("[portfolio] flash positions fetch failed:", err);
+    }
+    // Flash v2 positions — only when FEATURE_FLASH_V2 is on; a failure here must
+    // never break the Pacifica/Flash-v1 portfolio.
+    const flashV2 = getFlashV2Venue();
+    if (flashV2) {
+      try {
+        flashV2Positions = await flashV2.getPositions(user.solanaPubkey);
+      } catch (err) {
+        liveErrors.push("Flash v2 positions delayed");
+        console.warn("[portfolio] flash-v2 positions fetch failed:", err);
+      }
     }
     try {
       marks = await getMarksSnapshot({ maxAgeMs: PORTFOLIO_MARK_CACHE_MS });
@@ -456,10 +524,12 @@ export async function GET(request: Request) {
   // appear nowhere (excluded from legacy enrichment, copyBets, and the
   // confirmed-only flashTailByKey attribution above).
   const closedFlashTailRows = closedFlashTailCopyRows(userBets);
+  const flashV2Rows = flashV2Positions.map((p) => flashV2RowFromPosition(p, pricedAt));
   const liveCopyRows = [
     ...copyRows,
     ...walletRows,
     ...flashRows,
+    ...flashV2Rows,
     ...closedFlashTailRows,
   ] as PortfolioSnapshotPayload["copyRows"];
   const payload: PortfolioSnapshotPayload = {
