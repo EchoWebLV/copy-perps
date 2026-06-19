@@ -12,15 +12,16 @@ describe("flashV2ErRpc", () => {
     expect(flashV2ErRpc()).toBe("https://flash.er.example");
   });
 
-  it("falls back to the arena ER endpoint (same MagicBlock rollup)", () => {
+  it("ignores the arena ER endpoint (arena ≠ Flash's ER node)", () => {
+    // The arena runs on a different ER than Flash v2; falling back to it sent
+    // trades to a node with a stale oracle (open fails 6006). No arena fallback.
     vi.stubEnv("NEXT_PUBLIC_FLASH_V2_ER_RPC", "");
     vi.stubEnv("NEXT_PUBLIC_ARENA_ER_ENDPOINT", "https://arena.er.example");
-    expect(flashV2ErRpc()).toBe("https://arena.er.example");
+    expect(flashV2ErRpc()).toBe("https://flashtrade.magicblock.app");
   });
 
-  it("falls back to the mainnet default when neither env is set", () => {
+  it("falls back to Flash's dedicated ER node when the env is unset", () => {
     vi.stubEnv("NEXT_PUBLIC_FLASH_V2_ER_RPC", "");
-    vi.stubEnv("NEXT_PUBLIC_ARENA_ER_ENDPOINT", "");
-    expect(flashV2ErRpc()).toBe("https://mainnet.magicblock.app");
+    expect(flashV2ErRpc()).toBe("https://flashtrade.magicblock.app");
   });
 });

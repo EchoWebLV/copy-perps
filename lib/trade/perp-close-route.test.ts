@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   verifyPrivyRequest: vi.fn(),
   ensureUser: vi.fn(),
   getFlashV2Venue: vi.fn(),
-  planFlashV2Close: vi.fn(),
+  closeSelfFlashV2: vi.fn(),
   getAgentWallet: vi.fn(),
   getPositions: vi.fn(),
   closeCopyOrder: vi.fn(),
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/privy/server", () => ({ verifyPrivyRequest: mocks.verifyPrivyRequest }));
 vi.mock("@/lib/users/ensure", () => ({ ensureUser: mocks.ensureUser }));
 vi.mock("@/lib/flash-v2/resolve", () => ({ getFlashV2Venue: mocks.getFlashV2Venue }));
-vi.mock("@/lib/flash-v2/self-trade", () => ({ planFlashV2Close: mocks.planFlashV2Close }));
+vi.mock("@/lib/bets/self-flash-v2", () => ({ closeSelfFlashV2: mocks.closeSelfFlashV2 }));
 vi.mock("@/lib/wallets/agent", () => ({ getAgentWallet: mocks.getAgentWallet }));
 vi.mock("@/lib/pacifica/client", () => ({ getPositions: mocks.getPositions }));
 vi.mock("@/lib/pacifica/orders", () => ({ closeCopyOrder: mocks.closeCopyOrder }));
@@ -47,34 +47,48 @@ describe("POST /api/trade/perp/close", () => {
     const res = await POST(post(body()));
     expect(res.status).toBe(409);
     expect(mocks.getAgentWallet).toHaveBeenCalledTimes(1);
-    expect(mocks.planFlashV2Close).not.toHaveBeenCalled();
+    expect(mocks.closeSelfFlashV2).not.toHaveBeenCalled();
   });
 
-  it("flag-on (found): returns the flash-v2 close plan and skips Pacifica", async () => {
+  it("flag-on (closed): session-signs the close and skips Pacifica", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
-    mocks.planFlashV2Close.mockResolvedValue({
-      found: true,
-      plan: { phase: "close", transactionB64: "TX", layer: "er", estPnlUsd: 10, market: "SOL", side: "long" },
+    mocks.closeSelfFlashV2.mockResolvedValue({
+      kind: "closed",
+      signature: "CSIG",
+      estPnlUsd: 10,
     });
     const res = await POST(post(body()));
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({ phase: "close", layer: "er", transactionB64: "TX" });
+    await expect(res.json()).resolves.toMatchObject({
+      phase: "closed",
+      txSig: "CSIG",
+      estPnlUsd: 10,
+    });
+    expect(mocks.getAgentWallet).not.toHaveBeenCalled();
+  });
+
+  it("flag-on (no-session): 409 enable-session so the client re-enables then retries", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    mocks.closeSelfFlashV2.mockResolvedValue({ kind: "no-session" });
+    const res = await POST(post(body()));
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({ phase: "enable-session" });
     expect(mocks.getAgentWallet).not.toHaveBeenCalled();
   });
 
   it("flag-on (not found): falls through to Pacifica so a Pacifica position never strands", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
-    mocks.planFlashV2Close.mockResolvedValue({ found: false });
+    mocks.closeSelfFlashV2.mockResolvedValue({ kind: "not-found" });
     mocks.getAgentWallet.mockResolvedValue(null); // 409 inside Pacifica branch
     const res = await POST(post(body()));
     expect(res.status).toBe(409);
-    expect(mocks.planFlashV2Close).toHaveBeenCalledTimes(1);
+    expect(mocks.closeSelfFlashV2).toHaveBeenCalledTimes(1);
     expect(mocks.getAgentWallet).toHaveBeenCalledTimes(1); // proves fall-through
   });
 
   it("flag-on: a venue read failure maps to 502 and never touches Pacifica", async () => {
     mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
-    mocks.planFlashV2Close.mockRejectedValue(new Error("indexer 500"));
+    mocks.closeSelfFlashV2.mockRejectedValue(new Error("indexer 500"));
     const res = await POST(post(body()));
     expect(res.status).toBe(502);
     expect(mocks.getAgentWallet).not.toHaveBeenCalled();

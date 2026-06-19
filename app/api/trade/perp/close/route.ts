@@ -5,7 +5,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
-import { planFlashV2Close } from "@/lib/flash-v2/self-trade";
+import { closeSelfFlashV2 } from "@/lib/bets/self-flash-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -49,26 +49,42 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
-  // Flash v2 self-directed close. Routes by live position presence so a position
-  // opened on Pacifica (flag off) still closes on Pacifica after the flag flips:
-  // when the wallet has no matching Flash v2 position we fall through below.
+  // Flash v2 self-directed close (session-signed, no popup). Routes by live
+  // position presence so a position opened on Pacifica (flag off) still closes on
+  // Pacifica after the flag flips: when the wallet has no matching Flash v2
+  // position (`not-found`) we fall through below.
   const flashV2 = getFlashV2Venue();
   if (flashV2) {
+    let result;
     try {
-      const result = await planFlashV2Close({
+      result = await closeSelfFlashV2({
         venue: flashV2,
+        userId: user.id,
         owner: user.solanaPubkey,
         market,
         side: body.side,
       });
-      if (result.found) return NextResponse.json(result.plan);
     } catch (err) {
       console.error("[trade/perp/close] flash-v2 close failed:", err);
       return NextResponse.json(
-        { error: "Could not check live position. Try again." },
+        { error: "Trade could not close. Try again." },
         { status: 502 },
       );
     }
+    // Session expired/never enabled but the position IS live: the client must
+    // re-enable a session before the server can sign the close (the position
+    // would otherwise be unclosable). 409 so the client re-enables then retries.
+    if (result.kind === "no-session") {
+      return NextResponse.json({ phase: "enable-session" }, { status: 409 });
+    }
+    if (result.kind === "closed") {
+      return NextResponse.json({
+        phase: "closed",
+        txSig: result.signature,
+        estPnlUsd: result.estPnlUsd,
+      });
+    }
+    // result.kind === "not-found" ⇒ no v2 position; fall through to Pacifica.
   }
 
   const agent = await getAgentWallet(user.id);

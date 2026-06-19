@@ -31,7 +31,9 @@ describe("FastPerpsGame flag-on (v2) self-directed repoint", () => {
   });
 
   it("drives the v2 self-directed rails", () => {
-    expect(source).toContain('fetch("/api/trade/perp"');
+    // The open's POST /api/trade/perp lives inside runSelfV2Open (the funding
+    // driver); the close + positions poll stay inline here.
+    expect(source).toContain("runSelfV2Open");
     expect(source).toContain('fetch("/api/trade/perp/close"');
     expect(source).toContain('"/api/trade/perp/positions"');
     expect(source).toContain("buildSelfV2OpenBody");
@@ -39,10 +41,20 @@ describe("FastPerpsGame flag-on (v2) self-directed repoint", () => {
     expect(source).toContain("synthFlashV2Position");
   });
 
-  it("user-signs the ER tx sign-only then broadcasts via signAndSubmitErTx", () => {
-    expect(source).toContain("useSignTransaction");
-    expect(source).toContain("signAndSubmitErTx");
-    expect(source).toContain("const { signedTransaction } = await signTransaction(");
+  it("runs the v1-style session-signed open/close (no per-trade popup)", () => {
+    // First tap transparently enables a session + onboards + deposits; the trade
+    // itself is signed server-side by the session key, so there is no per-trade
+    // wallet popup and no client ER signing.
+    expect(source).toContain("enableFlashV2Session");
+    expect(source).toContain("enableSession: enableSessionFlow");
+    // Setup txs use the same proven (user-paid) signer as the v1 rail — no
+    // sponsorship request, which would break Privy signing when unconfigured.
+    expect(source).toContain("signBaseTx: signAndSendFlashTransaction");
+    // Session expiry mid-close ⇒ re-enable then retry, never strand the position.
+    expect(source).toContain('body.phase === "enable-session"');
+    // The old user-signed ER path is gone.
+    expect(source).not.toContain("signAndSubmitErTx");
+    expect(source).not.toContain("useSignTransaction");
   });
 
   it("flag-gates the positions poll URL (v2 vs v1)", () => {

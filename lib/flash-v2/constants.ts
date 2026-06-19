@@ -8,8 +8,17 @@ export const FLASH_V2_REST_BASE =
 export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const FLASH_V2_USDC_MINT = process.env.FLASH_V2_USDC_MINT ?? USDC_MINT;
 
-/** Protocol-fixed MagicBlock validator the basket delegates to (GOTCHAS). */
-export const FLASH_V2_ER_VALIDATOR = "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57";
+/**
+ * Flash v2 minimum deposit. The venue builds $1 deposits/opens (confirmed live),
+ * so v2 funding does NOT inherit Pacifica's $10 floor — a $1 stake must fund a $1
+ * basket. The only real venue minimum ($11) is triggers-only, not market orders.
+ */
+export const FLASH_V2_MIN_DEPOSIT_USDC = 1;
+
+/** Flash's dedicated ER node the basket delegates to (served at
+ *  flashtrade.magicblock.app), confirmed via router getDelegationStatus +
+ *  getIdentity. NOT the generic mainnet node MAS1Dt9 (stale oracle for baskets). */
+export const FLASH_V2_ER_VALIDATOR = "FLAshCJGr4SWk23bDVy7yeZecfND8h5Cingy1u2XE6HQ";
 
 export const FLASH_V2_CLUSTER: FlashCluster =
   process.env.FLASH_V2_CLUSTER === "mainnet" ? "mainnet" : "devnet";
@@ -36,8 +45,14 @@ export function resolveProgramId(cluster: FlashCluster): string {
 
 export function resolveErRpc(cluster: FlashCluster): string {
   if (process.env.FLASH_V2_ER_RPC) return process.env.FLASH_V2_ER_RPC;
+  // Flash v2 baskets delegate to Flash's OWN dedicated ER node
+  // (identity FLAshCJGr4SWk23bDVy7yeZecfND8h5Cingy1u2XE6HQ), served at
+  // flashtrade.magicblock.app — NOT the generic mainnet.magicblock.app node
+  // (MAS1Dt9), whose oracle is stale for these baskets (open fails 6006
+  // InvalidOraclePrice). The router can't resolve it ("unknown ER node") because
+  // it's Flash-hosted, so this endpoint is pinned here.
   return cluster === "mainnet"
-    ? "https://mainnet.magicblock.app"
+    ? "https://flashtrade.magicblock.app"
     : "https://devnet.magicblock.app";
 }
 

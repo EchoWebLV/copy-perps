@@ -80,9 +80,35 @@ describe("POST /api/users/me/deposit", () => {
     expect(body.steps[0]).toMatchObject({ name: "init-basket", layer: "base" });
   });
 
-  it("rejects an amount below the minimum before any venue work", async () => {
+  it("flag-off: rejects below the Pacifica $10 floor before any deposit work", async () => {
     const res = await POST(post({ amountUsdc: 5 }));
     expect(res.status).toBe(400);
-    expect(mocks.getFlashV2Venue).not.toHaveBeenCalled();
+    expect(mocks.buildDepositTx).not.toHaveBeenCalled();
+    expect(mocks.ensureGasWalletReady).not.toHaveBeenCalled();
+  });
+
+  it("flag-on: allows a $1 deposit (no inherited Pacifica $10 floor)", async () => {
+    const deposit = vi.fn(async () => ({
+      tx: { serialize: () => new Uint8Array([9]) },
+      layer: "base",
+    }));
+    mocks.getFlashV2Venue.mockReturnValue({
+      ensureOnboarded: vi.fn(async () => []),
+      deposit,
+    });
+    const res = await POST(post({ amountUsdc: 1 }));
+    expect(res.status).toBe(200);
+    expect(deposit).toHaveBeenCalledTimes(1);
+  });
+
+  it("flag-on: rejects below the $1 flash-v2 floor", async () => {
+    const deposit = vi.fn();
+    mocks.getFlashV2Venue.mockReturnValue({
+      ensureOnboarded: vi.fn(async () => []),
+      deposit,
+    });
+    const res = await POST(post({ amountUsdc: 0.5 }));
+    expect(res.status).toBe(400);
+    expect(deposit).not.toHaveBeenCalled();
   });
 });

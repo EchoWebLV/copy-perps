@@ -11,7 +11,7 @@
 export function flashV2ErRpc(): string {
   return (
     process.env.NEXT_PUBLIC_FLASH_V2_ER_RPC ||
-    process.env.NEXT_PUBLIC_ARENA_ER_ENDPOINT ||
-    "https://mainnet.magicblock.app"
+    // Flash's own dedicated ER node (fresh oracle), NOT generic mainnet.
+    "https://flashtrade.magicblock.app"
   );
 }

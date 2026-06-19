@@ -7,6 +7,8 @@ import { FlashV2TxFailedError } from "./errors";
 const confirmOk = async () => "confirmed" as const;
 const confirmFail = async () => "failed" as const;
 const confirmPending = async () => "pending" as const;
+// No-op blockhash refresh so tests never hit the ER RPC (prod refreshes for real).
+const refreshNoop = async () => {};
 
 const fakeTx = { id: "tx" } as never;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,7 +41,7 @@ describe("executeSessionOpen", () => {
       side: "long",
       stakeUsdc: 25,
       leverage: 5,
-      deps: { sign, submit, confirm: confirmOk },
+      deps: { refreshBlockhash: refreshNoop, sign, submit, confirm: confirmOk },
     });
     expect(out).toEqual({ signature: "SIG", quote: { feeUsdUi: 1 } });
     expect(v.openPosition).toHaveBeenCalledWith(
@@ -76,7 +78,7 @@ describe("executeSessionOpen", () => {
         side: "long",
         stakeUsdc: 25,
         leverage: 5,
-        deps: { sign, submit, confirm: confirmOk },
+        deps: { refreshBlockhash: refreshNoop, sign, submit, confirm: confirmOk },
       }),
     ).rejects.toBeInstanceOf(FlashV2PositionConflictError);
     expect(v.openPosition).not.toHaveBeenCalled();
@@ -94,7 +96,7 @@ describe("executeSessionOpen", () => {
         side: "long",
         stakeUsdc: 25,
         leverage: 5,
-        deps: { sign: vi.fn((t) => t), submit, confirm: confirmFail },
+        deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit, confirm: confirmFail },
       }),
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
     expect(submit).toHaveBeenCalledOnce(); // it did submit, then the ER reported failure
@@ -116,7 +118,7 @@ describe("executeSessionOpen", () => {
       side: "long",
       stakeUsdc: 25,
       leverage: 5,
-      deps: { sign: vi.fn((t) => t), submit, confirm: confirmPending },
+      deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit, confirm: confirmPending },
     });
     expect(out).toEqual({ signature: "SIG", quote: { feeUsdUi: 1 } });
     expect(getPositions).toHaveBeenCalledTimes(2);
@@ -136,7 +138,7 @@ describe("executeSessionOpen", () => {
         side: "long",
         stakeUsdc: 25,
         leverage: 5,
-        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "SIG"), confirm: confirmPending },
+        deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "SIG"), confirm: confirmPending },
       }),
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
   });
@@ -157,7 +159,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign, submit, confirm: confirmOk },
+      deps: { refreshBlockhash: refreshNoop, sign, submit, confirm: confirmOk },
     });
     expect(out).toMatchObject({ found: true, signature: "CSIG" });
     if (!out.found) throw new Error("unreachable");
@@ -185,7 +187,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
+      deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
     });
     expect(out).toMatchObject({ found: true, signature: "S", estPnlUsd: null });
   });
@@ -200,7 +202,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign, submit, confirm: confirmOk },
+      deps: { refreshBlockhash: refreshNoop, sign, submit, confirm: confirmOk },
     });
     expect(out).toEqual({ found: false });
     expect(v.closePosition).not.toHaveBeenCalled();
@@ -220,7 +222,7 @@ describe("executeSessionClose", () => {
         owner: "O",
         market: "SOL",
         side: "long",
-        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmFail },
+        deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmFail },
       }),
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
   });
@@ -238,7 +240,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
+      deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
     });
     expect(out).toMatchObject({ found: true, signature: "CSIG" });
     expect(getPositions).toHaveBeenCalledTimes(2);
@@ -263,7 +265,7 @@ describe("executeSessionClose", () => {
         owner: "O",
         market: "SOL",
         side: "long",
-        deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
+        deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "CSIG"), confirm: confirmPending },
       }),
     ).rejects.toBeInstanceOf(FlashV2TxFailedError);
   });
@@ -288,7 +290,7 @@ describe("executeSessionClose", () => {
       owner: "O",
       market: "SOL",
       side: "long",
-      deps: { sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
+      deps: { refreshBlockhash: refreshNoop, sign: vi.fn((t) => t), submit: vi.fn(async () => "S"), confirm: confirmOk },
     });
     if (!out.found) throw new Error("unreachable");
     // long +10% of $100 = +10 gross, minus $2 fees minus $1 borrow = $7 net.

@@ -225,9 +225,22 @@ export async function buildRevokeSessionTx(p: {
 }
 
 /**
- * Sign a Flash-returned trade tx with the session keypair (no user popup). The
- * tx arrives partially signed by Flash's ER validator with its own blockhash —
- * we add ONLY the session signature and never touch the blockhash (notes §5).
+ * Refresh the (stale) builder blockhash with a current ER blockhash, in place,
+ * BEFORE the session key signs. The open/close builder bakes a blockhash that is
+ * already invalid on the ER (same finding as the self-directed er-submit path);
+ * submitting as-is fails "Blockhash not found". The trade tx is single-sig (the
+ * session signer only — no validator pre-signature), so replacing the blockhash
+ * invalidates nothing and is the only blockhash the ER will accept.
+ */
+export async function refreshErBlockhash(tx: VersionedTransaction): Promise<void> {
+  const { blockhash } = await getConnection("er").getLatestBlockhash();
+  tx.message.recentBlockhash = blockhash;
+}
+
+/**
+ * Sign a Flash-returned trade tx with the session keypair (no user popup). Refresh
+ * the blockhash (refreshErBlockhash) BEFORE calling this — replacing the
+ * blockhash after signing would invalidate the signature.
  */
 export function signTradeWithSession(
   tx: VersionedTransaction,

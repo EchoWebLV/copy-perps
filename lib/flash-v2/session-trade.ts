@@ -11,13 +11,15 @@ import {
   signTradeWithSession as defaultSign,
   submitErTx as defaultSubmit,
   confirmErTx as defaultConfirm,
+  refreshErBlockhash as defaultRefresh,
 } from "./session";
 import type { SessionKeyRecord } from "./session-store";
 import type { Quote, Side } from "./types";
 import type { FlashV2Venue, SessionRef } from "./venue";
 
-/** Injection seam: tests swap sign/submit/confirm; production uses the ER defaults. */
+/** Injection seam: tests swap refresh/sign/submit/confirm; prod uses ER defaults. */
 export interface SessionExecDeps {
+  refreshBlockhash?: typeof defaultRefresh;
   sign?: typeof defaultSign;
   submit?: typeof defaultSubmit;
   confirm?: typeof defaultConfirm;
@@ -41,6 +43,7 @@ export async function executeSessionOpen(args: {
   leverage: number;
   deps?: SessionExecDeps;
 }): Promise<{ signature: string; quote: Quote }> {
+  const refreshBlockhash = args.deps?.refreshBlockhash ?? defaultRefresh;
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
   const confirm = args.deps?.confirm ?? defaultConfirm;
@@ -63,6 +66,9 @@ export async function executeSessionOpen(args: {
     orderType: "market",
     session: sessionRef(args.session),
   });
+  // Replace the builder's stale blockhash with a live ER one before signing
+  // (else the ER rejects it "Blockhash not found").
+  await refreshBlockhash(unsigned.tx);
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
   // Resolve the ER outcome (submitErTx is fire-and-forget). A definite on-chain
@@ -97,6 +103,7 @@ export async function executeSessionClose(args: {
   side: Side;
   deps?: SessionExecDeps;
 }): Promise<{ found: true; signature: string; estPnlUsd: number | null } | { found: false }> {
+  const refreshBlockhash = args.deps?.refreshBlockhash ?? defaultRefresh;
   const sign = args.deps?.sign ?? defaultSign;
   const submit = args.deps?.submit ?? defaultSubmit;
   const confirm = args.deps?.confirm ?? defaultConfirm;
@@ -113,6 +120,8 @@ export async function executeSessionClose(args: {
     closeUsd: pos.sizeUsd,
     session: sessionRef(args.session),
   });
+  // Replace the builder's stale blockhash with a live ER one before signing.
+  await refreshBlockhash(unsigned.tx);
   const signed = sign(unsigned.tx, args.session.keypair.secretKey);
   const signature = await submit(signed);
   // Resolve the ER outcome. A definite FAILURE throws so the bet stays

@@ -13,6 +13,8 @@ export interface EnableSessionDeps {
   signAndSendTransaction: SignAndSendTransaction;
   /** Confirm the base-layer createSessionV2 signature on chain (injectable for tests). */
   confirm: (signature: string) => Promise<void>;
+  /** Try Privy gas sponsorship first (falls back to user-paid if unsupported). */
+  preferSponsored?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -82,7 +84,10 @@ export async function enableFlashV2Session(
     transaction: b64ToBytes(build.createSessionTransaction),
     wallet: deps.wallet,
     signAndSendTransaction: deps.signAndSendTransaction,
-    preferSponsored: false,
+    preferSponsored: deps.preferSponsored ?? false,
+    // Sponsored if available, else user-paid (the wallet holds SOL) — never a
+    // hard block on a missing/misconfigured sponsor.
+    fallbackOnAnyError: deps.preferSponsored ?? false,
   });
   const sig = await toBase58(signature);
   await deps.confirm(sig);

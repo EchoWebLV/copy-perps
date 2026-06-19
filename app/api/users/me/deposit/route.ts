@@ -13,7 +13,10 @@ import {
 } from "@/lib/wallets/gas";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
 import { planFlashV2Deposit } from "@/lib/flash-v2/deposit-flow";
-import { FLASH_V2_USDC_MINT } from "@/lib/flash-v2/constants";
+import {
+  FLASH_V2_USDC_MINT,
+  FLASH_V2_MIN_DEPOSIT_USDC,
+} from "@/lib/flash-v2/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -29,9 +32,15 @@ export async function POST(request: Request) {
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = (await request.json().catch(() => null)) as Body | null;
-  if (!body?.amountUsdc || body.amountUsdc < PACIFICA_MIN_DEPOSIT_USDC) {
+  // Min deposit is venue-specific: Flash v2 funds $1 baskets (it does not inherit
+  // Pacifica's $10 floor), so resolve the venue before the bound check.
+  const flashV2 = getFlashV2Venue();
+  const minDeposit = flashV2
+    ? FLASH_V2_MIN_DEPOSIT_USDC
+    : PACIFICA_MIN_DEPOSIT_USDC;
+  if (!body?.amountUsdc || body.amountUsdc < minDeposit) {
     return NextResponse.json(
-      { error: `amountUsdc >= ${PACIFICA_MIN_DEPOSIT_USDC} required` },
+      { error: `amountUsdc >= ${minDeposit} required` },
       { status: 400 },
     );
   }
@@ -44,7 +53,6 @@ export async function POST(request: Request) {
   // Flash v2 funding (flag-gated): onboard the basket first if needed, then
   // deposit. Base-layer + user-signed, so no Gas Wallet. Pacifica path below is
   // untouched when the flag is off.
-  const flashV2 = getFlashV2Venue();
   if (flashV2) {
     const plan = await planFlashV2Deposit({
       venue: flashV2,

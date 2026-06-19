@@ -18,8 +18,13 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
-import { FlashV2PositionConflictError, planFlashV2Open } from "@/lib/flash-v2/self-trade";
+import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
+import { openSelfFlashV2 } from "@/lib/bets/self-flash-v2";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
+import {
+  reserveTailOnMarket,
+  releaseTailReservation,
+} from "@/lib/bets/tail-reservation";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -68,6 +73,14 @@ function parseMarket(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const market = value.trim().toUpperCase();
   return market.length > 0 ? market : null;
+}
+
+async function releaseReservationBestEffort(userId: string, market: string) {
+  try {
+    await releaseTailReservation(userId, market);
+  } catch (err) {
+    console.error("[trade/perp] reservation release failed:", err);
+  }
 }
 
 export async function POST(request: Request) {
@@ -120,28 +133,37 @@ export async function POST(request: Request) {
     // A self-directed open and a copy/whale/bot tail both execute on the same
     // Flash v2 account, which nets by (account, symbol): a second position on a
     // market that already has a DB-tracked tail would merge into it, and a later
-    // close would misattribute PnL. planFlashV2Open re-checks on-chain, but that
-    // read can lag a just-opened tail; this DB guard closes the (user, market)
-    // tail direction. The residual self-vs-self concurrent race needs a real
-    // reservation, which belongs with the client-ER-signing slice (this route is
-    // not yet wired to a live open caller).
+    // close would misattribute PnL. executeSessionOpen re-checks on-chain, but
+    // that read can lag a just-opened tail; this DB guard closes the (user,
+    // market) tail direction.
     if (await hasOpenTailOnMarket(u.id, market, "flash-v2")) {
       return NextResponse.json(
         { error: `you already have an open ${market} tail - close it first` },
         { status: 409 },
       );
     }
+    // Atomic lock across the async open so two concurrent same-(user, market)
+    // taps can't both pass the guard above and net into one on-chain position.
+    const reserved = await reserveTailOnMarket(u.id, market);
+    if (!reserved) {
+      return NextResponse.json(
+        { error: `you already have an open ${market} tail - close it first` },
+        { status: 409 },
+      );
+    }
+    let result;
     try {
-      const plan = await planFlashV2Open({
+      result = await openSelfFlashV2({
         venue: flashV2,
+        userId: u.id,
         owner: u.solanaPubkey,
         market,
         side: body.side,
         stakeUsdc: body.stakeUsdc,
         leverage: body.leverage,
       });
-      return NextResponse.json(plan);
     } catch (err) {
+      await releaseReservationBestEffort(u.id, market);
       if (err instanceof FlashV2PositionConflictError) {
         return NextResponse.json({ error: err.message }, { status: 409 });
       }
@@ -151,6 +173,24 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
+    // Non-terminal phases (the client signs setup then re-calls): release the
+    // lock so the re-call can re-reserve.
+    if (result.kind === "enable-session") {
+      await releaseReservationBestEffort(u.id, market);
+      return NextResponse.json({ phase: "enable-session" });
+    }
+    if (result.kind === "onboard") {
+      await releaseReservationBestEffort(u.id, market);
+      return NextResponse.json({ phase: "onboard", steps: result.steps });
+    }
+    await releaseReservationBestEffort(u.id, market);
+    return NextResponse.json({
+      phase: "open",
+      txSig: result.signature,
+      market,
+      side: body.side,
+      quote: result.quote,
+    });
   }
 
   let marketInfo;

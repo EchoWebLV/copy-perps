@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePrivy, useSessionSigners, type User } from "@privy-io/react-auth";
-import {
-  useSignAndSendTransaction,
-  useSignTransaction,
-} from "@privy-io/react-auth/solana";
+import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
 import { Connection } from "@solana/web3.js";
 import { ArrowDownRight, ArrowUpRight, Loader2, WalletCards } from "lucide-react";
 import {
@@ -46,12 +43,14 @@ import {
   sendDepositWithSponsorFallback,
 } from "@/components/tail/deposit-signing";
 import { isFlashV2Client } from "@/lib/flash-v2/client-flag";
-import { signAndSubmitErTx } from "@/components/trade/er-submit";
+import { FLASH_V2_MIN_DEPOSIT_USDC } from "@/lib/flash-v2/constants";
 import {
   buildSelfV2CloseBody,
   buildSelfV2OpenBody,
   synthFlashV2Position,
 } from "@/components/trade/self-v2-open";
+import { runSelfV2Open } from "@/components/trade/flash-v2-funding";
+import { enableFlashV2Session } from "@/components/tail/session-enable";
 import {
   ACCENT,
   BG,
@@ -308,9 +307,6 @@ export function FastPerpsGame() {
   const { addSessionSigners } = useSessionSigners();
   const wallet = useEmbeddedSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
-  // Sign-only path for user-signed Flash v2 ER trades (flag-on only); v1 keeps
-  // using the sign-and-send path above.
-  const { signTransaction } = useSignTransaction();
   const liveFlashMarks = useFlashLiveMarks();
   // Flag-on (NEXT_PUBLIC_FEATURE_FLASH_V2): the Trade tab executes on the v2 ER
   // rail. Flag-off (default) every path below is byte-for-byte the v1 behavior.
@@ -552,13 +548,18 @@ export function FastPerpsGame() {
   }, [authenticated, loadPositions, wallet?.address]);
 
   const signAndSendFlashTransaction = useCallback(
-    async (transactionB64: string) => {
+    // preferSponsored defaults false so the v1 (flag-off) call sites are
+    // byte-for-byte unchanged; the v2 setup path opts in to sponsored gas.
+    async (transactionB64: string, preferSponsored = false) => {
       if (!wallet) throw new Error("wallet not ready");
       const { signature } = await sendDepositWithSponsorFallback({
         transaction: b64ToBytes(transactionB64),
         wallet,
         signAndSendTransaction,
-        preferSponsored: false,
+        preferSponsored,
+        // If sponsorship isn't configured, don't hard-fail — pay with the
+        // wallet's SOL instead (the setup path always has SOL available).
+        fallbackOnAnyError: preferSponsored,
       });
       const bs58 = (await import("bs58")).default;
       const signatureText =
@@ -568,6 +569,25 @@ export function FastPerpsGame() {
     },
     [signAndSendTransaction, wallet],
   );
+
+  // One-time "enable instant trading" — authorizes a server-held session key so
+  // subsequent v2 trades sign server-side (no popup). Base-layer, user-signed via
+  // the SAME proven path as the v1 rail (pays gas from the wallet's SOL). NO
+  // sponsorship request: asking Privy to sponsor when the app has no sponsor
+  // configured throws "Failed to connect to wallet" and breaks signing. Sponsored
+  // gas is a later opt-in once it's actually set up in the Privy dashboard.
+  const enableSessionFlow = useCallback(async () => {
+    if (!wallet) throw new Error("wallet not ready");
+    await enableFlashV2Session({
+      getAccessToken,
+      wallet,
+      signAndSendTransaction,
+      confirm: async (sig: string) => {
+        const conn = new Connection(RPC, "confirmed");
+        await conn.confirmTransaction(sig, "confirmed");
+      },
+    });
+  }, [getAccessToken, signAndSendTransaction, wallet]);
 
   const upsertPosition = useCallback(
     (position: FlashPosition) => {
@@ -652,9 +672,10 @@ export function FastPerpsGame() {
     return body as FlashCloseResponse;
   }, [getAccessToken, market, side, wallet?.address]);
 
-  // Flag-on self-directed OPEN: thin v2 body → unsigned ER tx → user signs
-  // (sign-only) → broadcast to the ER → optimistic synth position, reconciled by
-  // the next positions poll. No bet row, no instant session-signer path.
+  // Flag-on self-directed OPEN (v1-style one-tap): the driver transparently runs
+  // the one-time setup (enable-session → onboard → deposit) then the server
+  // session-signs the open (no popup). Optimistic synth position is reconciled by
+  // the next positions poll.
   const openLiveV2 = useCallback(async () => {
     if (!readyToTrade || selectedPosition) return;
     if (!tradeAllowed) {
@@ -669,36 +690,25 @@ export function FastPerpsGame() {
     setError(null);
     setStatus("Preparing trade...");
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("not authed");
-      const resp = await fetch("/api/trade/perp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(
-          buildSelfV2OpenBody({
-            market,
-            side,
-            stakeUsdc: effectiveStake,
-            leverage,
-            walletAddress: wallet.address,
-          }),
-        ),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
-      setStatus("Signing transaction...");
-      await signAndSubmitErTx({
-        txBytes: b64ToBytes(body.transactionB64),
-        sign: async (bytes) => {
-          if (!wallet) throw new Error("Wallet not ready");
-          const { signedTransaction } = await signTransaction({
-            transaction: bytes,
-            wallet,
-          });
-          return signedTransaction;
+      // Move exactly the stake into the basket so "open $X" takes exactly $X
+      // (the venue's own fee comes out of the position margin, not an extra
+      // deposit). Clamp to the $1 venue floor.
+      const depositUsdc = Math.max(effectiveStake, FLASH_V2_MIN_DEPOSIT_USDC);
+      const { quote } = await runSelfV2Open({
+        openBody: buildSelfV2OpenBody({
+          market,
+          side,
+          stakeUsdc: effectiveStake,
+          leverage,
+          walletAddress: wallet.address,
+        }),
+        depositUsdc,
+        walletAddress: wallet.address,
+        http: { getAccessToken },
+        actions: {
+          signBaseTx: signAndSendFlashTransaction,
+          enableSession: enableSessionFlow,
+          onStatus: setStatus,
         },
       });
       upsertPosition(
@@ -707,7 +717,11 @@ export function FastPerpsGame() {
           side,
           stakeUsdc: effectiveStake,
           leverage,
-          quote: body.quote,
+          quote: quote as {
+            entryPriceUi?: number;
+            liquidationPriceUi?: number;
+            feeUsdUi?: number;
+          } | null,
           nowMs: Date.now(),
         }) as FlashPosition,
       );
@@ -722,6 +736,7 @@ export function FastPerpsGame() {
     }
   }, [
     effectiveStake,
+    enableSessionFlow,
     getAccessToken,
     leverage,
     loadPositions,
@@ -729,14 +744,16 @@ export function FastPerpsGame() {
     readyToTrade,
     selectedPosition,
     side,
-    signTransaction,
+    signAndSendFlashTransaction,
     tradeAllowed,
     upsertPosition,
     wallet,
   ]);
 
-  // Flag-on self-directed CLOSE: v2 close plan (unsigned ER tx) → user signs →
-  // broadcast → optimistic remove, reconciled by the positions poll.
+  // Flag-on self-directed CLOSE (v1-style): the server session-signs the close
+  // (no popup) and returns phase 'closed'. If the session expired (409
+  // enable-session) while the position is still live, re-enable once and retry so
+  // the position is never stranded. A Pacifica fall-through also returns 'closed'.
   const closeLiveV2 = useCallback(async () => {
     if (!readyToTrade || !selectedPosition) return;
     if (!wallet?.address) {
@@ -745,42 +762,40 @@ export function FastPerpsGame() {
     }
     setBusy(true);
     setError(null);
-    setStatus("Preparing close...");
+    setStatus("Closing...");
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("not authed");
-      const resp = await fetch("/api/trade/perp/close", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(
-          buildSelfV2CloseBody({
-            market: selectedPosition.symbol,
-            side: selectedPosition.side,
-            walletAddress: wallet.address,
-          }),
-        ),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
-      // The v2 rail returns an unsigned ER close tx; a Pacifica fall-through (no
-      // v2 position) would carry no transactionB64, in which case we only prune.
-      if (body.phase === "close" && typeof body.transactionB64 === "string") {
-        setStatus("Signing close...");
-        await signAndSubmitErTx({
-          txBytes: b64ToBytes(body.transactionB64),
-          sign: async (bytes) => {
-            if (!wallet) throw new Error("Wallet not ready");
-            const { signedTransaction } = await signTransaction({
-              transaction: bytes,
-              wallet,
-            });
-            return signedTransaction;
+      const doClose = async () => {
+        const token = await getAccessToken();
+        if (!token) throw new Error("not authed");
+        const resp = await fetch("/api/trade/perp/close", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
+          body: JSON.stringify(
+            buildSelfV2CloseBody({
+              market: selectedPosition.symbol,
+              side: selectedPosition.side,
+              walletAddress: wallet.address,
+            }),
+          ),
         });
+        const body = (await resp.json().catch(() => ({}))) as {
+          phase?: string;
+          error?: string;
+        };
+        return { resp, body };
+      };
+
+      let { resp, body } = await doClose();
+      if (resp.status === 409 && body.phase === "enable-session") {
+        setStatus("Re-enabling instant trading...");
+        await enableSessionFlow();
+        ({ resp, body } = await doClose());
       }
+      if (!resp.ok) throw new Error(body.error ?? `HTTP ${resp.status}`);
+
       forgetFlashEntryCost(entryCostCacheRef.current, selectedPosition);
       saveFlashEntryCostCache(wallet?.address, entryCostCacheRef.current);
       setPositions((current) =>
@@ -796,11 +811,11 @@ export function FastPerpsGame() {
       setBusy(false);
     }
   }, [
+    enableSessionFlow,
     getAccessToken,
     loadPositions,
     readyToTrade,
     selectedPosition,
-    signTransaction,
     wallet,
   ]);
 

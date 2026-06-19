@@ -12,6 +12,10 @@ interface SendDepositArgs {
   signAndSendTransaction: SignAndSendTransaction;
   onSponsorFallback?: (err: unknown) => void;
   preferSponsored?: boolean;
+  // When sponsored signing fails for ANY reason (not just the known "unsupported"
+  // signatures), still fall back to user-paid. Use when the wallet is known to
+  // hold SOL, so a misconfigured/unavailable sponsor never hard-blocks the tx.
+  fallbackOnAnyError?: boolean;
 }
 
 function collectErrorText(value: unknown, seen = new Set<unknown>()): string {
@@ -70,6 +74,7 @@ export async function sendDepositWithSponsorFallback({
   signAndSendTransaction,
   onSponsorFallback,
   preferSponsored = false,
+  fallbackOnAnyError = false,
 }: SendDepositArgs): Promise<{
   signature: Uint8Array | string;
   sponsored: boolean;
@@ -90,7 +95,7 @@ export async function sendDepositWithSponsorFallback({
     });
     return { signature: result.signature, sponsored: true };
   } catch (err) {
-    if (!isSponsoredSendUnsupported(err)) {
+    if (!fallbackOnAnyError && !isSponsoredSendUnsupported(err)) {
       throw err;
     }
     onSponsorFallback?.(err);
