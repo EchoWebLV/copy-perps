@@ -38,7 +38,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-const MIN_USDC = 5;
+const MIN_USDC = 1;
 const MAX_USDC = 1000;
 
 interface Body {

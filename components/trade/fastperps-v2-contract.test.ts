@@ -62,7 +62,7 @@ describe("FastPerpsGame flag-on (v2) self-directed repoint", () => {
 
   it("clamps stake floor and hides unsupported affordances under the flag", () => {
     expect(source).toContain("useState(flashV2 ? FLASH_V2_MIN_USDC : 1)");
-    expect(source).toContain("const FLASH_V2_MIN_USDC = 5");
+    expect(source).toContain("const FLASH_V2_MIN_USDC = 1");
     // Stake chip filter, degen toggle, autopilot, and TP/SL triggers all gate on !flashV2.
     expect(source).toContain("!flashV2 || nextStake >= FLASH_V2_MIN_USDC");
     expect(source).toContain("{!flashV2 && (");

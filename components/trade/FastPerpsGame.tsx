@@ -85,7 +85,7 @@ const PRIVY_INSTANT_TRADING_CONFIGURED = Boolean(PRIVY_INSTANT_SIGNER_ID);
 
 const FLASH_SCALP_MARKETS = ["BTC", "ETH", "SOL"] as const satisfies readonly FlashMarketSymbol[];
 const STAKES = [1, 5, 10, 50] as const;
-const FLASH_V2_MIN_USDC = 5; // the v2 self-directed open route floors stake at $5.
+const FLASH_V2_MIN_USDC = 1; // v2 open route minimum (the venue builds a $1 open; the old $5 was app-only).
 const TP_PRESETS = [50, 100, 200] as const; // % ROI on collateral
 const SL_PRESETS = [-25, -50, -75] as const;
 const STANDARD_LEVERAGES = [20, 50, 100] as const;

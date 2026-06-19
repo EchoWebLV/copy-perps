@@ -18,7 +18,7 @@ describe("TailModal deposit send", () => {
     expect(source).toContain(
       "setStake(isFlashV2Client() ? FLASH_V2_MIN_USDC : 1)",
     );
-    expect(source).toContain("const FLASH_V2_MIN_USDC = 5");
+    expect(source).toContain("const FLASH_V2_MIN_USDC = 1");
   });
 
   it("prepares tail copies through Flash instead of Pacifica bet routes", () => {

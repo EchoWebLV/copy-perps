@@ -49,10 +49,9 @@ const RPC =
 
 const STAKE_CHIPS = [1, 5, 10, 20] as const;
 const MIN_USDC = 1;
-// The Flash v2 whale/copy routes enforce a $5 floor; the v1 /api/flash/perp path
-// allows $1. When the client flag routes a whale tail to the v2 rail we raise the
-// UI minimum to match, so a default $1 tap can't be rejected with a 400.
-const FLASH_V2_MIN_USDC = 5;
+// Minimum stake for the Flash v2 whale/copy/bot routes. The venue itself builds a
+// $1 open (confirmed against the live builder), so this matches v1's $1 floor.
+const FLASH_V2_MIN_USDC = 1;
 const MAX_USDC = 1000;
 const TAIL_TRADE_SETTLING_AUTO_WAIT_MS = 20_000;
 

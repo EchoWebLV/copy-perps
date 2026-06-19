@@ -134,10 +134,20 @@ describe("POST /api/bet/bot", () => {
     expect(mocks.reserveTailOnMarket).not.toHaveBeenCalled();
   });
 
-  it("rejects a sub-$5 stake and out-of-range leverage with 400", async () => {
-    expect((await POST(post(body({ stakeUsdc: 1 })))).status).toBe(400);
+  it("rejects a sub-$1 stake and out-of-range leverage with 400", async () => {
+    expect((await POST(post(body({ stakeUsdc: 0.5 })))).status).toBe(400);
     expect((await POST(post(body({ leverage: 250 })))).status).toBe(400);
     expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+  });
+
+  it("allows a $1 stake on the v2 rail (venue builds a $1 open)", async () => {
+    mocks.openCopyFlashV2.mockResolvedValue({
+      kind: "opened",
+      signature: "SIG",
+      quote: { feeUsdUi: 0 },
+    });
+    mocks.insertReturning.mockResolvedValue([{ id: "bet-1" }]);
+    expect((await POST(post(body({ stakeUsdc: 1 })))).status).toBe(200);
   });
 
   it("rejects a non-finite / null stake with 400 (no NaN slips into the bounds compares)", async () => {
