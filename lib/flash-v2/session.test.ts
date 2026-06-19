@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import {
   deriveSessionTokenV2,
   isSessionExpired,
@@ -8,7 +8,10 @@ import {
   buildCreateSessionTx,
   buildRevokeSessionTx,
   isSessionRowActive,
+  signTradeWithSession,
+  submitErTx,
 } from "./session";
+import * as rpc from "./rpc";
 import { KEYSP_PROGRAM_ID } from "./constants";
 import { FlashV2Error } from "./errors";
 
@@ -105,5 +108,30 @@ describe("session creation/revoke tx", () => {
     const tx = await buildRevokeSessionTx({ authority, sessionSigner, connection: offlineConn() });
     expect(tx.instructions.some((i) => i.programId.toBase58() === KEYSP_PROGRAM_ID)).toBe(true);
     expect(tx.feePayer?.toBase58()).toBe(authority);
+  });
+});
+
+describe("session trade signing + ER submit", () => {
+  it("signTradeWithSession signs with the session keypair and returns the tx", () => {
+    const session = Keypair.generate();
+    const sign = vi.fn();
+    const tx = { sign } as unknown as VersionedTransaction;
+    const out = signTradeWithSession(tx, session.secretKey);
+    expect(out).toBe(tx);
+    const signers = sign.mock.calls[0]![0] as Keypair[];
+    expect(signers[0]!.publicKey.equals(session.publicKey)).toBe(true);
+  });
+
+  it("submitErTx submits the serialized tx to the ER connection with skipPreflight", async () => {
+    const sendRawTransaction = vi.fn().mockResolvedValue("SIG");
+    const spy = vi
+      .spyOn(rpc, "getConnection")
+      .mockReturnValue({ sendRawTransaction } as never);
+    const tx = { serialize: () => new Uint8Array([1, 2, 3]) } as unknown as VersionedTransaction;
+    const sig = await submitErTx(tx);
+    expect(sig).toBe("SIG");
+    expect(spy).toHaveBeenCalledWith("er");
+    expect(sendRawTransaction).toHaveBeenCalledWith(expect.any(Uint8Array), { skipPreflight: true });
+    spy.mockRestore();
   });
 });

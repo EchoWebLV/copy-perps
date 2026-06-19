@@ -8,6 +8,7 @@
 import {
   PublicKey,
   Transaction,
+  VersionedTransaction,
   Keypair,
   Connection,
   SystemProgram,
@@ -21,6 +22,7 @@ import {
   resolveProgramId,
   FLASH_V2_CLUSTER,
 } from "./constants";
+import { getConnection } from "./rpc";
 import { FlashV2Error } from "./errors";
 
 const KEYSP = new PublicKey(KEYSP_PROGRAM_ID);
@@ -166,4 +168,22 @@ export async function buildRevokeSessionTx(p: {
   tx.feePayer = authority;
   tx.recentBlockhash = (await p.connection.getLatestBlockhash("confirmed")).blockhash;
   return tx;
+}
+
+/**
+ * Sign a Flash-returned trade tx with the session keypair (no user popup). The
+ * tx arrives partially signed by Flash's ER validator with its own blockhash —
+ * we add ONLY the session signature and never touch the blockhash (notes §5).
+ */
+export function signTradeWithSession(
+  tx: VersionedTransaction,
+  sessionSecretKey: Uint8Array,
+): VersionedTransaction {
+  tx.sign([Keypair.fromSecretKey(sessionSecretKey)]);
+  return tx;
+}
+
+/** Submit a session-signed trade to the Ephemeral Rollup (trades → ER only). */
+export async function submitErTx(tx: VersionedTransaction): Promise<string> {
+  return getConnection("er").sendRawTransaction(tx.serialize(), { skipPreflight: true });
 }
