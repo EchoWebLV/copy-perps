@@ -139,4 +139,14 @@ describe("POST /api/bet/bot", () => {
     expect((await POST(post(body({ leverage: 250 })))).status).toBe(400);
     expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
   });
+
+  it("rejects a non-finite / null stake with 400 (no NaN slips into the bounds compares)", async () => {
+    // Over JSON, NaN/Infinity serialize to null (caught by the typeof gate); the
+    // Number.isFinite guard is the defense-in-depth backstop for any non-JSON
+    // caller, where a real NaN would otherwise pass `NaN < 5` / `NaN > 1000`.
+    expect((await POST(post(body({ stakeUsdc: Number.NaN })))).status).toBe(400);
+    expect((await POST(post(body({ stakeUsdc: Number.POSITIVE_INFINITY })))).status).toBe(400);
+    expect((await POST(post(body({ stakeUsdc: null })))).status).toBe(400);
+    expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+  });
 });

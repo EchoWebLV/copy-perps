@@ -71,7 +71,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (body.stakeUsdc < MIN_USDC || body.stakeUsdc > MAX_USDC) {
+  if (
+    !Number.isFinite(body.stakeUsdc) ||
+    body.stakeUsdc < MIN_USDC ||
+    body.stakeUsdc > MAX_USDC
+  ) {
     return NextResponse.json(
       { error: `stake must be between $${MIN_USDC} and $${MAX_USDC}` },
       { status: 400 },
