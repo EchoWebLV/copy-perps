@@ -8,6 +8,7 @@ import {
   buildCreateSessionTx,
   buildRevokeSessionTx,
   isSessionRowActive,
+  classifySessionStatus,
   signTradeWithSession,
   submitErTx,
   assertSessionReplaceable,
@@ -57,6 +58,20 @@ describe("session derivation + validation", () => {
     expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now + 1000) }, now)).toBe(true);
     expect(isSessionRowActive({ boundAt: null, validUntil: new Date(now + 1000) }, now)).toBe(false);
     expect(isSessionRowActive({ boundAt: new Date(0), validUntil: new Date(now - 1) }, now)).toBe(false);
+  });
+
+  it("classifySessionStatus maps row + now onto none/pending/active/expired", () => {
+    const now = 1_000_000;
+    expect(classifySessionStatus(undefined, now)).toBe("none");
+    expect(
+      classifySessionStatus({ boundAt: null, validUntil: new Date(now + 1000) }, now),
+    ).toBe("pending");
+    expect(
+      classifySessionStatus({ boundAt: new Date(0), validUntil: new Date(now + 1000) }, now),
+    ).toBe("active");
+    expect(
+      classifySessionStatus({ boundAt: new Date(0), validUntil: new Date(now - 1) }, now),
+    ).toBe("expired");
   });
 
   it("assertSessionReplaceable throws only on a live bound row; allows none/unbound/expired", () => {

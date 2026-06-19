@@ -12,6 +12,7 @@ import { buildCreateSessionTx, SessionAlreadyBoundError } from "@/lib/flash-v2/s
 import {
   generateSessionKeypair,
   createPendingSessionKey,
+  getSessionStatus,
 } from "@/lib/flash-v2/session-store";
 
 export const runtime = "nodejs";
@@ -20,6 +21,26 @@ export const dynamic = "force-dynamic";
 
 interface Body {
   walletAddress?: string;
+}
+
+/**
+ * Read the user's session state for the standalone auto-copy toggle:
+ * none | pending | active | expired (+ validUntil). Flash v2 only — 404 off.
+ */
+export async function GET(request: Request) {
+  if (!FEATURE_FLASH_V2) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const claims = await verifyPrivyRequest(request);
+  if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const user = await ensureUser(claims.userId, null);
+  const status = await getSessionStatus(user.id);
+  return NextResponse.json({
+    state: status.state,
+    sessionPubkey: status.sessionPubkey,
+    validUntil: status.validUntil?.toISOString() ?? null,
+  });
 }
 
 /**

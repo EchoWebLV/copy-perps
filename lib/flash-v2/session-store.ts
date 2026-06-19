@@ -9,7 +9,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessionKeys } from "@/lib/db/schema";
 import { encryptSeed, decryptSeed, generateAgentKeypair } from "@/lib/wallets/agent";
-import { isSessionRowActive, assertSessionReplaceable } from "./session";
+import {
+  isSessionRowActive,
+  assertSessionReplaceable,
+  classifySessionStatus,
+  type SessionStatusState,
+} from "./session";
 
 export interface SessionKeyRecord {
   userId: string;
@@ -90,6 +95,33 @@ export async function getActiveSessionKey(userId: string): Promise<SessionKeyRec
     sessionTokenPda: row.sessionTokenPda,
     validUntil: row.validUntil,
     keypair: Keypair.fromSeed(decryptSeed(row.sessionSecretEnc)),
+  };
+}
+
+export interface SessionStatus {
+  state: SessionStatusState;
+  sessionPubkey: string | null;
+  validUntil: Date | null;
+}
+
+/**
+ * The user's session lifecycle for the standalone toggle. Reads only the
+ * non-secret columns (never decrypts the seed — status display doesn't need it).
+ */
+export async function getSessionStatus(userId: string): Promise<SessionStatus> {
+  const [row] = await db
+    .select({
+      boundAt: sessionKeys.boundAt,
+      validUntil: sessionKeys.validUntil,
+      sessionPubkey: sessionKeys.sessionPubkey,
+    })
+    .from(sessionKeys)
+    .where(eq(sessionKeys.userId, userId))
+    .limit(1);
+  return {
+    state: classifySessionStatus(row, Date.now()),
+    sessionPubkey: row?.sessionPubkey ?? null,
+    validUntil: row?.validUntil ?? null,
   };
 }
 

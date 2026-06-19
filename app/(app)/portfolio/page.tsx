@@ -30,6 +30,7 @@ import {
 import { useWalletBalance } from "@/lib/solana/use-usdc-balance";
 import { CopyRow, type CopyRowData } from "@/components/portfolio/CopyRow";
 import { CopyTradingPanel } from "@/components/copy/CopyTradingPanel";
+import { SessionToggle } from "@/components/tail/SessionToggle";
 import { LeaderboardFeed } from "@/components/leaderboard/LeaderboardFeed";
 import { splitPortfolioPositions } from "@/lib/positions/portfolio-groups";
 import { mergeCopyRowsForPortfolioRefresh } from "@/lib/positions/portfolio-refresh";
@@ -584,6 +585,9 @@ function formatSnapshotAge(iso: string): string {
 function SubscriptionsPanel() {
   return (
     <section className="space-y-3">
+      {/* Standalone auto-copy session control (renders only when the flash-v2
+          client flag is on). */}
+      <SessionToggle />
       <CopyTradingPanel />
     </section>
   );

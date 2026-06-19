@@ -72,6 +72,24 @@ export function isSessionRowActive(
   return row.boundAt !== null && row.validUntil.getTime() > nowMs;
 }
 
+/** The lifecycle state of a stored session row, for the standalone toggle UI. */
+export type SessionStatusState = "none" | "pending" | "active" | "expired";
+
+/**
+ * Pure: classify a stored session row for display. `none` = no row, `pending` =
+ * created but its createSessionV2 hasn't confirmed (bound_at null), `active` =
+ * bound + unexpired, `expired` = bound but past valid_until. db-free so it stays
+ * unit-testable; the store wrapper in session-store.ts applies it.
+ */
+export function classifySessionStatus(
+  row: { boundAt: Date | null; validUntil: Date } | undefined,
+  nowMs: number,
+): SessionStatusState {
+  if (!row) return "none";
+  if (row.boundAt === null) return "pending";
+  return row.validUntil.getTime() > nowMs ? "active" : "expired";
+}
+
 /** Thrown when creating a session would clobber a still-bound one. Carries the
  *  prior session so the caller can build a revoke tx for it first. */
 export class SessionAlreadyBoundError extends FlashV2Error {

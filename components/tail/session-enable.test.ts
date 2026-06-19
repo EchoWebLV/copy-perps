@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enableFlashV2Session,
+  revokeFlashV2Session,
   SessionAlreadyBoundClientError,
 } from "./session-enable";
 
@@ -84,5 +85,41 @@ describe("enableFlashV2Session", () => {
       enableFlashV2Session({ ...deps, fetchImpl: fetchImpl as never }),
     ).rejects.toThrow(/confirm/);
     expect(deps.confirm).toHaveBeenCalledOnce(); // got far enough to sign + chain-confirm
+  });
+});
+
+describe("revokeFlashV2Session", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("builds the revoke tx, signs, confirms on-chain, then posts the confirmed delete", async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      const isConfirm =
+        url === "/api/users/me/session/revoke" &&
+        JSON.parse((init?.body as string) ?? "{}").confirmed === true;
+      if (url === "/api/users/me/session/revoke" && !isConfirm) {
+        return new Response(JSON.stringify({ revokeTransaction: TX_B64 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const deps = makeDeps();
+    await revokeFlashV2Session({ ...deps, fetchImpl: fetchImpl as never });
+
+    expect(deps.signAndSendTransaction).toHaveBeenCalledOnce();
+    expect(deps.confirm).toHaveBeenCalledWith("SIG58");
+    const confirmCall = fetchImpl.mock.calls.find(
+      (c) => JSON.parse((c[1] as RequestInit).body as string).confirmed === true,
+    );
+    expect(confirmCall).toBeTruthy();
+  });
+
+  it("throws (and never signs) when the build returns no tx", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "no bound session to revoke" }), { status: 404 }),
+    );
+    const deps = makeDeps();
+    await expect(
+      revokeFlashV2Session({ ...deps, fetchImpl: fetchImpl as never }),
+    ).rejects.toThrow(/revoke/);
+    expect(deps.signAndSendTransaction).not.toHaveBeenCalled();
   });
 });

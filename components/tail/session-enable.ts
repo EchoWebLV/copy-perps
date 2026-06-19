@@ -102,3 +102,60 @@ export async function enableFlashV2Session(
 
   return { sessionPubkey: build.sessionPubkey, validUntil: build.validUntil ?? "" };
 }
+
+export interface RevokeSessionDeps {
+  getAccessToken: () => Promise<string | null>;
+  wallet: ConnectedStandardSolanaWallet;
+  signAndSendTransaction: SignAndSendTransaction;
+  /** Confirm the base-layer revokeSessionV2 signature on chain (injectable for tests). */
+  confirm: (signature: string) => Promise<void>;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Revoke (turn off) the user's Flash v2 trading session. Drives: POST
+ * /session/revoke (build) → wallet signs the base-layer revokeSessionV2 tx →
+ * on-chain confirm → POST /session/revoke {confirmed:true} (drop the row). Like
+ * enable, the tx is base-layer so Privy's own submit works. After this the user
+ * can enable a fresh session.
+ */
+export async function revokeFlashV2Session(deps: RevokeSessionDeps): Promise<void> {
+  const f = deps.fetchImpl ?? fetch;
+  const token = await deps.getAccessToken();
+  if (!token) throw new Error("not authed");
+  const authHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  const buildResp = await f("/api/users/me/session/revoke", {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({ walletAddress: deps.wallet.address }),
+  });
+  const build = (await buildResp.json().catch(() => ({}))) as {
+    revokeTransaction?: string;
+    error?: string;
+  };
+  if (!buildResp.ok || !build.revokeTransaction) {
+    throw new Error(build.error ?? `could not start revoke (${buildResp.status})`);
+  }
+
+  const { signature } = await sendDepositWithSponsorFallback({
+    transaction: b64ToBytes(build.revokeTransaction),
+    wallet: deps.wallet,
+    signAndSendTransaction: deps.signAndSendTransaction,
+    preferSponsored: false,
+  });
+  await deps.confirm(await toBase58(signature));
+
+  const confirmResp = await f("/api/users/me/session/revoke", {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({ confirmed: true, walletAddress: deps.wallet.address }),
+  });
+  if (!confirmResp.ok) {
+    const e = (await confirmResp.json().catch(() => ({}))) as { error?: string };
+    throw new Error(e.error ?? `could not confirm revoke (${confirmResp.status})`);
+  }
+}
