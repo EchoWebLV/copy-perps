@@ -159,16 +159,30 @@ function flashRowFromPosition(
   };
 }
 
-// Attribution for a Flash v2 venue position. A confirmed flash-v2 `copy` bet on
-// the same market:side turns the row into a tail (betId + leader info, staked at
-// the user's amount); otherwise it renders as a self-directed wallet position
-// (Task 4). Mirrors the flash-v1 flashTailByKey pattern so a position is never
-// double-counted (once as a phantom Pacifica copy row + once as a wallet row).
-// PnL is mark-price (lib/flash-v2/pnl.ts), matching the "ignore indexer PnL" decision.
+// Resolved display attribution for a flash-v2 copy/whale bet, keyed to a venue
+// position. Pre-parsed (copy + whale meta) so the row builder stays meta-free.
+type FlashV2CopyAttribution = {
+  id: string;
+  stakeUsdc: number;
+  leverage: number | null;
+  leaderAddress: string | null;
+  whaleId: string | null;
+  autoCloseOnSourceClose: boolean;
+  botId: string | null;
+  leaderClosedAt: string | null;
+};
+
+// Attribution for a Flash v2 venue position. A confirmed flash-v2 `copy`/whale
+// bet on the same market:side turns the row into a tail (betId + leader/whale
+// info, staked at the user's amount); otherwise it renders as a self-directed
+// wallet position (Task 4). Mirrors the flash-v1 flashTailByKey pattern so a
+// position is never double-counted (once as a phantom Pacifica copy row + once
+// as a wallet row). PnL is mark-price (lib/flash-v2/pnl.ts), per the "ignore
+// indexer PnL" decision.
 function flashV2RowFromPosition(
   p: VenuePosition,
   pricedAt: string,
-  copyBet?: { id: string; stakeUsdc: number; meta: CopyRowMeta } | null,
+  copyBet?: FlashV2CopyAttribution | null,
 ): PortfolioSnapshotPayload["copyRows"][number] {
   const pnlUsd =
     p.entryPrice > 0 && p.markPrice > 0
@@ -191,7 +205,7 @@ function flashV2RowFromPosition(
     market: p.symbol,
     side: p.side,
     leverage:
-      copyBet?.meta.leverage ??
+      copyBet?.leverage ??
       (Number.isFinite(p.leverage) && p.leverage > 0 ? p.leverage : null),
     stakeUsdc: copyBet
       ? copyBet.stakeUsdc
@@ -199,14 +213,14 @@ function flashV2RowFromPosition(
         ? p.collateralUsd
         : null,
     openFeeUsd: null,
-    leaderAddress: copyBet?.meta.leaderAddress ?? null,
+    leaderAddress: copyBet?.leaderAddress ?? null,
     leaderUsername: null,
-    whaleId: null,
+    whaleId: copyBet?.whaleId ?? null,
     whaleName: null,
-    autoCloseOnSourceClose: false,
+    autoCloseOnSourceClose: copyBet?.autoCloseOnSourceClose ?? false,
     closeReason: null,
-    botId: copyBet?.meta.botId ?? null,
-    botName: copyBet?.meta.botId ?? null,
+    botId: copyBet?.botId ?? null,
+    botName: copyBet?.botId ?? null,
     liveStatus: "open" satisfies CopyLiveStatus,
     entryPrice: p.entryPrice > 0 ? p.entryPrice : null,
     markPrice: p.markPrice > 0 ? p.markPrice : null,
@@ -220,7 +234,7 @@ function flashV2RowFromPosition(
     unrealizedPnlPct,
     openedAt: null,
     positionUpdatedAt: pricedAt,
-    leaderClosedAt: copyBet?.meta.leaderClosedAt ?? null,
+    leaderClosedAt: copyBet?.leaderClosedAt ?? null,
   };
 }
 
@@ -550,17 +564,24 @@ export async function GET(request: Request) {
   // newest-first; first-wins keeps the live one — one position per
   // owner+market+side). A bet whose position died externally drops out (no
   // matching venue position) until the mirror-close/reconcile sweep marks it.
-  const flashV2CopyByKey = new Map<
-    string,
-    { id: string; stakeUsdc: number; meta: CopyRowMeta }
-  >();
+  const flashV2CopyByKey = new Map<string, FlashV2CopyAttribution>();
   for (const b of flashV2CopyBets) {
     if (b.status !== "confirmed") continue;
     const meta = parseCopyRowMeta(b.meta);
     if (!meta) continue;
+    const whaleMeta = parseWhaleCopyMeta(b.meta);
     const key = positionKey(meta.leaderMarket, meta.leaderSide);
     if (!flashV2CopyByKey.has(key)) {
-      flashV2CopyByKey.set(key, { id: b.id, stakeUsdc: b.amountUsdc, meta });
+      flashV2CopyByKey.set(key, {
+        id: b.id,
+        stakeUsdc: b.amountUsdc,
+        leverage: meta.leverage,
+        leaderAddress: meta.leaderAddress ?? whaleMeta?.sourceAccount ?? null,
+        whaleId: whaleMeta?.whaleId ?? null,
+        autoCloseOnSourceClose: whaleMeta?.autoCloseOnSourceClose ?? false,
+        botId: meta.botId ?? null,
+        leaderClosedAt: meta.leaderClosedAt ?? null,
+      });
     }
   }
   const flashV2Rows = flashV2Positions.map((p) =>

@@ -637,6 +637,76 @@ describe("GET /api/portfolio", () => {
     expect(body.copyRows[0].unrealizedPnlPct).toBeCloseTo(71.428571);
   });
 
+  it("surfaces whale identity on an attributed flash-v2 whale tail", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T14:15:00.000Z"));
+    mocks.selectUserLimit.mockResolvedValueOnce([
+      { id: "user-1", privyId: "privy-user", solanaPubkey: "wallet-1" },
+    ]);
+    mocks.selectBetsOrderBy.mockResolvedValue([
+      {
+        id: "whale-v2",
+        userId: "user-1",
+        type: "copy",
+        amountUsdc: 20,
+        feeUsdc: 0.2,
+        status: "confirmed",
+        meta: {
+          sourceType: "whale",
+          venue: "flash-v2",
+          whaleId: "pacifica:whale9",
+          source: "pacifica",
+          sourceAccount: "WHALE9ACC",
+          sourcePositionId: "pos-1",
+          leaderMarket: "ETH",
+          leaderSide: "short",
+          leverage: 10,
+          autoCloseOnSourceClose: true,
+          userEntryPrice: 2000,
+          sourceEntryPriceAtCopy: 2000,
+          pacificaOrderId: "WSIG",
+          closeReason: null,
+        },
+        createdAt: new Date("2026-05-28T14:10:00.000Z"),
+      },
+    ]);
+    mocks.getPositions.mockResolvedValue([]);
+    mocks.getFlashV2Venue.mockReturnValue({
+      getPositions: vi.fn().mockResolvedValue([
+        {
+          positionKey: "ETH-short",
+          symbol: "ETH",
+          side: "short",
+          sizeUsd: 200,
+          collateralUsd: 20,
+          entryPrice: 2000,
+          markPrice: 1950,
+          liquidationPrice: 2200,
+          leverage: 10,
+        },
+      ]),
+    });
+
+    const response = await GET(new Request("http://local.test/api/portfolio"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.copyRows).toHaveLength(1);
+    expect(body.copyRows[0]).toMatchObject({
+      betId: "whale-v2",
+      venue: "flash-v2",
+      sourceKind: "tail",
+      market: "ETH",
+      side: "short",
+      leverage: 10,
+      stakeUsdc: 20,
+      whaleId: "pacifica:whale9",
+      leaderAddress: "WHALE9ACC",
+      autoCloseOnSourceClose: true,
+      liveStatus: "open",
+    });
+  });
+
   it("includes uncredited Pacifica deposits as pending portfolio funds", async () => {
     mocks.selectUserLimit.mockResolvedValueOnce([
       {

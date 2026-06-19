@@ -62,6 +62,8 @@ const mocks = vi.hoisted(() => {
     reserveTailOnMarket: vi.fn(),
     blockTailReservation: vi.fn(),
     releaseTailReservation: vi.fn(),
+    getFlashV2Venue: vi.fn(),
+    openCopyFlashV2: vi.fn(),
     selectChain,
     selectLimit,
     insertValues,
@@ -114,6 +116,12 @@ vi.mock("@/lib/bets/tail-reservation", () => ({
   reserveTailOnMarket: mocks.reserveTailOnMarket,
   blockTailReservation: mocks.blockTailReservation,
   releaseTailReservation: mocks.releaseTailReservation,
+}));
+vi.mock("@/lib/flash-v2/resolve", () => ({
+  getFlashV2Venue: mocks.getFlashV2Venue,
+}));
+vi.mock("@/lib/bets/copy-flash-v2", () => ({
+  openCopyFlashV2: mocks.openCopyFlashV2,
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -216,6 +224,8 @@ describe("POST /api/bet/whale", () => {
       max_leverage: 50,
     });
     mocks.planPacificaDepositTopUp.mockResolvedValue(null);
+    // Flag-off by default so the existing assertions exercise the Pacifica path.
+    mocks.getFlashV2Venue.mockReturnValue(null);
     mocks.reserveTailOnMarket.mockResolvedValue(true);
     mocks.blockTailReservation.mockResolvedValue(undefined);
     mocks.releaseTailReservation.mockResolvedValue(undefined);
@@ -272,7 +282,7 @@ describe("POST /api/bet/whale", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.hasOpenTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+    expect(mocks.hasOpenTailOnMarket).toHaveBeenCalledWith("user-1", "ETH", "pacifica");
     expect(mocks.clampLeverageForNotional).toHaveBeenCalledWith("ETH", 70);
     expect(mocks.openCopyOrder).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1027,5 +1037,94 @@ describe("POST /api/bet/whale", () => {
       error: "HYPE is not available for copy trading",
     });
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+  });
+
+  describe("flash-v2 (flag on)", () => {
+    beforeEach(() => {
+      mocks.getFlashV2Venue.mockReturnValue({ id: "venue" });
+    });
+
+    it("keys the guard on flash-v2 and session-opens a confirmed whale tail (no Pacifica)", async () => {
+      mocks.openCopyFlashV2.mockResolvedValue({
+        kind: "opened",
+        signature: "WSIG",
+        quote: { feeUsdUi: 0.4 },
+      });
+
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mocks.hasOpenTailOnMarket).toHaveBeenCalledWith("user-1", "ETH", "flash-v2");
+      // Reservation is held across the session open, then released.
+      expect(mocks.reserveTailOnMarket).toHaveBeenCalledWith("user-1", "ETH");
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+      expect(mocks.openCopyFlashV2).toHaveBeenCalledWith(
+        expect.objectContaining({ owner: "wallet-1", market: "ETH", side: "long", stakeUsdc: 10 }),
+      );
+      // A single confirmed insert tagged venue:flash-v2 — no pending/confirm dance.
+      expect(mocks.insertValues).toHaveBeenCalledTimes(1);
+      expect(mocks.insertValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "copy",
+          status: "confirmed",
+          meta: expect.objectContaining({
+            venue: "flash-v2",
+            sourceType: "whale",
+            whaleId: "pacifica:abc",
+            pacificaOrderId: "WSIG",
+          }),
+        }),
+      );
+      // Pacifica execution never runs.
+      expect(mocks.openCopyOrder).not.toHaveBeenCalled();
+      expect(mocks.getAgentWallet).not.toHaveBeenCalled();
+      await expect(response.json()).resolves.toMatchObject({
+        phase: "open",
+        betId: "bet-1",
+        txSig: "WSIG",
+      });
+    });
+
+    it("surfaces enable-session and releases the reservation without opening", async () => {
+      mocks.openCopyFlashV2.mockResolvedValue({ kind: "enable-session" });
+
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ phase: "enable-session" });
+      expect(mocks.insertValues).not.toHaveBeenCalled();
+      expect(mocks.releaseTailReservation).toHaveBeenCalledWith("user-1", "ETH");
+    });
+
+    it("rejects when the tail reservation cannot be acquired", async () => {
+      mocks.reserveTailOnMarket.mockResolvedValue(false);
+
+      const response = await POST(
+        whaleRequest({
+          positionId: "source-pos-1",
+          stakeUsdc: 10,
+          walletAddress: "wallet-1",
+          autoCloseOnSourceClose: true,
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+      expect(mocks.insertValues).not.toHaveBeenCalled();
+    });
   });
 });

@@ -30,6 +30,8 @@ import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { isSourceFresh } from "@/lib/whales/identity";
 import { getWhaleLivePositionById } from "@/lib/whales/live-cache";
+import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { openCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -427,6 +429,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
+  // Execution venue: Flash v2 when the flag is on, else Pacifica (unchanged).
+  const flashV2 = getFlashV2Venue();
+  const copyVenue = flashV2 ? "flash-v2" : "pacifica";
+
   const userNotional = body.stakeUsdc * requestedLeverage;
   let clamped: number;
   try {
@@ -455,7 +461,7 @@ export async function POST(request: Request) {
     lotSize: marketInfo.lot_size,
   });
 
-  if (await hasOpenTailOnMarket(user.id, position.market)) {
+  if (await hasOpenTailOnMarket(user.id, position.market, copyVenue)) {
     if (body.preflightOnly === true) {
       return NextResponse.json({
         phase: "preflight",
@@ -476,6 +482,108 @@ export async function POST(request: Request) {
       canOpen: true,
       mode: detachedFromSource ? "snapshot" : "live",
       autoCloseOnSourceClose: sourceAutoClose,
+    });
+  }
+
+  // Flash v2 whale tail: session-signed (one-tap), no agent wallet. The whole
+  // Pacifica path below (agent onboarding, deposit top-up, pending/confirm
+  // ledger + compensation) is skipped when the flag is on. We still hold a
+  // tail reservation across the open to block a concurrent duplicate; an insert
+  // failure after a successful open leaves the position visible as a self-directed
+  // wallet row (recoverable), so no compensating close is needed.
+  if (flashV2) {
+    const reserved = await reserveTailOnMarket(user.id, position.market);
+    if (!reserved) {
+      return NextResponse.json(
+        { error: `you already have an open ${position.market} tail - close it first` },
+        { status: 409 },
+      );
+    }
+
+    let result;
+    try {
+      result = await openCopyFlashV2({
+        venue: flashV2,
+        userId: user.id,
+        owner: user.solanaPubkey,
+        market: position.market,
+        side: position.side,
+        stakeUsdc: body.stakeUsdc,
+        leverage: effectiveLeverage,
+      });
+    } catch (err) {
+      await releaseReservationBestEffort(user.id, position.market);
+      console.error("[bet/whale] flash-v2 open failed:", err);
+      return NextResponse.json(
+        { error: "Trade could not open. No funds were spent." },
+        { status: 502 },
+      );
+    }
+
+    if (result.kind === "enable-session") {
+      await releaseReservationBestEffort(user.id, position.market);
+      return NextResponse.json({ phase: "enable-session" });
+    }
+    if (result.kind === "onboard") {
+      await releaseReservationBestEffort(user.id, position.market);
+      return NextResponse.json({ phase: "onboard", steps: result.steps });
+    }
+
+    const avgFillPrice = position.currentMark ?? position.entryPrice;
+    let bet: typeof bets.$inferSelect;
+    try {
+      [bet] = await db
+        .insert(bets)
+        .values({
+          userId: user.id,
+          type: "copy",
+          amountUsdc: body.stakeUsdc,
+          status: "confirmed",
+          feeUsdc:
+            result.quote.feeUsdUi != null && Number.isFinite(result.quote.feeUsdUi)
+              ? result.quote.feeUsdUi
+              : null,
+          meta: buildWhaleCopyMeta({
+            venue: "flash-v2",
+            whaleId: whale.id,
+            source: position.source,
+            sourceAccount: position.sourceAccount,
+            sourcePositionId: position.id,
+            leaderMarket: position.market,
+            leaderSide: position.side,
+            leverage: effectiveLeverage,
+            autoCloseOnSourceClose: sourceAutoClose,
+            detachedFromSource,
+            userEntryPrice: avgFillPrice,
+            sourceEntryPriceAtCopy: position.entryPrice,
+            pacificaOrderId: result.signature,
+          }),
+        })
+        .returning();
+      if (!bet) throw new Error("flash-v2 whale bet insert returned no row");
+    } catch (err) {
+      await releaseReservationBestEffort(user.id, position.market);
+      console.error("[bet/whale] flash-v2 ledger insert failed:", err);
+      return NextResponse.json(
+        { error: "Could not record whale copy bet" },
+        { status: 502 },
+      );
+    }
+
+    await releaseReservationBestEffort(user.id, position.market);
+    return NextResponse.json({
+      phase: "open",
+      betId: bet.id,
+      txSig: result.signature,
+      source: {
+        whaleId: whale.id,
+        displayName: whale.displayName,
+        asset: position.market,
+        side: position.side,
+        leverage: effectiveLeverage,
+        autoCloseOnSourceClose: sourceAutoClose,
+        ...(detachedFromSource ? { detachedFromSource: true } : {}),
+      },
     });
   }
 

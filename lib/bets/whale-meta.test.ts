@@ -128,4 +128,66 @@ describe("whale copy metadata", () => {
       }),
     ).toBeNull();
   });
+
+  describe("venue", () => {
+    const valid = {
+      sourceType: "whale" as const,
+      whaleId: "pacifica:abc",
+      source: "pacifica" as const,
+      sourceAccount: "abc",
+      sourcePositionId: "pos-1",
+      leaderMarket: "ETH",
+      leaderSide: "long" as const,
+      leverage: 7,
+      autoCloseOnSourceClose: true,
+      userEntryPrice: 2118.51,
+      sourceEntryPriceAtCopy: 2110.25,
+      pacificaOrderId: "order-1",
+      closeReason: null,
+    };
+
+    it("omits venue on the Pacifica build path (byte-identical legacy meta)", () => {
+      const meta = buildWhaleCopyMeta({
+        whaleId: "pacifica:abc",
+        source: "pacifica",
+        sourceAccount: "abc",
+        sourcePositionId: "pos-1",
+        leaderMarket: "ETH",
+        leaderSide: "long",
+        leverage: 7,
+        autoCloseOnSourceClose: true,
+        userEntryPrice: 2118.51,
+        sourceEntryPriceAtCopy: 2110.25,
+        pacificaOrderId: "order-1",
+      });
+      expect("venue" in meta).toBe(false);
+    });
+
+    it("carries venue:flash-v2 through build + parse", () => {
+      const meta = buildWhaleCopyMeta({
+        venue: "flash-v2",
+        whaleId: "pacifica:abc",
+        source: "pacifica",
+        sourceAccount: "abc",
+        sourcePositionId: "pos-1",
+        leaderMarket: "ETH",
+        leaderSide: "long",
+        leverage: 7,
+        autoCloseOnSourceClose: true,
+        userEntryPrice: 2118.51,
+        sourceEntryPriceAtCopy: 2110.25,
+        pacificaOrderId: "WSIG",
+      });
+      expect(meta.venue).toBe("flash-v2");
+      expect(parseWhaleCopyMeta(meta)?.venue).toBe("flash-v2");
+    });
+
+    it("parses legacy meta with no venue (left undefined)", () => {
+      expect(parseWhaleCopyMeta(valid)?.venue).toBeUndefined();
+    });
+
+    it("rejects an unknown venue value", () => {
+      expect(parseWhaleCopyMeta({ ...valid, venue: "drift" })).toBeNull();
+    });
+  });
 });

@@ -11,8 +11,12 @@ export type WhaleCopyMeta = {
   detachedFromSource?: boolean;
   userEntryPrice: number | null;
   sourceEntryPriceAtCopy: number;
+  // The Pacifica order id, or (venue:'flash-v2') the open tx signature.
   pacificaOrderId: string | number;
   closeReason: "manual" | "source_closed" | "already_flat" | null;
+  // Execution venue. Omitted on legacy/Pacifica rows (read back as 'pacifica' by
+  // copyMetaVenue); set to 'flash-v2' for session-signed Flash v2 whale tails.
+  venue?: "pacifica" | "flash-v2";
 };
 
 type BuildWhaleCopyMetaArgs = Omit<WhaleCopyMeta, "sourceType" | "closeReason">;
@@ -81,6 +85,13 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
   if (!isNumber(value.sourceEntryPriceAtCopy)) return null;
   if (!isStringOrNumber(value.pacificaOrderId)) return null;
   if (!isWhaleCloseReason(value.closeReason)) return null;
+  if (
+    value.venue !== undefined &&
+    value.venue !== "pacifica" &&
+    value.venue !== "flash-v2"
+  ) {
+    return null;
+  }
 
   return {
     sourceType: "whale",
@@ -97,5 +108,6 @@ export function parseWhaleCopyMeta(value: unknown): WhaleCopyMeta | null {
     sourceEntryPriceAtCopy: value.sourceEntryPriceAtCopy,
     pacificaOrderId: value.pacificaOrderId,
     closeReason: value.closeReason,
+    ...(value.venue !== undefined ? { venue: value.venue } : {}),
   };
 }
