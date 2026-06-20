@@ -10,6 +10,7 @@
 import {
   DECISION_ACTION,
   DECISION_SIDE,
+  type LlmAction,
   type LlmDecision,
   toBps,
   toConfidence100,
@@ -54,13 +55,13 @@ export type FloorOutcome =
   | { kind: "skip"; reason: FloorReject | "Hold" };
 
 /**
- * Decide whether (and how) to submit a decision to the chain. CLOSE is always
- * allowed (risk reduction); HOLD never sends; OPEN passes the full floor.
+ * Decide whether (and how) to submit a single action to the chain. CLOSE is
+ * always allowed (risk reduction); HOLD never sends; OPEN passes the full floor.
  * Clamps leverage/stake exactly like the program so the pre-check and the
  * on-chain result agree.
  */
-export function evaluateDecision(
-  decision: LlmDecision,
+export function evaluateAction(
+  decision: LlmAction,
   params: LlmFloorParams,
   state: LlmBotLiveState,
   nowSecs: number,
@@ -126,4 +127,34 @@ export function evaluateDecision(
       confidence,
     },
   };
+}
+
+export interface ActionOutcome {
+  asset: LlmAction["asset"];
+  outcome: FloorOutcome;
+}
+
+/** Evaluate every action in a tick. Opens draw down a running daily-trade
+ *  budget so a multi-open tick stops submitting once the cap is hit (matches
+ *  the on-chain sequential trades_today increment). CLOSE/HOLD never consume
+ *  the budget. Cooldown is checked against the pre-tick lastDecisionTs, so a
+ *  multi-open tick requires decisionCooldownSecs = 0 (see the spec). */
+export function evaluateActions(
+  decision: LlmDecision,
+  params: LlmFloorParams,
+  state: LlmBotLiveState,
+  nowSecs: number,
+): ActionOutcome[] {
+  let opensSoFar = 0;
+  return decision.actions.map((action) => {
+    const liveForAction: LlmBotLiveState = {
+      ...state,
+      tradesToday: state.tradesToday + opensSoFar,
+    };
+    const outcome = evaluateAction(action, params, liveForAction, nowSecs);
+    if (outcome.kind === "send" && outcome.args.action === DECISION_ACTION.open) {
+      opensSoFar += 1;
+    }
+    return { asset: action.asset, outcome };
+  });
 }

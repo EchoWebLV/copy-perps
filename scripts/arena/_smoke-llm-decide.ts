@@ -8,7 +8,7 @@
 //   XAI_API_KEY=... ANTHROPIC_API_KEY=... npx tsx scripts/arena/_smoke-llm-decide.ts
 import { createLlmClient } from "../../lib/arena/llm/client";
 import { decisionSchema } from "../../lib/arena/llm/schema";
-import { evaluateDecision, type LlmFloorParams } from "../../lib/arena/llm/floor";
+import { evaluateActions, type LlmFloorParams } from "../../lib/arena/llm/floor";
 import { renderConstraints, renderMarketBlock, type SharedBrief } from "../../lib/arena/llm/brief";
 import { ORACLE_BOTS } from "../../lib/arena/llm/registry";
 
@@ -47,9 +47,10 @@ async function main() {
       continue;
     }
     const valid = decisionSchema.safeParse(decision).success;
-    console.log(`  decision [${ms}ms]: ${decision.action.toUpperCase()} ${decision.action === "open" ? `${decision.side} ${decision.asset} ${decision.leverage}x stake ${(decision.stakeFracPct * 100).toFixed(0)}% stop ${(decision.stopLossPct * 100).toFixed(1)}% tp ${(decision.takeProfitPct * 100).toFixed(1)}%` : decision.asset} (conf ${decision.confidence.toFixed(2)})`);
-    console.log(`  reasoning: ${decision.reasoning}`);
-    console.log(`  schema-valid: ${valid}`);
+    console.log(`  decision [${ms}ms]: ${decision.actions.length} action(s) — schema-valid: ${valid}`);
+    for (const a of decision.actions) {
+      console.log(`    ${a.action.toUpperCase()} ${a.action === "open" ? `${a.side} ${a.asset} ${a.leverage}x stake ${(a.stakeFracPct * 100).toFixed(0)}% stop ${(a.stopLossPct * 100).toFixed(1)}% tp ${(a.takeProfitPct * 100).toFixed(1)}%` : a.asset} (conf ${a.confidence.toFixed(2)}) — ${a.reasoning}`);
+    }
     const floor: LlmFloorParams = {
       maxLeverage: bot.params.maxLeverage,
       minStopBps: bot.params.minStopBps,
@@ -59,11 +60,13 @@ async function main() {
       decisionCooldownSecs: bot.params.decisionCooldownSecs,
       confidenceFloor: bot.params.confidenceFloor,
     };
-    const outcome = evaluateDecision(decision, floor, flatState, now);
-    if (outcome.kind === "send") {
-      console.log(`  → FLOOR PASS → would submit apply_decision: ${JSON.stringify(outcome.args)}`);
-    } else {
-      console.log(`  → FLOOR SKIP (${outcome.reason}) → no on-chain tx`);
+    const outcomes = evaluateActions(decision, floor, flatState, now);
+    for (const { asset, outcome } of outcomes) {
+      if (outcome.kind === "send") {
+        console.log(`  → ${asset} FLOOR PASS → would submit apply_decision: ${JSON.stringify(outcome.args)}`);
+      } else {
+        console.log(`  → ${asset} FLOOR SKIP (${outcome.reason}) → no on-chain tx`);
+      }
     }
   }
   console.log("\n✓ live smoke complete");
