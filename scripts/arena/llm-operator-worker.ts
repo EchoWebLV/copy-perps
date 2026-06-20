@@ -15,11 +15,13 @@ import path from "node:path";
 import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { runBotDecision, type LlmLoopDeps } from "../../lib/arena/llm/loop";
 import { createLlmClient } from "../../lib/arena/llm/client";
+import { marketForAsset } from "../../lib/arena/markets";
 import { buildApplyDecisionIx, llmBotPda } from "../../lib/arena/llm/submit";
 import { renderPromptFor, buildSharedBrief, type SharedBrief } from "../../lib/arena/llm/brief";
 import { DEMO_BRIEF } from "../../lib/arena/llm/demo-brief";
 import { ORACLE_BOTS } from "../../lib/arena/llm/registry";
-import { decodeLlmBot } from "../../lib/arena/decode";
+import { insertArenaDecision } from "../../lib/arena/llm/decision-store";
+import { decodeLlmBot, tapeNewestFirst } from "../../lib/arena/decode";
 import { getCandles } from "../../lib/data/candles";
 import { getMarketSentimentSnapshot } from "../../lib/data/market-sentiment";
 import { getNewsSentiment } from "../../lib/data/news-sentiment";
@@ -77,10 +79,20 @@ function depsFor(bot: (typeof ORACLE_BOTS)[number], brief: SharedBrief): LlmLoop
       const info = await conn.getAccountInfo(llmBotPda(PROGRAM, bot.persona), "confirmed");
       return info ? decodeLlmBot(new Uint8Array(info.data)) : null;
     },
-    buildBrief: async (b) => renderPromptFor({ systemBlock: bot.systemBlock, bot: b, brief }),
+    buildBrief: async (b) =>
+      renderPromptFor({
+        systemBlock: bot.systemBlock,
+        bot: b,
+        brief,
+        closingInstruction: bot.closingInstruction,
+      }),
     decide: (prompt) => client.decide(prompt),
-    submit: async ({ persona, marketId, args }) => {
-      const ix = buildApplyDecisionIx({ programId: PROGRAM, persona, operator: operator.publicKey, feed: FEED, marketId, args });
+    submit: async ({ persona, asset, args }) => {
+      // Route this action to its asset's on-chain market + oracle feed. The
+      // day-roll heartbeat passes asset "SOL", which maps to market 0/FEED —
+      // the same market the heartbeat has always advanced.
+      const { marketId, feed } = marketForAsset(asset);
+      const ix = buildApplyDecisionIx({ programId: PROGRAM, persona, operator: operator.publicKey, feed, marketId, args });
       const tx = new Transaction().add(ix);
       tx.feePayer = operator.publicKey;
       tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
@@ -89,8 +101,32 @@ function depsFor(bot: (typeof ORACLE_BOTS)[number], brief: SharedBrief): LlmLoop
       await conn.confirmTransaction(sig, "confirmed");
       return sig;
     },
-    persistDecision: (rec) =>
-      console.log(`  [${rec.persona}] ${rec.decision.action}${rec.sent ? ` SENT ${rec.signature?.slice(0, 8)}…` : ` skip(${rec.reason})`} — ${rec.decision.reasoning.slice(0, 90)}`),
+    // Persist the thought behind every decision (the UI's "why" layer). For a
+    // sent trade, read the bot back once post-confirm to capture the on-chain
+    // tape entry's tsMs — the exact join key the MagicBlock log uses to pair the
+    // reasoning with the right row. Best-effort: a DB or read-back hiccup logs
+    // and moves on (it never blocks or breaks the trading loop).
+    persistDecision: async (rec) => {
+      let tapeTsMs: number | null = null;
+      if (rec.sent && rec.signature) {
+        try {
+          const info = await conn.getAccountInfo(
+            llmBotPda(PROGRAM, rec.persona),
+            "confirmed",
+          );
+          const b = info ? decodeLlmBot(new Uint8Array(info.data)) : null;
+          tapeTsMs = b ? (tapeNewestFirst(b)[0]?.tsMs ?? null) : null;
+        } catch (e) {
+          console.warn(`[worker] tape read-back failed for ${rec.persona}:`, (e as Error).message);
+        }
+      }
+      try {
+        await insertArenaDecision(rec, { marketId: marketForAsset(rec.asset).marketId, tapeTsMs });
+      } catch (e) {
+        console.warn(`[worker] persist decision failed for ${rec.persona}:`, (e as Error).message);
+      }
+      console.log(`  [${rec.persona}] ${rec.decision.action} ${rec.asset}${rec.sent ? ` SENT ${rec.signature?.slice(0, 8)}…` : ` skip(${rec.reason})`} — ${rec.decision.reasoning.slice(0, 90)}`);
+    },
   };
 }
 
@@ -102,7 +138,13 @@ async function tick() {
   for (const bot of ACTIVE) {
     try {
       const res = await runBotDecision({ persona: bot.persona, marketId: MARKET_ID }, depsFor(bot, brief));
-      console.log(`  ${bot.displayName}: ${res.status}${res.status === "sent" ? ` → ${res.signature?.slice(0, 8)}…` : ""}`);
+      const detail =
+        res.status === "acted"
+          ? ` → ${res.results.map((r) => `${r.asset} ${r.signature?.slice(0, 8)}…`).join(", ")}`
+          : res.status === "heartbeat"
+            ? ` → heartbeat ${res.signature?.slice(0, 8)}…`
+            : "";
+      console.log(`  ${bot.displayName}: ${res.status}${detail}`);
     } catch (e) {
       console.warn(`  ${bot.displayName} failed:`, (e as Error).message);
     }

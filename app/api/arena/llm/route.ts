@@ -7,7 +7,7 @@
 // page shows exactly what each model decided and whether the rules let it trade.
 import { NextResponse } from "next/server";
 import { createLlmClient, hasKeyFor } from "@/lib/arena/llm/client";
-import { evaluateDecision, type LlmFloorParams } from "@/lib/arena/llm/floor";
+import { evaluateActions, type LlmFloorParams } from "@/lib/arena/llm/floor";
 import { renderConstraints, renderMarketBlock } from "@/lib/arena/llm/brief";
 import { DEMO_BRIEF, FLAT_BOOK } from "@/lib/arena/llm/demo-brief";
 import { ORACLE_BOTS } from "@/lib/arena/llm/registry";
@@ -50,8 +50,19 @@ export async function GET() {
         decisionCooldownSecs: bot.params.decisionCooldownSecs,
         confidenceFloor: bot.params.confidenceFloor,
       };
-      const outcome = evaluateDecision(decision, floor, FLAT_STATE, NOW);
-      return { ...base, status: "ok" as const, latencyMs, decision, outcome };
+      const outcomes = evaluateActions(decision, floor, FLAT_STATE, NOW);
+      // The preview UI shows one decision/outcome per bot; surface the first
+      // action (the bot's primary idea this tick) and every action's verdict.
+      const decisions = decision.actions;
+      return {
+        ...base,
+        status: "ok" as const,
+        latencyMs,
+        decision: decisions[0] ?? null,
+        outcome: outcomes[0]?.outcome ?? null,
+        decisions,
+        outcomes,
+      };
     }),
   );
 
