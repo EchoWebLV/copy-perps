@@ -15,6 +15,11 @@ export const FLASH_V2_USDC_MINT = process.env.FLASH_V2_USDC_MINT ?? USDC_MINT;
  */
 export const FLASH_V2_MIN_DEPOSIT_USDC = 1;
 
+/** Max leverage the Flash v2 venue builds (degen tier, confirmed live). Both the
+ *  self-directed Trade rail and the whale-copy rail validate against this; the
+ *  venue stays the final authority on any per-market ceiling below it. */
+export const MAX_FLASH_V2_LEVERAGE = 500;
+
 /** Flash's dedicated ER node the basket delegates to (served at
  *  flashtrade.magicblock.app), confirmed via router getDelegationStatus +
  *  getIdentity. NOT the generic mainnet node MAS1Dt9 (stale oracle for baskets). */

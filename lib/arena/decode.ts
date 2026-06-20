@@ -281,14 +281,23 @@ export interface ArenaActionDisplay {
   color: ArenaColorToken;
 }
 
-// Codes per state.rs TapeEntry.action:
-// 0 OPEN_LONG, 1 OPEN_SHORT, 2 EXIT_FAVORABLE, 3 EXIT_MAX_HOLD, 4 LIQUIDATED.
+// Codes per state.rs TapeEntry.action. The strategy bots use 0–4; the LLM
+// (oracle) bots write a separate 5–9 range from apply_decision/maintain (see
+// the llm-arena spec §4.3 — OPEN_LONG_LLM..KILL_SWITCH). Both share this one
+// map since the code ranges never collide.
+// 0 OPEN_LONG, 1 OPEN_SHORT, 2 EXIT_FAVORABLE, 3 EXIT_MAX_HOLD, 4 LIQUIDATED,
+// 5 OPEN_LONG_LLM, 6 OPEN_SHORT_LLM, 7 CLOSE_LLM, 8 STOP_HIT, 9 KILL_SWITCH.
 export const ARENA_ACTIONS: Readonly<Record<number, ArenaActionDisplay>> = {
   0: { label: "OPEN LONG", color: "GREEN" },
   1: { label: "OPEN SHORT", color: "RED" },
   2: { label: "EXIT FAVORABLE", color: "GREEN" },
   3: { label: "EXIT MAX HOLD", color: "DIM" },
   4: { label: "LIQUIDATED", color: "RED" },
+  5: { label: "OPEN LONG", color: "GREEN" },
+  6: { label: "OPEN SHORT", color: "RED" },
+  7: { label: "CLOSE", color: "DIM" },
+  8: { label: "STOP HIT", color: "RED" },
+  9: { label: "KILL SWITCH", color: "RED" },
 };
 
 export function arenaAction(code: number): ArenaActionDisplay {

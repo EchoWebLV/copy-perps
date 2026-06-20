@@ -73,6 +73,14 @@ export function synthFlashV2Position(args: {
     leverage: args.leverage,
     liquidationPriceUsd: args.quote?.liquidationPriceUi,
     openFeeUsd: args.quote?.feeUsdUi,
+    // The user's real stake. This is the highest-priority signal in
+    // flashStakeUsdFromPosition, so the card reads ~$1 for a $1 open instead of
+    // the sizeUsd/leverage fallback. That fallback misreads v2: the venue
+    // reports a spread-reduced sizeUsd (~$18 for a $20 notional) and a broken
+    // leverage field (Infinity), which divides out to the misleading ~$0.90.
+    // It also rides the entry-cost cache onto the polled venue position so the
+    // value stays stable after the optimistic synth is replaced.
+    entryCostUsd: args.stakeUsdc,
     pnlUsd: 0,
     openTime: args.nowMs,
   };

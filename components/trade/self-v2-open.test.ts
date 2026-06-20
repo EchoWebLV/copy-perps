@@ -66,6 +66,8 @@ describe("synthFlashV2Position", () => {
       leverage: 10,
       liquidationPriceUsd: 100,
       openFeeUsd: 0.5,
+      // The user's real stake drives the card value (not sizeUsd/leverage).
+      entryCostUsd: 20,
       openTime: 1700,
     });
   });

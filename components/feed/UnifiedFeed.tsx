@@ -17,10 +17,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { WhaleTraderSignal } from "@/lib/types";
-import { useArenaLive } from "@/lib/arena/use-arena-live";
+import { useArenaLive, parseArenaEnv } from "@/lib/arena/use-arena-live";
+import { useArenaThoughts } from "@/lib/arena/use-arena-thoughts";
+import type { ArenaThought } from "@/lib/arena/llm/thoughts";
 import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
-import { ARENA_PERSONAS } from "@/lib/arena/personas";
+import { ARENA_PERSONAS, resolveBotPda } from "@/lib/arena/personas";
 import { BotCard } from "@/components/arena/BotCard";
+import { DecisionTape } from "@/components/arena/DecisionTape";
 import { BalancePill } from "@/components/shell/BalancePill";
 import { TailModal, type TailSource } from "@/components/tail/TailModal";
 import { CopyModal, type CopyModalTarget } from "@/components/copy/CopyModal";
@@ -91,6 +94,8 @@ export function UnifiedFeed({ initialWhales }: Props) {
   const [tailSource, setTailSource] = useState<TailSource | null>(null);
   const [copyTarget, setCopyTarget] = useState<CopyModalTarget | null>(null);
   const { bots, market, mode, lastUpdateMs } = useArenaLive();
+  // Persisted "why" behind each bot trade, indexed per bot by tape entry.
+  const thoughts = useArenaThoughts(parseArenaEnv()?.llmBotNames ?? []);
   const now = useNowTick();
 
   const load = useCallback(async () => {
@@ -302,6 +307,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       market={market}
                       lastUpdateMs={lastUpdateMs}
                       now={now}
+                      thoughts={thoughts.byPersonaTape[entry.name] ?? null}
                       sentiment={botSentiment[`bot:${entry.name}`] ?? null}
                       onReact={(reaction) =>
                         reactToBot(`bot:${entry.name}`, reaction)
@@ -357,6 +363,7 @@ export function UnifiedFeed({ initialWhales }: Props) {
                       market={market}
                       lastUpdateMs={lastUpdateMs}
                       now={now}
+                      thoughts={thoughts.byPersonaTape[entry.name] ?? null}
                       sentiment={botSentiment[`bot:${entry.name}`] ?? null}
                       onReact={(reaction) =>
                         reactToBot(`bot:${entry.name}`, reaction)
@@ -603,6 +610,7 @@ function BotFeedCard({
   market,
   lastUpdateMs,
   now,
+  thoughts,
   sentiment,
   onReact,
   onTail,
@@ -613,6 +621,7 @@ function BotFeedCard({
   market: ArenaMarketState | null;
   lastUpdateMs: number;
   now: number;
+  thoughts: Map<number, ArenaThought> | null;
   sentiment: TraderSentiment | null;
   onReact: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
@@ -630,6 +639,12 @@ function BotFeedCard({
 
   const wins = bot.wins;
   const losses = Math.max(0, bot.trades - bot.wins);
+
+  // Verify link target for the MagicBlock log (oracle vs strategy tier PDA).
+  const env = parseArenaEnv();
+  const pda = env
+    ? resolveBotPda(name, env.programId, env.llmBotNames).toBase58()
+    : null;
 
   const position = primaryBotPosition(bot);
   const markPrice =
@@ -752,6 +767,15 @@ function BotFeedCard({
           </div>
         </>
       )}
+
+      {/* MagicBlock log — on-chain decision tape (newest 3 + show all), each
+          row carrying the model's reasoning when we have it. */}
+      <DecisionTape
+        bot={bot}
+        now={now}
+        thoughts={thoughts}
+        verify={env ? { pda, endpoint: env.endpoint } : null}
+      />
     </article>
   );
 }
@@ -821,6 +845,7 @@ function GridBotCard({
   market,
   lastUpdateMs,
   now,
+  thoughts,
   sentiment,
   onReact,
   onTail,
@@ -831,6 +856,7 @@ function GridBotCard({
   market: ArenaMarketState | null;
   lastUpdateMs: number;
   now: number;
+  thoughts: Map<number, ArenaThought> | null;
   sentiment: TraderSentiment | null;
   onReact: (reaction: WhaleVote) => void;
   onTail: (source: TailSource) => void;
@@ -853,6 +879,7 @@ function GridBotCard({
       bot={bot}
       now={now}
       market={market}
+      thoughts={thoughts}
       sentiment={sentiment}
       onReact={onReact}
       tailCta={

@@ -18,6 +18,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { getAgentWallet } from "@/lib/wallets/agent";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { MAX_FLASH_V2_LEVERAGE } from "@/lib/flash-v2/constants";
 import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
 import { openSelfFlashV2 } from "@/lib/bets/self-flash-v2";
 import { hasOpenTailOnMarket } from "@/lib/bets/copy-guard";
@@ -32,7 +33,6 @@ export const dynamic = "force-dynamic";
 
 const MIN_USDC = 1;
 const MAX_USDC = 1000;
-const MAX_FLASH_V2_LEVERAGE = 500; // venue builds up to 500x (degen); confirmed live.
 
 interface Body {
   market?: string;

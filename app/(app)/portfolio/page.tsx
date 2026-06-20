@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { Activity, History, LogOut, RefreshCw, Trophy, Users } from "lucide-react";
+import { Activity, History, LogOut, RefreshCw, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { BottomNav } from "@/components/shell/BottomNav";
 import {
@@ -365,7 +365,7 @@ export default function PortfolioPage() {
   return (
     <AppShell rail={portfolioRail} railTitle="My copies" hideEmptyRail>
       <div
-        className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-none lg:px-6 lg:pt-5"
+        className="mx-auto flex h-full max-w-md flex-col overflow-hidden px-5 pt-4 lg:max-w-xl lg:px-6 lg:pt-5"
         style={{ background: BG, color: FG, fontFamily: FONT_DISPLAY }}
       >
         {!ready && (
@@ -467,7 +467,7 @@ export default function PortfolioPage() {
               {/* Tab bar — Subscriptions first, then Open, History, Wins.
                   Wallet is its own nav tab now. */}
               <div
-                className="grid grid-cols-4 gap-1 rounded-2xl p-1"
+                className="grid grid-cols-3 gap-1 rounded-2xl p-1"
                 style={{ background: PANEL_2, border: `1px solid ${FAINT}` }}
               >
                 {(
@@ -475,7 +475,6 @@ export default function PortfolioPage() {
                     ["subscriptions", "Subs", null, Users],
                     ["open", "Open", openHoldingCount, Activity],
                     ["history", "History", closedHoldingCount, History],
-                    ["wins", "Wins", null, Trophy],
                   ] as const
                 ).map(([key, label, count, Icon]) => {
                   const active = activeTab === key;

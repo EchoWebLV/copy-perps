@@ -599,7 +599,7 @@ describe("ringClosesChronological", () => {
 // ───────────────────────────── action map ─────────────────────────────────
 
 describe("ARENA_ACTIONS", () => {
-  it("maps the five on-chain action codes to labels + v2 color tokens", () => {
+  it("maps the strategy-bot action codes (0–4) to labels + v2 color tokens", () => {
     expect(ARENA_ACTIONS[0]).toEqual({ label: "OPEN LONG", color: "GREEN" });
     expect(ARENA_ACTIONS[1]).toEqual({ label: "OPEN SHORT", color: "RED" });
     expect(ARENA_ACTIONS[2]).toEqual({
@@ -610,8 +610,16 @@ describe("ARENA_ACTIONS", () => {
     expect(ARENA_ACTIONS[4]).toEqual({ label: "LIQUIDATED", color: "RED" });
   });
 
+  it("maps the LLM-bot action codes (5–9) so the log never reads UNKNOWN", () => {
+    expect(ARENA_ACTIONS[5]).toEqual({ label: "OPEN LONG", color: "GREEN" });
+    expect(ARENA_ACTIONS[6]).toEqual({ label: "OPEN SHORT", color: "RED" });
+    expect(ARENA_ACTIONS[7]).toEqual({ label: "CLOSE", color: "DIM" });
+    expect(ARENA_ACTIONS[8]).toEqual({ label: "STOP HIT", color: "RED" });
+    expect(ARENA_ACTIONS[9]).toEqual({ label: "KILL SWITCH", color: "RED" });
+  });
+
   it("arenaAction falls back to a DIM unknown for unmapped codes", () => {
-    expect(arenaAction(9)).toEqual({ label: "UNKNOWN(9)", color: "DIM" });
+    expect(arenaAction(42)).toEqual({ label: "UNKNOWN(42)", color: "DIM" });
     expect(arenaAction(2)).toEqual(ARENA_ACTIONS[2]);
   });
 });

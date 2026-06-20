@@ -13,6 +13,7 @@
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { autopilotSessions, bets, users } from "@/lib/db/schema";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { parseFlashTailMeta } from "@/lib/bets/flash-tail-meta";
 import { isTierName, type TierName } from "./tiers";
 import { buildEvent, emitNotification } from "@/lib/notifications/emit";
@@ -110,15 +111,6 @@ export function clampBudget(budgetUsd: number): number {
   }
   const clamped = Math.min(MAX_BUDGET_USD, budgetUsd);
   return Math.floor(clamped * 100) / 100;
-}
-
-/** Postgres unique_violation — postgres-js exposes the SQLSTATE on err.code. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: unknown }).code === "23505"
-  );
 }
 
 export async function startSession(args: {

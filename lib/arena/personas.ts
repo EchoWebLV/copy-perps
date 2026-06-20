@@ -101,3 +101,17 @@ export function llmBotPda(name: string, programId: PublicKey): PublicKey {
     programId,
   )[0];
 }
+
+/** Resolve a bot's on-chain account PDA by tier: oracle (LLM) bots live under
+ *  the `llmbot` seed, the deterministic strategy bots under `bot`. Callers pass
+ *  the env's `llmBotNames` so an LLM-only roster verify-links to the right
+ *  account (the seed prefix differs, so botPda would point at a dead address). */
+export function resolveBotPda(
+  name: string,
+  programId: PublicKey,
+  llmBotNames: readonly string[],
+): PublicKey {
+  return llmBotNames.includes(name)
+    ? llmBotPda(name, programId)
+    : botPda(name, programId);
+}

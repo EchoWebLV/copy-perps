@@ -8,8 +8,9 @@
 
 import { useEffect } from "react";
 import type { ArenaBot, ArenaMarketState } from "@/lib/arena/decode";
-import { arenaAction, tapeNewestFirst } from "@/lib/arena/decode";
-import { ARENA_PERSONAS, botPda } from "@/lib/arena/personas";
+import type { ArenaThought } from "@/lib/arena/llm/thoughts";
+import { ARENA_PERSONAS, resolveBotPda } from "@/lib/arena/personas";
+import { DecisionTape } from "@/components/arena/DecisionTape";
 import { isStale, parseArenaEnv } from "@/lib/arena/use-arena-live";
 import {
   botPositionPnlPct,
@@ -22,11 +23,13 @@ import {
   type TraderSentiment,
   type WhaleVote,
 } from "@/components/feed/DesktopWhaleCard";
-import { isDevnetEndpoint, solscanAccountUrl } from "@/lib/arena/solscan";
+import {
+  isDevnetEndpoint,
+  magicblockExplorerAccountUrl,
+  solscanAccountUrl,
+} from "@/lib/arena/solscan";
 import { AI, AiBotBadge, BG, DIM, FAINT, FG, GREEN, RED, Headline, AI_TINT } from "@/components/v2/ui";
 import { fmtArenaPrice } from "./BotCard";
-
-const TOKEN_COLORS = { GREEN, RED, DIM } as const;
 
 function fmtUsd(v: number): string {
   return `$${v.toLocaleString("en-US", {
@@ -40,20 +43,12 @@ function fmtSignedUsd(v: number): string {
   return `${sign}${fmtUsd(Math.abs(v))}`;
 }
 
-function fmtWhen(tsMs: number, now: number): string {
-  if (now <= 0 || tsMs <= 0) return "—";
-  const s = Math.max(0, Math.floor((now - tsMs) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
 export function BotProfile({
   name,
   bot,
   now,
   market,
+  thoughts,
   sentiment,
   onReact,
   onClose,
@@ -62,14 +57,17 @@ export function BotProfile({
   bot: ArenaBot | null;
   now: number;
   market?: ArenaMarketState | null;
+  /** Tape tsMs → the model's reasoning, for the decision tape's why-line. */
+  thoughts?: Map<number, ArenaThought> | null;
   sentiment?: TraderSentiment | null;
   onReact?: (reaction: WhaleVote) => void;
   onClose: () => void;
 }) {
   const persona = ARENA_PERSONAS[name];
   const env = parseArenaEnv();
-  const pda = env ? botPda(name, env.programId).toBase58() : null;
-  const tape = bot ? tapeNewestFirst(bot) : [];
+  const pda = env
+    ? resolveBotPda(name, env.programId, env.llmBotNames).toBase58()
+    : null;
   const openPositions = bot?.positions.filter((p) => p.active) ?? [];
   // Single-market SOL arena — every position marks against the one live feed
   // (see BotCard for the marketId-byte caveat across clusters).
@@ -251,47 +249,15 @@ export function BotProfile({
           </div>
         )}
 
-        {/* decision tape */}
-        <div className="mt-5">
-          <div
-            className="text-[10px] font-black uppercase tracking-[0.24em]"
-            style={{ color: DIM }}
-          >
-            decision tape · on-chain
-          </div>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {tape.length === 0 ? (
-              <div
-                className="rounded-xl border border-dashed px-3 py-3 text-[10px] font-bold uppercase tracking-widest"
-                style={{ borderColor: FAINT, color: DIM }}
-              >
-                no decisions yet — the strategy is waiting for its setup
-              </div>
-            ) : (
-              tape.slice(0, 24).map((e, i) => {
-                const act = arenaAction(e.action);
-                return (
-                  <div
-                    key={`${e.tsMs}-${i}`}
-                    className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold tabular-nums"
-                    style={{ borderColor: FAINT }}
-                  >
-                    <span
-                      className="font-black uppercase tracking-widest"
-                      style={{ color: TOKEN_COLORS[act.color] }}
-                    >
-                      {act.label}
-                    </span>
-                    <span style={{ color: DIM }}>
-                      {fmtArenaPrice(e.price)} · {fmtUsd(e.stakeUsd)} stake
-                    </span>
-                    <span style={{ color: DIM }}>{fmtWhen(e.tsMs, now)}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        {/* decision tape — full inline (no collapse) in the profile, each row
+            carrying the model's reasoning when we have it */}
+        <DecisionTape
+          bot={bot}
+          now={now}
+          heading="decision tape · on-chain"
+          initialCount={24}
+          thoughts={thoughts}
+        />
 
         {/* about + verify */}
         <div
@@ -302,18 +268,19 @@ export function BotProfile({
           Rollup; prices come from the Pyth Lazer oracle feed operated by
           MagicBlock.{" "}
           {isDevnetEndpoint(env?.endpoint)
-            ? "Devnet demo."
-            : "State is committed to Solana mainnet — check it yourself:"}
+            ? "Devnet demo — "
+            : ""}
+          Every decision is a transaction on the rollup — check them yourself:
           {pda && (
             <div className="mt-2 flex flex-wrap gap-3">
               <a
-                href={solscanAccountUrl(pda, env?.endpoint)}
+                href={magicblockExplorerAccountUrl(pda, env?.endpoint)}
                 target="_blank"
                 rel="noreferrer"
                 className="underline underline-offset-2"
                 style={{ color: FG }}
               >
-                view raw bot account
+                view its decisions on the rollup
                 {isDevnetEndpoint(env?.endpoint) ? " (devnet)" : ""}
               </a>
               {env && (

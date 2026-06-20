@@ -96,9 +96,17 @@ const FLASH_POSITION_RECONCILE_MS = 10_000;
 // that don't yet show it. The ER indexer lags the just-submitted open by a few
 // seconds; past this window a still-missing synth is assumed failed and dropped.
 const OPTIMISTIC_SYNTH_GRACE_MS = 30_000;
-const MAX_GRAPH_POINTS = 120;
-const GRAPH_SAMPLE_MS = 80;
-const GRAPH_SMOOTHING = 0.6; // snappy: tip tracks each Flash mark, no jitter
+const MAX_GRAPH_POINTS = 200;
+// Append cadence: a fresh trail point every GRAPH_SAMPLE_MS keeps the window
+// ~MAX_GRAPH_POINTS·GRAPH_SAMPLE_MS (≈8s) and always scrolling. Densified for
+// the Pyth Lazer feed (~14-50 ticks/s vs the old ~3/s) so the trail visibly
+// flows instead of stepping — most frames still early-return when the tip is at
+// the mark, so this is a freshness ceiling, not a fixed render cost.
+const GRAPH_SAMPLE_MS = 40;
+// Per-60fps-frame tip ease (rescaled to the real frame delta below). The tip
+// glides toward each incoming mark on requestAnimationFrame, so even a sparse
+// mark feed renders as a smooth flowing line instead of 12fps steps.
+const GRAPH_SMOOTHING = 0.22;
 const LIVE_DOT_PULSE = true; // soft heartbeat on the live dot (set false = still)
 const CURVE_TENSION = 0.16; // Catmull-Rom→bezier smoothing for the live value curve
 const WINDOW_K = 0.7; // auto-range padding: live series fills ~1/(2·K) ≈ 71% of graph height
@@ -1789,27 +1797,52 @@ function LivePerpGraph({
     setPoints([targetRef.current]);
   }, [activeKey]);
 
-  // Responsive sampling: snap the tip toward each incoming mark (no jitter).
+  // Responsive trail: a requestAnimationFrame loop eases the tip toward each
+  // incoming mark every frame (~60fps glide, frame-rate independent) so even a
+  // sparse mark feed flows smoothly, and appends a fresh sample every
+  // GRAPH_SAMPLE_MS so the window keeps scrolling. rAF (not setInterval) is
+  // buttery while visible and pauses cleanly when the tab is hidden.
   useEffect(() => {
-    const id = setInterval(() => {
-      // No data yet (mark not delivered): don't plot, and never "climb" from
-      // a zero seed — that 0 would pollute the auto-ranged window (and the
-      // price grid) for minutes until it scrolls out.
-      if (!Number.isFinite(targetRef.current) || targetRef.current <= 0) {
-        return;
-      }
+    let raf = 0;
+    let lastT = 0;
+    let acc = 0;
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      if (lastT === 0) lastT = now;
+      const dt = Math.min(64, now - lastT); // clamp after a tab-hidden gap
+      lastT = now;
+      const target = targetRef.current;
+      // No mark yet: don't plot, and never "climb" from a zero seed — that 0
+      // would pollute the auto-ranged window (and the price grid) for minutes.
+      if (!Number.isFinite(target) || target <= 0) return;
       if (!Number.isFinite(displayRef.current) || displayRef.current <= 0) {
-        displayRef.current = targetRef.current;
-        setPoints([targetRef.current]);
+        displayRef.current = target;
+        setPoints([target]);
         return;
       }
-      displayRef.current +=
-        (targetRef.current - displayRef.current) * GRAPH_SMOOTHING;
-      setPoints((prev) =>
-        [...prev, displayRef.current].slice(-MAX_GRAPH_POINTS),
-      );
-    }, GRAPH_SAMPLE_MS);
-    return () => clearInterval(id);
+      acc += dt;
+      const append = acc >= GRAPH_SAMPLE_MS;
+      const gap = target - displayRef.current;
+      // Nothing to redraw this frame: tip already at the mark and no scroll due.
+      if (!append && Math.abs(gap) < 1e-9) return;
+      if (append) acc = 0;
+      // Frame-rate-normalised easing: GRAPH_SMOOTHING is the per-60fps-frame
+      // fraction, rescaled to the real frame delta so the glide feels identical
+      // at any refresh rate.
+      const k = 1 - Math.pow(1 - GRAPH_SMOOTHING, dt / 16.67);
+      displayRef.current += gap * k;
+      setPoints((prev) => {
+        if (prev.length === 0) return [displayRef.current];
+        const next = prev.slice();
+        next[next.length - 1] = displayRef.current; // glide the live tip
+        if (append) next.push(displayRef.current);
+        return next.length > MAX_GRAPH_POINTS
+          ? next.slice(-MAX_GRAPH_POINTS)
+          : next;
+      });
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, [activeKey]);
 
   // Render at the container's real pixel size so a 320-wide viewBox isn't

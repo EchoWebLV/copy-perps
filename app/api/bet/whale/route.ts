@@ -31,6 +31,7 @@ import { getAgentWallet } from "@/lib/wallets/agent";
 import { isSourceFresh } from "@/lib/whales/identity";
 import { getWhaleLivePositionById } from "@/lib/whales/live-cache";
 import { getFlashV2Venue } from "@/lib/flash-v2/resolve";
+import { MAX_FLASH_V2_LEVERAGE } from "@/lib/flash-v2/constants";
 import { FlashV2PositionConflictError } from "@/lib/flash-v2/self-trade";
 import { openCopyFlashV2 } from "@/lib/bets/copy-flash-v2";
 
@@ -409,11 +410,19 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+  // Execution venue decides the leverage ceiling, so resolve it BEFORE
+  // validating. Flash v2 (the live whale rail) builds up to MAX_FLASH_V2_LEVERAGE
+  // (degen); Pacifica is bounded by the market's own max_leverage (e.g. BTC 50x).
+  // Without this, a 500x copy that actually executes on Flash v2 was wrongly
+  // rejected by the Pacifica cap.
+  const flashV2 = getFlashV2Venue();
+  const copyVenue = flashV2 ? "flash-v2" : "pacifica";
   const parsedMarketMaxLeverage = Number(marketInfo.max_leverage);
-  const marketMaxLeverage =
+  const pacificaMaxLeverage =
     Number.isFinite(parsedMarketMaxLeverage) && parsedMarketMaxLeverage >= 1
       ? Math.floor(parsedMarketMaxLeverage)
       : 1;
+  const marketMaxLeverage = flashV2 ? MAX_FLASH_V2_LEVERAGE : pacificaMaxLeverage;
   const requestedLeverage =
     body.leverage ?? Math.min(position.leverage, marketMaxLeverage);
   if (
@@ -434,24 +443,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no Solana wallet on user" }, { status: 400 });
   }
 
-  // Execution venue: Flash v2 when the flag is on, else Pacifica (unchanged).
-  const flashV2 = getFlashV2Venue();
-  const copyVenue = flashV2 ? "flash-v2" : "pacifica";
-
-  const userNotional = body.stakeUsdc * requestedLeverage;
-  let clamped: number;
-  try {
-    clamped = await clampLeverageForNotional(position.market, userNotional);
-  } catch (err) {
-    const marketError = marketDataErrorResponse(err);
-    if (marketError) return marketError;
-    console.error("[bet/whale] leverage lookup failed:", err);
-    return NextResponse.json(
-      { error: "Could not load market data. Try again." },
-      { status: 502 },
-    );
+  // Flash v2 enforces its own per-market ceiling at the venue, and the 500x cap
+  // is already applied above. Pacifica's notional-tier clamp would wrongly
+  // re-cap a Flash v2 copy at the Pacifica market max (e.g. BTC 50x), so it only
+  // runs on the Pacifica path.
+  let effectiveLeverage: number;
+  if (flashV2) {
+    effectiveLeverage = requestedLeverage;
+  } else {
+    const userNotional = body.stakeUsdc * requestedLeverage;
+    let clamped: number;
+    try {
+      clamped = await clampLeverageForNotional(position.market, userNotional);
+    } catch (err) {
+      const marketError = marketDataErrorResponse(err);
+      if (marketError) return marketError;
+      console.error("[bet/whale] leverage lookup failed:", err);
+      return NextResponse.json(
+        { error: "Could not load market data. Try again." },
+        { status: 502 },
+      );
+    }
+    effectiveLeverage = Math.min(requestedLeverage, clamped);
   }
-  const effectiveLeverage = Math.min(requestedLeverage, clamped);
   const finalNotional = body.stakeUsdc * effectiveLeverage;
   const sizingPrice = await resolveSizingPrice(position);
   if (!sizingPrice) {

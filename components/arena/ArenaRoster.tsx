@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { isStale, parseArenaEnv, useArenaLive } from "@/lib/arena/use-arena-live";
+import { useArenaThoughts } from "@/lib/arena/use-arena-thoughts";
 import { useSentiment } from "@/components/feed/use-sentiment";
 import { isDevnetEndpoint } from "@/lib/arena/solscan";
 import {
@@ -33,6 +34,8 @@ export function ArenaRoster() {
   const { bots, market, mode } = useArenaLive();
   const now = useNowTick();
   const botNames = Object.keys(bots);
+  // Persisted "why" behind each bot trade, indexed per bot by tape entry.
+  const thoughts = useArenaThoughts(parseArenaEnv()?.llmBotNames ?? []);
   const [selected, setSelected] = useState<string | null>(null);
 
   // Community Bullish/Bearish vote per bot — same widget + backend as whales.
@@ -117,6 +120,7 @@ export function ArenaRoster() {
                   bot={bots[name]}
                   now={now}
                   market={market}
+                  thoughts={thoughts.byPersonaTape[name] ?? null}
                   sentiment={sentiment[`bot:${name}`] ?? null}
                   onReact={(reaction) => react(`bot:${name}`, reaction)}
                   onOpen={() => setSelected(name)}
@@ -144,6 +148,7 @@ export function ArenaRoster() {
           bot={bots[selected] ?? null}
           now={now}
           market={market}
+          thoughts={thoughts.byPersonaTape[selected] ?? null}
           sentiment={sentiment[`bot:${selected}`] ?? null}
           onReact={(reaction) => react(`bot:${selected}`, reaction)}
           onClose={() => setSelected(null)}

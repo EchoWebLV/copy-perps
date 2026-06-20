@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  bigint,
   jsonb,
   uuid,
   doublePrecision,
@@ -558,5 +559,45 @@ export const copySubscriptions = pgTable(
     liveTargetIdx: uniqueIndex("copy_subscriptions_live_target_idx")
       .on(t.userId, t.targetKind, t.targetKey)
       .where(sql`status <> 'stopped'`),
+  }),
+);
+
+// One row per LLM oracle-bot decision — the "AI thought behind the trade". The
+// brain computes `reasoning` every tick (schema.ts decisionSchema) but the
+// on-chain tape only stores a numeric reason code, so the narration would be
+// lost. This table preserves it plus the apply_decision tx, letting the
+// MagicBlock log show WHY each trade happened. `tapeTsMs` is the epoch-ms of the
+// on-chain tape entry the apply wrote (read back after the tx confirms) — the
+// exact join key to a decoded ArenaTapeEntry. Null for HOLD/skip (no trade made)
+// or when the post-confirm read-back missed.
+export const arenaDecisions = pgTable(
+  "arena_decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    persona: text("persona").notNull(), // on-chain persona id, e.g. "claude-v1"
+    marketId: integer("market_id").notNull().default(0),
+    action: text("action").notNull(), // 'open' | 'close' | 'hold'
+    side: text("side"), // 'long' | 'short' | null (hold)
+    asset: text("asset"), // 'BTC' | 'ETH' | 'SOL' | null
+    leverage: integer("leverage"),
+    confidence: doublePrecision("confidence"), // 0..1
+    reasoning: text("reasoning").notNull(),
+    sent: boolean("sent").notNull().default(false),
+    rejectReason: text("reject_reason"), // floor reject code or 'Hold' when not sent
+    signature: text("signature"), // apply_decision tx sig (sent only)
+    tapeTsMs: bigint("tape_ts_ms", { mode: "number" }), // join key → ArenaTapeEntry.tsMs
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    personaTsIdx: index("arena_decisions_persona_ts_idx").on(
+      t.persona,
+      t.createdAt,
+    ),
+    personaTapeIdx: index("arena_decisions_persona_tape_idx").on(
+      t.persona,
+      t.tapeTsMs,
+    ),
   }),
 );

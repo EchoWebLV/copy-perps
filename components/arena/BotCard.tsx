@@ -8,8 +8,10 @@
 
 import type { ReactNode } from "react";
 import type { ArenaBot, ArenaMarketState, ArenaPosition } from "@/lib/arena/decode";
-import { ARENA_PERSONAS } from "@/lib/arena/personas";
-import { isStale } from "@/lib/arena/use-arena-live";
+import type { ArenaThought } from "@/lib/arena/llm/thoughts";
+import { ARENA_PERSONAS, resolveBotPda } from "@/lib/arena/personas";
+import { isStale, parseArenaEnv } from "@/lib/arena/use-arena-live";
+import { DecisionTape } from "./DecisionTape";
 import {
   botPositionPnlPct,
   botEquityUsd,
@@ -59,6 +61,7 @@ export function BotCard({
   bot,
   now,
   market,
+  thoughts,
   sentiment,
   onReact,
   onOpen,
@@ -70,6 +73,8 @@ export function BotCard({
   /** Live oracle market — threads the mark price in so positions show live
    *  PnL. Optional: callers without it (legacy) just render entry-only rows. */
   market?: ArenaMarketState | null;
+  /** Tape tsMs → the model's reasoning, for the MagicBlock log's why-line. */
+  thoughts?: Map<number, ArenaThought> | null;
   /** Community Bullish/Bearish vote — same widget + backend as the whale
    *  cards, keyed per bot. Omit to hide the row. */
   sentiment?: TraderSentiment | null;
@@ -81,6 +86,12 @@ export function BotCard({
 }) {
   const persona = ARENA_PERSONAS[name];
   const display = persona?.display ?? name;
+  // Verify link target: resolve the bot's on-chain account (oracle vs strategy
+  // tier) so the MagicBlock log deep-links to the right Solscan account.
+  const env = parseArenaEnv();
+  const pda = env
+    ? resolveBotPda(name, env.programId, env.llmBotNames).toBase58()
+    : null;
   const openPositions = bot?.positions.filter((p) => p.active) ?? [];
   // Live mark for PnL, gated on freshness so stale numbers render dimmed.
   // Single-market (SOL-only) arena: the hook streams exactly one market feed,
@@ -249,6 +260,16 @@ export function BotCard({
           ))
         )}
       </div>
+
+      {/* MagicBlock log — the bot's on-chain decision tape (newest first), with
+          a verify link to the raw account and the model's reasoning per trade.
+          Newest 3 inline, "show all" expands. */}
+      <DecisionTape
+        bot={bot}
+        now={now}
+        thoughts={thoughts}
+        verify={env ? { pda, endpoint: env.endpoint } : null}
+      />
 
       {/* Pinned to the card bottom (mt-auto) so the CTA row lines up with the
           whale cards in the stretched grid. Stop propagation so a CTA tap

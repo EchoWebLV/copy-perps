@@ -36,10 +36,12 @@ const FlashLivePriceContext = createContext<FlashLivePriceContextValue>({
   lastOracleDeliveryMs: 0,
 });
 
-/** ER pushes arrive every ~50ms per feed; rendering each one would re-render
- *  every consumer ~60×/s. Buffer in refs and flush on this cadence — fast
- *  enough to read as live, 10× fewer renders. */
-export const ORACLE_FLUSH_MS = 120;
+/** The Lazer relay (Source 3) pushes 1-50ms ticks. Buffer in refs and flush at
+ *  this cadence so the scalp price number tracks the feed at ~50Hz. The flush
+ *  loop early-returns when no mark is pending, so re-renders never exceed the
+ *  actual mark-arrival rate — this is a ceiling on freshness, not a fixed render
+ *  cost (a quiet feed still costs nothing). */
+export const ORACLE_FLUSH_MS = 20;
 
 // Module-level Connection singleton on the ER endpoint (same pattern as
 // lib/arena/use-arena-live.ts). "processed": the ER is a single validator —
@@ -100,9 +102,39 @@ export function FlashLivePriceProvider({
     pendingMarksRef.current[symbol] = cur ? mergeMark(cur, mark) : mark;
   };
 
-  // Source 1 — Pyth Hermes via our SSE proxy. Kept as the always-on fallback:
-  // it auto-reconnects and serves browsers/regions where the ER ws path is
-  // unavailable. Freshest-wins merge means it never regresses an ER mark.
+  // Source 1 — Pyth Lazer via our server-side relay (/api/flash/perp/prices/
+  // lazer). This is the PRIMARY fast feed: Lazer's `real_time` channel pushes a
+  // fresh tick every 1-50ms (vs Hermes ~2-4/s), so the scalp price and graph
+  // move continuously. The relay holds the access token server-side and
+  // transcodes each tick into the same Hermes "parsed" shape parsePythPriceUpdate
+  // decodes, so this reuses the exact handler as the Hermes source below.
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return;
+    const source = new EventSource("/api/flash/perp/prices/lazer");
+
+    source.onmessage = (event) => {
+      const nextMarks = parsePythPriceUpdate(event.data);
+      for (const [symbol, mark] of Object.entries(nextMarks) as Array<
+        [FlashLivePriceSymbol, FlashLiveMark]
+      >) {
+        buffer(symbol, mark);
+      }
+    };
+
+    source.onerror = () => {
+      // EventSource reconnects automatically (and the relay reconnects its own
+      // upstream). Hermes (Source 2) keeps the price live in the meantime.
+    };
+
+    return () => {
+      source.close();
+    };
+  }, []);
+
+  // Source 2 — Pyth Hermes via our SSE proxy. The always-on fallback: free, no
+  // token, auto-reconnecting, and serves browsers/regions where Lazer is
+  // unavailable. Freshest-wins merge (by publishTimeMs) means it never regresses
+  // a fresher Lazer mark.
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
     const source = new EventSource("/api/flash/perp/prices/stream");
@@ -125,10 +157,12 @@ export function FlashLivePriceProvider({
     };
   }, []);
 
-  // Source 2 — MagicBlock ER Lazer feeds, ~50ms pushes straight from the
-  // rollup (the oracle tier Flash executes against). Subscriptions are
-  // best-effort: a dead ws path just leaves SSE as the live source, and a
-  // late delivery silently upgrades freshness via mergeMark.
+  // Source 3 — MagicBlock ER Lazer feeds read directly off the rollup via
+  // onAccountChange. Kept as the honest ER-delivery signal (lastOracleDeliveryMs
+  // is the oracle tier Flash executes against). Sparser than the Lazer relay, so
+  // freshest-wins merge usually keeps the relay's tick — but a late ER delivery
+  // silently upgrades freshness via mergeMark. Best-effort: a dead ws path just
+  // leaves the SSE sources live.
   useEffect(() => {
     const endpoint =
       process.env.NEXT_PUBLIC_ARENA_ER_ENDPOINT?.trim() || DEFAULT_ER_ENDPOINT;

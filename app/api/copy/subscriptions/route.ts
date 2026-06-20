@@ -4,6 +4,7 @@ import { verifyPrivyRequest } from "@/lib/privy/server";
 import { ensureUser } from "@/lib/users/ensure";
 import { ARENA_PERSONAS } from "@/lib/arena/personas";
 import { parseWhaleTargetKey } from "@/lib/copy/sources";
+import { isUniqueViolation } from "@/lib/db/errors";
 import {
   countOpenCopies,
   createCopySubscription,
@@ -43,15 +44,6 @@ interface CreateBody {
   dailyCapUsd?: number;
   maxEntryGapBps?: number;
   walletAddress?: string;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "23505"
-  );
 }
 
 export async function POST(request: Request) {

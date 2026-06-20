@@ -441,6 +441,59 @@ describe("POST /api/bet/whale", () => {
     expect(mocks.openCopyOrder).not.toHaveBeenCalled();
   });
 
+  it("allows leverage above the Pacifica max on the Flash v2 rail (up to 500x)", async () => {
+    // The whale executes on Flash v2 (degen 500x), not Pacifica — the Pacifica
+    // market max (50x here) must not gate it. Regression for "500x should work".
+    mocks.getFlashV2Venue.mockReturnValue({} as never);
+    mocks.openCopyFlashV2.mockResolvedValue({
+      kind: "opened",
+      signature: "sig-500x",
+      quote: {},
+    });
+    mocks.getMarketBySymbol.mockResolvedValue({
+      symbol: "ETH",
+      lot_size: "0.001",
+      max_leverage: 50,
+    });
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        leverage: 500,
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).not.toBe(400);
+    expect(mocks.openCopyFlashV2).toHaveBeenCalledWith(
+      expect.objectContaining({ leverage: 500 }),
+    );
+    // Pacifica's notional-tier clamp must be skipped on the Flash v2 rail.
+    expect(mocks.clampLeverageForNotional).not.toHaveBeenCalled();
+  });
+
+  it("rejects copy leverage above the Flash v2 ceiling (500x)", async () => {
+    mocks.getFlashV2Venue.mockReturnValue({} as never);
+
+    const response = await POST(
+      whaleRequest({
+        positionId: "source-pos-1",
+        stakeUsdc: 10,
+        walletAddress: "wallet-1",
+        leverage: 600,
+        autoCloseOnSourceClose: true,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "leverage must be between 1x and market max 500x",
+    });
+    expect(mocks.openCopyFlashV2).not.toHaveBeenCalled();
+  });
+
   it("sizes the copy from current mark when it is available", async () => {
     mocks.getWhaleLivePositionById.mockResolvedValue(
       openPacificaSource({ currentMark: 2500 }),
