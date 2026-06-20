@@ -11,7 +11,7 @@ import { z } from "zod";
 export const ARENA_ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"] as const;
 export type ArenaAsset = (typeof ARENA_ASSETS)[number];
 
-export const decisionSchema = z.object({
+export const actionSchema = z.object({
   action: z.enum(["open", "close", "hold"]),
   // Required for OPEN; ignored for CLOSE/HOLD. Kept required (not optional) so
   // structured-output mode is robust across providers.
@@ -27,6 +27,15 @@ export const decisionSchema = z.object({
   // not this text). Generous cap so thorough reasoning doesn't fail validation
   // and void an otherwise-valid decision.
   reasoning: z.string().max(600),
+});
+
+export type LlmAction = z.infer<typeof actionSchema>;
+
+// One tick may emit up to 4 actions (the on-chain position-slot count): e.g.
+// close a loser and open two new ideas in a single decision. An empty list is
+// a valid do-nothing tick.
+export const decisionSchema = z.object({
+  actions: z.array(actionSchema).max(4),
 });
 
 export type LlmDecision = z.infer<typeof decisionSchema>;
