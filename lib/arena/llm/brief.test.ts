@@ -82,7 +82,7 @@ describe("sanitizeSentimentText", () => {
 describe("buildSharedBrief", () => {
   it("includes indicators, OI/long-short, funding, and sanitized sentiment", async () => {
     const brief = await buildSharedBrief(sources);
-    expect(brief.markets).toHaveLength(3);
+    expect(brief.markets).toHaveLength(6);
     const sol = brief.markets.find((m) => m.asset === "SOL")!;
     expect(sol.rsi14).not.toBeNull();
     expect(sol.openInterestUsd).toBe(1_200_000_000);
@@ -116,5 +116,20 @@ describe("renderMarketBlock + arena fairness", () => {
     expect(promptA).toContain(market);
     expect(promptB).toContain(market);
     expect(promptA).not.toEqual(promptB); // system + book differ
+  });
+
+  it("uses the patient closer by default, overridable per bot", async () => {
+    const brief = await buildSharedBrief(sources);
+    const baseline = renderPromptFor({ systemBlock: "S", bot: fakeBot(), brief });
+    expect(baseline).toContain("doing nothing is correct"); // patient default
+
+    const aggro = renderPromptFor({
+      systemBlock: "S",
+      bot: fakeBot(),
+      brief,
+      closingInstruction: "OPEN a small position almost every tick.",
+    });
+    expect(aggro).toContain("OPEN a small position almost every tick.");
+    expect(aggro).not.toContain("doing nothing is correct"); // override replaces it
   });
 });

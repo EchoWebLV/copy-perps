@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decisionSchema, toBps, toConfidence100 } from "./schema";
+import { ARENA_ASSETS, decisionSchema, toBps, toConfidence100 } from "./schema";
 
 const valid = {
   action: "open",
@@ -12,6 +12,10 @@ const valid = {
   confidence: 0.7,
   reasoning: "SOL reclaimed $150 with cooling funding",
 };
+
+it("covers the six target majors", () => {
+  expect([...ARENA_ASSETS]).toEqual(["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"]);
+});
 
 describe("decisionSchema", () => {
   it("parses a valid decision", () => {

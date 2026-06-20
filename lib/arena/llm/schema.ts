@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 
-export const ARENA_ASSETS = ["BTC", "ETH", "SOL"] as const;
+export const ARENA_ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"] as const;
 export type ArenaAsset = (typeof ARENA_ASSETS)[number];
 
 export const decisionSchema = z.object({
