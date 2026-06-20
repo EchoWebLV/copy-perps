@@ -69,14 +69,23 @@ export function createLlmClient(cfg: { provider: LlmProvider; modelId?: string }
                   baseURL: "https://api.anthropic.com/v1",
                   apiKey: keyFromEnv("ANTHROPIC_API_KEY"),
                 })(modelId);
+        // COST LEVER: the GPT-5 bots default to ~1900 hidden REASONING tokens
+        // per trivial decision (billed as output ≈ 94% of the bill). reasoning
+        // effort "minimal" drops that to ~0 (a measured 28s/$0.0207 → 2.3s/
+        // $0.0012 per call, ~94% cheaper) with the on-chain floor + zod schema
+        // still bounding every trade. With no reasoning tail there is no need
+        // for a large token budget, so the cap drops 4000 → 800. xAI/Anthropic
+        // get no openai options (and aren't reasoning-heavy here by default).
+        const providerOptions =
+          cfg.provider === "openai"
+            ? { openai: { reasoningEffort: "minimal", textVerbosity: "low" } }
+            : undefined;
         const { object } = await generateObject({
           model,
           schema: decisionSchema,
           prompt,
-          // Generous budget: reasoning models (e.g. gpt-5) spend output tokens
-          // on hidden reasoning before emitting the JSON — too small a cap
-          // yields AI_NoObjectGeneratedError. Terse models ignore the headroom.
-          maxOutputTokens: 4000,
+          maxOutputTokens: 800,
+          providerOptions,
         });
         // Belt-and-suspenders: generateObject already validates against the
         // schema, but re-parse defensively so a malformed object can never

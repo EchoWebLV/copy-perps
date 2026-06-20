@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DISABLE_ENV, runBotDecision, startLlmBrain, type LlmLoopDeps } from "./loop";
 import type { ArenaLlmBot } from "../decode";
-import type { LlmAction } from "./schema";
+import type { LlmAction, LlmDecision } from "./schema";
 
 function fakeBot(over: Partial<ArenaLlmBot> = {}): ArenaLlmBot {
   return {
@@ -98,7 +98,7 @@ describe("runBotDecision (end-to-end)", () => {
           { action: "close", side: "long", asset: "SOL", leverage: 1, stakeFracPct: 0,
             stopLossPct: 0.01, takeProfitPct: 0, confidence: 0.6, reasoning: "b" },
         ],
-      })),
+      } satisfies LlmDecision)),
     });
     const res = await runBotDecision(cfg, d);
     expect(res.status).toBe("acted");
