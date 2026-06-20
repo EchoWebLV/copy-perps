@@ -17,6 +17,7 @@ import type { MarketSentiment } from "../../data/market-sentiment";
 import { atr, macd, realizedVol, rsi } from "../../data/indicators";
 import type { ArenaLlmBot } from "../decode";
 import { ARENA_ASSETS, type ArenaAsset } from "./schema";
+import { assetForMarket } from "../markets";
 
 export interface SentimentBrief {
   score: number; // -1..1
@@ -139,7 +140,7 @@ export function renderBookBlock(bot: ArenaLlmBot): string {
     ? open
         .map(
           (p) =>
-            `  ${p.side} ${p.marketId === 0 ? "SOL" : `mkt${p.marketId}`} ${p.leverage}x ` +
+            `  ${p.side} ${assetForMarket(p.marketId) ?? `mkt${p.marketId}`} ${p.leverage}x ` +
             `entry $${p.entryPrice.toFixed(2)} stake $${p.stakeUsd.toFixed(0)} stop $${p.stopPrice.toFixed(2)}`,
         )
         .join("\n")
@@ -175,11 +176,20 @@ export function renderConstraints(p: FloorBounds): string {
   );
 }
 
-/** Full prompt: per-bot system/persona block + identical market block + own book. */
+/** Default closing instruction — the patient, fairness-baseline guidance every
+ *  controlled bot gets. Overridable per bot via renderPromptFor's
+ *  `closingInstruction` (the hyper-active grok bot flips it). */
+export const DEFAULT_CLOSING_INSTRUCTION =
+  "Decide: open / close / hold. Return the structured decision. Most ticks, doing nothing is correct — only trade a setup you can justify in one sentence.";
+
+/** Full prompt: per-bot system/persona block + identical market block + own book.
+ *  `closingInstruction` overrides the final directive (default = the patient
+ *  baseline); a per-bot override is how a bot's activity level diverges. */
 export function renderPromptFor(args: {
   systemBlock: string;
   bot: ArenaLlmBot;
   brief: SharedBrief;
+  closingInstruction?: string;
 }): string {
   return [
     args.systemBlock.trim(),
@@ -190,6 +200,6 @@ export function renderPromptFor(args: {
     "",
     renderBookBlock(args.bot),
     "",
-    "Decide: open / close / hold. Return the structured decision. Most ticks, doing nothing is correct — only trade a setup you can justify in one sentence.",
+    (args.closingInstruction ?? DEFAULT_CLOSING_INSTRUCTION).trim(),
   ].join("\n");
 }

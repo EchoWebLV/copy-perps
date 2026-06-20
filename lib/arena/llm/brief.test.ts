@@ -96,6 +96,16 @@ describe("buildSharedBrief", () => {
   });
 });
 
+import { renderBookBlock } from "./brief";
+
+it("labels open positions by asset, not market number", () => {
+  const bot = { balanceUsd: 900, equityHighUsd: 1000, feesUsd: 1, fundingPaidUsd: 0,
+    tradesToday: 1, halted: false,
+    positions: [{ active: true, marketId: 1, side: "long", leverage: 20,
+      entryPrice: 64000, stakeUsd: 100, stopPrice: 62000 }] } as any;
+  expect(renderBookBlock(bot)).toContain("long BTC 20x");
+});
+
 describe("renderMarketBlock + arena fairness", () => {
   it("renders OI / long-short / indicators / sentiment", async () => {
     const block = renderMarketBlock(await buildSharedBrief(sources));
